@@ -4,4 +4,4 @@ Gram is the tool platform for AI agents.
 
 ## Development
 
-Run `./zero`
+Run `./zero` until it succeeds.
