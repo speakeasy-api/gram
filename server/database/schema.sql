@@ -77,10 +77,9 @@ create table if not exists deployments (
   user_id uuid not null,
   organization_id uuid not null,
   workspace_id uuid not null,
-  external_id text not null,
-  external_url text,
-  git_sha text,
-
+  external_id text not null check (external_id != '' and length(external_id) <= 80),
+  external_url text check (external_url != '' and length(external_url) <= 150),
+ 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz,
