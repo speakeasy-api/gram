@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+set -e
+
+missing_tools=false
+mise_installed=true
+docker_installed=true
+
+check_command() {
+    local cmd=$1
+    local var_name="${cmd}_installed"
+
+    if ! command -v "$cmd" &> /dev/null; then
+        missing_tools=true
+        declare -g "${var_name}=false"
+    fi
+}
+
+check_command "mise"
+check_command "docker"
+
+if [ $missing_tools = true ]; then
+    echo "# Missing tools:"
+
+    if [ $mise_installed = false ]; then
+      echo "## Mise:"
+      echo "Install it from here: https://mise.jdx.dev/"
+      echo "Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion"
+    fi
+
+    if [ $docker_installed = false ]; then
+      echo "## Docker:"
+      echo "Install docker: https://www.docker.com/"
+    fi
+
+    exit 1
+fi
+
+echo -e "\n⏳ Installing tools"
+mise install
+
+echo -e "\n⏳ Installing dependencies"
+mise run install
+
+echo -e "\n✅ All set up!"
+mise tasks
