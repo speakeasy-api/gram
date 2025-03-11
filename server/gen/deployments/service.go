@@ -69,7 +69,17 @@ type DeploymentCreateForm struct {
 // createDeployment method.
 type DeploymentCreateResult struct {
 	// The ID to of the deployment.
-	ID *string
+	ID string
+	// The creation date of the deployment.
+	CreatedAt string
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolForm
 }
 
 // DeploymentGetForm is the payload type of the deployments service

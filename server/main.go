@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/speakeasy-api/gram/cmd"
+	"github.com/speakeasy-api/gram/cmd/gram"
 )
 
 func main() {
-	cmd.Execute(context.Background(), os.Args)
+	gram.Execute(context.Background(), os.Args)
 }

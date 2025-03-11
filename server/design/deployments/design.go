@@ -1,4 +1,4 @@
-package design
+package deployments
 
 import (
 	. "goa.design/goa/v3/dsl"
@@ -96,10 +96,7 @@ var DeploymentCreateForm = Type("DeploymentCreateForm", func() {
 })
 
 var DeploymentCreateResult = Type("DeploymentCreateResult", func() {
-	Attribute("id", String, func() {
-		Description("The ID to of the deployment.")
-		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
-	})
+	Extend(Deployment)
 })
 
 var DeploymentListForm = Type("DeploymentListForm", func() {

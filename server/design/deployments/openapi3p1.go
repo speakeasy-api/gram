@@ -1,4 +1,4 @@
-package design
+package deployments
 
 import (
 	"net/http"

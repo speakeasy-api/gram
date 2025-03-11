@@ -13,6 +13,22 @@ produces:
     - application/xml
     - application/gob
 paths:
+    /health:
+        get:
+            tags:
+                - system
+            summary: healthCheck system
+            description: Check the health of the service.
+            operationId: system#healthCheck
+            responses:
+                "200":
+                    description: OK response.
+                    schema:
+                        $ref: '#/definitions/HealthCheckResult'
+                        required:
+                            - status
+            schemes:
+                - http
     /rpc/deployments.create:
         post:
             tags:
@@ -31,6 +47,9 @@ paths:
                     description: OK response.
                     schema:
                         $ref: '#/definitions/DeploymentCreateResult'
+                        required:
+                            - id
+                            - created_at
             schemes:
                 - http
     /rpc/deployments.get:
@@ -94,7 +113,7 @@ definitions:
             created_at:
                 type: string
                 description: The creation date of the deployment.
-                example: "2014-03-13T12:47:32Z"
+                example: "1992-03-13T02:41:25Z"
                 format: date-time
             external_id:
                 type: string
@@ -114,7 +133,7 @@ definitions:
                     $ref: '#/definitions/OpenAPI3P1ToolForm'
                 description: The HTTP tools available in the deployment.
         example:
-            created_at: "1995-11-11T13:49:35Z"
+            created_at: "1972-02-29T17:03:30Z"
             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
             external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
             id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -145,20 +164,10 @@ definitions:
         title: DeploymentCreateResult
         type: object
         properties:
-            id:
-                type: string
-                description: The ID to of the deployment.
-                example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-        example:
-            id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-    DeploymentGetResult:
-        title: DeploymentGetResult
-        type: object
-        properties:
             created_at:
                 type: string
                 description: The creation date of the deployment.
-                example: "2007-07-23T08:06:07Z"
+                example: "2015-09-25T00:21:27Z"
                 format: date-time
             external_id:
                 type: string
@@ -178,7 +187,41 @@ definitions:
                     $ref: '#/definitions/OpenAPI3P1ToolForm'
                 description: The HTTP tools available in the deployment.
         example:
-            created_at: "1997-05-27T09:35:15Z"
+            created_at: "1990-08-27T00:25:40Z"
+            external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+        required:
+            - id
+            - created_at
+    DeploymentGetResult:
+        title: DeploymentGetResult
+        type: object
+        properties:
+            created_at:
+                type: string
+                description: The creation date of the deployment.
+                example: "1981-12-01T10:44:22Z"
+                format: date-time
+            external_id:
+                type: string
+                description: The external ID to refer to the deployment. This can be a git commit hash for example.
+                example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            external_url:
+                type: string
+                description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            id:
+                type: string
+                description: The ID to of the deployment.
+                example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            openapi_3p1_tools:
+                type: array
+                items:
+                    $ref: '#/definitions/OpenAPI3P1ToolForm'
+                description: The HTTP tools available in the deployment.
+        example:
+            created_at: "2007-08-15T14:22:38Z"
             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
             external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
             id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -195,19 +238,19 @@ definitions:
                     $ref: '#/definitions/Deployment'
                 description: A list of deployments
                 example:
-                    - created_at: "1972-02-17T21:09:35Z"
+                    - created_at: "1990-06-03T11:50:48Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                    - created_at: "1972-02-17T21:09:35Z"
+                    - created_at: "1990-06-03T11:50:48Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                    - created_at: "1972-02-17T21:09:35Z"
+                    - created_at: "1990-06-03T11:50:48Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                    - created_at: "1972-02-17T21:09:35Z"
+                    - created_at: "1990-06-03T11:50:48Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -217,25 +260,29 @@ definitions:
                 example: 01jp3f054qc02gbcmpp0qmyzed
         example:
             items:
-                - created_at: "1972-02-17T21:09:35Z"
+                - created_at: "1990-06-03T11:50:48Z"
                   external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                   external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                   id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                - created_at: "1972-02-17T21:09:35Z"
-                  external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                  external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                  id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                - created_at: "1972-02-17T21:09:35Z"
-                  external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                  external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                  id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                - created_at: "1972-02-17T21:09:35Z"
+                - created_at: "1990-06-03T11:50:48Z"
                   external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                   external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                   id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
             next_cursor: 01jp3f054qc02gbcmpp0qmyzed
         required:
             - items
+    HealthCheckResult:
+        title: HealthCheckResult
+        type: object
+        properties:
+            status:
+                type: string
+                description: The status of the service.
+                example: Laborum odit ut libero saepe magnam reprehenderit.
+        example:
+            status: Officia et nemo rerum.
+        required:
+            - status
     OpenAPI3P1ParameterSchema:
         title: OpenAPI3P1ParameterSchema
         type: object
@@ -243,26 +290,25 @@ definitions:
             allowReserved:
                 type: boolean
                 description: Whether the parameter is allowed to be reserved.
-                example: true
+                example: false
             deprecated:
                 type: boolean
                 description: A brief description of the parameter.
                 default: false
-                example: false
+                example: true
             description:
                 type: string
                 description: A brief description of the parameter.
-                example: Id perferendis.
+                example: Est officiis natus.
             example:
                 description: An example value for the parameter.
-                example: Est qui.
+                example: Non placeat itaque.
             examples:
                 type: object
                 description: Examples of the parameter.
                 example:
-                    Et officia quisquam recusandae.: Distinctio debitis.
-                    Nobis quas dicta dolor aut.: Inventore ut aut.
-                    Recusandae facilis voluptatem et eaque magni quia.: Nemo accusantium architecto ducimus.
+                    Consequatur vero cum.: Amet nemo et saepe non.
+                    Eaque animi id cumque.: Rem voluptatem sit sint harum.
                 additionalProperties: true
             explode:
                 type: boolean
@@ -271,7 +317,7 @@ definitions:
             in:
                 type: string
                 description: The location of the parameter in an HTTP request.
-                example: path
+                example: query
                 enum:
                     - query
                     - header
@@ -280,11 +326,11 @@ definitions:
             name:
                 type: string
                 description: The name of the parameter.
-                example: Accusamus quibusdam omnis ex corrupti odit voluptate.
+                example: Et illum et perspiciatis perferendis.
             required:
                 type: boolean
                 description: Whether the parameter is required.
-                example: false
+                example: true
             schema:
                 type: string
                 description: The JSON Schema describing the parameter.
@@ -293,7 +339,7 @@ definitions:
             style:
                 type: string
                 description: The style of the parameter.
-                example: spaceDelimited
+                example: simple
                 enum:
                     - form
                     - simple
@@ -303,17 +349,17 @@ definitions:
         example:
             allowReserved: true
             deprecated: false
-            description: Officia iste id dolorem aspernatur.
-            example: Enim quos earum optio quasi rem quia.
+            description: In qui est impedit natus.
+            example: Inventore ab.
             examples:
-                Exercitationem et reprehenderit ea architecto.: Consequatur culpa et rerum tenetur fugiat.
-                Inventore molestias nihil sed repellat enim nam.: Animi consequatur quibusdam.
-            explode: false
-            in: header
-            name: Ipsam velit quis id.
-            required: false
+                Amet temporibus autem eaque qui.: Aliquam ut minima omnis rem perferendis beatae.
+                Autem molestiae aut sit.: Aliquid voluptatem.
+            explode: true
+            in: path
+            name: Consequuntur suscipit explicabo beatae maiores.
+            required: true
             schema: '{"name":"example","email":"mail@example.com"}'
-            style: deepObject
+            style: form
         required:
             - name
             - in
@@ -335,29 +381,33 @@ definitions:
                 type: object
                 description: A map of header schemas to send with the HTTP request.
                 example:
-                    Placeat itaque.:
+                    Est sit voluptas quis alias harum.:
                         allowReserved: false
-                        deprecated: false
-                        description: Quaerat voluptatibus explicabo ut aut recusandae voluptatem.
-                        example: Consequatur quod.
+                        deprecated: true
+                        description: Soluta sunt in.
+                        example: Aut ea excepturi magni recusandae et.
                         examples:
-                            Omnis exercitationem ea fugit blanditiis sunt voluptates.: Ut odit.
-                        explode: true
-                        in: path
-                        name: Quisquam natus.
+                            Consequatur adipisci sit enim cupiditate.: Impedit perspiciatis.
+                            Corporis doloribus ut ipsum cumque ex inventore.: Nihil sit minima alias ratione.
+                            Est eveniet.: Voluptas fugit et explicabo nesciunt.
+                        explode: false
+                        in: cookie
+                        name: Eaque nisi nemo ad veniam.
                         required: true
                         schema: '{"name":"example","email":"mail@example.com"}'
                         style: form
-                    Veniam ipsum placeat quibusdam ut velit.:
+                    Et ipsum repellendus.:
                         allowReserved: false
-                        deprecated: false
-                        description: Quaerat voluptatibus explicabo ut aut recusandae voluptatem.
-                        example: Consequatur quod.
+                        deprecated: true
+                        description: Soluta sunt in.
+                        example: Aut ea excepturi magni recusandae et.
                         examples:
-                            Omnis exercitationem ea fugit blanditiis sunt voluptates.: Ut odit.
-                        explode: true
-                        in: path
-                        name: Quisquam natus.
+                            Consequatur adipisci sit enim cupiditate.: Impedit perspiciatis.
+                            Corporis doloribus ut ipsum cumque ex inventore.: Nihil sit minima alias ratione.
+                            Est eveniet.: Voluptas fugit et explicabo nesciunt.
+                        explode: false
+                        in: cookie
+                        name: Eaque nisi nemo ad veniam.
                         required: true
                         schema: '{"name":"example","email":"mail@example.com"}'
                         style: form
@@ -395,16 +445,18 @@ definitions:
                 type: object
                 description: A map of path parameters to interpolate into the path of the HTTP request.
                 example:
-                    Amet in molestiae omnis necessitatibus nihil consequatur.:
+                    Deserunt doloribus velit non laboriosam ut nihil.:
                         allowReserved: false
-                        deprecated: false
-                        description: Quaerat voluptatibus explicabo ut aut recusandae voluptatem.
-                        example: Consequatur quod.
+                        deprecated: true
+                        description: Soluta sunt in.
+                        example: Aut ea excepturi magni recusandae et.
                         examples:
-                            Omnis exercitationem ea fugit blanditiis sunt voluptates.: Ut odit.
-                        explode: true
-                        in: path
-                        name: Quisquam natus.
+                            Consequatur adipisci sit enim cupiditate.: Impedit perspiciatis.
+                            Corporis doloribus ut ipsum cumque ex inventore.: Nihil sit minima alias ratione.
+                            Est eveniet.: Voluptas fugit et explicabo nesciunt.
+                        explode: false
+                        in: cookie
+                        name: Eaque nisi nemo ad veniam.
                         required: true
                         schema: '{"name":"example","email":"mail@example.com"}'
                         style: form
@@ -414,29 +466,48 @@ definitions:
                 type: object
                 description: A map of query parameters to send with the HTTP request.
                 example:
-                    Eaque animi id cumque.:
+                    Quae esse quaerat quas quos.:
                         allowReserved: false
-                        deprecated: false
-                        description: Quaerat voluptatibus explicabo ut aut recusandae voluptatem.
-                        example: Consequatur quod.
+                        deprecated: true
+                        description: Soluta sunt in.
+                        example: Aut ea excepturi magni recusandae et.
                         examples:
-                            Omnis exercitationem ea fugit blanditiis sunt voluptates.: Ut odit.
-                        explode: true
-                        in: path
-                        name: Quisquam natus.
+                            Consequatur adipisci sit enim cupiditate.: Impedit perspiciatis.
+                            Corporis doloribus ut ipsum cumque ex inventore.: Nihil sit minima alias ratione.
+                            Est eveniet.: Voluptas fugit et explicabo nesciunt.
+                        explode: false
+                        in: cookie
+                        name: Eaque nisi nemo ad veniam.
                         required: true
                         schema: '{"name":"example","email":"mail@example.com"}'
                         style: form
-                    Rem voluptatem sit sint harum.:
+                    Qui aut.:
                         allowReserved: false
-                        deprecated: false
-                        description: Quaerat voluptatibus explicabo ut aut recusandae voluptatem.
-                        example: Consequatur quod.
+                        deprecated: true
+                        description: Soluta sunt in.
+                        example: Aut ea excepturi magni recusandae et.
                         examples:
-                            Omnis exercitationem ea fugit blanditiis sunt voluptates.: Ut odit.
-                        explode: true
-                        in: path
-                        name: Quisquam natus.
+                            Consequatur adipisci sit enim cupiditate.: Impedit perspiciatis.
+                            Corporis doloribus ut ipsum cumque ex inventore.: Nihil sit minima alias ratione.
+                            Est eveniet.: Voluptas fugit et explicabo nesciunt.
+                        explode: false
+                        in: cookie
+                        name: Eaque nisi nemo ad veniam.
+                        required: true
+                        schema: '{"name":"example","email":"mail@example.com"}'
+                        style: form
+                    Velit est saepe repudiandae maxime sed error.:
+                        allowReserved: false
+                        deprecated: true
+                        description: Soluta sunt in.
+                        example: Aut ea excepturi magni recusandae et.
+                        examples:
+                            Consequatur adipisci sit enim cupiditate.: Impedit perspiciatis.
+                            Corporis doloribus ut ipsum cumque ex inventore.: Nihil sit minima alias ratione.
+                            Est eveniet.: Voluptas fugit et explicabo nesciunt.
+                        explode: false
+                        in: cookie
+                        name: Eaque nisi nemo ad veniam.
                         required: true
                         schema: '{"name":"example","email":"mail@example.com"}'
                         style: form
@@ -446,7 +517,7 @@ definitions:
                 type: array
                 items:
                     type: string
-                    example: ny
+                    example: d
                     pattern: ^[a-z](?:[a-z0-9_-]*[a-z0-9])?$
                 description: The tags that are associated with the tool.
                 default: []

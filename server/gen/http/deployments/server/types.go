@@ -48,7 +48,17 @@ type GetDeploymentResponseBody struct {
 // "createDeployment" endpoint HTTP response body.
 type CreateDeploymentResponseBody struct {
 	// The ID to of the deployment.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	ID string `form:"id" json:"id" xml:"id"`
+	// The creation date of the deployment.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolFormResponseBody `form:"openapi_3p1_tools,omitempty" json:"openapi_3p1_tools,omitempty" xml:"openapi_3p1_tools,omitempty"`
 }
 
 // ListDeploymentsResponseBody is the type of the "deployments" service
@@ -199,7 +209,16 @@ func NewGetDeploymentResponseBody(res *deployments.DeploymentGetResult) *GetDepl
 // result of the "createDeployment" endpoint of the "deployments" service.
 func NewCreateDeploymentResponseBody(res *deployments.DeploymentCreateResult) *CreateDeploymentResponseBody {
 	body := &CreateDeploymentResponseBody{
-		ID: res.ID,
+		ID:          res.ID,
+		CreatedAt:   res.CreatedAt,
+		ExternalID:  res.ExternalID,
+		ExternalURL: res.ExternalURL,
+	}
+	if res.Openapi3p1Tools != nil {
+		body.Openapi3p1Tools = make([]*OpenAPI3P1ToolFormResponseBody, len(res.Openapi3p1Tools))
+		for i, val := range res.Openapi3p1Tools {
+			body.Openapi3p1Tools[i] = marshalDeploymentsOpenAPI3P1ToolFormToOpenAPI3P1ToolFormResponseBody(val)
+		}
 	}
 	return body
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 
 	deploymentsc "github.com/speakeasy-api/gram/gen/http/deployments/client"
+	systemc "github.com/speakeasy-api/gram/gen/http/system/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -23,12 +24,14 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() string {
 	return `deployments (get-deployment|create-deployment|list-deployments)
+system health-check
 `
 }
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` deployments get-deployment --id "Necessitatibus eaque voluptas."` + "\n" +
+	return os.Args[0] + ` deployments get-deployment --id "Adipisci id consequuntur totam eum."` + "\n" +
+		os.Args[0] + ` system health-check` + "\n" +
 		""
 }
 
@@ -53,11 +56,18 @@ func ParseEndpoint(
 		deploymentsListDeploymentsFlags      = flag.NewFlagSet("list-deployments", flag.ExitOnError)
 		deploymentsListDeploymentsCursorFlag = deploymentsListDeploymentsFlags.String("cursor", "", "")
 		deploymentsListDeploymentsLimitFlag  = deploymentsListDeploymentsFlags.String("limit", "10", "")
+
+		systemFlags = flag.NewFlagSet("system", flag.ContinueOnError)
+
+		systemHealthCheckFlags = flag.NewFlagSet("health-check", flag.ExitOnError)
 	)
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
 	deploymentsCreateDeploymentFlags.Usage = deploymentsCreateDeploymentUsage
 	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
+
+	systemFlags.Usage = systemUsage
+	systemHealthCheckFlags.Usage = systemHealthCheckUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -76,6 +86,8 @@ func ParseEndpoint(
 		switch svcn {
 		case "deployments":
 			svcf = deploymentsFlags
+		case "system":
+			svcf = systemFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
 		}
@@ -101,6 +113,13 @@ func ParseEndpoint(
 
 			case "list-deployments":
 				epf = deploymentsListDeploymentsFlags
+
+			}
+
+		case "system":
+			switch epn {
+			case "health-check":
+				epf = systemHealthCheckFlags
 
 			}
 
@@ -137,6 +156,12 @@ func ParseEndpoint(
 				endpoint = c.ListDeployments()
 				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsLimitFlag)
 			}
+		case "system":
+			c := systemc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "health-check":
+				endpoint = c.HealthCheck()
+			}
 		}
 	}
 	if err != nil {
@@ -169,7 +194,7 @@ Create a deployment to load tool definitions.
     -id STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Necessitatibus eaque voluptas."
+    %[1]s deployments get-deployment --id "Adipisci id consequuntur totam eum."
 `, os.Args[0])
 }
 
@@ -195,6 +220,29 @@ List all deployments in descending order of creation.
     -limit INT: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Qui nisi." --limit 19
+    %[1]s deployments list-deployments --cursor "Blanditiis aut porro nam vel." --limit 6
+`, os.Args[0])
+}
+
+// systemUsage displays the usage of the system command and its subcommands.
+func systemUsage() {
+	fmt.Fprintf(os.Stderr, `Exposes service health and status information.
+Usage:
+    %[1]s [globalflags] system COMMAND [flags]
+
+COMMAND:
+    health-check: Check the health of the service.
+
+Additional help:
+    %[1]s system COMMAND --help
+`, os.Args[0])
+}
+func systemHealthCheckUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] system health-check
+
+Check the health of the service.
+
+Example:
+    %[1]s system health-check
 `, os.Args[0])
 }

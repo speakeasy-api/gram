@@ -49,6 +49,16 @@ type GetDeploymentResponseBody struct {
 type CreateDeploymentResponseBody struct {
 	// The ID to of the deployment.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The creation date of the deployment.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolFormResponseBody `form:"openapi_3p1_tools,omitempty" json:"openapi_3p1_tools,omitempty" xml:"openapi_3p1_tools,omitempty"`
 }
 
 // ListDeploymentsResponseBody is the type of the "deployments" service
@@ -216,7 +226,16 @@ func NewGetDeploymentDeploymentGetResultOK(body *GetDeploymentResponseBody) *dep
 // "createDeployment" endpoint result from a HTTP "OK" response.
 func NewCreateDeploymentDeploymentCreateResultOK(body *CreateDeploymentResponseBody) *deployments.DeploymentCreateResult {
 	v := &deployments.DeploymentCreateResult{
-		ID: body.ID,
+		ID:          *body.ID,
+		CreatedAt:   *body.CreatedAt,
+		ExternalID:  body.ExternalID,
+		ExternalURL: body.ExternalURL,
+	}
+	if body.Openapi3p1Tools != nil {
+		v.Openapi3p1Tools = make([]*deployments.OpenAPI3P1ToolForm, len(body.Openapi3p1Tools))
+		for i, val := range body.Openapi3p1Tools {
+			v.Openapi3p1Tools[i] = unmarshalOpenAPI3P1ToolFormResponseBodyToDeploymentsOpenAPI3P1ToolForm(val)
+		}
 	}
 
 	return v
@@ -239,6 +258,28 @@ func NewListDeploymentsDeploymentListResultOK(body *ListDeploymentsResponseBody)
 // ValidateGetDeploymentResponseBody runs the validations defined on
 // GetDeploymentResponseBody
 func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Openapi3p1Tools {
+		if e != nil {
+			if err2 := ValidateOpenAPI3P1ToolFormResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCreateDeploymentResponseBody runs the validations defined on
+// CreateDeploymentResponseBody
+func ValidateCreateDeploymentResponseBody(body *CreateDeploymentResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

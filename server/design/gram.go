@@ -4,6 +4,7 @@ import (
 	. "goa.design/goa/v3/dsl"
 
 	_ "github.com/speakeasy-api/gram/design/deployments"
+	_ "github.com/speakeasy-api/gram/design/system"
 )
 
 var _ = API("gram", func() {

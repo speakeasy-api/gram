@@ -149,6 +149,10 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
 			}
+			err = ValidateCreateDeploymentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
 			res := NewCreateDeploymentDeploymentCreateResultOK(&body)
 			return res, nil
 		default:

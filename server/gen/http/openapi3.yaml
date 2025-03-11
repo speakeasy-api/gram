@@ -7,6 +7,22 @@ servers:
     - url: http://localhost:80
       description: Default server for gram
 paths:
+    /health:
+        get:
+            tags:
+                - system
+            summary: healthCheck system
+            description: Check the health of the service.
+            operationId: system#healthCheck
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthCheckResult'
+                            example:
+                                status: Facilis voluptatem et.
     /rpc/deployments.create:
         post:
             tags:
@@ -31,6 +47,9 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/DeploymentCreateResult'
                             example:
+                                created_at: "1997-06-09T13:16:29Z"
+                                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
     /rpc/deployments.get:
         post:
@@ -47,8 +66,8 @@ paths:
                   schema:
                     type: string
                     description: The ID of the deployment
-                    example: Perferendis et deleniti quia aut.
-                  example: Vel sed totam quis unde.
+                    example: Vitae ut voluptatum quia.
+                  example: Asperiores reiciendis et.
             responses:
                 "200":
                     description: OK response.
@@ -57,7 +76,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/DeploymentGetResult'
                             example:
-                                created_at: "1991-08-30T08:11:08Z"
+                                created_at: "1978-07-12T06:10:19Z"
                                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -76,8 +95,8 @@ paths:
                   schema:
                     type: string
                     description: The cursor to fetch results from
-                    example: Rerum veniam perspiciatis nostrum minus repellendus.
-                  example: Qui dolorem unde sint nemo rerum.
+                    example: Eligendi facilis.
+                  example: Perferendis alias alias iure.
                 - name: limit
                   in: query
                   description: Results per page
@@ -86,11 +105,11 @@ paths:
                     type: integer
                     description: Results per page
                     default: 10
-                    example: 39
+                    example: 41
                     format: int64
                     minimum: 1
                     maximum: 100
-                  example: 28
+                  example: 88
             responses:
                 "200":
                     description: OK response.
@@ -100,19 +119,19 @@ paths:
                                 $ref: '#/components/schemas/DeploymentListResult'
                             example:
                                 items:
-                                    - created_at: "1972-02-17T21:09:35Z"
+                                    - created_at: "1990-06-03T11:50:48Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                    - created_at: "1972-02-17T21:09:35Z"
+                                    - created_at: "1990-06-03T11:50:48Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                    - created_at: "1972-02-17T21:09:35Z"
+                                    - created_at: "1990-06-03T11:50:48Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                    - created_at: "1972-02-17T21:09:35Z"
+                                    - created_at: "1990-06-03T11:50:48Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -125,7 +144,7 @@ components:
                 created_at:
                     type: string
                     description: The creation date of the deployment.
-                    example: "1988-02-06T07:11:52Z"
+                    example: "2004-03-31T09:33:25Z"
                     format: date-time
                 external_id:
                     type: string
@@ -145,7 +164,7 @@ components:
                         $ref: '#/components/schemas/OpenAPI3P1ToolForm'
                     description: The HTTP tools available in the deployment.
             example:
-                created_at: "1985-03-31T11:30:05Z"
+                created_at: "1989-02-27T05:52:30Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -174,28 +193,10 @@ components:
         DeploymentCreateResult:
             type: object
             properties:
-                id:
-                    type: string
-                    description: The ID to of the deployment.
-                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-            example:
-                id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-        DeploymentGetForm:
-            type: object
-            properties:
-                id:
-                    type: string
-                    description: The ID of the deployment
-                    example: Ea quia distinctio.
-            example:
-                id: Assumenda veniam excepturi a et.
-        DeploymentGetResult:
-            type: object
-            properties:
                 created_at:
                     type: string
                     description: The creation date of the deployment.
-                    example: "2005-10-23T00:08:33Z"
+                    example: "1996-05-08T10:05:06Z"
                     format: date-time
                 external_id:
                     type: string
@@ -215,7 +216,49 @@ components:
                         $ref: '#/components/schemas/OpenAPI3P1ToolForm'
                     description: The HTTP tools available in the deployment.
             example:
-                created_at: "1975-10-15T10:51:58Z"
+                created_at: "1998-06-02T18:15:57Z"
+                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            required:
+                - id
+                - created_at
+        DeploymentGetForm:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the deployment
+                    example: Enim modi aliquam aut.
+            example:
+                id: Incidunt suscipit.
+        DeploymentGetResult:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the deployment.
+                    example: "1996-05-14T16:45:20Z"
+                    format: date-time
+                external_id:
+                    type: string
+                    description: The external ID to refer to the deployment. This can be a git commit hash for example.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url:
+                    type: string
+                    description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                id:
+                    type: string
+                    description: The ID to of the deployment.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                openapi_3p1_tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
+                    description: The HTTP tools available in the deployment.
+            example:
+                created_at: "2000-08-09T00:19:55Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -228,18 +271,18 @@ components:
                 cursor:
                     type: string
                     description: The cursor to fetch results from
-                    example: Asperiores tempore blanditiis esse eos.
+                    example: Expedita numquam officia voluptas.
                 limit:
                     type: integer
                     description: Results per page
                     default: 10
-                    example: 19
+                    example: 53
                     format: int64
                     minimum: 1
                     maximum: 100
             example:
-                cursor: At eaque qui.
-                limit: 7
+                cursor: Veritatis aliquam.
+                limit: 20
         DeploymentListResult:
             type: object
             properties:
@@ -249,15 +292,11 @@ components:
                         $ref: '#/components/schemas/Deployment'
                     description: A list of deployments
                     example:
-                        - created_at: "2015-06-18T16:53:03Z"
+                        - created_at: "1997-06-13T08:34:30Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                        - created_at: "2015-06-18T16:53:03Z"
-                          external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                        - created_at: "2015-06-18T16:53:03Z"
+                        - created_at: "1997-06-13T08:34:30Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -267,28 +306,35 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             example:
                 items:
-                    - created_at: "2015-06-18T16:53:03Z"
+                    - created_at: "1997-06-13T08:34:30Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                    - created_at: "2015-06-18T16:53:03Z"
-                      external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                    - created_at: "2015-06-18T16:53:03Z"
+                    - created_at: "1997-06-13T08:34:30Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
+        HealthCheckResult:
+            type: object
+            properties:
+                status:
+                    type: string
+                    description: The status of the service.
+                    example: Optio ut veritatis praesentium et consequuntur quidem.
+            example:
+                status: Libero accusantium.
+            required:
+                - status
         OpenAPI3P1ParameterSchema:
             type: object
             properties:
                 allowReserved:
                     type: boolean
                     description: Whether the parameter is allowed to be reserved.
-                    example: true
+                    example: false
                 deprecated:
                     type: boolean
                     description: A brief description of the parameter.
@@ -297,26 +343,25 @@ components:
                 description:
                     type: string
                     description: A brief description of the parameter.
-                    example: Dolores beatae.
+                    example: Vel sit consequuntur est.
                 example:
                     description: An example value for the parameter.
-                    example: Quia assumenda commodi pariatur.
+                    example: Et quos quis fugit ut.
                 examples:
                     type: object
                     description: Examples of the parameter.
                     example:
-                        At praesentium voluptates error sed.: Officiis dignissimos distinctio mollitia tempora maiores ea.
-                        Et culpa voluptatem.: Asperiores explicabo et sit in vel labore.
-                        Ipsa molestiae voluptas nemo.: Iusto voluptas culpa sed.
+                        Et dignissimos veniam vel.: Iste id suscipit corrupti ea et quaerat.
+                        Qui et est.: Dolores ipsum amet perspiciatis.
                     additionalProperties: true
                 explode:
                     type: boolean
                     description: Whether the parameter is exploded.
-                    example: false
+                    example: true
                 in:
                     type: string
                     description: The location of the parameter in an HTTP request.
-                    example: query
+                    example: cookie
                     enum:
                         - query
                         - header
@@ -325,11 +370,11 @@ components:
                 name:
                     type: string
                     description: The name of the parameter.
-                    example: Architecto est ad ut voluptatibus soluta.
+                    example: Sit accusantium.
                 required:
                     type: boolean
                     description: Whether the parameter is required.
-                    example: true
+                    example: false
                 schema:
                     type: string
                     example: '{"name":"example","email":"mail@example.com"}'
@@ -337,7 +382,7 @@ components:
                 style:
                     type: string
                     description: The style of the parameter.
-                    example: pipeDelimited
+                    example: simple
                     enum:
                         - form
                         - simple
@@ -345,19 +390,18 @@ components:
                         - pipeDelimited
                         - deepObject
             example:
-                allowReserved: true
-                deprecated: false
-                description: Qui dolorem natus porro aut.
-                example: Voluptas unde laboriosam laborum sint quasi itaque.
+                allowReserved: false
+                deprecated: true
+                description: Corporis dolor.
+                example: Et autem quasi.
                 examples:
-                    Ea aut et.: Similique nostrum.
-                    Explicabo omnis aspernatur.: Deleniti ea tenetur a ut.
+                    Quasi enim.: Omnis eos.
                 explode: false
-                in: path
-                name: Dolor maxime quam vel ut.
+                in: cookie
+                name: Voluptates molestias corrupti.
                 required: true
-                schema: Labore sapiente atque ut minima quia iure.
-                style: deepObject
+                schema: Ipsam voluptate non iusto et ut accusantium.
+                style: pipeDelimited
             required:
                 - name
                 - in
@@ -377,20 +421,51 @@ components:
                     type: object
                     description: A map of header schemas to send with the HTTP request.
                     example:
-                        Quas dolor mollitia laboriosam.:
+                        Deserunt et at et dolorum.:
                             allowReserved: false
-                            deprecated: true
-                            description: Ut libero saepe magnam.
-                            example: Expedita numquam officia voluptas.
+                            deprecated: false
+                            description: Incidunt amet dolor deleniti porro qui rerum.
+                            example: Blanditiis qui vel explicabo sint rem voluptatem.
                             examples:
-                                Suscipit et minus ea est.: Consequatur deserunt sequi maxime.
-                                Veritatis aliquam.: Itaque enim modi aliquam aut provident.
+                                Architecto odit quo.: Deserunt tenetur.
+                                Fugit perferendis libero sint ut.: Aut saepe vel voluptatum nisi dolorem.
+                                Non ipsa architecto et accusantium cumque.: Odit sit iste itaque itaque atque.
                             explode: false
-                            in: query
-                            name: Nisi praesentium maxime laborum.
+                            in: header
+                            name: Voluptates est provident corporis.
                             required: true
-                            schema: Labore sapiente atque ut minima quia iure.
-                            style: simple
+                            schema: Ipsam voluptate non iusto et ut accusantium.
+                            style: form
+                        Perferendis dolorum ut rem a culpa.:
+                            allowReserved: false
+                            deprecated: false
+                            description: Incidunt amet dolor deleniti porro qui rerum.
+                            example: Blanditiis qui vel explicabo sint rem voluptatem.
+                            examples:
+                                Architecto odit quo.: Deserunt tenetur.
+                                Fugit perferendis libero sint ut.: Aut saepe vel voluptatum nisi dolorem.
+                                Non ipsa architecto et accusantium cumque.: Odit sit iste itaque itaque atque.
+                            explode: false
+                            in: header
+                            name: Voluptates est provident corporis.
+                            required: true
+                            schema: Ipsam voluptate non iusto et ut accusantium.
+                            style: form
+                        Tenetur quibusdam et aut consequatur provident animi.:
+                            allowReserved: false
+                            deprecated: false
+                            description: Incidunt amet dolor deleniti porro qui rerum.
+                            example: Blanditiis qui vel explicabo sint rem voluptatem.
+                            examples:
+                                Architecto odit quo.: Deserunt tenetur.
+                                Fugit perferendis libero sint ut.: Aut saepe vel voluptatum nisi dolorem.
+                                Non ipsa architecto et accusantium cumque.: Odit sit iste itaque itaque atque.
+                            explode: false
+                            in: header
+                            name: Voluptates est provident corporis.
+                            required: true
+                            schema: Ipsam voluptate non iusto et ut accusantium.
+                            style: form
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
                 kind:
@@ -425,75 +500,49 @@ components:
                     type: object
                     description: A map of path parameters to interpolate into the path of the HTTP request.
                     example:
-                        Architecto eaque eum repellat aliquid magnam voluptatem.:
+                        Aspernatur qui asperiores praesentium voluptas dolor.:
                             allowReserved: false
-                            deprecated: true
-                            description: Ut libero saepe magnam.
-                            example: Expedita numquam officia voluptas.
+                            deprecated: false
+                            description: Incidunt amet dolor deleniti porro qui rerum.
+                            example: Blanditiis qui vel explicabo sint rem voluptatem.
                             examples:
-                                Suscipit et minus ea est.: Consequatur deserunt sequi maxime.
-                                Veritatis aliquam.: Itaque enim modi aliquam aut provident.
+                                Architecto odit quo.: Deserunt tenetur.
+                                Fugit perferendis libero sint ut.: Aut saepe vel voluptatum nisi dolorem.
+                                Non ipsa architecto et accusantium cumque.: Odit sit iste itaque itaque atque.
                             explode: false
-                            in: query
-                            name: Nisi praesentium maxime laborum.
+                            in: header
+                            name: Voluptates est provident corporis.
                             required: true
-                            schema: Labore sapiente atque ut minima quia iure.
-                            style: simple
+                            schema: Ipsam voluptate non iusto et ut accusantium.
+                            style: form
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
                 query_parameters:
                     type: object
                     description: A map of query parameters to send with the HTTP request.
                     example:
-                        Doloribus ut quaerat aut.:
+                        Aut consequatur quae accusantium occaecati eum.:
                             allowReserved: false
-                            deprecated: true
-                            description: Ut libero saepe magnam.
-                            example: Expedita numquam officia voluptas.
+                            deprecated: false
+                            description: Incidunt amet dolor deleniti porro qui rerum.
+                            example: Blanditiis qui vel explicabo sint rem voluptatem.
                             examples:
-                                Suscipit et minus ea est.: Consequatur deserunt sequi maxime.
-                                Veritatis aliquam.: Itaque enim modi aliquam aut provident.
+                                Architecto odit quo.: Deserunt tenetur.
+                                Fugit perferendis libero sint ut.: Aut saepe vel voluptatum nisi dolorem.
+                                Non ipsa architecto et accusantium cumque.: Odit sit iste itaque itaque atque.
                             explode: false
-                            in: query
-                            name: Nisi praesentium maxime laborum.
+                            in: header
+                            name: Voluptates est provident corporis.
                             required: true
-                            schema: Labore sapiente atque ut minima quia iure.
-                            style: simple
-                        Error et enim nostrum doloremque.:
-                            allowReserved: false
-                            deprecated: true
-                            description: Ut libero saepe magnam.
-                            example: Expedita numquam officia voluptas.
-                            examples:
-                                Suscipit et minus ea est.: Consequatur deserunt sequi maxime.
-                                Veritatis aliquam.: Itaque enim modi aliquam aut provident.
-                            explode: false
-                            in: query
-                            name: Nisi praesentium maxime laborum.
-                            required: true
-                            schema: Labore sapiente atque ut minima quia iure.
-                            style: simple
-                        Fuga id ea et esse.:
-                            allowReserved: false
-                            deprecated: true
-                            description: Ut libero saepe magnam.
-                            example: Expedita numquam officia voluptas.
-                            examples:
-                                Suscipit et minus ea est.: Consequatur deserunt sequi maxime.
-                                Veritatis aliquam.: Itaque enim modi aliquam aut provident.
-                            explode: false
-                            in: query
-                            name: Nisi praesentium maxime laborum.
-                            required: true
-                            schema: Labore sapiente atque ut minima quia iure.
-                            style: simple
+                            schema: Ipsam voluptate non iusto et ut accusantium.
+                            style: form
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
                 tags:
                     type: array
                     items:
                         type: string
-                        example: ktv
+                        example: i
                         pattern: ^[a-z](?:[a-z0-9_-]*[a-z0-9])?$
                     description: The tags that are associated with the tool.
                     default: []
@@ -515,3 +564,5 @@ components:
 tags:
     - name: deployments
       description: Manages deployments of tools from upstream sources.
+    - name: system
+      description: Exposes service health and status information.

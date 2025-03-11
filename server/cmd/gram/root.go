@@ -1,4 +1,4 @@
-package cmd
+package gram
 
 import (
 	"context"
@@ -21,11 +21,11 @@ func newApp() *cli.App {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "log-level",
-				Value:   "error",
+				Value:   "info",
 				Usage:   "Set the base log level",
 				EnvVars: []string{"GRAM_LOG_LEVEL"},
 				Action: func(c *cli.Context, val string) error {
-					if _, ok := logLevels[val]; !ok {
+					if _, ok := log.LogLevels[val]; !ok {
 						return fmt.Errorf("invalid log level: %s", val)
 					}
 					return nil
@@ -38,6 +38,7 @@ func newApp() *cli.App {
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
 		},
+		Commands: []*cli.Command{newStartCommand()},
 		Before: func(c *cli.Context) error {
 			pretty := c.Bool("log-pretty")
 
@@ -45,18 +46,18 @@ func newApp() *cli.App {
 			if pretty {
 				logger = slog.New(charmlog.NewWithOptions(os.Stderr, charmlog.Options{
 					ReportCaller: true,
-					Level:        logLevels[c.String("log-level")].charm,
+					Level:        log.LogLevels[c.String("log-level")].Charm,
 				}))
 			} else {
 				logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 					AddSource: true,
-					Level:     logLevels[c.String("log-level")].slog,
+					Level:     log.LogLevels[c.String("log-level")].Slog,
 				}))
 			}
 
 			// Sets GOMAXPROCS to match the Linux container CPU quota.
 			maxprocs.Set(maxprocs.Logger(func(s string, i ...interface{}) {
-				logger.Info(fmt.Sprintf(s, i...))
+				logger.InfoContext(c.Context, fmt.Sprintf(s, i...))
 			}))
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
 			memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(logger))
