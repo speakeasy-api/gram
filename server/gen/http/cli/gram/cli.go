@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"os"
 
-	gramc "github.com/speakeasy-api/gram/gen/http/gram/client"
+	deploymentsc "github.com/speakeasy-api/gram/gen/http/deployments/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -22,16 +22,13 @@ import (
 //
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() string {
-	return `gram create-deployment
+	return `deployments (get-deployment|create-deployment|list-deployments)
 `
 }
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` gram create-deployment --body '{
-      "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6"
-   }'` + "\n" +
+	return os.Args[0] + ` deployments get-deployment --id "Necessitatibus eaque voluptas."` + "\n" +
 		""
 }
 
@@ -45,13 +42,22 @@ func ParseEndpoint(
 	restore bool,
 ) (goa.Endpoint, any, error) {
 	var (
-		gramFlags = flag.NewFlagSet("gram", flag.ContinueOnError)
+		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
-		gramCreateDeploymentFlags    = flag.NewFlagSet("create-deployment", flag.ExitOnError)
-		gramCreateDeploymentBodyFlag = gramCreateDeploymentFlags.String("body", "REQUIRED", "")
+		deploymentsGetDeploymentFlags  = flag.NewFlagSet("get-deployment", flag.ExitOnError)
+		deploymentsGetDeploymentIDFlag = deploymentsGetDeploymentFlags.String("id", "", "")
+
+		deploymentsCreateDeploymentFlags    = flag.NewFlagSet("create-deployment", flag.ExitOnError)
+		deploymentsCreateDeploymentBodyFlag = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
+
+		deploymentsListDeploymentsFlags      = flag.NewFlagSet("list-deployments", flag.ExitOnError)
+		deploymentsListDeploymentsCursorFlag = deploymentsListDeploymentsFlags.String("cursor", "", "")
+		deploymentsListDeploymentsLimitFlag  = deploymentsListDeploymentsFlags.String("limit", "10", "")
 	)
-	gramFlags.Usage = gramUsage
-	gramCreateDeploymentFlags.Usage = gramCreateDeploymentUsage
+	deploymentsFlags.Usage = deploymentsUsage
+	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
+	deploymentsCreateDeploymentFlags.Usage = deploymentsCreateDeploymentUsage
+	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -68,8 +74,8 @@ func ParseEndpoint(
 	{
 		svcn = flag.Arg(0)
 		switch svcn {
-		case "gram":
-			svcf = gramFlags
+		case "deployments":
+			svcf = deploymentsFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
 		}
@@ -85,10 +91,16 @@ func ParseEndpoint(
 	{
 		epn = svcf.Arg(0)
 		switch svcn {
-		case "gram":
+		case "deployments":
 			switch epn {
+			case "get-deployment":
+				epf = deploymentsGetDeploymentFlags
+
 			case "create-deployment":
-				epf = gramCreateDeploymentFlags
+				epf = deploymentsCreateDeploymentFlags
+
+			case "list-deployments":
+				epf = deploymentsListDeploymentsFlags
 
 			}
 
@@ -112,12 +124,18 @@ func ParseEndpoint(
 	)
 	{
 		switch svcn {
-		case "gram":
-			c := gramc.NewClient(scheme, host, doer, enc, dec, restore)
+		case "deployments":
+			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get-deployment":
+				endpoint = c.GetDeployment()
+				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag)
 			case "create-deployment":
 				endpoint = c.CreateDeployment()
-				data, err = gramc.BuildCreateDeploymentPayload(*gramCreateDeploymentBodyFlag)
+				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag)
+			case "list-deployments":
+				endpoint = c.ListDeployments()
+				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsLimitFlag)
 			}
 		}
 	}
@@ -128,29 +146,55 @@ func ParseEndpoint(
 	return endpoint, data, nil
 }
 
-// gramUsage displays the usage of the gram command and its subcommands.
-func gramUsage() {
-	fmt.Fprintf(os.Stderr, `The concerts service manages music concert data.
+// deploymentsUsage displays the usage of the deployments command and its
+// subcommands.
+func deploymentsUsage() {
+	fmt.Fprintf(os.Stderr, `Manages deployments of tools from upstream sources.
 Usage:
-    %[1]s [globalflags] gram COMMAND [flags]
+    %[1]s [globalflags] deployments COMMAND [flags]
 
 COMMAND:
+    get-deployment: Create a deployment to load tool definitions.
     create-deployment: Create a deployment to load tool definitions.
+    list-deployments: List all deployments in descending order of creation.
 
 Additional help:
-    %[1]s gram COMMAND --help
+    %[1]s deployments COMMAND --help
 `, os.Args[0])
 }
-func gramCreateDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] gram create-deployment -body JSON
+func deploymentsGetDeploymentUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING
+
+Create a deployment to load tool definitions.
+    -id STRING: 
+
+Example:
+    %[1]s deployments get-deployment --id "Necessitatibus eaque voluptas."
+`, os.Args[0])
+}
+
+func deploymentsCreateDeploymentUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON
 
 Create a deployment to load tool definitions.
     -body JSON: 
 
 Example:
-    %[1]s gram create-deployment --body '{
+    %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       "external_url": "https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6"
    }'
+`, os.Args[0])
+}
+
+func deploymentsListDeploymentsUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -limit INT
+
+List all deployments in descending order of creation.
+    -cursor STRING: 
+    -limit INT: 
+
+Example:
+    %[1]s deployments list-deployments --cursor "Qui nisi." --limit 19
 `, os.Args[0])
 }

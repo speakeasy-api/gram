@@ -2,23 +2,11 @@ package design
 
 import (
 	. "goa.design/goa/v3/dsl"
+
+	_ "github.com/speakeasy-api/gram/design/deployments"
 )
 
-// Service definition
-var _ = Service("gram", func() {
-	Description("The concerts service manages music concert data.")
-
-	Method("createDeployment", func() {
-		Description("Create a deployment to load tool definitions.")
-
-		Payload(DeploymentCreateForm)
-
-		Result(DeploymentCreateResult)
-
-		HTTP(func() {
-			POST("/rpc/deployments.create")
-
-			Response(StatusOK)
-		})
-	})
+var _ = API("gram", func() {
+	Title("Gram API Description")
+	Description("Gram is the tools platform for AI agents")
 })
