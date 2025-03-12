@@ -35,7 +35,7 @@ func newStartCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-			logger := log.From(ctx)
+			logger := log.From(ctx).With(slog.String("service", "gram"))
 
 			mux := goahttp.NewMuxer()
 			requestDecoder := goahttp.RequestDecoder
@@ -70,7 +70,7 @@ func newStartCommand() *cli.Command {
 			go func() {
 				<-ctx.Done()
 
-				logger.InfoContext(ctx, "shutting down development server")
+				logger.InfoContext(ctx, "shutting down server")
 
 				graceCtx, graceCancel := context.WithTimeout(ctx, 60*time.Second)
 				defer graceCancel()

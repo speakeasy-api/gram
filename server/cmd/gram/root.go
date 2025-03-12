@@ -11,10 +11,13 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.uber.org/automaxprocs/maxprocs"
 
+	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/log"
 )
 
 func newApp() *cli.App {
+	var shutdownFuncs []func(context.Context) error
+
 	return &cli.App{
 		Name:  "gram",
 		Usage: "CLI for the Gram API service",
@@ -64,6 +67,25 @@ func newApp() *cli.App {
 
 			c.Context = log.With(c.Context, logger)
 
+			controlServer := control.Server{
+				Address: ":8081",
+				Logger:  logger.With(slog.String("service", "control")),
+			}
+
+			shutdown, err := controlServer.Start(c.Context)
+			if err != nil {
+				return err
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			return nil
+		},
+		After: func(c *cli.Context) error {
+			for _, shutdown := range shutdownFuncs {
+				if err := shutdown(c.Context); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}
