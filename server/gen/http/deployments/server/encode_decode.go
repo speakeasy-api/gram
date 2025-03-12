@@ -36,11 +36,15 @@ func EncodeGetDeploymentResponse(encoder func(context.Context, http.ResponseWrit
 func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id *string
+			id  string
+			err error
 		)
-		idRaw := r.URL.Query().Get("id")
-		if idRaw != "" {
-			id = &idRaw
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		if err != nil {
+			return nil, err
 		}
 		payload := NewGetDeploymentDeploymentGetForm(id)
 
@@ -335,10 +339,13 @@ func unmarshalOpenAPI3P1ParameterSchemaRequestBodyToDeploymentsOpenAPI3P1Paramet
 // *DeploymentResponseBody from a value of type *deployments.Deployment.
 func marshalDeploymentsDeploymentToDeploymentResponseBody(v *deployments.Deployment) *DeploymentResponseBody {
 	res := &DeploymentResponseBody{
-		ID:          v.ID,
-		CreatedAt:   v.CreatedAt,
-		ExternalID:  v.ExternalID,
-		ExternalURL: v.ExternalURL,
+		ID:             v.ID,
+		OrganizationID: v.OrganizationID,
+		WorkspaceID:    v.WorkspaceID,
+		UserID:         v.UserID,
+		CreatedAt:      v.CreatedAt,
+		ExternalID:     v.ExternalID,
+		ExternalURL:    v.ExternalURL,
 	}
 	if v.Openapi3p1Tools != nil {
 		res.Openapi3p1Tools = make([]*OpenAPI3P1ToolFormResponseBody, len(v.Openapi3p1Tools))

@@ -19,11 +19,9 @@ import (
 // BuildGetDeploymentPayload builds the payload for the deployments
 // getDeployment endpoint from CLI flags.
 func BuildGetDeploymentPayload(deploymentsGetDeploymentID string) (*deployments.DeploymentGetForm, error) {
-	var id *string
+	var id string
 	{
-		if deploymentsGetDeploymentID != "" {
-			id = &deploymentsGetDeploymentID
-		}
+		id = deploymentsGetDeploymentID
 	}
 	v := &deployments.DeploymentGetForm{}
 	v.ID = id

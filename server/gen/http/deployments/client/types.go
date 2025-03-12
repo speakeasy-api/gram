@@ -32,6 +32,12 @@ type CreateDeploymentRequestBody struct {
 type GetDeploymentResponseBody struct {
 	// The ID to of the deployment.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID *string `form:"workspace_id,omitempty" json:"workspace_id,omitempty" xml:"workspace_id,omitempty"`
+	// The ID of the user that created the deployment.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -49,6 +55,12 @@ type GetDeploymentResponseBody struct {
 type CreateDeploymentResponseBody struct {
 	// The ID to of the deployment.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID *string `form:"workspace_id,omitempty" json:"workspace_id,omitempty" xml:"workspace_id,omitempty"`
+	// The ID of the user that created the deployment.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -175,6 +187,12 @@ type OpenAPI3P1ParameterSchemaRequestBody struct {
 type DeploymentResponseBody struct {
 	// The ID to of the deployment.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID *string `form:"workspace_id,omitempty" json:"workspace_id,omitempty" xml:"workspace_id,omitempty"`
+	// The ID of the user that created the deployment.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -207,10 +225,13 @@ func NewCreateDeploymentRequestBody(p *deployments.DeploymentCreateForm) *Create
 // "getDeployment" endpoint result from a HTTP "OK" response.
 func NewGetDeploymentDeploymentGetResultOK(body *GetDeploymentResponseBody) *deployments.DeploymentGetResult {
 	v := &deployments.DeploymentGetResult{
-		ID:          *body.ID,
-		CreatedAt:   *body.CreatedAt,
-		ExternalID:  body.ExternalID,
-		ExternalURL: body.ExternalURL,
+		ID:             *body.ID,
+		OrganizationID: *body.OrganizationID,
+		WorkspaceID:    *body.WorkspaceID,
+		UserID:         *body.UserID,
+		CreatedAt:      *body.CreatedAt,
+		ExternalID:     body.ExternalID,
+		ExternalURL:    body.ExternalURL,
 	}
 	if body.Openapi3p1Tools != nil {
 		v.Openapi3p1Tools = make([]*deployments.OpenAPI3P1ToolForm, len(body.Openapi3p1Tools))
@@ -226,10 +247,13 @@ func NewGetDeploymentDeploymentGetResultOK(body *GetDeploymentResponseBody) *dep
 // "createDeployment" endpoint result from a HTTP "OK" response.
 func NewCreateDeploymentDeploymentCreateResultOK(body *CreateDeploymentResponseBody) *deployments.DeploymentCreateResult {
 	v := &deployments.DeploymentCreateResult{
-		ID:          *body.ID,
-		CreatedAt:   *body.CreatedAt,
-		ExternalID:  body.ExternalID,
-		ExternalURL: body.ExternalURL,
+		ID:             *body.ID,
+		OrganizationID: *body.OrganizationID,
+		WorkspaceID:    *body.WorkspaceID,
+		UserID:         *body.UserID,
+		CreatedAt:      *body.CreatedAt,
+		ExternalID:     body.ExternalID,
+		ExternalURL:    body.ExternalURL,
 	}
 	if body.Openapi3p1Tools != nil {
 		v.Openapi3p1Tools = make([]*deployments.OpenAPI3P1ToolForm, len(body.Openapi3p1Tools))
@@ -264,6 +288,15 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.WorkspaceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_id", "body"))
+	}
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -285,6 +318,15 @@ func ValidateCreateDeploymentResponseBody(body *CreateDeploymentResponseBody) (e
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.WorkspaceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_id", "body"))
+	}
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -510,6 +552,15 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.WorkspaceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_id", "body"))
+	}
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

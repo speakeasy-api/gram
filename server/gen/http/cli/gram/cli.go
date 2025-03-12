@@ -30,7 +30,7 @@ system health-check
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` deployments get-deployment --id "Adipisci id consequuntur totam eum."` + "\n" +
+	return os.Args[0] + ` deployments get-deployment --id "Velit rerum non voluptates."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		""
 }
@@ -48,7 +48,7 @@ func ParseEndpoint(
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
 		deploymentsGetDeploymentFlags  = flag.NewFlagSet("get-deployment", flag.ExitOnError)
-		deploymentsGetDeploymentIDFlag = deploymentsGetDeploymentFlags.String("id", "", "")
+		deploymentsGetDeploymentIDFlag = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
 
 		deploymentsCreateDeploymentFlags    = flag.NewFlagSet("create-deployment", flag.ExitOnError)
 		deploymentsCreateDeploymentBodyFlag = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
@@ -194,7 +194,7 @@ Create a deployment to load tool definitions.
     -id STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Adipisci id consequuntur totam eum."
+    %[1]s deployments get-deployment --id "Velit rerum non voluptates."
 `, os.Args[0])
 }
 
@@ -220,7 +220,7 @@ List all deployments in descending order of creation.
     -limit INT: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Blanditiis aut porro nam vel." --limit 6
+    %[1]s deployments list-deployments --cursor "Omnis exercitationem dolores iusto harum harum dolores." --limit 99
 `, os.Args[0])
 }
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
 	goahttp "goa.design/goa/v3/http"
 
@@ -28,14 +29,27 @@ func newStartCommand() *cli.Command {
 		Usage: "Start the Gram API server",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "address",
-				Value: ":8080",
-				Usage: "HTTP address to listen on",
+				Name:    "address",
+				Value:   ":8080",
+				Usage:   "HTTP address to listen on",
+				EnvVars: []string{"GRAM_SERVER_ADDRESS"},
+			},
+			&cli.StringFlag{
+				Name:    "database-url",
+				Usage:   "Database URL",
+				EnvVars: []string{"GRAM_DATABASE_URL"},
 			},
 		},
 		Action: func(c *cli.Context) error {
-			ctx := c.Context
+			ctx, cancel := context.WithCancel(c.Context)
+			defer cancel()
 			logger := log.From(ctx).With(slog.String("service", "gram"))
+
+			db, err := pgxpool.New(ctx, c.String("database-url"))
+			if err != nil {
+				return err
+			}
+			defer db.Close()
 
 			mux := goahttp.NewMuxer()
 			requestDecoder := goahttp.RequestDecoder
@@ -51,7 +65,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			{
-				deploymentsService := deployments.NewService(nil)
+				deploymentsService := deployments.NewService(logger.With("component", "deployments"), nil)
 				deploymentsEndpoints := gendeployments.NewEndpoints(deploymentsService)
 				httpdeployments.Mount(
 					mux,
@@ -64,11 +78,11 @@ func newStartCommand() *cli.Command {
 				Handler: mux,
 			}
 
-			ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-			defer cancel()
+			sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+			defer sigcancel()
 
 			go func() {
-				<-ctx.Done()
+				<-sigctx.Done()
 
 				logger.InfoContext(ctx, "shutting down server")
 

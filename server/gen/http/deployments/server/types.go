@@ -32,6 +32,12 @@ type CreateDeploymentRequestBody struct {
 type GetDeploymentResponseBody struct {
 	// The ID to of the deployment.
 	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// The ID of the user that created the deployment.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -49,6 +55,12 @@ type GetDeploymentResponseBody struct {
 type CreateDeploymentResponseBody struct {
 	// The ID to of the deployment.
 	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// The ID of the user that created the deployment.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -125,6 +137,12 @@ type OpenAPI3P1ParameterSchemaResponseBody struct {
 type DeploymentResponseBody struct {
 	// The ID to of the deployment.
 	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// The ID of the user that created the deployment.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -191,10 +209,13 @@ type OpenAPI3P1ParameterSchemaRequestBody struct {
 // of the "getDeployment" endpoint of the "deployments" service.
 func NewGetDeploymentResponseBody(res *deployments.DeploymentGetResult) *GetDeploymentResponseBody {
 	body := &GetDeploymentResponseBody{
-		ID:          res.ID,
-		CreatedAt:   res.CreatedAt,
-		ExternalID:  res.ExternalID,
-		ExternalURL: res.ExternalURL,
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		WorkspaceID:    res.WorkspaceID,
+		UserID:         res.UserID,
+		CreatedAt:      res.CreatedAt,
+		ExternalID:     res.ExternalID,
+		ExternalURL:    res.ExternalURL,
 	}
 	if res.Openapi3p1Tools != nil {
 		body.Openapi3p1Tools = make([]*OpenAPI3P1ToolFormResponseBody, len(res.Openapi3p1Tools))
@@ -209,10 +230,13 @@ func NewGetDeploymentResponseBody(res *deployments.DeploymentGetResult) *GetDepl
 // result of the "createDeployment" endpoint of the "deployments" service.
 func NewCreateDeploymentResponseBody(res *deployments.DeploymentCreateResult) *CreateDeploymentResponseBody {
 	body := &CreateDeploymentResponseBody{
-		ID:          res.ID,
-		CreatedAt:   res.CreatedAt,
-		ExternalID:  res.ExternalID,
-		ExternalURL: res.ExternalURL,
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		WorkspaceID:    res.WorkspaceID,
+		UserID:         res.UserID,
+		CreatedAt:      res.CreatedAt,
+		ExternalID:     res.ExternalID,
+		ExternalURL:    res.ExternalURL,
 	}
 	if res.Openapi3p1Tools != nil {
 		body.Openapi3p1Tools = make([]*OpenAPI3P1ToolFormResponseBody, len(res.Openapi3p1Tools))
@@ -242,7 +266,7 @@ func NewListDeploymentsResponseBody(res *deployments.DeploymentListResult) *List
 
 // NewGetDeploymentDeploymentGetForm builds a deployments service getDeployment
 // endpoint payload.
-func NewGetDeploymentDeploymentGetForm(id *string) *deployments.DeploymentGetForm {
+func NewGetDeploymentDeploymentGetForm(id string) *deployments.DeploymentGetForm {
 	v := &deployments.DeploymentGetForm{}
 	v.ID = id
 

@@ -40,6 +40,12 @@ var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployment
 type Deployment struct {
 	// The ID to of the deployment.
 	ID string
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID string
+	// The ID of the user that created the deployment.
+	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -70,6 +76,12 @@ type DeploymentCreateForm struct {
 type DeploymentCreateResult struct {
 	// The ID to of the deployment.
 	ID string
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID string
+	// The ID of the user that created the deployment.
+	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -86,7 +98,7 @@ type DeploymentCreateResult struct {
 // getDeployment method.
 type DeploymentGetForm struct {
 	// The ID of the deployment
-	ID *string
+	ID string
 }
 
 // DeploymentGetResult is the result type of the deployments service
@@ -94,6 +106,12 @@ type DeploymentGetForm struct {
 type DeploymentGetResult struct {
 	// The ID to of the deployment.
 	ID string
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string
+	// The ID of the workspace that the deployment belongs to.
+	WorkspaceID string
+	// The ID of the user that created the deployment.
+	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
 	// The external ID to refer to the deployment. This can be a git commit hash

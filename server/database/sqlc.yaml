@@ -1,0 +1,20 @@
+version: "2"
+servers:
+  - engine: postgresql
+    uri: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable
+sql:
+  - schema: schema.sql
+    queries: ../internal/deployments/queries.sql
+    engine: postgresql
+    database:
+      managed: true
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/deployments/repo"
+        sql_package: "pgx/v5"
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/oklog/ulid/v2"
+              type: "ULID"

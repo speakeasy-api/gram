@@ -43,9 +43,7 @@ func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			return goahttp.ErrInvalidType("deployments", "getDeployment", "*deployments.DeploymentGetForm", v)
 		}
 		values := req.URL.Query()
-		if p.ID != nil {
-			values.Add("id", *p.ID)
-		}
+		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -526,10 +524,13 @@ func marshalOpenAPI3P1ParameterSchemaRequestBodyToDeploymentsOpenAPI3P1Parameter
 // type *deployments.Deployment from a value of type *DeploymentResponseBody.
 func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentResponseBody) *deployments.Deployment {
 	res := &deployments.Deployment{
-		ID:          *v.ID,
-		CreatedAt:   *v.CreatedAt,
-		ExternalID:  v.ExternalID,
-		ExternalURL: v.ExternalURL,
+		ID:             *v.ID,
+		OrganizationID: *v.OrganizationID,
+		WorkspaceID:    *v.WorkspaceID,
+		UserID:         *v.UserID,
+		CreatedAt:      *v.CreatedAt,
+		ExternalID:     v.ExternalID,
+		ExternalURL:    v.ExternalURL,
 	}
 	if v.Openapi3p1Tools != nil {
 		res.Openapi3p1Tools = make([]*deployments.OpenAPI3P1ToolForm, len(v.Openapi3p1Tools))

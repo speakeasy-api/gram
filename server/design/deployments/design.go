@@ -56,11 +56,20 @@ var _ = Service("deployments", func() {
 })
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at")
+	Required("id", "created_at", "organization_id", "workspace_id", "user_id")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
 		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
+	})
+	Attribute("organization_id", String, func() {
+		Description("The ID of the organization that the deployment belongs to.")
+	})
+	Attribute("workspace_id", String, func() {
+		Description("The ID of the workspace that the deployment belongs to.")
+	})
+	Attribute("user_id", String, func() {
+		Description("The ID of the user that created the deployment.")
 	})
 	Attribute("created_at", String, func() {
 		Description("The creation date of the deployment.")
@@ -118,6 +127,7 @@ var DeploymentListResult = Type("DeploymentListResult", func() {
 })
 
 var DeploymentGetForm = Type("DeploymentGetForm", func() {
+	Required("id")
 	Attribute("id", String, "The ID of the deployment")
 })
 
