@@ -76,6 +76,9 @@ func newStartCommand() *cli.Command {
 			srv := &http.Server{
 				Addr:    c.String("address"),
 				Handler: mux,
+				BaseContext: func(net.Listener) context.Context {
+					return ctx
+				},
 			}
 
 			sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
