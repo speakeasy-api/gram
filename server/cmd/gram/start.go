@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -63,18 +64,15 @@ func newStartCommand() *cli.Command {
 				Handler: mux,
 			}
 
-			shutdownCtx, shutdown := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-			defer shutdown()
+			ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+			defer cancel()
 
 			go func() {
-				select {
-				case <-ctx.Done():
-				case <-shutdownCtx.Done():
-				}
+				<-ctx.Done()
 
 				logger.InfoContext(ctx, "shutting down development server")
 
-				graceCtx, graceCancel := context.WithTimeout(context.Background(), 60*time.Second)
+				graceCtx, graceCancel := context.WithTimeout(ctx, 60*time.Second)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
