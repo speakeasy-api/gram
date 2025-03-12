@@ -15,8 +15,6 @@ require (
 	goa.design/goa/v3 v3.20.0
 )
 
-require github.com/gohugoio/hashstructure v0.5.0 // indirect
-
 require (
 	cel.dev/expr v0.19.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
