@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,10 +15,6 @@ import (
 	"github.com/urfave/cli/v2"
 	goahttp "goa.design/goa/v3/http"
 
-	gendeployments "github.com/speakeasy-api/gram/gen/deployments"
-	httpdeployments "github.com/speakeasy-api/gram/gen/http/deployments/server"
-	httpsystem "github.com/speakeasy-api/gram/gen/http/system/server"
-	gensystem "github.com/speakeasy-api/gram/gen/system"
 	"github.com/speakeasy-api/gram/internal/deployments"
 	"github.com/speakeasy-api/gram/internal/log"
 	"github.com/speakeasy-api/gram/internal/system"
@@ -52,26 +49,8 @@ func newStartCommand() *cli.Command {
 			defer db.Close()
 
 			mux := goahttp.NewMuxer()
-			requestDecoder := goahttp.RequestDecoder
-			responseEncoder := goahttp.ResponseEncoder
-
-			{
-				systemService := system.NewService()
-				systemEndpoints := gensystem.NewEndpoints(systemService)
-				httpsystem.Mount(
-					mux,
-					httpsystem.New(systemEndpoints, mux, requestDecoder, responseEncoder, nil, nil),
-				)
-			}
-
-			{
-				deploymentsService := deployments.NewService(logger.With("component", "deployments"), nil)
-				deploymentsEndpoints := gendeployments.NewEndpoints(deploymentsService)
-				httpdeployments.Mount(
-					mux,
-					httpdeployments.New(deploymentsEndpoints, mux, requestDecoder, responseEncoder, nil, nil),
-				)
-			}
+			system.Attach(mux, system.NewService())
+			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),
