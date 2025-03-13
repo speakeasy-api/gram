@@ -1,5 +1,5 @@
 -- 🚨
--- 🚨 READ ./RULES.md BEFORE EDITING THIS FILE
+-- 🚨 READ .cursor/rules/database-design.mdc BEFORE EDITING THIS FILE
 -- 🚨
 
 create extension if not exists pgcrypto;
