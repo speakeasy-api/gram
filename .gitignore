@@ -2,3 +2,4 @@ mise.local.toml
 .tsbuildinfo
 node_modules
 bin
+junit-report.xml
