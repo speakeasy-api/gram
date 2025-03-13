@@ -25,7 +25,8 @@ if [ $missing_tools = true ]; then
     if [ $mise_installed = false ]; then
       echo "## Mise:"
       echo "Install it from here: https://mise.jdx.dev/"
-      echo "Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion"
+      echo "- Make sure to update your .zprofile (zsh), .profile (bash), ..."
+      echo "- Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion"
     fi
 
     if [ $docker_installed = false ]; then

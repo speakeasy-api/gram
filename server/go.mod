@@ -1,6 +1,6 @@
 module github.com/speakeasy-api/gram
 
-go 1.24.0
+go 1.24.1
 
 tool (
 	github.com/sqlc-dev/sqlc/cmd/sqlc
@@ -14,8 +14,6 @@ require (
 	go.uber.org/automaxprocs v1.6.0
 	goa.design/goa/v3 v3.20.0
 )
-
-require github.com/gohugoio/hashstructure v0.5.0 // indirect
 
 require (
 	cel.dev/expr v0.19.0 // indirect
@@ -38,7 +36,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.2 // indirect
+	github.com/jackc/pgx/v5 v5.7.2
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
