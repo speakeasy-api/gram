@@ -14,4 +14,4 @@ Everything under the `# Coding assistant guidelines` headers is intended for AI 
 
 ## Putting up pull requests
 
-You must have a good title and description for your PR. Please do not be lazy about this or write it off as trivial. Go nuts with streams of commits but invest the 5 minutes to present a reviewable PR with good context. This is a non-starter.
+You must have a good title and description for your PR. Please do not be lazy about this or write it off as trivial. Go nuts with streams of commits but invest the 5 minutes to present a reviewable PR with good context. This is a non-negotiable.
