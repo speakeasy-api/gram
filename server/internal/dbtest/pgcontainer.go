@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/oklog/ulid/v2"
+	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -73,7 +74,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 		}
 		defer conn.Close(ctx)
 
-		clonename := fmt.Sprintf("%s_%s", name, strings.ToLower(ulid.Make().String()))
+		clonename := fmt.Sprintf("%s_%s", name, must.Value(uuid.NewV7()))
 		_, err = conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", clonename))
 		if err != nil {
 			return nil, fmt.Errorf("create test database: %w", err)

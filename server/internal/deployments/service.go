@@ -5,15 +5,16 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/oklog/ulid/v2"
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/gen/deployments"
 	srv "github.com/speakeasy-api/gram/gen/http/deployments/server"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/internal/must"
 )
 
 type Service struct {
@@ -37,7 +38,7 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 }
 
 func (s *Service) GetDeployment(ctx context.Context, form *gen.DeploymentGetForm) (*gen.DeploymentGetResult, error) {
-	id, err := ulid.Parse(form.ID)
+	id, err := uuid.Parse(form.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +51,9 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.DeploymentGetForm
 	return &gen.DeploymentGetResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  deployment.OrganizationID.String(),
-		WorkspaceID:     deployment.WorkspaceID.String(),
-		UserID:          deployment.UserID.String(),
+		OrganizationID:  must.UUID(deployment.OrganizationID).String(),
+		ProjectID:       must.UUID(deployment.ProjectID).String(),
+		UserID:          must.UUID(deployment.UserID).String(),
 		ExternalID:      conv.FromPGText(deployment.ExternalID),
 		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
 		Openapi3p1Tools: []*gen.OpenAPI3P1ToolForm{},
@@ -65,9 +66,9 @@ func (s *Service) ListDeployments(context.Context, *gen.DeploymentListForm) (res
 
 func (s *Service) CreateDeployment(ctx context.Context, form *gen.DeploymentCreateForm) (*gen.DeploymentCreateResult, error) {
 	deployment, err := s.repo.CreateDeployment(ctx, repo.CreateDeploymentParams{
-		UserID:         ulid.Make(),
-		OrganizationID: ulid.Make(),
-		WorkspaceID:    ulid.Make(),
+		UserID:         uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
+		OrganizationID: uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
+		ProjectID:      uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
 		ExternalID:     pgtype.Text{String: *form.ExternalID, Valid: true},
 		ExternalUrl:    pgtype.Text{String: *form.ExternalURL, Valid: true},
 	})
@@ -78,9 +79,9 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.DeploymentCrea
 	return &gen.DeploymentCreateResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  deployment.OrganizationID.String(),
-		WorkspaceID:     deployment.WorkspaceID.String(),
-		UserID:          deployment.UserID.String(),
+		OrganizationID:  must.UUID(deployment.OrganizationID).String(),
+		ProjectID:       must.UUID(deployment.ProjectID).String(),
+		UserID:          must.UUID(deployment.UserID).String(),
 		ExternalID:      conv.FromPGText(deployment.ExternalID),
 		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
 		Openapi3p1Tools: []*gen.OpenAPI3P1ToolForm{},

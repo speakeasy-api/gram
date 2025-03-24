@@ -526,7 +526,7 @@ func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentRespons
 	res := &deployments.Deployment{
 		ID:             *v.ID,
 		OrganizationID: *v.OrganizationID,
-		WorkspaceID:    *v.WorkspaceID,
+		ProjectID:      *v.ProjectID,
 		UserID:         *v.UserID,
 		CreatedAt:      *v.CreatedAt,
 		ExternalID:     v.ExternalID,

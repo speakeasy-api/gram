@@ -56,7 +56,7 @@ var _ = Service("deployments", func() {
 })
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at", "organization_id", "workspace_id", "user_id")
+	Required("id", "created_at", "organization_id", "project_id", "user_id")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -65,8 +65,8 @@ var Deployment = Type("Deployment", func() {
 	Attribute("organization_id", String, func() {
 		Description("The ID of the organization that the deployment belongs to.")
 	})
-	Attribute("workspace_id", String, func() {
-		Description("The ID of the workspace that the deployment belongs to.")
+	Attribute("project_id", String, func() {
+		Description("The ID of the project that the deployment belongs to.")
 	})
 	Attribute("user_id", String, func() {
 		Description("The ID of the user that created the deployment.")

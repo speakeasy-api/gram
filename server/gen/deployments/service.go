@@ -42,8 +42,8 @@ type Deployment struct {
 	ID string
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID string
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID string
+	// The ID of the project that the deployment belongs to.
+	ProjectID string
 	// The ID of the user that created the deployment.
 	UserID string
 	// The creation date of the deployment.
@@ -78,8 +78,8 @@ type DeploymentCreateResult struct {
 	ID string
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID string
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID string
+	// The ID of the project that the deployment belongs to.
+	ProjectID string
 	// The ID of the user that created the deployment.
 	UserID string
 	// The creation date of the deployment.
@@ -108,8 +108,8 @@ type DeploymentGetResult struct {
 	ID string
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID string
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID string
+	// The ID of the project that the deployment belongs to.
+	ProjectID string
 	// The ID of the user that created the deployment.
 	UserID string
 	// The creation date of the deployment.

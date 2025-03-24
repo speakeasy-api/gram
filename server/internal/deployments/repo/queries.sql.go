@@ -8,15 +8,19 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	ulid "github.com/oklog/ulid/v2"
 )
 
 const createDeployment = `-- name: CreateDeployment :one
 INSERT INTO deployments (
     user_id
+  , manifest_version
+  , manifest_url
   , organization_id
-  , workspace_id
+  , project_id
+  , github_repo
+  , github_pr
   , external_id
   , external_url
 ) VALUES (
@@ -25,12 +29,20 @@ INSERT INTO deployments (
   , $3
   , $4
   , $5
+  , $6
+  , $7
+  , $8
+  , $9
 )
 RETURNING 
     id
   , user_id
   , organization_id
-  , workspace_id
+  , project_id
+  , manifest_version
+  , manifest_url
+  , github_repo
+  , github_pr
   , external_id
   , external_url
   , created_at
@@ -38,29 +50,41 @@ RETURNING
 `
 
 type CreateDeploymentParams struct {
-	UserID         ulid.ULID
-	OrganizationID ulid.ULID
-	WorkspaceID    ulid.ULID
-	ExternalID     pgtype.Text
-	ExternalUrl    pgtype.Text
+	UserID          uuid.NullUUID
+	ManifestVersion string
+	ManifestUrl     string
+	OrganizationID  uuid.NullUUID
+	ProjectID       uuid.NullUUID
+	GithubRepo      pgtype.Text
+	GithubPr        pgtype.Text
+	ExternalID      pgtype.Text
+	ExternalUrl     pgtype.Text
 }
 
 type CreateDeploymentRow struct {
-	ID             ulid.ULID
-	UserID         ulid.ULID
-	OrganizationID ulid.ULID
-	WorkspaceID    ulid.ULID
-	ExternalID     pgtype.Text
-	ExternalUrl    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	UserID          uuid.NullUUID
+	OrganizationID  uuid.NullUUID
+	ProjectID       uuid.NullUUID
+	ManifestVersion string
+	ManifestUrl     string
+	GithubRepo      pgtype.Text
+	GithubPr        pgtype.Text
+	ExternalID      pgtype.Text
+	ExternalUrl     pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (CreateDeploymentRow, error) {
 	row := q.db.QueryRow(ctx, createDeployment,
 		arg.UserID,
+		arg.ManifestVersion,
+		arg.ManifestUrl,
 		arg.OrganizationID,
-		arg.WorkspaceID,
+		arg.ProjectID,
+		arg.GithubRepo,
+		arg.GithubPr,
 		arg.ExternalID,
 		arg.ExternalUrl,
 	)
@@ -69,7 +93,11 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		&i.ID,
 		&i.UserID,
 		&i.OrganizationID,
-		&i.WorkspaceID,
+		&i.ProjectID,
+		&i.ManifestVersion,
+		&i.ManifestUrl,
+		&i.GithubRepo,
+		&i.GithubPr,
 		&i.ExternalID,
 		&i.ExternalUrl,
 		&i.CreatedAt,
@@ -83,7 +111,11 @@ SELECT
     id
   , user_id
   , organization_id
-  , workspace_id
+  , project_id
+  , manifest_version
+  , manifest_url
+  , github_repo
+  , github_pr
   , external_id
   , external_url
   , created_at
@@ -93,24 +125,32 @@ WHERE id = $1
 `
 
 type GetDeploymentRow struct {
-	ID             ulid.ULID
-	UserID         ulid.ULID
-	OrganizationID ulid.ULID
-	WorkspaceID    ulid.ULID
-	ExternalID     pgtype.Text
-	ExternalUrl    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	UserID          uuid.NullUUID
+	OrganizationID  uuid.NullUUID
+	ProjectID       uuid.NullUUID
+	ManifestVersion string
+	ManifestUrl     string
+	GithubRepo      pgtype.Text
+	GithubPr        pgtype.Text
+	ExternalID      pgtype.Text
+	ExternalUrl     pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
-func (q *Queries) GetDeployment(ctx context.Context, id ulid.ULID) (GetDeploymentRow, error) {
+func (q *Queries) GetDeployment(ctx context.Context, id uuid.UUID) (GetDeploymentRow, error) {
 	row := q.db.QueryRow(ctx, getDeployment, id)
 	var i GetDeploymentRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.OrganizationID,
-		&i.WorkspaceID,
+		&i.ProjectID,
+		&i.ManifestVersion,
+		&i.ManifestUrl,
+		&i.GithubRepo,
+		&i.GithubPr,
 		&i.ExternalID,
 		&i.ExternalUrl,
 		&i.CreatedAt,

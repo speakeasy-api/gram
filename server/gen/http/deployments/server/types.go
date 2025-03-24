@@ -34,8 +34,8 @@ type GetDeploymentResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// The ID of the project that the deployment belongs to.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user that created the deployment.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
@@ -57,8 +57,8 @@ type CreateDeploymentResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// The ID of the project that the deployment belongs to.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user that created the deployment.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
@@ -139,8 +139,8 @@ type DeploymentResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// The ID of the project that the deployment belongs to.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user that created the deployment.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
@@ -211,7 +211,7 @@ func NewGetDeploymentResponseBody(res *deployments.DeploymentGetResult) *GetDepl
 	body := &GetDeploymentResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
-		WorkspaceID:    res.WorkspaceID,
+		ProjectID:      res.ProjectID,
 		UserID:         res.UserID,
 		CreatedAt:      res.CreatedAt,
 		ExternalID:     res.ExternalID,
@@ -232,7 +232,7 @@ func NewCreateDeploymentResponseBody(res *deployments.DeploymentCreateResult) *C
 	body := &CreateDeploymentResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
-		WorkspaceID:    res.WorkspaceID,
+		ProjectID:      res.ProjectID,
 		UserID:         res.UserID,
 		CreatedAt:      res.CreatedAt,
 		ExternalID:     res.ExternalID,

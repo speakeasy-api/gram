@@ -34,8 +34,8 @@ type GetDeploymentResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID *string `form:"workspace_id,omitempty" json:"workspace_id,omitempty" xml:"workspace_id,omitempty"`
+	// The ID of the project that the deployment belongs to.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user that created the deployment.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
@@ -57,8 +57,8 @@ type CreateDeploymentResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID *string `form:"workspace_id,omitempty" json:"workspace_id,omitempty" xml:"workspace_id,omitempty"`
+	// The ID of the project that the deployment belongs to.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user that created the deployment.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
@@ -189,8 +189,8 @@ type DeploymentResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the organization that the deployment belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The ID of the workspace that the deployment belongs to.
-	WorkspaceID *string `form:"workspace_id,omitempty" json:"workspace_id,omitempty" xml:"workspace_id,omitempty"`
+	// The ID of the project that the deployment belongs to.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user that created the deployment.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
@@ -227,7 +227,7 @@ func NewGetDeploymentDeploymentGetResultOK(body *GetDeploymentResponseBody) *dep
 	v := &deployments.DeploymentGetResult{
 		ID:             *body.ID,
 		OrganizationID: *body.OrganizationID,
-		WorkspaceID:    *body.WorkspaceID,
+		ProjectID:      *body.ProjectID,
 		UserID:         *body.UserID,
 		CreatedAt:      *body.CreatedAt,
 		ExternalID:     body.ExternalID,
@@ -249,7 +249,7 @@ func NewCreateDeploymentDeploymentCreateResultOK(body *CreateDeploymentResponseB
 	v := &deployments.DeploymentCreateResult{
 		ID:             *body.ID,
 		OrganizationID: *body.OrganizationID,
-		WorkspaceID:    *body.WorkspaceID,
+		ProjectID:      *body.ProjectID,
 		UserID:         *body.UserID,
 		CreatedAt:      *body.CreatedAt,
 		ExternalID:     body.ExternalID,
@@ -291,8 +291,8 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
-	if body.WorkspaceID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_id", "body"))
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
@@ -322,8 +322,8 @@ func ValidateCreateDeploymentResponseBody(body *CreateDeploymentResponseBody) (e
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
-	if body.WorkspaceID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_id", "body"))
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
@@ -556,8 +556,8 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
-	if body.WorkspaceID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_id", "body"))
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))

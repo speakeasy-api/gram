@@ -2,91 +2,194 @@
 -- 🚨 READ .cursor/rules/database-design.mdc BEFORE EDITING THIS FILE
 -- 🚨
 
-create extension if not exists pgcrypto;
+-- https://gist.github.com/kjmph/5bd772b2c2df145aa645b837da7eca74
+create or replace function generate_uuidv7()
+returns uuid
+as $$
+begin
+  -- use random v4 uuid as starting point (which has the same variant we need)
+  -- then overlay timestamp
+  -- then set version 7 by flipping the 2 and 1 bit in the version 4 string
+  return encode(
+    set_bit(
+      set_bit(
+        overlay(uuid_send(gen_random_uuid())
+                placing substring(int8send(floor(extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
+                from 1 for 6
+        ),
+        52, 1
+      ),
+      53, 1
+    ),
+    'hex')::uuid;
+end
+$$
+language plpgsql
+volatile;
 
--- https://blog.daveallie.com/ulid-primary-keys/
-create or replace function generate_ulid() returns uuid
-    as $$
-        select (lpad(to_hex(floor(extract(epoch from clock_timestamp()) * 1000)::bigint), 12, '0') || encode(gen_random_bytes(10), 'hex'))::uuid;
-    $$ language sql;
+CREATE TABLE IF NOT EXISTS organizations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-create table if not exists organizations (
-  id uuid not null default generate_ulid(),
-  name text not null,
-  slug text not null,
+  name text NOT NULL,
+  slug text NOT NULL,
 
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
-  deleted boolean not null generated always as (deleted_at is not null) stored,
-  
-  constraint organizations_pkey primary key (id),
-  constraint organizations_slug_key unique (slug)
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT organizations_pkey PRIMARY KEY (id),
+  CONSTRAINT organizations_slug_key UNIQUE (slug)
 );
 
-create table if not exists workspaces (
-  id uuid not null default generate_ulid(),
-  name text not null,
-  slug text not null,
-  organization_id uuid not null,
-  
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz,
-  deleted boolean not null generated always as (deleted_at is not null) stored,
-  
-  constraint workspaces_pkey primary key (id),
-  constraint workspaces_organization_id_slug_key unique (organization_id, slug),
-  constraint workspaces_organization_id_fkey foreign key (organization_id) references organizations (id)
-);
+CREATE TABLE IF NOT EXISTS users (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-create table if not exists users (
-  id uuid not null default generate_ulid(),
-  email text not null,
-  verification uuid not null default generate_ulid(),
+  email text NOT NULL,
+  verification uuid NOT NULL DEFAULT generate_uuidv7(),
   verified_at timestamptz,
-  
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz,
-  deleted boolean not null generated always as (deleted_at is not null) stored,
 
-  constraint users_pkey primary key (id),
-  constraint users_email_key unique (email)
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_email_key UNIQUE (email)
 );
 
-create table if not exists memberships (
-  id uuid not null default generate_ulid(),
-  user_id uuid not null,
-  organization_id uuid not null,
-  role text not null,
+CREATE TABLE IF NOT EXISTS memberships (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
+  user_id uuid,
+  organization_id uuid,
+  role text NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
-  deleted boolean not null generated always as (deleted_at is not null) stored,
-  
-  constraint memberships_pkey primary key (id),
-  constraint memberships_organization_id_fkey foreign key (organization_id) references organizations (id),
-  constraint memberships_user_id_fkey foreign key (user_id) references users (id),
-  constraint memberships_user_id_organization_id_key unique (user_id, organization_id, deleted)
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT memberships_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL,
+  CONSTRAINT memberships_user_id_fkey FOREIGN key (user_id) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT memberships_user_id_organization_id_key UNIQUE (user_id, organization_id, deleted)
 );
 
-create table if not exists deployments (
-  id uuid not null default generate_ulid(),
-  user_id uuid not null,
-  organization_id uuid not null,
-  workspace_id uuid not null,
-  external_id text check (external_id != '' and length(external_id) <= 80),
-  external_url text check (external_url != '' and length(external_url) <= 150),
- 
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
+CREATE TABLE IF NOT EXISTS projects (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
-  deleted boolean not null generated always as (deleted_at is not null) stored,
-  
-  constraint deployments_pkey primary key (id),
-  constraint deployments_user_id_fkey foreign key (user_id) references users (id),
-  constraint deployments_organization_id_fkey foreign key (organization_id) references organizations (id),
-  constraint deployments_workspace_id_fkey foreign key (workspace_id) references workspaces (id)
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT projects_pkey PRIMARY KEY (id),
+  CONSTRAINT projects_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS deployments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  user_id uuid,
+  project_id uuid,
+  organization_id uuid,
+  manifest_version text NOT NULL,
+  manifest_url text NOT NULL,
+
+  github_repo text,
+  github_pr text CHECK (
+    github_pr != ''
+    AND length(github_pr) <= 10
+  ),
+  external_id text CHECK (
+    external_id != ''
+    AND length(external_id) <= 80
+  ),
+  external_url text CHECK (
+    external_url != ''
+    AND length(external_url) <= 150
+  ),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT deployments_pkey PRIMARY KEY (id),
+  CONSTRAINT deployments_user_id_fkey FOREIGN key (user_id) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT deployments_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT deployments_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS deployment_statuses (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  seq BIGSERIAL NOT NULL,
+
+  deployment_id uuid,
+  status text NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT deployment_statuses_pkey PRIMARY KEY (id),
+  CONSTRAINT deployment_statuses_seq_key UNIQUE (seq),
+  CONSTRAINT deployment_statuses_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS deployment_logs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  seq BIGSERIAL NOT NULL,
+
+  event text NOT NULL,
+  deployment_id uuid,
+  project_id uuid,
+  tooltemplate_id uuid,
+  tooltemplate_type text CHECK (
+    -- Cannot be null if tooltemplate_id is not null
+    (tooltemplate_id IS NULL) OR (tooltemplate_type IS NOT NULL)
+  ),
+  collection_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT deployment_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT deployment_logs_seq_key UNIQUE (seq),
+  CONSTRAINT deployment_logs_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
+  CONSTRAINT deployment_logs_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
+  -- CONSTRAINT deployment_logs_collection_id_fkey FOREIGN key (collection_id) REFERENCES collections (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS http_tool_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id uuid,
+  project_id uuid,
+  name text NOT NULL,
+  description text NOT NULL,
+
+  server_env_var text NOT NULL,
+  security_type text NOT NULL CHECK (
+    security_type IN ('http:bearer', 'http:basic', 'apikey')
+  ),
+  bearer_env_var text,
+  apikey_env_var text,
+  username_env_var text,
+  password_env_var text,
+
+  http_method text NOT NULL,
+  path text NOT NULL,
+  headers_schema jsonb,
+  queries_schema jsonb,
+  pathparams_schema jsonb,
+  body_schema jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT http_tool_definitions_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL,
+  CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );

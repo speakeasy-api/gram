@@ -16,5 +16,11 @@ sql:
         overrides:
           - db_type: "uuid"
             go_type:
-              import: "github.com/oklog/ulid/v2"
-              type: "ULID"
+              import: "github.com/google/uuid"
+              type: "UUID"
+            nullable: false
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "NullUUID"
+            nullable: true

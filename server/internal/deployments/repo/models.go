@@ -5,27 +5,75 @@
 package repo
 
 import (
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	ulid "github.com/oklog/ulid/v2"
 )
 
 type Deployment struct {
-	ID             ulid.ULID
-	UserID         ulid.ULID
-	OrganizationID ulid.ULID
-	WorkspaceID    ulid.ULID
-	ExternalID     pgtype.Text
-	ExternalUrl    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	UserID          uuid.NullUUID
+	ProjectID       uuid.NullUUID
+	OrganizationID  uuid.NullUUID
+	ManifestVersion string
+	ManifestUrl     string
+	GithubRepo      pgtype.Text
+	GithubPr        pgtype.Text
+	ExternalID      pgtype.Text
+	ExternalUrl     pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type DeploymentLog struct {
+	ID               uuid.UUID
+	Seq              int64
+	Event            string
+	DeploymentID     uuid.NullUUID
+	ProjectID        uuid.NullUUID
+	TooltemplateID   uuid.NullUUID
+	TooltemplateType pgtype.Text
+	CollectionID     uuid.NullUUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type DeploymentStatus struct {
+	ID           uuid.UUID
+	Seq          int64
+	DeploymentID uuid.NullUUID
+	Status       string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type HttpToolDefinition struct {
+	ID               uuid.UUID
+	OrganizationID   uuid.NullUUID
+	ProjectID        uuid.NullUUID
+	Name             string
+	Description      string
+	ServerEnvVar     string
+	SecurityType     string
+	BearerEnvVar     pgtype.Text
+	ApikeyEnvVar     pgtype.Text
+	UsernameEnvVar   pgtype.Text
+	PasswordEnvVar   pgtype.Text
+	HttpMethod       string
+	Path             string
+	HeadersSchema    []byte
+	QueriesSchema    []byte
+	PathparamsSchema []byte
+	BodySchema       []byte
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type Membership struct {
-	ID             ulid.ULID
-	UserID         ulid.ULID
-	OrganizationID ulid.ULID
+	ID             uuid.UUID
+	UserID         uuid.NullUUID
+	OrganizationID uuid.NullUUID
 	Role           string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -34,7 +82,7 @@ type Membership struct {
 }
 
 type Organization struct {
-	ID        ulid.ULID
+	ID        uuid.UUID
 	Name      string
 	Slug      string
 	CreatedAt pgtype.Timestamptz
@@ -43,24 +91,22 @@ type Organization struct {
 	Deleted   bool
 }
 
+type Project struct {
+	ID             uuid.UUID
+	OrganizationID uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type User struct {
-	ID           ulid.ULID
+	ID           uuid.UUID
 	Email        string
-	Verification ulid.ULID
+	Verification uuid.UUID
 	VerifiedAt   pgtype.Timestamptz
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
 	Deleted      bool
-}
-
-type Workspace struct {
-	ID             ulid.ULID
-	Name           string
-	Slug           string
-	OrganizationID ulid.ULID
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
 }

@@ -52,8 +52,8 @@ paths:
                                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 organization_id: Cum a quia necessitatibus est consequatur.
+                                project_id: Et illo at optio dignissimos temporibus.
                                 user_id: Deserunt dolores.
-                                workspace_id: Et illo at optio dignissimos temporibus.
     /rpc/deployments.get:
         post:
             tags:
@@ -85,8 +85,8 @@ paths:
                                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 organization_id: Et voluptatem deserunt sed.
+                                project_id: Voluptate eius est est impedit mollitia.
                                 user_id: Delectus quia cupiditate corporis aut iste laudantium.
-                                workspace_id: Voluptate eius est est impedit mollitia.
     /rpc/deployments.list:
         post:
             tags:
@@ -131,15 +131,15 @@ paths:
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       organization_id: Et dolore eos et.
+                                      project_id: Aliquam quam sapiente aliquam dolores.
                                       user_id: Id pariatur autem quod magnam praesentium dolores.
-                                      workspace_id: Aliquam quam sapiente aliquam dolores.
                                     - created_at: "1998-07-07T16:38:05Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       organization_id: Et dolore eos et.
+                                      project_id: Aliquam quam sapiente aliquam dolores.
                                       user_id: Id pariatur autem quod magnam praesentium dolores.
-                                      workspace_id: Aliquam quam sapiente aliquam dolores.
                                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
 components:
     schemas:
@@ -172,27 +172,27 @@ components:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
                     example: Asperiores quasi.
+                project_id:
+                    type: string
+                    description: The ID of the project that the deployment belongs to.
+                    example: Deserunt aspernatur quibusdam quaerat repellendus.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
                     example: Blanditiis debitis voluptatem.
-                workspace_id:
-                    type: string
-                    description: The ID of the workspace that the deployment belongs to.
-                    example: Deserunt aspernatur quibusdam quaerat repellendus.
             example:
                 created_at: "1976-11-08T12:41:33Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 organization_id: Illo libero corporis quia vel qui suscipit.
+                project_id: Ex perferendis assumenda distinctio delectus.
                 user_id: Consequuntur est sit.
-                workspace_id: Ex perferendis assumenda distinctio delectus.
             required:
                 - id
                 - created_at
                 - organization_id
-                - workspace_id
+                - project_id
                 - user_id
         DeploymentCreateForm:
             type: object
@@ -242,27 +242,27 @@ components:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
                     example: Perferendis alias alias iure.
+                project_id:
+                    type: string
+                    description: The ID of the project that the deployment belongs to.
+                    example: Repellendus dolorum.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
                     example: Nobis velit aperiam aut quae et.
-                workspace_id:
-                    type: string
-                    description: The ID of the workspace that the deployment belongs to.
-                    example: Repellendus dolorum.
             example:
                 created_at: "1970-04-07T15:30:23Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 organization_id: Itaque totam quae asperiores modi nobis dicta.
+                project_id: Voluptas eos.
                 user_id: Necessitatibus qui repudiandae magni ea consequatur est.
-                workspace_id: Voluptas eos.
             required:
                 - id
                 - created_at
                 - organization_id
-                - workspace_id
+                - project_id
                 - user_id
         DeploymentGetForm:
             type: object
@@ -304,27 +304,27 @@ components:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
                     example: Consequuntur porro.
+                project_id:
+                    type: string
+                    description: The ID of the project that the deployment belongs to.
+                    example: In ut officia sit enim fugiat reiciendis.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
                     example: Ad excepturi similique.
-                workspace_id:
-                    type: string
-                    description: The ID of the workspace that the deployment belongs to.
-                    example: In ut officia sit enim fugiat reiciendis.
             example:
                 created_at: "2014-07-31T00:31:44Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 organization_id: Qui aspernatur inventore voluptatem qui.
+                project_id: Magni vero consequuntur quis est aperiam assumenda.
                 user_id: Placeat dolor.
-                workspace_id: Magni vero consequuntur quis est aperiam assumenda.
             required:
                 - id
                 - created_at
                 - organization_id
-                - workspace_id
+                - project_id
                 - user_id
         DeploymentListForm:
             type: object
@@ -358,29 +358,29 @@ components:
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           organization_id: Nobis atque ad modi consequuntur et.
+                          project_id: Et qui id aut omnis ab eum.
                           user_id: Dolor numquam vel voluptatibus.
-                          workspace_id: Et qui id aut omnis ab eum.
                         - created_at: "2014-07-15T11:44:08Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           organization_id: Nobis atque ad modi consequuntur et.
+                          project_id: Et qui id aut omnis ab eum.
                           user_id: Dolor numquam vel voluptatibus.
-                          workspace_id: Et qui id aut omnis ab eum.
                         - created_at: "2014-07-15T11:44:08Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           organization_id: Nobis atque ad modi consequuntur et.
+                          project_id: Et qui id aut omnis ab eum.
                           user_id: Dolor numquam vel voluptatibus.
-                          workspace_id: Et qui id aut omnis ab eum.
                         - created_at: "2014-07-15T11:44:08Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           organization_id: Nobis atque ad modi consequuntur et.
+                          project_id: Et qui id aut omnis ab eum.
                           user_id: Dolor numquam vel voluptatibus.
-                          workspace_id: Et qui id aut omnis ab eum.
                 next_cursor:
                     type: string
                     description: The cursor to fetch results from
@@ -392,15 +392,15 @@ components:
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       organization_id: Nobis atque ad modi consequuntur et.
+                      project_id: Et qui id aut omnis ab eum.
                       user_id: Dolor numquam vel voluptatibus.
-                      workspace_id: Et qui id aut omnis ab eum.
                     - created_at: "2014-07-15T11:44:08Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       organization_id: Nobis atque ad modi consequuntur et.
+                      project_id: Et qui id aut omnis ab eum.
                       user_id: Dolor numquam vel voluptatibus.
-                      workspace_id: Et qui id aut omnis ab eum.
                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items

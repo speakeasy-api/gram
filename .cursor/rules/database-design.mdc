@@ -25,6 +25,7 @@ alwaysApply: false
   - Define primary keys for all tables.
   - Use foreign keys to establish relationships between tables.
   - Utilize domains to enforce data type constraints reusable across multiple columns.
+  - All foreign keys constraints must ALWAYS specify an `ON DELETE SET NULL` clause.
 
 - **Indexing:**
   - Create indexes on columns frequently used in `WHERE` clauses and `JOIN` conditions.
