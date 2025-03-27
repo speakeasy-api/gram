@@ -13,6 +13,7 @@ func New() *Sessions {
 }
 
 func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context, error) {
+	// key = check if we already added this to context from cookie (GOA doesn't natively support)
 	if key == "" {
 		return ctx, errors.New("session key is required")
 	}
