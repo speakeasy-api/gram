@@ -8,7 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/sessions"
 	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/gen/deployments"
 	srv "github.com/speakeasy-api/gram/gen/http/deployments/server"
@@ -18,15 +20,16 @@ import (
 )
 
 type Service struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	repo     *repo.Queries
+	sessions *sessions.Sessions
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db)}
+	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New()}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
@@ -37,7 +40,7 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 	)
 }
 
-func (s *Service) GetDeployment(ctx context.Context, form *gen.DeploymentGetForm) (*gen.DeploymentGetResult, error) {
+func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayload) (res *gen.DeploymentGetResult, err error) {
 	id, err := uuid.Parse(form.ID)
 	if err != nil {
 		return nil, err
@@ -60,11 +63,11 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.DeploymentGetForm
 	}, nil
 }
 
-func (s *Service) ListDeployments(context.Context, *gen.DeploymentListForm) (res *gen.DeploymentListResult, err error) {
+func (s *Service) ListDeployments(context.Context, *gen.ListDeploymentsPayload) (res *gen.DeploymentListResult, err error) {
 	return &gen.DeploymentListResult{}, nil
 }
 
-func (s *Service) CreateDeployment(ctx context.Context, form *gen.DeploymentCreateForm) (*gen.DeploymentCreateResult, error) {
+func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeploymentPayload) (*gen.DeploymentCreateResult, error) {
 	deployment, err := s.repo.CreateDeployment(ctx, repo.CreateDeploymentParams{
 		UserID:         uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
 		OrganizationID: uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
@@ -86,4 +89,8 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.DeploymentCrea
 		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
 		Openapi3p1Tools: []*gen.OpenAPI3P1ToolForm{},
 	}, nil
+}
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.sessions.SessionAuth(ctx, key)
 }

@@ -11,6 +11,7 @@ import (
 	"context"
 
 	goa "goa.design/goa/v3/pkg"
+	"goa.design/goa/v3/security"
 )
 
 // Endpoints wraps the "deployments" service endpoints.
@@ -22,10 +23,12 @@ type Endpoints struct {
 
 // NewEndpoints wraps the methods of the "deployments" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
+	// Casting service to Auther interface
+	a := s.(Auther)
 	return &Endpoints{
-		GetDeployment:    NewGetDeploymentEndpoint(s),
-		CreateDeployment: NewCreateDeploymentEndpoint(s),
-		ListDeployments:  NewListDeploymentsEndpoint(s),
+		GetDeployment:    NewGetDeploymentEndpoint(s, a.APIKeyAuth),
+		CreateDeployment: NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
+		ListDeployments:  NewListDeploymentsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -38,27 +41,69 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 
 // NewGetDeploymentEndpoint returns an endpoint function that calls the method
 // "getDeployment" of service "deployments".
-func NewGetDeploymentEndpoint(s Service) goa.Endpoint {
+func NewGetDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeploymentGetForm)
+		p := req.(*GetDeploymentPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "gram_session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.GramSession != nil {
+			key = *p.GramSession
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
 		return s.GetDeployment(ctx, p)
 	}
 }
 
 // NewCreateDeploymentEndpoint returns an endpoint function that calls the
 // method "createDeployment" of service "deployments".
-func NewCreateDeploymentEndpoint(s Service) goa.Endpoint {
+func NewCreateDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeploymentCreateForm)
+		p := req.(*CreateDeploymentPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "gram_session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.GramSession != nil {
+			key = *p.GramSession
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
 		return s.CreateDeployment(ctx, p)
 	}
 }
 
 // NewListDeploymentsEndpoint returns an endpoint function that calls the
 // method "listDeployments" of service "deployments".
-func NewListDeploymentsEndpoint(s Service) goa.Endpoint {
+func NewListDeploymentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeploymentListForm)
+		p := req.(*ListDeploymentsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "gram_session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.GramSession != nil {
+			key = *p.GramSession
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
 		return s.ListDeployments(ctx, p)
 	}
 }

@@ -9,16 +9,24 @@ package deployments
 
 import (
 	"context"
+
+	"goa.design/goa/v3/security"
 )
 
 // Manages deployments of tools from upstream sources.
 type Service interface {
 	// Create a deployment to load tool definitions.
-	GetDeployment(context.Context, *DeploymentGetForm) (res *DeploymentGetResult, err error)
+	GetDeployment(context.Context, *GetDeploymentPayload) (res *DeploymentGetResult, err error)
 	// Create a deployment to load tool definitions.
-	CreateDeployment(context.Context, *DeploymentCreateForm) (res *DeploymentCreateResult, err error)
+	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *DeploymentCreateResult, err error)
 	// List all deployments in descending order of creation.
-	ListDeployments(context.Context, *DeploymentListForm) (res *DeploymentListResult, err error)
+	ListDeployments(context.Context, *ListDeploymentsPayload) (res *DeploymentListResult, err error)
+}
+
+// Auther defines the authorization functions to be implemented by the service.
+type Auther interface {
+	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
+	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -37,6 +45,20 @@ const ServiceName = "deployments"
 // MethodKey key.
 var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployments"}
 
+// CreateDeploymentPayload is the payload type of the deployments service
+// createDeployment method.
+type CreateDeploymentPayload struct {
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolForm
+	GramSession     *string
+}
+
 type Deployment struct {
 	// The ID to of the deployment.
 	ID string
@@ -48,19 +70,6 @@ type Deployment struct {
 	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
-}
-
-// DeploymentCreateForm is the payload type of the deployments service
-// createDeployment method.
-type DeploymentCreateForm struct {
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string
@@ -94,13 +103,6 @@ type DeploymentCreateResult struct {
 	Openapi3p1Tools []*OpenAPI3P1ToolForm
 }
 
-// DeploymentGetForm is the payload type of the deployments service
-// getDeployment method.
-type DeploymentGetForm struct {
-	// The ID of the deployment
-	ID string
-}
-
 // DeploymentGetResult is the result type of the deployments service
 // getDeployment method.
 type DeploymentGetResult struct {
@@ -124,15 +126,6 @@ type DeploymentGetResult struct {
 	Openapi3p1Tools []*OpenAPI3P1ToolForm
 }
 
-// DeploymentListForm is the payload type of the deployments service
-// listDeployments method.
-type DeploymentListForm struct {
-	// The cursor to fetch results from
-	Cursor *string
-	// Results per page
-	Limit int
-}
-
 // DeploymentListResult is the result type of the deployments service
 // listDeployments method.
 type DeploymentListResult struct {
@@ -142,7 +135,25 @@ type DeploymentListResult struct {
 	Items []*Deployment
 }
 
+// GetDeploymentPayload is the payload type of the deployments service
+// getDeployment method.
+type GetDeploymentPayload struct {
+	// The ID of the deployment
+	ID          string
+	GramSession *string
+}
+
 type JSONSchema string
+
+// ListDeploymentsPayload is the payload type of the deployments service
+// listDeployments method.
+type ListDeploymentsPayload struct {
+	// The cursor to fetch results from
+	Cursor *string
+	// Results per page
+	Limit       int
+	GramSession *string
+}
 
 type OpenAPI3P1ParameterSchema struct {
 	// The name of the parameter.

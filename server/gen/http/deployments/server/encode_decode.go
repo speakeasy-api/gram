@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
 	goahttp "goa.design/goa/v3/http"
@@ -36,17 +37,29 @@ func EncodeGetDeploymentResponse(encoder func(context.Context, http.ResponseWrit
 func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id  string
-			err error
+			id          string
+			gramSession *string
+			err         error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
+		gramSessionRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionRaw != "" {
+			gramSession = &gramSessionRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetDeploymentDeploymentGetForm(id)
+		payload := NewGetDeploymentPayload(id, gramSession)
+		if payload.GramSession != nil {
+			if strings.Contains(*payload.GramSession, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
+				payload.GramSession = &cred
+			}
+		}
 
 		return payload, nil
 	}
@@ -87,7 +100,22 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return nil, err
 		}
-		payload := NewCreateDeploymentDeploymentCreateForm(&body)
+
+		var (
+			gramSession *string
+		)
+		gramSessionRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionRaw != "" {
+			gramSession = &gramSessionRaw
+		}
+		payload := NewCreateDeploymentPayload(&body, gramSession)
+		if payload.GramSession != nil {
+			if strings.Contains(*payload.GramSession, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
+				payload.GramSession = &cred
+			}
+		}
 
 		return payload, nil
 	}
@@ -110,9 +138,10 @@ func EncodeListDeploymentsResponse(encoder func(context.Context, http.ResponseWr
 func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			cursor *string
-			limit  int
-			err    error
+			cursor      *string
+			limit       int
+			gramSession *string
+			err         error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
@@ -137,10 +166,21 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if limit > 100 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
 		}
+		gramSessionRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionRaw != "" {
+			gramSession = &gramSessionRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListDeploymentsDeploymentListForm(cursor, limit)
+		payload := NewListDeploymentsPayload(cursor, limit, gramSession)
+		if payload.GramSession != nil {
+			if strings.Contains(*payload.GramSession, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
+				payload.GramSession = &cred
+			}
+		}
 
 		return payload, nil
 	}

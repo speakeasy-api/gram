@@ -22,7 +22,171 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/HealthCheckResult'
                             example:
-                                status: Culpa quas.
+                                status: Et sit quae quia earum quam error.
+    /rpc/auth.callback:
+        get:
+            tags:
+                - auth
+            summary: auth callback auth
+            description: Handles the authentication callback.
+            operationId: auth#auth callback
+            parameters:
+                - name: shared_token
+                  in: query
+                  description: The shared token for authentication from the speakeasy system
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: The shared token for authentication from the speakeasy system
+                    example: Molestias adipisci voluptas et labore excepturi.
+                  example: Voluptas et quos vitae sunt mollitia et.
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: The URL to redirect to after authentication
+                            schema:
+                                type: string
+                                description: The URL to redirect to after authentication
+                                example: Et esse ipsum aliquam consequuntur modi.
+                            example: Sit aut voluptatem.
+                        Set-Cookie:
+                            description: The authentication session
+                            schema:
+                                type: string
+                                description: The authentication session
+                                example: Suscipit quo omnis exercitationem consequuntur.
+                            example: Vero nostrum hic dolores qui.
+                        X-Gram-Session:
+                            description: Session header
+                            schema:
+                                type: string
+                                description: Session header
+                                example: Consequuntur voluptate suscipit.
+                            example: Ut quaerat aliquid.
+    /rpc/auth.info:
+        get:
+            tags:
+                - auth
+            summary: auth info auth
+            description: Provides information about the current authentication status.
+            operationId: auth#auth info
+            parameters:
+                - name: X-Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                    example: Eius pariatur.
+                  example: Sunt voluptas in.
+            responses:
+                "200":
+                    description: OK response.
+                    headers:
+                        Set-Cookie:
+                            description: The authentication session
+                            schema:
+                                type: string
+                                description: The authentication session
+                                example: Tenetur ad ab quod.
+                            example: Et omnis non reprehenderit quo.
+                        X-Gram-Session:
+                            description: Session header
+                            schema:
+                                type: string
+                                description: Session header
+                                example: Unde magni dolorem molestiae qui quisquam.
+                            example: Qui ea dolorum error minima eaque autem.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthInfoResponseBody'
+                            example:
+                                account_type: Eaque quae.
+                                organization_name: Repellendus explicabo.
+                                organization_slug: Qui aut quia maxime rem.
+                                project_id: Dicta cum.
+                                project_name: Et et est et eveniet.
+                                user_email: Officia quidem totam.
+                                user_id: Veritatis aspernatur natus ipsam.
+            security:
+                - gram_session_header_X-Gram-Session: []
+    /rpc/auth.logout:
+        get:
+            tags:
+                - auth
+            summary: auth logout auth
+            description: Logs out the current user by clearing their session.
+            operationId: auth#auth logout
+            responses:
+                "200":
+                    description: OK response.
+                    headers:
+                        Set-Cookie:
+                            description: Empty string to clear the session
+                            schema:
+                                type: string
+                                description: Empty string to clear the session
+                                example: Iusto ut.
+                            example: Voluptatum illo modi aut aliquid qui est.
+    /rpc/auth.switch.scopes:
+        post:
+            tags:
+                - auth
+            summary: auth switch scopes auth
+            description: Switches the authentication scope to a different organization.
+            operationId: auth#auth switch scopes
+            parameters:
+                - name: org_slug
+                  in: query
+                  description: The organization slug to switch scopes
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The organization slug to switch scopes
+                    example: Tempore ut.
+                  example: Quis officiis cum voluptatem rerum dolores.
+                - name: X-Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                    example: Exercitationem ut.
+                  example: Ipsa quo facilis iure omnis.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AuthSwitchScopesRequestBody'
+                        example:
+                            project_id: Omnis eligendi a nostrum illo quis eos.
+            responses:
+                "200":
+                    description: OK response.
+                    headers:
+                        Set-Cookie:
+                            description: The authentication session
+                            schema:
+                                type: string
+                                description: The authentication session
+                                example: Eius doloremque accusamus omnis blanditiis nobis maiores.
+                            example: Quia quia voluptatum sed in et.
+                        X-Gram-Session:
+                            description: Session header
+                            schema:
+                                type: string
+                                description: Session header
+                                example: Maiores sit pariatur perferendis rem.
+                            example: Error dolores occaecati.
+            security:
+                - gram_session_header_X-Gram-Session: []
     /rpc/deployments.create:
         post:
             tags:
@@ -30,6 +194,16 @@ paths:
             summary: createDeployment deployments
             description: Create a deployment to load tool definitions.
             operationId: deployments#createDeployment
+            parameters:
+                - name: X-Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                    example: Sed eum odit voluptatem ea libero architecto.
+                  example: Iusto et animi.
             requestBody:
                 required: true
                 content:
@@ -47,13 +221,15 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/DeploymentCreateResult'
                             example:
-                                created_at: "1974-03-02T15:24:35Z"
+                                created_at: "2002-02-18T23:38:33Z"
                                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                organization_id: Cum a quia necessitatibus est consequatur.
-                                project_id: Et illo at optio dignissimos temporibus.
-                                user_id: Deserunt dolores.
+                                organization_id: Ipsum quam quas.
+                                project_id: Vel nesciunt.
+                                user_id: Consectetur voluptatem deserunt minima quam.
+            security:
+                - gram_session_header_X-Gram-Session: []
     /rpc/deployments.get:
         post:
             tags:
@@ -70,8 +246,17 @@ paths:
                   schema:
                     type: string
                     description: The ID of the deployment
-                    example: Ducimus soluta fuga omnis iste optio ullam.
-                  example: Quod animi tenetur nesciunt et est.
+                    example: Illum quia voluptate mollitia.
+                  example: Accusamus et corporis reiciendis molestias dolorem.
+                - name: X-Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                    example: Quia odio doloremque est nihil.
+                  example: Quas qui vel omnis.
             responses:
                 "200":
                     description: OK response.
@@ -80,13 +265,15 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/DeploymentGetResult'
                             example:
-                                created_at: "1980-09-04T13:53:19Z"
+                                created_at: "1971-04-10T19:22:03Z"
                                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                organization_id: Et voluptatem deserunt sed.
-                                project_id: Voluptate eius est est impedit mollitia.
-                                user_id: Delectus quia cupiditate corporis aut iste laudantium.
+                                organization_id: Praesentium nemo cumque maxime eos labore.
+                                project_id: Quisquam sunt dolores.
+                                user_id: Vel odio ipsam voluptatum omnis.
+            security:
+                - gram_session_header_X-Gram-Session: []
     /rpc/deployments.list:
         post:
             tags:
@@ -102,8 +289,8 @@ paths:
                   schema:
                     type: string
                     description: The cursor to fetch results from
-                    example: Atque nam quis ea provident.
-                  example: Sequi rerum amet sapiente.
+                    example: Quia qui dolores ea.
+                  example: Id et illum earum ipsa.
                 - name: limit
                   in: query
                   description: Results per page
@@ -112,11 +299,20 @@ paths:
                     type: integer
                     description: Results per page
                     default: 10
-                    example: 55
+                    example: 96
                     format: int64
                     minimum: 1
                     maximum: 100
-                  example: 14
+                  example: 70
+                - name: X-Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                    example: Possimus autem omnis sed harum ut quasi.
+                  example: Excepturi perspiciatis suscipit quam.
             responses:
                 "200":
                     description: OK response.
@@ -126,30 +322,81 @@ paths:
                                 $ref: '#/components/schemas/DeploymentListResult'
                             example:
                                 items:
-                                    - created_at: "1998-07-07T16:38:05Z"
+                                    - created_at: "1983-07-25T21:04:20Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      organization_id: Et dolore eos et.
-                                      project_id: Aliquam quam sapiente aliquam dolores.
-                                      user_id: Id pariatur autem quod magnam praesentium dolores.
-                                    - created_at: "1998-07-07T16:38:05Z"
+                                      organization_id: Nobis vero.
+                                      project_id: Tempore sit eum molestias.
+                                      user_id: Quam nesciunt.
+                                    - created_at: "1983-07-25T21:04:20Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      organization_id: Et dolore eos et.
-                                      project_id: Aliquam quam sapiente aliquam dolores.
-                                      user_id: Id pariatur autem quod magnam praesentium dolores.
+                                      organization_id: Nobis vero.
+                                      project_id: Tempore sit eum molestias.
+                                      user_id: Quam nesciunt.
                                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
+            security:
+                - gram_session_header_X-Gram-Session: []
 components:
     schemas:
+        AuthInfoResponseBody:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    example: Ut velit ab sit nostrum iste eum.
+                organization_name:
+                    type: string
+                    example: Officiis dolor.
+                organization_slug:
+                    type: string
+                    example: Aut nisi odio officiis.
+                project_id:
+                    type: string
+                    example: A accusamus qui quidem corrupti.
+                project_name:
+                    type: string
+                    example: Est nisi fuga dolores.
+                user_email:
+                    type: string
+                    example: Fugit fugiat fuga quia fuga ipsa nihil.
+                user_id:
+                    type: string
+                    example: Dolor omnis.
+            example:
+                account_type: Aspernatur reiciendis tempora odit eligendi dicta.
+                organization_name: Et distinctio unde facere quos dolore cupiditate.
+                organization_slug: Reiciendis ipsum repudiandae aperiam.
+                project_id: Id qui deleniti facilis quasi illo.
+                project_name: Et ipsum nulla.
+                user_email: Eligendi unde nemo molestias.
+                user_id: Id pariatur impedit.
+            required:
+                - user_id
+                - user_email
+                - organization_slug
+                - organization_name
+                - account_type
+                - project_id
+                - project_name
+        AuthSwitchScopesRequestBody:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                    description: The project id to switch scopes too
+                    example: Quam maiores qui harum eos repellendus reprehenderit.
+            example:
+                project_id: Est quo.
         Deployment:
             type: object
             properties:
                 created_at:
                     type: string
                     description: The creation date of the deployment.
-                    example: "1972-11-22T15:28:36Z"
+                    example: "1979-12-31T19:59:22Z"
                     format: date-time
                 external_id:
                     type: string
@@ -171,23 +418,23 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
-                    example: Asperiores quasi.
+                    example: Voluptatem quia.
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
-                    example: Deserunt aspernatur quibusdam quaerat repellendus.
+                    example: Nisi aliquid minima omnis sint eius.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
-                    example: Blanditiis debitis voluptatem.
+                    example: Velit earum consequatur officiis eum eum.
             example:
-                created_at: "1976-11-08T12:41:33Z"
+                created_at: "2003-05-18T22:13:29Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                organization_id: Illo libero corporis quia vel qui suscipit.
-                project_id: Ex perferendis assumenda distinctio delectus.
-                user_id: Consequuntur est sit.
+                organization_id: Magnam expedita hic eius voluptatem aliquam.
+                project_id: Sit ab possimus.
+                user_id: Debitis rerum accusamus alias est est.
             required:
                 - id
                 - created_at
@@ -219,7 +466,7 @@ components:
                 created_at:
                     type: string
                     description: The creation date of the deployment.
-                    example: "2011-06-30T07:43:40Z"
+                    example: "2013-03-05T00:17:45Z"
                     format: date-time
                 external_id:
                     type: string
@@ -241,23 +488,23 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
-                    example: Perferendis alias alias iure.
+                    example: Nisi ea et sunt voluptas harum ut.
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
-                    example: Repellendus dolorum.
+                    example: Quis eos et quia.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
-                    example: Nobis velit aperiam aut quae et.
+                    example: Voluptate dolor quaerat quis sunt.
             example:
-                created_at: "1970-04-07T15:30:23Z"
+                created_at: "2009-07-11T07:19:35Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                organization_id: Itaque totam quae asperiores modi nobis dicta.
-                project_id: Voluptas eos.
-                user_id: Necessitatibus qui repudiandae magni ea consequatur est.
+                organization_id: Nihil similique.
+                project_id: Fugiat eos rerum deleniti totam qui.
+                user_id: Illum officiis laudantium odio et quibusdam.
             required:
                 - id
                 - created_at
@@ -270,9 +517,9 @@ components:
                 id:
                     type: string
                     description: The ID of the deployment
-                    example: Labore incidunt.
+                    example: Eos eos voluptatibus.
             example:
-                id: Dolor deleniti porro.
+                id: Unde pariatur cupiditate quia.
             required:
                 - id
         DeploymentGetResult:
@@ -281,7 +528,7 @@ components:
                 created_at:
                     type: string
                     description: The creation date of the deployment.
-                    example: "1987-11-12T06:49:34Z"
+                    example: "1988-02-29T05:40:14Z"
                     format: date-time
                 external_id:
                     type: string
@@ -303,23 +550,23 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
-                    example: Consequuntur porro.
+                    example: Inventore et culpa quod mollitia facere vero.
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
-                    example: In ut officia sit enim fugiat reiciendis.
+                    example: Fugiat et.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
-                    example: Ad excepturi similique.
+                    example: Voluptatem saepe.
             example:
-                created_at: "2014-07-31T00:31:44Z"
+                created_at: "2014-07-10T08:40:49Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                organization_id: Qui aspernatur inventore voluptatem qui.
-                project_id: Magni vero consequuntur quis est aperiam assumenda.
-                user_id: Placeat dolor.
+                organization_id: Aspernatur voluptas aut quae iste.
+                project_id: Ex vero dolores voluptatem et.
+                user_id: Quae quos voluptates.
             required:
                 - id
                 - created_at
@@ -332,18 +579,18 @@ components:
                 cursor:
                     type: string
                     description: The cursor to fetch results from
-                    example: Velit aspernatur qui.
+                    example: Aliquid placeat.
                 limit:
                     type: integer
                     description: Results per page
                     default: 10
-                    example: 53
+                    example: 42
                     format: int64
                     minimum: 1
                     maximum: 100
             example:
-                cursor: Voluptas dolor magnam voluptates est.
-                limit: 42
+                cursor: Repudiandae veniam.
+                limit: 6
         DeploymentListResult:
             type: object
             properties:
@@ -353,54 +600,54 @@ components:
                         $ref: '#/components/schemas/Deployment'
                     description: A list of deployments
                     example:
-                        - created_at: "2014-07-15T11:44:08Z"
+                        - created_at: "1982-11-19T14:31:07Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          organization_id: Nobis atque ad modi consequuntur et.
-                          project_id: Et qui id aut omnis ab eum.
-                          user_id: Dolor numquam vel voluptatibus.
-                        - created_at: "2014-07-15T11:44:08Z"
+                          organization_id: Et velit id.
+                          project_id: Adipisci sit enim.
+                          user_id: Eius impedit perspiciatis.
+                        - created_at: "1982-11-19T14:31:07Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          organization_id: Nobis atque ad modi consequuntur et.
-                          project_id: Et qui id aut omnis ab eum.
-                          user_id: Dolor numquam vel voluptatibus.
-                        - created_at: "2014-07-15T11:44:08Z"
-                          external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          organization_id: Nobis atque ad modi consequuntur et.
-                          project_id: Et qui id aut omnis ab eum.
-                          user_id: Dolor numquam vel voluptatibus.
-                        - created_at: "2014-07-15T11:44:08Z"
-                          external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          organization_id: Nobis atque ad modi consequuntur et.
-                          project_id: Et qui id aut omnis ab eum.
-                          user_id: Dolor numquam vel voluptatibus.
+                          organization_id: Et velit id.
+                          project_id: Adipisci sit enim.
+                          user_id: Eius impedit perspiciatis.
                 next_cursor:
                     type: string
                     description: The cursor to fetch results from
                     example: 01jp3f054qc02gbcmpp0qmyzed
             example:
                 items:
-                    - created_at: "2014-07-15T11:44:08Z"
+                    - created_at: "1982-11-19T14:31:07Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      organization_id: Nobis atque ad modi consequuntur et.
-                      project_id: Et qui id aut omnis ab eum.
-                      user_id: Dolor numquam vel voluptatibus.
-                    - created_at: "2014-07-15T11:44:08Z"
+                      organization_id: Et velit id.
+                      project_id: Adipisci sit enim.
+                      user_id: Eius impedit perspiciatis.
+                    - created_at: "1982-11-19T14:31:07Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      organization_id: Nobis atque ad modi consequuntur et.
-                      project_id: Et qui id aut omnis ab eum.
-                      user_id: Dolor numquam vel voluptatibus.
+                      organization_id: Et velit id.
+                      project_id: Adipisci sit enim.
+                      user_id: Eius impedit perspiciatis.
+                    - created_at: "1982-11-19T14:31:07Z"
+                      external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      organization_id: Et velit id.
+                      project_id: Adipisci sit enim.
+                      user_id: Eius impedit perspiciatis.
+                    - created_at: "1982-11-19T14:31:07Z"
+                      external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      organization_id: Et velit id.
+                      project_id: Adipisci sit enim.
+                      user_id: Eius impedit perspiciatis.
                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
@@ -410,9 +657,9 @@ components:
                 status:
                     type: string
                     description: The status of the service.
-                    example: Sit voluptas in maxime est.
+                    example: Sint animi eos omnis repellat aut.
             example:
-                status: Nihil cupiditate.
+                status: Minus saepe qui id qui iusto.
             required:
                 - status
         OpenAPI3P1ParameterSchema:
@@ -426,21 +673,21 @@ components:
                     type: boolean
                     description: A brief description of the parameter.
                     default: false
-                    example: true
+                    example: false
                 description:
                     type: string
                     description: A brief description of the parameter.
-                    example: Tenetur quibusdam et aut consequatur provident animi.
+                    example: Impedit dolore suscipit.
                 example:
                     description: An example value for the parameter.
-                    example: Sint nemo rerum.
+                    example: Totam aliquid.
                 examples:
                     type: object
                     description: Examples of the parameter.
                     example:
-                        Non vel.: Sed modi suscipit laboriosam.
-                        Sint rerum debitis culpa.: Ducimus perferendis illo.
-                        Voluptate sapiente aliquam sit aperiam illo.: Enim quas dolorem et.
+                        Laborum fugit.: Nulla in dolor.
+                        Magnam vitae.: Voluptatum quia et asperiores.
+                        Ut veritatis praesentium et.: Quidem deserunt libero.
                     additionalProperties: true
                 explode:
                     type: boolean
@@ -449,7 +696,7 @@ components:
                 in:
                     type: string
                     description: The location of the parameter in an HTTP request.
-                    example: path
+                    example: query
                     enum:
                         - query
                         - header
@@ -458,7 +705,7 @@ components:
                 name:
                     type: string
                     description: The name of the parameter.
-                    example: Perferendis dolorum ut rem a culpa.
+                    example: Nulla officia sit qui est.
                 required:
                     type: boolean
                     description: Whether the parameter is required.
@@ -478,18 +725,17 @@ components:
                         - pipeDelimited
                         - deepObject
             example:
-                allowReserved: false
-                deprecated: true
-                description: Culpa repellat nihil harum sit est libero.
-                example: Corrupti quis quam similique.
+                allowReserved: true
+                deprecated: false
+                description: Facilis deleniti perferendis.
+                example: Ut totam necessitatibus debitis ut.
                 examples:
-                    Eveniet dignissimos.: Quo quod.
-                    Harum nemo optio vel.: Vero qui et autem vel eos dolores.
+                    Vero voluptas est quia.: Sed eligendi architecto et neque odit.
                 explode: false
-                in: header
-                name: Voluptates dolore ut.
+                in: query
+                name: Et et.
                 required: true
-                schema: Similique suscipit ipsa iste est.
+                schema: Libero nobis velit aperiam aut quae.
                 style: deepObject
             required:
                 - name
@@ -510,48 +756,21 @@ components:
                     type: object
                     description: A map of header schemas to send with the HTTP request.
                     example:
-                        Dolorum numquam.:
+                        Voluptatem modi omnis voluptas reiciendis assumenda.:
                             allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
+                            deprecated: true
+                            description: Rerum iusto eos consequatur et sint.
+                            example: Laboriosam ut tempora.
                             examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
+                                Explicabo et consequatur consequatur rerum.: Dolorum velit repudiandae quia rerum consequatur non.
+                                Voluptas eos.: Necessitatibus qui repudiandae magni ea consequatur est.
+                                Voluptatem minima quia rerum.: Itaque totam quae asperiores modi nobis dicta.
                             explode: true
-                            in: header
-                            name: Ex ex consequatur.
+                            in: query
+                            name: Ut fuga earum animi quisquam nihil amet.
                             required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
-                        Voluptas odio impedit aut aut.:
-                            allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
-                            examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
-                            explode: true
-                            in: header
-                            name: Ex ex consequatur.
-                            required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
-                        Voluptatem eum.:
-                            allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
-                            examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
-                            explode: true
-                            in: header
-                            name: Ex ex consequatur.
-                            required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
+                            schema: Libero nobis velit aperiam aut quae.
+                            style: pipeDelimited
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
                 kind:
@@ -586,89 +805,64 @@ components:
                     type: object
                     description: A map of path parameters to interpolate into the path of the HTTP request.
                     example:
-                        Aut adipisci.:
+                        Cupiditate rerum adipisci nostrum.:
                             allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
+                            deprecated: true
+                            description: Rerum iusto eos consequatur et sint.
+                            example: Laboriosam ut tempora.
                             examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
+                                Explicabo et consequatur consequatur rerum.: Dolorum velit repudiandae quia rerum consequatur non.
+                                Voluptas eos.: Necessitatibus qui repudiandae magni ea consequatur est.
+                                Voluptatem minima quia rerum.: Itaque totam quae asperiores modi nobis dicta.
                             explode: true
-                            in: header
-                            name: Ex ex consequatur.
+                            in: query
+                            name: Ut fuga earum animi quisquam nihil amet.
                             required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
-                        Ut omnis sit et quia iste inventore.:
-                            allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
-                            examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
-                            explode: true
-                            in: header
-                            name: Ex ex consequatur.
-                            required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
+                            schema: Libero nobis velit aperiam aut quae.
+                            style: pipeDelimited
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
                 query_parameters:
                     type: object
                     description: A map of query parameters to send with the HTTP request.
                     example:
-                        Ipsa quidem tempora rerum.:
+                        Doloribus aperiam expedita consequatur perferendis velit est.:
                             allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
+                            deprecated: true
+                            description: Rerum iusto eos consequatur et sint.
+                            example: Laboriosam ut tempora.
                             examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
+                                Explicabo et consequatur consequatur rerum.: Dolorum velit repudiandae quia rerum consequatur non.
+                                Voluptas eos.: Necessitatibus qui repudiandae magni ea consequatur est.
+                                Voluptatem minima quia rerum.: Itaque totam quae asperiores modi nobis dicta.
                             explode: true
-                            in: header
-                            name: Ex ex consequatur.
+                            in: query
+                            name: Ut fuga earum animi quisquam nihil amet.
                             required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
-                        Quaerat mollitia reiciendis magnam omnis.:
+                            schema: Libero nobis velit aperiam aut quae.
+                            style: pipeDelimited
+                        Minima molestiae et tenetur sed.:
                             allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
+                            deprecated: true
+                            description: Rerum iusto eos consequatur et sint.
+                            example: Laboriosam ut tempora.
                             examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
+                                Explicabo et consequatur consequatur rerum.: Dolorum velit repudiandae quia rerum consequatur non.
+                                Voluptas eos.: Necessitatibus qui repudiandae magni ea consequatur est.
+                                Voluptatem minima quia rerum.: Itaque totam quae asperiores modi nobis dicta.
                             explode: true
-                            in: header
-                            name: Ex ex consequatur.
+                            in: query
+                            name: Ut fuga earum animi quisquam nihil amet.
                             required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
-                        Sint ut.:
-                            allowReserved: true
-                            deprecated: false
-                            description: Consequatur quos recusandae voluptatem quidem quaerat rem.
-                            example: Amet excepturi quia.
-                            examples:
-                                Ea amet atque ea quam quia.: Expedita non tempore maxime id.
-                                Temporibus optio quas consequatur.: Ut vel quia ullam.
-                            explode: true
-                            in: header
-                            name: Ex ex consequatur.
-                            required: true
-                            schema: Similique suscipit ipsa iste est.
-                            style: form
+                            schema: Libero nobis velit aperiam aut quae.
+                            style: pipeDelimited
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
                 tags:
                     type: array
                     items:
                         type: string
-                        example: z
+                        example: a
                         pattern: ^[a-z](?:[a-z0-9_-]*[a-z0-9])?$
                     description: The tags that are associated with the tool.
                     default: []
@@ -687,7 +881,23 @@ components:
                 - query_parameters
                 - body
             additionalProperties: false
+        SessionPayload:
+            type: object
+            properties:
+                gram_session:
+                    type: string
+                    example: Distinctio eos ut neque cumque ut possimus.
+            example:
+                gram_session: Eius dignissimos.
+    securitySchemes:
+        gram_session_header_X-Gram-Session:
+            type: apiKey
+            description: Gram Session based auth. By cookie or header.
+            name: X-Gram-Session
+            in: header
 tags:
+    - name: auth
+      description: Managed auth for gram producers and dashboard.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: system

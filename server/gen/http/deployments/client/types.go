@@ -207,7 +207,7 @@ type DeploymentResponseBody struct {
 
 // NewCreateDeploymentRequestBody builds the HTTP request body from the payload
 // of the "createDeployment" endpoint of the "deployments" service.
-func NewCreateDeploymentRequestBody(p *deployments.DeploymentCreateForm) *CreateDeploymentRequestBody {
+func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *CreateDeploymentRequestBody {
 	body := &CreateDeploymentRequestBody{
 		ExternalID:  p.ExternalID,
 		ExternalURL: p.ExternalURL,

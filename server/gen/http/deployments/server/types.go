@@ -264,19 +264,20 @@ func NewListDeploymentsResponseBody(res *deployments.DeploymentListResult) *List
 	return body
 }
 
-// NewGetDeploymentDeploymentGetForm builds a deployments service getDeployment
-// endpoint payload.
-func NewGetDeploymentDeploymentGetForm(id string) *deployments.DeploymentGetForm {
-	v := &deployments.DeploymentGetForm{}
+// NewGetDeploymentPayload builds a deployments service getDeployment endpoint
+// payload.
+func NewGetDeploymentPayload(id string, gramSession *string) *deployments.GetDeploymentPayload {
+	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
+	v.GramSession = gramSession
 
 	return v
 }
 
-// NewCreateDeploymentDeploymentCreateForm builds a deployments service
-// createDeployment endpoint payload.
-func NewCreateDeploymentDeploymentCreateForm(body *CreateDeploymentRequestBody) *deployments.DeploymentCreateForm {
-	v := &deployments.DeploymentCreateForm{
+// NewCreateDeploymentPayload builds a deployments service createDeployment
+// endpoint payload.
+func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, gramSession *string) *deployments.CreateDeploymentPayload {
+	v := &deployments.CreateDeploymentPayload{
 		ExternalID:  body.ExternalID,
 		ExternalURL: body.ExternalURL,
 	}
@@ -286,16 +287,18 @@ func NewCreateDeploymentDeploymentCreateForm(body *CreateDeploymentRequestBody) 
 			v.Openapi3p1Tools[i] = unmarshalOpenAPI3P1ToolFormRequestBodyToDeploymentsOpenAPI3P1ToolForm(val)
 		}
 	}
+	v.GramSession = gramSession
 
 	return v
 }
 
-// NewListDeploymentsDeploymentListForm builds a deployments service
-// listDeployments endpoint payload.
-func NewListDeploymentsDeploymentListForm(cursor *string, limit int) *deployments.DeploymentListForm {
-	v := &deployments.DeploymentListForm{}
+// NewListDeploymentsPayload builds a deployments service listDeployments
+// endpoint payload.
+func NewListDeploymentsPayload(cursor *string, limit int, gramSession *string) *deployments.ListDeploymentsPayload {
+	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.GramSession = gramSession
 
 	return v
 }

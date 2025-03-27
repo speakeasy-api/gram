@@ -1,24 +1,29 @@
 package deployments
 
 import (
+	"github.com/speakeasy-api/gram/design/sessions"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("deployments", func() {
 	Description("Manages deployments of tools from upstream sources.")
 
+	Security(sessions.GramSession)
+
 	Method("getDeployment", func() {
 		Description("Create a deployment to load tool definitions.")
 
-		Payload(DeploymentGetForm)
+		Payload(func() {
+			Extend(DeploymentGetForm)
+			Extend(sessions.SessionPayload)
+		})
 
 		Result(DeploymentGetResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.get")
-
+			sessions.SessionHeader()
 			Param("id")
-
 			Response(StatusOK)
 		})
 	})
@@ -26,13 +31,16 @@ var _ = Service("deployments", func() {
 	Method("createDeployment", func() {
 		Description("Create a deployment to load tool definitions.")
 
-		Payload(DeploymentCreateForm)
+		Payload(func() {
+			Extend(DeploymentCreateForm)
+			Extend(sessions.SessionPayload)
+		})
 
 		Result(DeploymentCreateResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.create")
-
+			sessions.SessionHeader()
 			Response(StatusOK)
 		})
 	})
@@ -40,16 +48,18 @@ var _ = Service("deployments", func() {
 	Method("listDeployments", func() {
 		Description("List all deployments in descending order of creation.")
 
-		Payload(DeploymentListForm)
+		Payload(func() {
+			Extend(DeploymentListForm)
+			Extend(sessions.SessionPayload)
+		})
 
 		Result(DeploymentListResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.list")
-
+			sessions.SessionHeader()
 			Param("cursor")
 			Param("limit")
-
 			Response(StatusOK)
 		})
 	})
