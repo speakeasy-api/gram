@@ -3,23 +3,36 @@ package sessions
 import (
 	"context"
 	"errors"
+
+	"github.com/speakeasy-api/gram/internal/cache"
 )
 
 type Sessions struct {
+	sessionCache cache.Cache[GramSession]
 }
 
 func New() *Sessions {
-	return &Sessions{}
+	return &Sessions{
+		sessionCache: cache.New[GramSession](sessionCacheExpiry),
+	}
 }
 
 func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context, error) {
-	// key = check if we already added this to context from cookie (GOA doesn't natively support)
 	if key == "" {
-		return ctx, errors.New("session key is required")
+		// This may have been set via cookie from http middleware, GOA does not support natively
+		key, _ = GetSessionTokenFromContext(ctx)
 	}
 
-	// check redis for session key
-	// attach auth info to context
+	if key == "" {
+		return ctx, errors.New("session token is required for auth")
+	}
+
+	session, err := s.sessionCache.Get(ctx, key)
+	if err != nil {
+		return ctx, errors.New("session token is invalid: " + err.Error())
+	}
+
+	ctx = SetSessionValueInContext(ctx, &session)
 
 	return ctx, nil
 }
