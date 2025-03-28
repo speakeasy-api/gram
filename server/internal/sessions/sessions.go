@@ -3,7 +3,6 @@ package sessions
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/speakeasy-api/gram/internal/cache"
@@ -26,8 +25,6 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 		// This may have been set via cookie from http middleware, GOA does not support natively
 		key, _ = GetSessionTokenFromContext(ctx)
 	}
-
-	fmt.Println("key", key)
 
 	if key == "" {
 		// If you attempt auth with no token provided in local we will automatically populate the session from local env
