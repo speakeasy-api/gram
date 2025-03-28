@@ -26,20 +26,20 @@ type localEnvFile map[string]struct {
 }
 
 func GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
-	file, err := os.Open(".local.env.json")
+	file, err := os.Open(os.Getenv("LOCAL_ENV_PATH"))
 	if err != nil {
-		return nil, fmt.Errorf("failed to open .local.env.json: %w", err)
+		return nil, fmt.Errorf("failed to open local env file: %w", err)
 	}
 	defer file.Close()
 
 	byteValue, err := io.ReadAll(file)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read .local.env.json: %w", err)
+		return nil, fmt.Errorf("failed to read local env file: %w", err)
 	}
 
 	var data localEnvFile
 	if err := json.Unmarshal(byteValue, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal .local.env.json: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
 	}
 
 	userInfo, ok := data[userID]
@@ -75,15 +75,15 @@ func GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
 }
 
 func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (string, error) {
-	file, err := os.Open(".local.env.json")
+	file, err := os.Open(os.Getenv("LOCAL_ENV_PATH"))
 	if err != nil {
-		return "", fmt.Errorf("failed to open .local.env.json: %w", err)
+		return "", fmt.Errorf("failed to open local env file: %w", err)
 	}
 	defer file.Close()
 
 	byteValue, err := ioutil.ReadAll(file)
 	if err != nil {
-		return "", fmt.Errorf("failed to read .local.env.json: %w", err)
+		return "", fmt.Errorf("failed to read local env file: %w", err)
 	}
 
 	var data map[string]struct {
@@ -99,7 +99,7 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 		} `json:"organizations"`
 	}
 	if err := json.Unmarshal(byteValue, &data); err != nil {
-		return "", fmt.Errorf("failed to unmarshal .local.env.json: %w", err)
+		return "", fmt.Errorf("failed to unmarshal local env file: %w", err)
 	}
 
 	var gramSession *GramSession
@@ -116,7 +116,7 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 	}
 
 	if gramSession == nil {
-		return "", fmt.Errorf("no user found in .local.env.json")
+		return "", fmt.Errorf("no user found in local env file")
 	}
 
 	err = s.sessionCache.Store(ctx, *gramSession)

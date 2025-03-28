@@ -27,7 +27,7 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 	}
 
 	if key == "" {
-		if os.Getenv("ENV") == "local" {
+		if os.Getenv("GRAM_ENVIRONMENT") == "local" {
 			var err error
 			key, err = s.PopulateLocalDevDefaultAuthSession(ctx)
 			if err != nil {

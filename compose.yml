@@ -17,15 +17,14 @@ services:
   gram-cache:
     image: redis:6.2-alpine
     restart: always
+    volumes:
+      - cache_data:/var/lib/gram-cache/data
     ports:
       - "${CACHE_PORT}:35299"
     command: redis-server --port ${CACHE_PORT} --requirepass xi9XILbY
 
-
-
-    networks:
-      - localnet
-
 volumes:
   postgres_data:
+    driver: local
+  cache_data:
     driver: local
