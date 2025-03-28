@@ -23,11 +23,11 @@ type AuthInfoResponseBody struct {
 
 // OrganizationResponseBody is used to define fields on response body types.
 type OrganizationResponseBody struct {
-	OrgID       string                 `form:"org_id" json:"org_id" xml:"org_id"`
-	OrgName     string                 `form:"org_name" json:"org_name" xml:"org_name"`
-	OrgSlug     string                 `form:"org_slug" json:"org_slug" xml:"org_slug"`
-	AccountType string                 `form:"account_type" json:"account_type" xml:"account_type"`
-	Projects    []*ProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
+	OrganizationID   string                 `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	OrganizationName string                 `form:"organization_name" json:"organization_name" xml:"organization_name"`
+	OrganizationSlug string                 `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
+	AccountType      string                 `form:"account_type" json:"account_type" xml:"account_type"`
+	Projects         []*ProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
 }
 
 // ProjectResponseBody is used to define fields on response body types.

@@ -109,11 +109,11 @@ type AuthSwitchScopesResult struct {
 }
 
 type Organization struct {
-	OrgID       string
-	OrgName     string
-	OrgSlug     string
-	AccountType string
-	Projects    []*Project
+	OrganizationID   string
+	OrganizationName string
+	OrganizationSlug string
+	AccountType      string
+	Projects         []*Project
 }
 
 type Project struct {

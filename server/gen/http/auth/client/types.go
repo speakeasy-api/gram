@@ -24,11 +24,11 @@ type AuthInfoResponseBody struct {
 
 // OrganizationResponseBody is used to define fields on response body types.
 type OrganizationResponseBody struct {
-	OrgID       *string                `form:"org_id,omitempty" json:"org_id,omitempty" xml:"org_id,omitempty"`
-	OrgName     *string                `form:"org_name,omitempty" json:"org_name,omitempty" xml:"org_name,omitempty"`
-	OrgSlug     *string                `form:"org_slug,omitempty" json:"org_slug,omitempty" xml:"org_slug,omitempty"`
-	AccountType *string                `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
-	Projects    []*ProjectResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
+	OrganizationID   *string                `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	OrganizationName *string                `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
+	OrganizationSlug *string                `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
+	AccountType      *string                `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	Projects         []*ProjectResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
 }
 
 // ProjectResponseBody is used to define fields on response body types.
@@ -116,14 +116,14 @@ func ValidateAuthInfoResponseBody(body *AuthInfoResponseBody) (err error) {
 // ValidateOrganizationResponseBody runs the validations defined on
 // OrganizationResponseBody
 func ValidateOrganizationResponseBody(body *OrganizationResponseBody) (err error) {
-	if body.OrgID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("org_id", "body"))
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
-	if body.OrgName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("org_name", "body"))
+	if body.OrganizationName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_name", "body"))
 	}
-	if body.OrgSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("org_slug", "body"))
+	if body.OrganizationSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_slug", "body"))
 	}
 	if body.AccountType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))

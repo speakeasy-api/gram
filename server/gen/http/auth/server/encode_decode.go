@@ -179,10 +179,10 @@ func DecodeAuthInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 // *OrganizationResponseBody from a value of type *auth.Organization.
 func marshalAuthOrganizationToOrganizationResponseBody(v *auth.Organization) *OrganizationResponseBody {
 	res := &OrganizationResponseBody{
-		OrgID:       v.OrgID,
-		OrgName:     v.OrgName,
-		OrgSlug:     v.OrgSlug,
-		AccountType: v.AccountType,
+		OrganizationID:   v.OrganizationID,
+		OrganizationName: v.OrganizationName,
+		OrganizationSlug: v.OrganizationSlug,
+		AccountType:      v.AccountType,
 	}
 	if v.Projects != nil {
 		res.Projects = make([]*ProjectResponseBody, len(v.Projects))

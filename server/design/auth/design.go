@@ -54,7 +54,7 @@ var _ = Service("auth", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/auth.switch.scopes")
+			POST("/rpc/auth.switch")
 			Param("organization_id")
 			Param("project_id")
 			sessions.SessionHeader()
@@ -120,10 +120,10 @@ var Project = Type("Project", func() {
 })
 
 var Organization = Type("Organization", func() {
-	Attribute("org_id", String)
-	Attribute("org_name", String)
-	Attribute("org_slug", String)
+	Attribute("organization_id", String)
+	Attribute("organization_name", String)
+	Attribute("organization_slug", String)
 	Attribute("account_type", String)
 	Attribute("projects", ArrayOf("Project"))
-	Required("org_id", "org_name", "org_slug", "account_type", "projects")
+	Required("organization_id", "organization_name", "organization_slug", "account_type", "projects")
 })

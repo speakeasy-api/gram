@@ -35,8 +35,9 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 }
 
 func (s *Service) AuthCallback(context.Context, *gen.AuthCallbackPayload) (res *gen.AuthCallbackResult, err error) {
-	// TODO: Exchange sharedToken with speakeasy backend for user information OIDC
+	// TODO: Exchange sharedToken with speakeasy backend for user information OIDC. Token will either be a JWT userID or another short term redis backed token
 	// TODO: Populate an auth session from that information, redirect back to gram
+	// TODO: This will call GET api.speakeasy.com/v1/gram/info/{userID}
 	return &gen.AuthCallbackResult{}, nil
 }
 
@@ -54,7 +55,7 @@ func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchS
 	if payload.OrganizationID != nil {
 		orgFound := false
 		for _, org := range userInfo.Organizations {
-			if org.OrgID == *payload.OrganizationID {
+			if org.OrganizationID == *payload.OrganizationID {
 				orgFound = true
 				break
 			}
@@ -63,25 +64,6 @@ func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchS
 			return nil, errors.New("organization not found")
 		}
 		session.ActiveOrganizationID = *payload.OrganizationID
-	}
-
-	if payload.ProjectID != nil {
-		projectFound := false
-		for _, org := range userInfo.Organizations {
-			for _, proj := range org.Projects {
-				if proj.ProjectID == *payload.ProjectID {
-					projectFound = true
-					break
-				}
-			}
-			if projectFound {
-				break
-			}
-		}
-		if !projectFound {
-			return nil, errors.New("project not found")
-		}
-		session.ActiveProjectID = *payload.ProjectID
 	}
 
 	if err := s.sessions.UpdateSession(ctx, *session); err != nil {
@@ -94,7 +76,15 @@ func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchS
 	}, nil
 }
 
-func (s *Service) AuthLogout(context.Context) (res *gen.AuthLogoutResult, err error) {
+func (s *Service) AuthLogout(ctx context.Context) (res *gen.AuthLogoutResult, err error) {
+	// Clears cookie and invalidates session
+	session, ok := sessions.GetSessionValueFromContext(ctx)
+	if !ok || session == nil {
+		return nil, errors.New("session not found in context")
+	}
+	if err := s.sessions.ClearSession(ctx, *session); err != nil {
+		return nil, err
+	}
 	return &gen.AuthLogoutResult{GramSession: ""}, nil
 }
 func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (res *gen.AuthInfoResult, err error) {
@@ -111,18 +101,11 @@ func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (r
 	// Fully unpack the userInfo object
 	organizations := make([]*gen.Organization, len(userInfo.Organizations))
 	for i, org := range userInfo.Organizations {
-		projects := make([]*gen.Project, len(org.Projects))
-		for j, proj := range org.Projects {
-			projects[j] = &gen.Project{
-				ProjectID: proj.ProjectID,
-			}
-		}
 		organizations[i] = &gen.Organization{
-			OrgID:       org.OrgID,
-			OrgName:     org.OrgName,
-			OrgSlug:     org.OrgSlug,
-			AccountType: org.AccountType,
-			Projects:    projects,
+			OrganizationID:   org.OrganizationID,
+			OrganizationName: org.OrganizationName,
+			OrganizationSlug: org.OrganizationSlug,
+			AccountType:      org.AccountType,
 		}
 	}
 

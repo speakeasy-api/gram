@@ -371,10 +371,10 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 // *auth.Organization from a value of type *OrganizationResponseBody.
 func unmarshalOrganizationResponseBodyToAuthOrganization(v *OrganizationResponseBody) *auth.Organization {
 	res := &auth.Organization{
-		OrgID:       *v.OrgID,
-		OrgName:     *v.OrgName,
-		OrgSlug:     *v.OrgSlug,
-		AccountType: *v.AccountType,
+		OrganizationID:   *v.OrganizationID,
+		OrganizationName: *v.OrganizationName,
+		OrganizationSlug: *v.OrganizationSlug,
+		AccountType:      *v.AccountType,
 	}
 	res.Projects = make([]*auth.Project, len(v.Projects))
 	for i, val := range v.Projects {

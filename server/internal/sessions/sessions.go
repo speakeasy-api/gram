@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/speakeasy-api/gram/internal/cache"
@@ -26,7 +27,10 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 		key, _ = GetSessionTokenFromContext(ctx)
 	}
 
+	fmt.Println("key", key)
+
 	if key == "" {
+		// If you attempt auth with no token provided in local we will automatically populate the session from local env
 		if os.Getenv("GRAM_ENVIRONMENT") == "local" {
 			var err error
 			key, err = s.PopulateLocalDevDefaultAuthSession(ctx)
@@ -54,4 +58,8 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 
 func (s *Sessions) UpdateSession(ctx context.Context, session GramSession) error {
 	return s.sessionCache.Store(ctx, session)
+}
+
+func (s *Sessions) ClearSession(ctx context.Context, session GramSession) error {
+	return s.sessionCache.Delete(ctx, session)
 }

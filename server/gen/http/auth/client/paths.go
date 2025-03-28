@@ -14,7 +14,7 @@ func AuthCallbackAuthPath() string {
 
 // AuthSwitchScopesAuthPath returns the URL path to the auth service auth switch scopes HTTP endpoint.
 func AuthSwitchScopesAuthPath() string {
-	return "/rpc/auth.switch.scopes"
+	return "/rpc/auth.switch"
 }
 
 // AuthLogoutAuthPath returns the URL path to the auth service auth logout HTTP endpoint.

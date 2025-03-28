@@ -98,7 +98,7 @@ paths:
                     description: OK response.
             schemes:
                 - http
-    /rpc/auth.switch.scopes:
+    /rpc/auth.switch:
         post:
             tags:
                 - auth
@@ -252,30 +252,30 @@ definitions:
                     $ref: '#/definitions/Organization'
                 example:
                     - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                      org_id: Eaque quae.
-                      org_name: Dicta cum.
-                      org_slug: Et et est et eveniet.
+                      organization_id: Eaque quae.
+                      organization_name: Dicta cum.
+                      organization_slug: Et et est et eveniet.
                       projects:
                         - project_id: Et voluptatem deserunt sed.
                         - project_id: Et voluptatem deserunt sed.
                     - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                      org_id: Eaque quae.
-                      org_name: Dicta cum.
-                      org_slug: Et et est et eveniet.
+                      organization_id: Eaque quae.
+                      organization_name: Dicta cum.
+                      organization_slug: Et et est et eveniet.
                       projects:
                         - project_id: Et voluptatem deserunt sed.
                         - project_id: Et voluptatem deserunt sed.
                     - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                      org_id: Eaque quae.
-                      org_name: Dicta cum.
-                      org_slug: Et et est et eveniet.
+                      organization_id: Eaque quae.
+                      organization_name: Dicta cum.
+                      organization_slug: Et et est et eveniet.
                       projects:
                         - project_id: Et voluptatem deserunt sed.
                         - project_id: Et voluptatem deserunt sed.
                     - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                      org_id: Eaque quae.
-                      org_name: Dicta cum.
-                      org_slug: Et et est et eveniet.
+                      organization_id: Eaque quae.
+                      organization_name: Dicta cum.
+                      organization_slug: Et et est et eveniet.
                       projects:
                         - project_id: Et voluptatem deserunt sed.
                         - project_id: Et voluptatem deserunt sed.
@@ -290,30 +290,30 @@ definitions:
             active_project_id: Voluptas nesciunt.
             organizations:
                 - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                  org_id: Eaque quae.
-                  org_name: Dicta cum.
-                  org_slug: Et et est et eveniet.
+                  organization_id: Eaque quae.
+                  organization_name: Dicta cum.
+                  organization_slug: Et et est et eveniet.
                   projects:
                     - project_id: Et voluptatem deserunt sed.
                     - project_id: Et voluptatem deserunt sed.
                 - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                  org_id: Eaque quae.
-                  org_name: Dicta cum.
-                  org_slug: Et et est et eveniet.
+                  organization_id: Eaque quae.
+                  organization_name: Dicta cum.
+                  organization_slug: Et et est et eveniet.
                   projects:
                     - project_id: Et voluptatem deserunt sed.
                     - project_id: Et voluptatem deserunt sed.
                 - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                  org_id: Eaque quae.
-                  org_name: Dicta cum.
-                  org_slug: Et et est et eveniet.
+                  organization_id: Eaque quae.
+                  organization_name: Dicta cum.
+                  organization_slug: Et et est et eveniet.
                   projects:
                     - project_id: Et voluptatem deserunt sed.
                     - project_id: Et voluptatem deserunt sed.
                 - account_type: Exercitationem totam explicabo porro quae quasi delectus.
-                  org_id: Eaque quae.
-                  org_name: Dicta cum.
-                  org_slug: Et et est et eveniet.
+                  organization_id: Eaque quae.
+                  organization_name: Dicta cum.
+                  organization_slug: Et et est et eveniet.
                   projects:
                     - project_id: Et voluptatem deserunt sed.
                     - project_id: Et voluptatem deserunt sed.
@@ -841,13 +841,13 @@ definitions:
             account_type:
                 type: string
                 example: Ipsum saepe quis.
-            org_id:
+            organization_id:
                 type: string
                 example: Magnam dolor id totam inventore officiis quia.
-            org_name:
+            organization_name:
                 type: string
                 example: Laudantium quia animi praesentium quas vitae esse.
-            org_slug:
+            organization_slug:
                 type: string
                 example: Modi laudantium consequatur placeat.
             projects:
@@ -861,16 +861,16 @@ definitions:
                     - project_id: Et voluptatem deserunt sed.
         example:
             account_type: Et voluptates ratione.
-            org_id: Asperiores tempore blanditiis esse eos.
-            org_name: Rerum at eaque qui libero aut.
-            org_slug: Quia distinctio cumque assumenda veniam excepturi.
+            organization_id: Asperiores tempore blanditiis esse eos.
+            organization_name: Rerum at eaque qui libero aut.
+            organization_slug: Quia distinctio cumque assumenda veniam excepturi.
             projects:
                 - project_id: Et voluptatem deserunt sed.
                 - project_id: Et voluptatem deserunt sed.
         required:
-            - org_id
-            - org_name
-            - org_slug
+            - organization_id
+            - organization_name
+            - organization_slug
             - account_type
             - projects
     Project:

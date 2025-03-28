@@ -53,7 +53,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"AuthCallback", "GET", "/rpc/auth.callback"},
-			{"AuthSwitchScopes", "POST", "/rpc/auth.switch.scopes"},
+			{"AuthSwitchScopes", "POST", "/rpc/auth.switch"},
 			{"AuthLogout", "GET", "/rpc/auth.logout"},
 			{"AuthInfo", "GET", "/rpc/auth.info"},
 		},
@@ -151,7 +151,7 @@ func MountAuthSwitchScopesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/auth.switch.scopes", f)
+	mux.Handle("POST", "/rpc/auth.switch", f)
 }
 
 // NewAuthSwitchScopesHandler creates a HTTP handler which loads the HTTP

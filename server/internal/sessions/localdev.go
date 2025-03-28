@@ -15,13 +15,10 @@ import (
 type localEnvFile map[string]struct {
 	UserEmail     string `json:"user_email"`
 	Organizations []struct {
-		OrgID       string `json:"org_id"`
-		OrgName     string `json:"org_name"`
-		OrgSlug     string `json:"org_slug"`
-		AccountType string `json:"account_type"`
-		Projects    []struct {
-			ProjectID string `json:"project_id"`
-		} `json:"projects"`
+		OrganizationID   string `json:"organization_id"`
+		OrganizationName string `json:"organization_name"`
+		OrganizationSlug string `json:"organization_slug"`
+		AccountType      string `json:"account_type"`
 	} `json:"organizations"`
 }
 
@@ -57,17 +54,10 @@ func GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
 	result.Organizations = make([]auth.Organization, len(userInfo.Organizations))
 	for i, org := range userInfo.Organizations {
 		result.Organizations[i] = auth.Organization{
-			OrgID:       org.OrgID,
-			OrgName:     org.OrgName,
-			OrgSlug:     org.OrgSlug,
-			AccountType: org.AccountType,
-			Projects:    make([]*auth.Project, len(org.Projects)),
-		}
-		// Convert projects
-		for j, proj := range org.Projects {
-			result.Organizations[i].Projects[j] = &auth.Project{
-				ProjectID: proj.ProjectID,
-			}
+			OrganizationID:   org.OrganizationID,
+			OrganizationName: org.OrganizationName,
+			OrganizationSlug: org.OrganizationSlug,
+			AccountType:      org.AccountType,
 		}
 	}
 

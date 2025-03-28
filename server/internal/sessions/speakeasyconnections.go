@@ -11,6 +11,7 @@ import (
 
 func (s *Sessions) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
 	// This function is currently empty and needs to be implemented
+	// TODO: This will call GET api.speakeasy.com/v1/gram/info/{userID}
 	return nil, fmt.Errorf("not implemented")
 }
 
@@ -45,7 +46,7 @@ func (s *Sessions) HasAccessToOrganization(ctx context.Context, userID, organiza
 	}
 
 	for _, org := range userInfo.Organizations {
-		if org.OrgID == organizationID {
+		if org.OrganizationID == organizationID {
 			return &org, true
 		}
 	}

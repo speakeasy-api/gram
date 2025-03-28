@@ -9,7 +9,6 @@ import (
 
 	redisCache "github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/internal/log"
 	"go.uber.org/zap"
 )
@@ -135,7 +134,7 @@ func New[T Cacheable[T]](ttl time.Duration) Cache[T] {
 	var redisAddr string
 	var redisPassword string
 	if os.Getenv("GRAM_ENVIRONMENT") == "local" {
-		serverVersion = uuid.NewString()
+		serverVersion = "gram-local"
 		redisAddr = fmt.Sprintf("localhost:%s", os.Getenv("CACHE_PORT"))
 		redisPassword = "xi9XILbY"
 	}
