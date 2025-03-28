@@ -8,9 +8,6 @@
 package client
 
 import (
-	"encoding/json"
-	"fmt"
-
 	auth "github.com/speakeasy-api/gram/gen/auth"
 )
 
@@ -29,19 +26,17 @@ func BuildAuthCallbackPayload(authAuthCallbackSharedToken string) (*auth.AuthCal
 
 // BuildAuthSwitchScopesPayload builds the payload for the auth auth switch
 // scopes endpoint from CLI flags.
-func BuildAuthSwitchScopesPayload(authAuthSwitchScopesBody string, authAuthSwitchScopesOrgSlug string, authAuthSwitchScopesGramSession string) (*auth.AuthSwitchScopesPayload, error) {
-	var err error
-	var body AuthSwitchScopesRequestBody
+func BuildAuthSwitchScopesPayload(authAuthSwitchScopesOrganizationID string, authAuthSwitchScopesProjectID string, authAuthSwitchScopesGramSession string) (*auth.AuthSwitchScopesPayload, error) {
+	var organizationID *string
 	{
-		err = json.Unmarshal([]byte(authAuthSwitchScopesBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"project_id\": \"Omnis eligendi a nostrum illo quis eos.\"\n   }'")
+		if authAuthSwitchScopesOrganizationID != "" {
+			organizationID = &authAuthSwitchScopesOrganizationID
 		}
 	}
-	var orgSlug *string
+	var projectID *string
 	{
-		if authAuthSwitchScopesOrgSlug != "" {
-			orgSlug = &authAuthSwitchScopesOrgSlug
+		if authAuthSwitchScopesProjectID != "" {
+			projectID = &authAuthSwitchScopesProjectID
 		}
 	}
 	var gramSession *string
@@ -50,10 +45,9 @@ func BuildAuthSwitchScopesPayload(authAuthSwitchScopesBody string, authAuthSwitc
 			gramSession = &authAuthSwitchScopesGramSession
 		}
 	}
-	v := &auth.AuthSwitchScopesPayload{
-		ProjectID: body.ProjectID,
-	}
-	v.OrgSlug = orgSlug
+	v := &auth.AuthSwitchScopesPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
 	v.GramSession = gramSession
 
 	return v, nil

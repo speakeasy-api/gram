@@ -32,8 +32,8 @@ system health-check
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` auth auth-callback --shared-token "Et quam."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Exercitationem totam explicabo porro quae quasi delectus." --gram-session "Officia et voluptatem deserunt sed."` + "\n" +
+	return os.Args[0] + ` auth auth-callback --shared-token "Omnis eligendi a nostrum illo quis eos."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Eum sed." --gram-session "Illo laborum reprehenderit sit aspernatur."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		""
 }
@@ -53,10 +53,10 @@ func ParseEndpoint(
 		authAuthCallbackFlags           = flag.NewFlagSet("auth-callback", flag.ExitOnError)
 		authAuthCallbackSharedTokenFlag = authAuthCallbackFlags.String("shared-token", "REQUIRED", "")
 
-		authAuthSwitchScopesFlags           = flag.NewFlagSet("auth-switch-scopes", flag.ExitOnError)
-		authAuthSwitchScopesBodyFlag        = authAuthSwitchScopesFlags.String("body", "REQUIRED", "")
-		authAuthSwitchScopesOrgSlugFlag     = authAuthSwitchScopesFlags.String("org-slug", "", "")
-		authAuthSwitchScopesGramSessionFlag = authAuthSwitchScopesFlags.String("gram-session", "", "")
+		authAuthSwitchScopesFlags              = flag.NewFlagSet("auth-switch-scopes", flag.ExitOnError)
+		authAuthSwitchScopesOrganizationIDFlag = authAuthSwitchScopesFlags.String("organization-id", "", "")
+		authAuthSwitchScopesProjectIDFlag      = authAuthSwitchScopesFlags.String("project-id", "", "")
+		authAuthSwitchScopesGramSessionFlag    = authAuthSwitchScopesFlags.String("gram-session", "", "")
 
 		authAuthLogoutFlags = flag.NewFlagSet("auth-logout", flag.ExitOnError)
 
@@ -196,7 +196,7 @@ func ParseEndpoint(
 				data, err = authc.BuildAuthCallbackPayload(*authAuthCallbackSharedTokenFlag)
 			case "auth-switch-scopes":
 				endpoint = c.AuthSwitchScopes()
-				data, err = authc.BuildAuthSwitchScopesPayload(*authAuthSwitchScopesBodyFlag, *authAuthSwitchScopesOrgSlugFlag, *authAuthSwitchScopesGramSessionFlag)
+				data, err = authc.BuildAuthSwitchScopesPayload(*authAuthSwitchScopesOrganizationIDFlag, *authAuthSwitchScopesProjectIDFlag, *authAuthSwitchScopesGramSessionFlag)
 			case "auth-logout":
 				endpoint = c.AuthLogout()
 			case "auth-info":
@@ -254,22 +254,20 @@ Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth auth-callback --shared-token "Et quam."
+    %[1]s auth auth-callback --shared-token "Omnis eligendi a nostrum illo quis eos."
 `, os.Args[0])
 }
 
 func authAuthSwitchScopesUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-switch-scopes -body JSON -org-slug STRING -gram-session STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-switch-scopes -organization-id STRING -project-id STRING -gram-session STRING
 
 Switches the authentication scope to a different organization.
-    -body JSON: 
-    -org-slug STRING: 
+    -organization-id STRING: 
+    -project-id STRING: 
     -gram-session STRING: 
 
 Example:
-    %[1]s auth auth-switch-scopes --body '{
-      "project_id": "Omnis eligendi a nostrum illo quis eos."
-   }' --org-slug "Incidunt qui." --gram-session "Quos occaecati suscipit dignissimos et ab."
+    %[1]s auth auth-switch-scopes --organization-id "Repellat nam." --project-id "Veniam et ipsa quasi dolore illum accusamus." --gram-session "Qui laborum qui quaerat debitis."
 `, os.Args[0])
 }
 
@@ -290,7 +288,7 @@ Provides information about the current authentication status.
     -gram-session STRING: 
 
 Example:
-    %[1]s auth auth-info --gram-session "Qui laborum qui quaerat debitis."
+    %[1]s auth auth-info --gram-session "Officia quidem totam."
 `, os.Args[0])
 }
 
@@ -318,7 +316,7 @@ Create a deployment to load tool definitions.
     -gram-session STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Exercitationem totam explicabo porro quae quasi delectus." --gram-session "Officia et voluptatem deserunt sed."
+    %[1]s deployments get-deployment --id "Eum sed." --gram-session "Illo laborum reprehenderit sit aspernatur."
 `, os.Args[0])
 }
 
@@ -333,7 +331,7 @@ Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       "external_url": "https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6"
-   }' --gram-session "Eius et blanditiis fugiat animi."
+   }' --gram-session "Voluptatem deserunt minima quam quae qui minima."
 `, os.Args[0])
 }
 
@@ -346,7 +344,7 @@ List all deployments in descending order of creation.
     -gram-session STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Ducimus velit dignissimos minima." --limit 71 --gram-session "Dolores optio laudantium harum eveniet repellendus minus."
+    %[1]s deployments list-deployments --cursor "Eum molestias iste quam nesciunt nostrum." --limit 10 --gram-session "Aliquam ipsa."
 `, os.Args[0])
 }
 

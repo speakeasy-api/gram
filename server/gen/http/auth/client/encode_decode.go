@@ -139,14 +139,13 @@ func EncodeAuthSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) 
 			req.Header.Set("X-Gram-Session", head)
 		}
 		values := req.URL.Query()
-		if p.OrgSlug != nil {
-			values.Add("org_slug", *p.OrgSlug)
+		if p.OrganizationID != nil {
+			values.Add("organization_id", *p.OrganizationID)
+		}
+		if p.ProjectID != nil {
+			values.Add("project_id", *p.ProjectID)
 		}
 		req.URL.RawQuery = values.Encode()
-		body := NewAuthSwitchScopesRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("auth", "auth switch scopes", err)
-		}
 		return nil
 	}
 }
@@ -333,14 +332,15 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				return nil, goahttp.ErrValidationError("auth", "auth info", err)
 			}
 			var (
-				gramSession *string
+				gramSession string
 			)
 			gramSessionRaw := resp.Header.Get("X-Gram-Session")
-			if gramSessionRaw != "" {
-				gramSession = &gramSessionRaw
+			if gramSessionRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session", "header"))
 			}
+			gramSession = gramSessionRaw
 			var (
-				gramSessionCookie    *string
+				gramSessionCookie    string
 				gramSessionCookieRaw string
 
 				cookies = resp.Cookies()
@@ -351,8 +351,12 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 					gramSessionCookieRaw = c.Value
 				}
 			}
-			if gramSessionCookieRaw != "" {
-				gramSessionCookie = &gramSessionCookieRaw
+			if gramSessionCookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_cookie", "cookie"))
+			}
+			gramSessionCookie = gramSessionCookieRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "auth info", err)
 			}
 			res := NewAuthInfoResultOK(&body, gramSession, gramSessionCookie)
 			return res, nil
@@ -361,4 +365,31 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			return nil, goahttp.ErrInvalidResponse("auth", "auth info", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalOrganizationResponseBodyToAuthOrganization builds a value of type
+// *auth.Organization from a value of type *OrganizationResponseBody.
+func unmarshalOrganizationResponseBodyToAuthOrganization(v *OrganizationResponseBody) *auth.Organization {
+	res := &auth.Organization{
+		OrgID:       *v.OrgID,
+		OrgName:     *v.OrgName,
+		OrgSlug:     *v.OrgSlug,
+		AccountType: *v.AccountType,
+	}
+	res.Projects = make([]*auth.Project, len(v.Projects))
+	for i, val := range v.Projects {
+		res.Projects[i] = unmarshalProjectResponseBodyToAuthProject(val)
+	}
+
+	return res
+}
+
+// unmarshalProjectResponseBodyToAuthProject builds a value of type
+// *auth.Project from a value of type *ProjectResponseBody.
+func unmarshalProjectResponseBodyToAuthProject(v *ProjectResponseBody) *auth.Project {
+	res := &auth.Project{
+		ProjectID: *v.ProjectID,
+	}
+
+	return res
 }

@@ -9,8 +9,6 @@ package server
 
 import (
 	"context"
-	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -84,34 +82,24 @@ func EncodeAuthSwitchScopesResponse(encoder func(context.Context, http.ResponseW
 func DecodeAuthSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			body AuthSwitchScopesRequestBody
-			err  error
+			organizationID *string
+			projectID      *string
+			gramSession    *string
 		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if err == io.EOF {
-				return nil, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return nil, gerr
-			}
-			return nil, goa.DecodePayloadError(err.Error())
+		qp := r.URL.Query()
+		organizationIDRaw := qp.Get("organization_id")
+		if organizationIDRaw != "" {
+			organizationID = &organizationIDRaw
 		}
-
-		var (
-			orgSlug     *string
-			gramSession *string
-		)
-		orgSlugRaw := r.URL.Query().Get("org_slug")
-		if orgSlugRaw != "" {
-			orgSlug = &orgSlugRaw
+		projectIDRaw := qp.Get("project_id")
+		if projectIDRaw != "" {
+			projectID = &projectIDRaw
 		}
 		gramSessionRaw := r.Header.Get("X-Gram-Session")
 		if gramSessionRaw != "" {
 			gramSession = &gramSessionRaw
 		}
-		payload := NewAuthSwitchScopesPayload(&body, orgSlug, gramSession)
+		payload := NewAuthSwitchScopesPayload(organizationID, projectID, gramSession)
 		if payload.GramSession != nil {
 			if strings.Contains(*payload.GramSession, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -149,19 +137,15 @@ func EncodeAuthInfoResponse(encoder func(context.Context, http.ResponseWriter) g
 		res, _ := v.(*auth.AuthInfoResult)
 		enc := encoder(ctx, w)
 		body := NewAuthInfoResponseBody(res)
-		if res.GramSession != nil {
-			w.Header().Set("X-Gram-Session", *res.GramSession)
-		}
-		if res.GramSessionCookie != nil {
-			gramSessionCookie := *res.GramSessionCookie
-			http.SetCookie(w, &http.Cookie{
-				Name:     "gram_session",
-				Value:    gramSessionCookie,
-				MaxAge:   2592000,
-				Secure:   true,
-				HttpOnly: true,
-			})
-		}
+		w.Header().Set("X-Gram-Session", res.GramSession)
+		gramSessionCookie := res.GramSessionCookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "gram_session",
+			Value:    gramSessionCookie,
+			MaxAge:   2592000,
+			Secure:   true,
+			HttpOnly: true,
+		})
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
@@ -189,4 +173,35 @@ func DecodeAuthInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 
 		return payload, nil
 	}
+}
+
+// marshalAuthOrganizationToOrganizationResponseBody builds a value of type
+// *OrganizationResponseBody from a value of type *auth.Organization.
+func marshalAuthOrganizationToOrganizationResponseBody(v *auth.Organization) *OrganizationResponseBody {
+	res := &OrganizationResponseBody{
+		OrgID:       v.OrgID,
+		OrgName:     v.OrgName,
+		OrgSlug:     v.OrgSlug,
+		AccountType: v.AccountType,
+	}
+	if v.Projects != nil {
+		res.Projects = make([]*ProjectResponseBody, len(v.Projects))
+		for i, val := range v.Projects {
+			res.Projects[i] = marshalAuthProjectToProjectResponseBody(val)
+		}
+	} else {
+		res.Projects = []*ProjectResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAuthProjectToProjectResponseBody builds a value of type
+// *ProjectResponseBody from a value of type *auth.Project.
+func marshalAuthProjectToProjectResponseBody(v *auth.Project) *ProjectResponseBody {
+	res := &ProjectResponseBody{
+		ProjectID: v.ProjectID,
+	}
+
+	return res
 }

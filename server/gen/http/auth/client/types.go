@@ -12,32 +12,28 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// AuthSwitchScopesRequestBody is the type of the "auth" service "auth switch
-// scopes" endpoint HTTP request body.
-type AuthSwitchScopesRequestBody struct {
-	// The project id to switch scopes too
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-}
-
 // AuthInfoResponseBody is the type of the "auth" service "auth info" endpoint
 // HTTP response body.
 type AuthInfoResponseBody struct {
-	UserID           *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	UserEmail        *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
-	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
-	AccountType      *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
-	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	ProjectName      *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	UserID               *string                     `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	UserEmail            *string                     `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	ActiveOrganizationID *string                     `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
+	ActiveProjectID      *string                     `form:"active_project_id,omitempty" json:"active_project_id,omitempty" xml:"active_project_id,omitempty"`
+	Organizations        []*OrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
-// NewAuthSwitchScopesRequestBody builds the HTTP request body from the payload
-// of the "auth switch scopes" endpoint of the "auth" service.
-func NewAuthSwitchScopesRequestBody(p *auth.AuthSwitchScopesPayload) *AuthSwitchScopesRequestBody {
-	body := &AuthSwitchScopesRequestBody{
-		ProjectID: p.ProjectID,
-	}
-	return body
+// OrganizationResponseBody is used to define fields on response body types.
+type OrganizationResponseBody struct {
+	OrgID       *string                `form:"org_id,omitempty" json:"org_id,omitempty" xml:"org_id,omitempty"`
+	OrgName     *string                `form:"org_name,omitempty" json:"org_name,omitempty" xml:"org_name,omitempty"`
+	OrgSlug     *string                `form:"org_slug,omitempty" json:"org_slug,omitempty" xml:"org_slug,omitempty"`
+	AccountType *string                `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	Projects    []*ProjectResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
+}
+
+// ProjectResponseBody is used to define fields on response body types.
+type ProjectResponseBody struct {
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
 // NewAuthCallbackResultTemporaryRedirect builds a "auth" service "auth
@@ -72,15 +68,16 @@ func NewAuthLogoutResultOK(gramSession string) *auth.AuthLogoutResult {
 
 // NewAuthInfoResultOK builds a "auth" service "auth info" endpoint result from
 // a HTTP "OK" response.
-func NewAuthInfoResultOK(body *AuthInfoResponseBody, gramSession *string, gramSessionCookie *string) *auth.AuthInfoResult {
+func NewAuthInfoResultOK(body *AuthInfoResponseBody, gramSession string, gramSessionCookie string) *auth.AuthInfoResult {
 	v := &auth.AuthInfoResult{
-		UserID:           *body.UserID,
-		UserEmail:        *body.UserEmail,
-		OrganizationSlug: *body.OrganizationSlug,
-		OrganizationName: *body.OrganizationName,
-		AccountType:      *body.AccountType,
-		ProjectID:        *body.ProjectID,
-		ProjectName:      *body.ProjectName,
+		UserID:               *body.UserID,
+		UserEmail:            *body.UserEmail,
+		ActiveOrganizationID: *body.ActiveOrganizationID,
+		ActiveProjectID:      *body.ActiveProjectID,
+	}
+	v.Organizations = make([]*auth.Organization, len(body.Organizations))
+	for i, val := range body.Organizations {
+		v.Organizations[i] = unmarshalOrganizationResponseBodyToAuthOrganization(val)
 	}
 	v.GramSession = gramSession
 	v.GramSessionCookie = gramSessionCookie
@@ -97,20 +94,58 @@ func ValidateAuthInfoResponseBody(body *AuthInfoResponseBody) (err error) {
 	if body.UserEmail == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
 	}
-	if body.OrganizationSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_slug", "body"))
+	if body.ActiveOrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_organization_id", "body"))
 	}
-	if body.OrganizationName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_name", "body"))
+	if body.ActiveProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_project_id", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	for _, e := range body.Organizations {
+		if e != nil {
+			if err2 := ValidateOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateOrganizationResponseBody runs the validations defined on
+// OrganizationResponseBody
+func ValidateOrganizationResponseBody(body *OrganizationResponseBody) (err error) {
+	if body.OrgID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_id", "body"))
+	}
+	if body.OrgName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_name", "body"))
+	}
+	if body.OrgSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_slug", "body"))
 	}
 	if body.AccountType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
 	}
+	if body.Projects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("projects", "body"))
+	}
+	for _, e := range body.Projects {
+		if e != nil {
+			if err2 := ValidateProjectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateProjectResponseBody runs the validations defined on
+// ProjectResponseBody
+func ValidateProjectResponseBody(body *ProjectResponseBody) (err error) {
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.ProjectName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
 	}
 	return
 }

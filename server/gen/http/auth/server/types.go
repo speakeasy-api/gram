@@ -11,36 +11,46 @@ import (
 	auth "github.com/speakeasy-api/gram/gen/auth"
 )
 
-// AuthSwitchScopesRequestBody is the type of the "auth" service "auth switch
-// scopes" endpoint HTTP request body.
-type AuthSwitchScopesRequestBody struct {
-	// The project id to switch scopes too
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-}
-
 // AuthInfoResponseBody is the type of the "auth" service "auth info" endpoint
 // HTTP response body.
 type AuthInfoResponseBody struct {
-	UserID           string `form:"user_id" json:"user_id" xml:"user_id"`
-	UserEmail        string `form:"user_email" json:"user_email" xml:"user_email"`
-	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
-	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
-	AccountType      string `form:"account_type" json:"account_type" xml:"account_type"`
-	ProjectID        string `form:"project_id" json:"project_id" xml:"project_id"`
-	ProjectName      string `form:"project_name" json:"project_name" xml:"project_name"`
+	UserID               string                      `form:"user_id" json:"user_id" xml:"user_id"`
+	UserEmail            string                      `form:"user_email" json:"user_email" xml:"user_email"`
+	ActiveOrganizationID string                      `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
+	ActiveProjectID      string                      `form:"active_project_id" json:"active_project_id" xml:"active_project_id"`
+	Organizations        []*OrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+}
+
+// OrganizationResponseBody is used to define fields on response body types.
+type OrganizationResponseBody struct {
+	OrgID       string                 `form:"org_id" json:"org_id" xml:"org_id"`
+	OrgName     string                 `form:"org_name" json:"org_name" xml:"org_name"`
+	OrgSlug     string                 `form:"org_slug" json:"org_slug" xml:"org_slug"`
+	AccountType string                 `form:"account_type" json:"account_type" xml:"account_type"`
+	Projects    []*ProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
+}
+
+// ProjectResponseBody is used to define fields on response body types.
+type ProjectResponseBody struct {
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 }
 
 // NewAuthInfoResponseBody builds the HTTP response body from the result of the
 // "auth info" endpoint of the "auth" service.
 func NewAuthInfoResponseBody(res *auth.AuthInfoResult) *AuthInfoResponseBody {
 	body := &AuthInfoResponseBody{
-		UserID:           res.UserID,
-		UserEmail:        res.UserEmail,
-		OrganizationSlug: res.OrganizationSlug,
-		OrganizationName: res.OrganizationName,
-		AccountType:      res.AccountType,
-		ProjectID:        res.ProjectID,
-		ProjectName:      res.ProjectName,
+		UserID:               res.UserID,
+		UserEmail:            res.UserEmail,
+		ActiveOrganizationID: res.ActiveOrganizationID,
+		ActiveProjectID:      res.ActiveProjectID,
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*OrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			body.Organizations[i] = marshalAuthOrganizationToOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*OrganizationResponseBody{}
 	}
 	return body
 }
@@ -55,11 +65,10 @@ func NewAuthCallbackPayload(sharedToken string) *auth.AuthCallbackPayload {
 
 // NewAuthSwitchScopesPayload builds a auth service auth switch scopes endpoint
 // payload.
-func NewAuthSwitchScopesPayload(body *AuthSwitchScopesRequestBody, orgSlug *string, gramSession *string) *auth.AuthSwitchScopesPayload {
-	v := &auth.AuthSwitchScopesPayload{
-		ProjectID: body.ProjectID,
-	}
-	v.OrgSlug = orgSlug
+func NewAuthSwitchScopesPayload(organizationID *string, projectID *string, gramSession *string) *auth.AuthSwitchScopesPayload {
+	v := &auth.AuthSwitchScopesPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
 	v.GramSession = gramSession
 
 	return v

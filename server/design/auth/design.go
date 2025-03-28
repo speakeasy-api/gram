@@ -42,7 +42,7 @@ var _ = Service("auth", func() {
 		Security(sessions.GramSession)
 
 		Payload(func() {
-			Attribute("org_slug", String, "The organization slug to switch scopes")
+			Attribute("organization_id", String, "The organization slug to switch scopes")
 			Attribute("project_id", String, "The project id to switch scopes too")
 			Extend(sessions.SessionPayload)
 		})
@@ -55,7 +55,8 @@ var _ = Service("auth", func() {
 
 		HTTP(func() {
 			POST("/rpc/auth.switch.scopes")
-			Param("org_slug")
+			Param("organization_id")
+			Param("project_id")
 			sessions.SessionHeader()
 			Response(StatusOK, func() {
 				sessions.WriteSessionCookie()
@@ -93,14 +94,12 @@ var _ = Service("auth", func() {
 		Result(func() {
 			Attribute("user_id", String)
 			Attribute("user_email", String)
-			Attribute("organization_slug", String)
-			Attribute("organization_name", String)
-			Attribute("account_type", String)
-			Attribute("project_id", String)
-			Attribute("project_name", String)
+			Attribute("active_organization_id", String)
+			Attribute("active_project_id", String)
+			Attribute("organizations", ArrayOf("Organization")) // <-- here too
 			Attribute("gram_session", String, "The authentication session")
 			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("user_id", "user_email", "organization_slug", "organization_name", "account_type", "project_id", "project_name")
+			Required("user_id", "user_email", "active_organization_id", "active_project_id", "organizations", "gram_session", "gram_session_cookie")
 		})
 
 		HTTP(func() {
@@ -113,4 +112,18 @@ var _ = Service("auth", func() {
 			})
 		})
 	})
+})
+
+var Project = Type("Project", func() {
+	Attribute("project_id", String)
+	Required("project_id")
+})
+
+var Organization = Type("Organization", func() {
+	Attribute("org_id", String)
+	Attribute("org_name", String)
+	Attribute("org_slug", String)
+	Attribute("account_type", String)
+	Attribute("projects", ArrayOf("Project"))
+	Required("org_id", "org_name", "org_slug", "account_type", "projects")
 })

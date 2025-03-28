@@ -72,17 +72,15 @@ type AuthInfoPayload struct {
 
 // AuthInfoResult is the result type of the auth service auth info method.
 type AuthInfoResult struct {
-	UserID           string
-	UserEmail        string
-	OrganizationSlug string
-	OrganizationName string
-	AccountType      string
-	ProjectID        string
-	ProjectName      string
+	UserID               string
+	UserEmail            string
+	ActiveOrganizationID string
+	ActiveProjectID      string
+	Organizations        []*Organization
 	// The authentication session
-	GramSession *string
+	GramSession string
 	// The authentication session
-	GramSessionCookie *string
+	GramSessionCookie string
 }
 
 // AuthLogoutResult is the result type of the auth service auth logout method.
@@ -95,7 +93,7 @@ type AuthLogoutResult struct {
 // scopes method.
 type AuthSwitchScopesPayload struct {
 	// The organization slug to switch scopes
-	OrgSlug *string
+	OrganizationID *string
 	// The project id to switch scopes too
 	ProjectID   *string
 	GramSession *string
@@ -108,4 +106,16 @@ type AuthSwitchScopesResult struct {
 	GramSession string
 	// The authentication session
 	GramSessionCookie string
+}
+
+type Organization struct {
+	OrgID       string
+	OrgName     string
+	OrgSlug     string
+	AccountType string
+	Projects    []*Project
+}
+
+type Project struct {
+	ProjectID string
 }

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,19 +35,106 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 }
 
 func (s *Service) AuthCallback(context.Context, *gen.AuthCallbackPayload) (res *gen.AuthCallbackResult, err error) {
+	// TODO: Exchange sharedToken with speakeasy backend for user information OIDC
+	// TODO: Populate an auth session from that information, redirect back to gram
 	return &gen.AuthCallbackResult{}, nil
 }
 
-func (s *Service) AuthSwitchScopes(context.Context, *gen.AuthSwitchScopesPayload) (res *gen.AuthSwitchScopesResult, err error) {
-	return &gen.AuthSwitchScopesResult{}, nil
+func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchScopesPayload) (res *gen.AuthSwitchScopesResult, err error) {
+	session, ok := sessions.GetSessionValueFromContext(ctx)
+	if !ok || session == nil {
+		return nil, errors.New("session not found in context")
+	}
+
+	userInfo, err := s.sessions.GetUserInfo(ctx, session.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	if payload.OrganizationID != nil {
+		orgFound := false
+		for _, org := range userInfo.Organizations {
+			if org.OrgID == *payload.OrganizationID {
+				orgFound = true
+				break
+			}
+		}
+		if !orgFound {
+			return nil, errors.New("organization not found")
+		}
+		session.ActiveOrganizationID = *payload.OrganizationID
+	}
+
+	if payload.ProjectID != nil {
+		projectFound := false
+		for _, org := range userInfo.Organizations {
+			for _, proj := range org.Projects {
+				if proj.ProjectID == *payload.ProjectID {
+					projectFound = true
+					break
+				}
+			}
+			if projectFound {
+				break
+			}
+		}
+		if !projectFound {
+			return nil, errors.New("project not found")
+		}
+		session.ActiveProjectID = *payload.ProjectID
+	}
+
+	if err := s.sessions.UpdateSession(ctx, *session); err != nil {
+		return nil, err
+	}
+
+	return &gen.AuthSwitchScopesResult{
+		GramSession:       session.ID,
+		GramSessionCookie: session.ID,
+	}, nil
 }
 
 func (s *Service) AuthLogout(context.Context) (res *gen.AuthLogoutResult, err error) {
 	return &gen.AuthLogoutResult{GramSession: ""}, nil
 }
+func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (res *gen.AuthInfoResult, err error) {
+	session, ok := sessions.GetSessionValueFromContext(ctx)
+	if !ok || session == nil {
+		return nil, errors.New("session not found in context")
+	}
 
-func (s *Service) AuthInfo(context.Context, *gen.AuthInfoPayload) (res *gen.AuthInfoResult, err error) {
-	return &gen.AuthInfoResult{}, nil
+	userInfo, err := s.sessions.GetUserInfo(ctx, session.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fully unpack the userInfo object
+	organizations := make([]*gen.Organization, len(userInfo.Organizations))
+	for i, org := range userInfo.Organizations {
+		projects := make([]*gen.Project, len(org.Projects))
+		for j, proj := range org.Projects {
+			projects[j] = &gen.Project{
+				ProjectID: proj.ProjectID,
+			}
+		}
+		organizations[i] = &gen.Organization{
+			OrgID:       org.OrgID,
+			OrgName:     org.OrgName,
+			OrgSlug:     org.OrgSlug,
+			AccountType: org.AccountType,
+			Projects:    projects,
+		}
+	}
+
+	return &gen.AuthInfoResult{
+		GramSession:          session.ID,
+		GramSessionCookie:    session.ID,
+		ActiveOrganizationID: session.ActiveOrganizationID,
+		ActiveProjectID:      session.ActiveProjectID,
+		UserID:               userInfo.UserID,
+		UserEmail:            userInfo.Email,
+		Organizations:        organizations,
+	}, nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
