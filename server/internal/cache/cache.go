@@ -149,6 +149,11 @@ func New[T Cacheable[T]](ttl time.Duration) Cache[T] {
 		WriteTimeout: 1 * time.Second,
 	})
 
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		fmt.Println("Redis connection failed: %v", err)
+		panic(err)
+	}
+
 	cache := redisCache.New(&redisCache.Options{
 		Redis: rdb,
 	})

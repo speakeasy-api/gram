@@ -38,9 +38,9 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 		}
 	}
 
-	session, err := s.sessionCache.Get(ctx, key)
+	session, err := s.sessionCache.Get(ctx, GramSessionCacheKey(key))
 	if err != nil {
-		return ctx, errors.New("session token is invalid: " + err.Error())
+		return ctx, errors.New("session token is invalid")
 	}
 
 	if _, ok := s.HasAccessToOrganization(ctx, session.UserID, session.ActiveOrganizationID); !ok {

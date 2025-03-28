@@ -15,14 +15,14 @@ func (s *Sessions) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
 }
 
 func (s *Sessions) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, error) {
-	if userInfo, err := s.userInfoCache.Get(ctx, userID); err == nil {
+	if userInfo, err := s.userInfoCache.Get(ctx, UserInfoCacheKey(userID)); err == nil {
 		return &userInfo, nil
 	}
 
 	var userInfo *CachedUserInfo
 	var err error
 
-	if os.Getenv("ENV") == "local" {
+	if os.Getenv("GRAM_ENVIRONMENT") == "local" {
 		userInfo, err = GetUserInfoFromLocalEnvFile(userID)
 	} else {
 		userInfo, err = s.GetUserInfoFromSpeakeasy()

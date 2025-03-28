@@ -33,12 +33,12 @@ type CachedUserInfo struct {
 	Organizations []auth.Organization
 }
 
-func DocumentCacheKey(userID string) string {
+func UserInfoCacheKey(userID string) string {
 	return "speakeasyUserInfo:" + userID
 }
 
 func (c CachedUserInfo) CacheKey() string {
-	return DocumentCacheKey(c.UserID)
+	return UserInfoCacheKey(c.UserID)
 }
 
 func (c CachedUserInfo) AdditionalCacheKeys() []string {

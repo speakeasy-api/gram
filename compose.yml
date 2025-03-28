@@ -21,7 +21,7 @@ services:
       - cache_data:/var/lib/gram-cache/data
     ports:
       - "${CACHE_PORT}:35299"
-    command: redis-server --port ${CACHE_PORT} --requirepass xi9XILbY
+    command: redis-server --port 35299 --requirepass xi9XILbY
 
 volumes:
   postgres_data:
