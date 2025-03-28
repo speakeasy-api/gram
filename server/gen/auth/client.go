@@ -53,9 +53,9 @@ func (c *Client) AuthSwitchScopes(ctx context.Context, p *AuthSwitchScopesPayloa
 }
 
 // AuthLogout calls the "auth logout" endpoint of the "auth" service.
-func (c *Client) AuthLogout(ctx context.Context) (res *AuthLogoutResult, err error) {
+func (c *Client) AuthLogout(ctx context.Context, p *AuthLogoutPayload) (res *AuthLogoutResult, err error) {
 	var ires any
-	ires, err = c.AuthLogoutEndpoint(ctx, nil)
+	ires, err = c.AuthLogoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

@@ -29,7 +29,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		AuthCallback:     NewAuthCallbackEndpoint(s),
 		AuthSwitchScopes: NewAuthSwitchScopesEndpoint(s, a.APIKeyAuth),
-		AuthLogout:       NewAuthLogoutEndpoint(s),
+		AuthLogout:       NewAuthLogoutEndpoint(s, a.APIKeyAuth),
 		AuthInfo:         NewAuthInfoEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -76,9 +76,24 @@ func NewAuthSwitchScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 
 // NewAuthLogoutEndpoint returns an endpoint function that calls the method
 // "auth logout" of service "auth".
-func NewAuthLogoutEndpoint(s Service) goa.Endpoint {
+func NewAuthLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return s.AuthLogout(ctx)
+		p := req.(*AuthLogoutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "gram_session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.GramSession != nil {
+			key = *p.GramSession
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.AuthLogout(ctx, p)
 	}
 }
 

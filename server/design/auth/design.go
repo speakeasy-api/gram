@@ -67,6 +67,11 @@ var _ = Service("auth", func() {
 
 	Method("auth logout", func() {
 		Description("Logs out the current user by clearing their session.")
+		Security(sessions.GramSession)
+
+		Payload(func() {
+			Extend(sessions.SessionPayload)
+		})
 
 		Result(func() {
 			Attribute("gram_session", String, "Empty string to clear the session")
@@ -75,6 +80,7 @@ var _ = Service("auth", func() {
 
 		HTTP(func() {
 			GET("/rpc/auth.logout")
+			sessions.SessionHeader()
 
 			Response(StatusOK, func() {
 				sessions.DeleteSessionCookie()

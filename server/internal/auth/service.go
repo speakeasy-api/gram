@@ -76,7 +76,7 @@ func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchS
 	}, nil
 }
 
-func (s *Service) AuthLogout(ctx context.Context) (res *gen.AuthLogoutResult, err error) {
+func (s *Service) AuthLogout(ctx context.Context, payload *gen.AuthLogoutPayload) (res *gen.AuthLogoutResult, err error) {
 	// Clears cookie and invalidates session
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {

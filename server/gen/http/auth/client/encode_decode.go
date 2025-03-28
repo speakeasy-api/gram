@@ -221,6 +221,22 @@ func (c *Client) BuildAuthLogoutRequest(ctx context.Context, v any) (*http.Reque
 	return req, nil
 }
 
+// EncodeAuthLogoutRequest returns an encoder for requests sent to the auth
+// auth logout server.
+func EncodeAuthLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*auth.AuthLogoutPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("auth", "auth logout", "*auth.AuthLogoutPayload", v)
+		}
+		if p.GramSession != nil {
+			head := *p.GramSession
+			req.Header.Set("X-Gram-Session", head)
+		}
+		return nil
+	}
+}
+
 // DecodeAuthLogoutResponse returns a decoder for responses returned by the
 // auth auth logout endpoint. restoreBody controls whether the response body
 // should be restored after having been read.

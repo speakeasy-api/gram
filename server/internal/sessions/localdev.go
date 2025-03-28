@@ -79,13 +79,10 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 	var data map[string]struct {
 		UserEmail     string `json:"user_email"`
 		Organizations []struct {
-			OrgID       string `json:"org_id"`
-			OrgName     string `json:"org_name"`
-			OrgSlug     string `json:"org_slug"`
+			OrgID       string `json:"organization_id"`
+			OrgName     string `json:"organization_name"`
+			OrgSlug     string `json:"organization_slug"`
 			AccountType string `json:"account_type"`
-			Projects    []struct {
-				ProjectID string `json:"project_id"`
-			} `json:"projects"`
 		} `json:"organizations"`
 	}
 	if err := json.Unmarshal(byteValue, &data); err != nil {
@@ -100,7 +97,7 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 			UserID:               userID,
 			UserEmail:            userInfo.UserEmail,
 			ActiveOrganizationID: userInfo.Organizations[0].OrgID,
-			ActiveProjectID:      userInfo.Organizations[0].Projects[0].ProjectID,
+			ActiveProjectID:      "",
 		}
 		break
 	}

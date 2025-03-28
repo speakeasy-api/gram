@@ -74,6 +74,14 @@ func NewAuthSwitchScopesPayload(organizationID *string, projectID *string, gramS
 	return v
 }
 
+// NewAuthLogoutPayload builds a auth service auth logout endpoint payload.
+func NewAuthLogoutPayload(gramSession *string) *auth.AuthLogoutPayload {
+	v := &auth.AuthLogoutPayload{}
+	v.GramSession = gramSession
+
+	return v
+}
+
 // NewAuthInfoPayload builds a auth service auth info endpoint payload.
 func NewAuthInfoPayload(gramSession *string) *auth.AuthInfoPayload {
 	v := &auth.AuthInfoPayload{}

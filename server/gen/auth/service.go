@@ -20,7 +20,7 @@ type Service interface {
 	// Switches the authentication scope to a different organization.
 	AuthSwitchScopes(context.Context, *AuthSwitchScopesPayload) (res *AuthSwitchScopesResult, err error)
 	// Logs out the current user by clearing their session.
-	AuthLogout(context.Context) (res *AuthLogoutResult, err error)
+	AuthLogout(context.Context, *AuthLogoutPayload) (res *AuthLogoutResult, err error)
 	// Provides information about the current authentication status.
 	AuthInfo(context.Context, *AuthInfoPayload) (res *AuthInfoResult, err error)
 }
@@ -81,6 +81,11 @@ type AuthInfoResult struct {
 	GramSession string
 	// The authentication session
 	GramSessionCookie string
+}
+
+// AuthLogoutPayload is the payload type of the auth service auth logout method.
+type AuthLogoutPayload struct {
+	GramSession *string
 }
 
 // AuthLogoutResult is the result type of the auth service auth logout method.

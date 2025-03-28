@@ -53,6 +53,21 @@ func BuildAuthSwitchScopesPayload(authAuthSwitchScopesOrganizationID string, aut
 	return v, nil
 }
 
+// BuildAuthLogoutPayload builds the payload for the auth auth logout endpoint
+// from CLI flags.
+func BuildAuthLogoutPayload(authAuthLogoutGramSession string) (*auth.AuthLogoutPayload, error) {
+	var gramSession *string
+	{
+		if authAuthLogoutGramSession != "" {
+			gramSession = &authAuthLogoutGramSession
+		}
+	}
+	v := &auth.AuthLogoutPayload{}
+	v.GramSession = gramSession
+
+	return v, nil
+}
+
 // BuildAuthInfoPayload builds the payload for the auth auth info endpoint from
 // CLI flags.
 func BuildAuthInfoPayload(authAuthInfoGramSession string) (*auth.AuthInfoPayload, error) {

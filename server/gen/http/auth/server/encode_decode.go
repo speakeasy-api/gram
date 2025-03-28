@@ -130,6 +130,30 @@ func EncodeAuthLogoutResponse(encoder func(context.Context, http.ResponseWriter)
 	}
 }
 
+// DecodeAuthLogoutRequest returns a decoder for requests sent to the auth auth
+// logout endpoint.
+func DecodeAuthLogoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+	return func(r *http.Request) (any, error) {
+		var (
+			gramSession *string
+		)
+		gramSessionRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionRaw != "" {
+			gramSession = &gramSessionRaw
+		}
+		payload := NewAuthLogoutPayload(gramSession)
+		if payload.GramSession != nil {
+			if strings.Contains(*payload.GramSession, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
+				payload.GramSession = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
 // EncodeAuthInfoResponse returns an encoder for responses returned by the auth
 // auth info endpoint.
 func EncodeAuthInfoResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {

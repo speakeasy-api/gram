@@ -32,8 +32,8 @@ system health-check
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` auth auth-callback --shared-token "Omnis eligendi a nostrum illo quis eos."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Eum sed." --gram-session "Illo laborum reprehenderit sit aspernatur."` + "\n" +
+	return os.Args[0] + ` auth auth-callback --shared-token "Nisi quos occaecati suscipit."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session "Asperiores dolorem voluptas."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		""
 }
@@ -58,7 +58,8 @@ func ParseEndpoint(
 		authAuthSwitchScopesProjectIDFlag      = authAuthSwitchScopesFlags.String("project-id", "", "")
 		authAuthSwitchScopesGramSessionFlag    = authAuthSwitchScopesFlags.String("gram-session", "", "")
 
-		authAuthLogoutFlags = flag.NewFlagSet("auth-logout", flag.ExitOnError)
+		authAuthLogoutFlags           = flag.NewFlagSet("auth-logout", flag.ExitOnError)
+		authAuthLogoutGramSessionFlag = authAuthLogoutFlags.String("gram-session", "", "")
 
 		authAuthInfoFlags           = flag.NewFlagSet("auth-info", flag.ExitOnError)
 		authAuthInfoGramSessionFlag = authAuthInfoFlags.String("gram-session", "", "")
@@ -199,6 +200,7 @@ func ParseEndpoint(
 				data, err = authc.BuildAuthSwitchScopesPayload(*authAuthSwitchScopesOrganizationIDFlag, *authAuthSwitchScopesProjectIDFlag, *authAuthSwitchScopesGramSessionFlag)
 			case "auth-logout":
 				endpoint = c.AuthLogout()
+				data, err = authc.BuildAuthLogoutPayload(*authAuthLogoutGramSessionFlag)
 			case "auth-info":
 				endpoint = c.AuthInfo()
 				data, err = authc.BuildAuthInfoPayload(*authAuthInfoGramSessionFlag)
@@ -254,7 +256,7 @@ Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth auth-callback --shared-token "Omnis eligendi a nostrum illo quis eos."
+    %[1]s auth auth-callback --shared-token "Nisi quos occaecati suscipit."
 `, os.Args[0])
 }
 
@@ -267,17 +269,18 @@ Switches the authentication scope to a different organization.
     -gram-session STRING: 
 
 Example:
-    %[1]s auth auth-switch-scopes --organization-id "Repellat nam." --project-id "Veniam et ipsa quasi dolore illum accusamus." --gram-session "Qui laborum qui quaerat debitis."
+    %[1]s auth auth-switch-scopes --organization-id "Qui laborum qui quaerat debitis." --project-id "Hic maxime consequuntur ipsum accusantium in." --gram-session "Deserunt non autem."
 `, os.Args[0])
 }
 
 func authAuthLogoutUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-logout
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-logout -gram-session STRING
 
 Logs out the current user by clearing their session.
+    -gram-session STRING: 
 
 Example:
-    %[1]s auth auth-logout
+    %[1]s auth auth-logout --gram-session "Qui aut quia maxime rem."
 `, os.Args[0])
 }
 
@@ -288,7 +291,7 @@ Provides information about the current authentication status.
     -gram-session STRING: 
 
 Example:
-    %[1]s auth auth-info --gram-session "Officia quidem totam."
+    %[1]s auth auth-info --gram-session "Eaque quae."
 `, os.Args[0])
 }
 
@@ -316,7 +319,7 @@ Create a deployment to load tool definitions.
     -gram-session STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Eum sed." --gram-session "Illo laborum reprehenderit sit aspernatur."
+    %[1]s deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session "Asperiores dolorem voluptas."
 `, os.Args[0])
 }
 
@@ -331,7 +334,7 @@ Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       "external_url": "https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6"
-   }' --gram-session "Voluptatem deserunt minima quam quae qui minima."
+   }' --gram-session "Nemo accusantium architecto ducimus."
 `, os.Args[0])
 }
 
@@ -344,7 +347,7 @@ List all deployments in descending order of creation.
     -gram-session STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Eum molestias iste quam nesciunt nostrum." --limit 10 --gram-session "Aliquam ipsa."
+    %[1]s deployments list-deployments --cursor "Doloremque voluptas et culpa." --limit 37 --gram-session "Quos earum optio quasi rem quia ipsa."
 `, os.Args[0])
 }
 

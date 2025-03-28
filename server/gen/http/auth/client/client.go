@@ -117,10 +117,15 @@ func (c *Client) AuthSwitchScopes() goa.Endpoint {
 // auth logout server.
 func (c *Client) AuthLogout() goa.Endpoint {
 	var (
+		encodeRequest  = EncodeAuthLogoutRequest(c.encoder)
 		decodeResponse = DecodeAuthLogoutResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildAuthLogoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
 		if err != nil {
 			return nil, err
 		}
