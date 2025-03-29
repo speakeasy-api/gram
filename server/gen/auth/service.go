@@ -60,14 +60,14 @@ type AuthCallbackResult struct {
 	// The URL to redirect to after authentication
 	Location string
 	// The authentication session
-	GramSession string
+	GramSessionToken string
 	// The authentication session
 	GramSessionCookie string
 }
 
 // AuthInfoPayload is the payload type of the auth service auth info method.
 type AuthInfoPayload struct {
-	GramSession *string
+	GramSessionToken *string
 }
 
 // AuthInfoResult is the result type of the auth service auth info method.
@@ -78,20 +78,20 @@ type AuthInfoResult struct {
 	ActiveProjectID      string
 	Organizations        []*Organization
 	// The authentication session
-	GramSession string
+	GramSessionToken string
 	// The authentication session
 	GramSessionCookie string
 }
 
 // AuthLogoutPayload is the payload type of the auth service auth logout method.
 type AuthLogoutPayload struct {
-	GramSession *string
+	GramSessionToken *string
 }
 
 // AuthLogoutResult is the result type of the auth service auth logout method.
 type AuthLogoutResult struct {
 	// Empty string to clear the session
-	GramSession string
+	GramSessionCookie string
 }
 
 // AuthSwitchScopesPayload is the payload type of the auth service auth switch
@@ -100,15 +100,15 @@ type AuthSwitchScopesPayload struct {
 	// The organization slug to switch scopes
 	OrganizationID *string
 	// The project id to switch scopes too
-	ProjectID   *string
-	GramSession *string
+	ProjectID        *string
+	GramSessionToken *string
 }
 
 // AuthSwitchScopesResult is the result type of the auth service auth switch
 // scopes method.
 type AuthSwitchScopesResult struct {
 	// The authentication session
-	GramSession string
+	GramSessionToken string
 	// The authentication session
 	GramSessionCookie string
 }

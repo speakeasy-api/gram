@@ -37,27 +37,27 @@ func EncodeGetDeploymentResponse(encoder func(context.Context, http.ResponseWrit
 func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id          string
-			gramSession *string
-			err         error
+			id               string
+			gramSessionToken *string
+			err              error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
-		gramSessionRaw := r.Header.Get("X-Gram-Session")
-		if gramSessionRaw != "" {
-			gramSession = &gramSessionRaw
+		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionTokenRaw != "" {
+			gramSessionToken = &gramSessionTokenRaw
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetDeploymentPayload(id, gramSession)
-		if payload.GramSession != nil {
-			if strings.Contains(*payload.GramSession, " ") {
+		payload := NewGetDeploymentPayload(id, gramSessionToken)
+		if payload.GramSessionToken != nil {
+			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
-				payload.GramSession = &cred
+				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
+				payload.GramSessionToken = &cred
 			}
 		}
 
@@ -102,18 +102,18 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		}
 
 		var (
-			gramSession *string
+			gramSessionToken *string
 		)
-		gramSessionRaw := r.Header.Get("X-Gram-Session")
-		if gramSessionRaw != "" {
-			gramSession = &gramSessionRaw
+		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionTokenRaw != "" {
+			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewCreateDeploymentPayload(&body, gramSession)
-		if payload.GramSession != nil {
-			if strings.Contains(*payload.GramSession, " ") {
+		payload := NewCreateDeploymentPayload(&body, gramSessionToken)
+		if payload.GramSessionToken != nil {
+			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
-				payload.GramSession = &cred
+				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
+				payload.GramSessionToken = &cred
 			}
 		}
 
@@ -138,10 +138,10 @@ func EncodeListDeploymentsResponse(encoder func(context.Context, http.ResponseWr
 func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			cursor      *string
-			limit       int
-			gramSession *string
-			err         error
+			cursor           *string
+			limit            int
+			gramSessionToken *string
+			err              error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
@@ -166,19 +166,19 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if limit > 100 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
 		}
-		gramSessionRaw := r.Header.Get("X-Gram-Session")
-		if gramSessionRaw != "" {
-			gramSession = &gramSessionRaw
+		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionTokenRaw != "" {
+			gramSessionToken = &gramSessionTokenRaw
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListDeploymentsPayload(cursor, limit, gramSession)
-		if payload.GramSession != nil {
-			if strings.Contains(*payload.GramSession, " ") {
+		payload := NewListDeploymentsPayload(cursor, limit, gramSessionToken)
+		if payload.GramSessionToken != nil {
+			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
-				payload.GramSession = &cred
+				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
+				payload.GramSessionToken = &cred
 			}
 		}
 

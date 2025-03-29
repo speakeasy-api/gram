@@ -55,8 +55,8 @@ type CreateDeploymentPayload struct {
 	// commit hash or pull request.
 	ExternalURL *string
 	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
-	GramSession     *string
+	Openapi3p1Tools  []*OpenAPI3P1ToolForm
+	GramSessionToken *string
 }
 
 type Deployment struct {
@@ -139,8 +139,8 @@ type DeploymentListResult struct {
 // getDeployment method.
 type GetDeploymentPayload struct {
 	// The ID of the deployment
-	ID          string
-	GramSession *string
+	ID               string
+	GramSessionToken *string
 }
 
 type JSONSchema string
@@ -151,8 +151,8 @@ type ListDeploymentsPayload struct {
 	// The cursor to fetch results from
 	Cursor *string
 	// Results per page
-	Limit       int
-	GramSession *string
+	Limit            int
+	GramSessionToken *string
 }
 
 type OpenAPI3P1ParameterSchema struct {

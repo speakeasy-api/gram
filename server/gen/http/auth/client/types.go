@@ -38,10 +38,10 @@ type ProjectResponseBody struct {
 
 // NewAuthCallbackResultTemporaryRedirect builds a "auth" service "auth
 // callback" endpoint result from a HTTP "TemporaryRedirect" response.
-func NewAuthCallbackResultTemporaryRedirect(location string, gramSession string, gramSessionCookie string) *auth.AuthCallbackResult {
+func NewAuthCallbackResultTemporaryRedirect(location string, gramSessionToken string, gramSessionCookie string) *auth.AuthCallbackResult {
 	v := &auth.AuthCallbackResult{}
 	v.Location = location
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 	v.GramSessionCookie = gramSessionCookie
 
 	return v
@@ -49,9 +49,9 @@ func NewAuthCallbackResultTemporaryRedirect(location string, gramSession string,
 
 // NewAuthSwitchScopesResultOK builds a "auth" service "auth switch scopes"
 // endpoint result from a HTTP "OK" response.
-func NewAuthSwitchScopesResultOK(gramSession string, gramSessionCookie string) *auth.AuthSwitchScopesResult {
+func NewAuthSwitchScopesResultOK(gramSessionToken string, gramSessionCookie string) *auth.AuthSwitchScopesResult {
 	v := &auth.AuthSwitchScopesResult{}
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 	v.GramSessionCookie = gramSessionCookie
 
 	return v
@@ -59,16 +59,16 @@ func NewAuthSwitchScopesResultOK(gramSession string, gramSessionCookie string) *
 
 // NewAuthLogoutResultOK builds a "auth" service "auth logout" endpoint result
 // from a HTTP "OK" response.
-func NewAuthLogoutResultOK(gramSession string) *auth.AuthLogoutResult {
+func NewAuthLogoutResultOK(gramSessionCookie string) *auth.AuthLogoutResult {
 	v := &auth.AuthLogoutResult{}
-	v.GramSession = gramSession
+	v.GramSessionCookie = gramSessionCookie
 
 	return v
 }
 
 // NewAuthInfoResultOK builds a "auth" service "auth info" endpoint result from
 // a HTTP "OK" response.
-func NewAuthInfoResultOK(body *AuthInfoResponseBody, gramSession string, gramSessionCookie string) *auth.AuthInfoResult {
+func NewAuthInfoResultOK(body *AuthInfoResponseBody, gramSessionToken string, gramSessionCookie string) *auth.AuthInfoResult {
 	v := &auth.AuthInfoResult{
 		UserID:               *body.UserID,
 		UserEmail:            *body.UserEmail,
@@ -79,7 +79,7 @@ func NewAuthInfoResultOK(body *AuthInfoResponseBody, gramSession string, gramSes
 	for i, val := range body.Organizations {
 		v.Organizations[i] = unmarshalOrganizationResponseBodyToAuthOrganization(val)
 	}
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 	v.GramSessionCookie = gramSessionCookie
 
 	return v

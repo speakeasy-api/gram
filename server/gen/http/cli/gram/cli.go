@@ -33,7 +33,7 @@ system health-check
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + ` auth auth-callback --shared-token "Nisi quos occaecati suscipit."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session "Asperiores dolorem voluptas."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session-token "Asperiores dolorem voluptas."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		""
 }
@@ -53,31 +53,31 @@ func ParseEndpoint(
 		authAuthCallbackFlags           = flag.NewFlagSet("auth-callback", flag.ExitOnError)
 		authAuthCallbackSharedTokenFlag = authAuthCallbackFlags.String("shared-token", "REQUIRED", "")
 
-		authAuthSwitchScopesFlags              = flag.NewFlagSet("auth-switch-scopes", flag.ExitOnError)
-		authAuthSwitchScopesOrganizationIDFlag = authAuthSwitchScopesFlags.String("organization-id", "", "")
-		authAuthSwitchScopesProjectIDFlag      = authAuthSwitchScopesFlags.String("project-id", "", "")
-		authAuthSwitchScopesGramSessionFlag    = authAuthSwitchScopesFlags.String("gram-session", "", "")
+		authAuthSwitchScopesFlags                = flag.NewFlagSet("auth-switch-scopes", flag.ExitOnError)
+		authAuthSwitchScopesOrganizationIDFlag   = authAuthSwitchScopesFlags.String("organization-id", "", "")
+		authAuthSwitchScopesProjectIDFlag        = authAuthSwitchScopesFlags.String("project-id", "", "")
+		authAuthSwitchScopesGramSessionTokenFlag = authAuthSwitchScopesFlags.String("gram-session-token", "", "")
 
-		authAuthLogoutFlags           = flag.NewFlagSet("auth-logout", flag.ExitOnError)
-		authAuthLogoutGramSessionFlag = authAuthLogoutFlags.String("gram-session", "", "")
+		authAuthLogoutFlags                = flag.NewFlagSet("auth-logout", flag.ExitOnError)
+		authAuthLogoutGramSessionTokenFlag = authAuthLogoutFlags.String("gram-session-token", "", "")
 
-		authAuthInfoFlags           = flag.NewFlagSet("auth-info", flag.ExitOnError)
-		authAuthInfoGramSessionFlag = authAuthInfoFlags.String("gram-session", "", "")
+		authAuthInfoFlags                = flag.NewFlagSet("auth-info", flag.ExitOnError)
+		authAuthInfoGramSessionTokenFlag = authAuthInfoFlags.String("gram-session-token", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
-		deploymentsGetDeploymentFlags           = flag.NewFlagSet("get-deployment", flag.ExitOnError)
-		deploymentsGetDeploymentIDFlag          = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
-		deploymentsGetDeploymentGramSessionFlag = deploymentsGetDeploymentFlags.String("gram-session", "", "")
+		deploymentsGetDeploymentFlags                = flag.NewFlagSet("get-deployment", flag.ExitOnError)
+		deploymentsGetDeploymentIDFlag               = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
+		deploymentsGetDeploymentGramSessionTokenFlag = deploymentsGetDeploymentFlags.String("gram-session-token", "", "")
 
-		deploymentsCreateDeploymentFlags           = flag.NewFlagSet("create-deployment", flag.ExitOnError)
-		deploymentsCreateDeploymentBodyFlag        = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
-		deploymentsCreateDeploymentGramSessionFlag = deploymentsCreateDeploymentFlags.String("gram-session", "", "")
+		deploymentsCreateDeploymentFlags                = flag.NewFlagSet("create-deployment", flag.ExitOnError)
+		deploymentsCreateDeploymentBodyFlag             = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
+		deploymentsCreateDeploymentGramSessionTokenFlag = deploymentsCreateDeploymentFlags.String("gram-session-token", "", "")
 
-		deploymentsListDeploymentsFlags           = flag.NewFlagSet("list-deployments", flag.ExitOnError)
-		deploymentsListDeploymentsCursorFlag      = deploymentsListDeploymentsFlags.String("cursor", "", "")
-		deploymentsListDeploymentsLimitFlag       = deploymentsListDeploymentsFlags.String("limit", "10", "")
-		deploymentsListDeploymentsGramSessionFlag = deploymentsListDeploymentsFlags.String("gram-session", "", "")
+		deploymentsListDeploymentsFlags                = flag.NewFlagSet("list-deployments", flag.ExitOnError)
+		deploymentsListDeploymentsCursorFlag           = deploymentsListDeploymentsFlags.String("cursor", "", "")
+		deploymentsListDeploymentsLimitFlag            = deploymentsListDeploymentsFlags.String("limit", "10", "")
+		deploymentsListDeploymentsGramSessionTokenFlag = deploymentsListDeploymentsFlags.String("gram-session-token", "", "")
 
 		systemFlags = flag.NewFlagSet("system", flag.ContinueOnError)
 
@@ -197,26 +197,26 @@ func ParseEndpoint(
 				data, err = authc.BuildAuthCallbackPayload(*authAuthCallbackSharedTokenFlag)
 			case "auth-switch-scopes":
 				endpoint = c.AuthSwitchScopes()
-				data, err = authc.BuildAuthSwitchScopesPayload(*authAuthSwitchScopesOrganizationIDFlag, *authAuthSwitchScopesProjectIDFlag, *authAuthSwitchScopesGramSessionFlag)
+				data, err = authc.BuildAuthSwitchScopesPayload(*authAuthSwitchScopesOrganizationIDFlag, *authAuthSwitchScopesProjectIDFlag, *authAuthSwitchScopesGramSessionTokenFlag)
 			case "auth-logout":
 				endpoint = c.AuthLogout()
-				data, err = authc.BuildAuthLogoutPayload(*authAuthLogoutGramSessionFlag)
+				data, err = authc.BuildAuthLogoutPayload(*authAuthLogoutGramSessionTokenFlag)
 			case "auth-info":
 				endpoint = c.AuthInfo()
-				data, err = authc.BuildAuthInfoPayload(*authAuthInfoGramSessionFlag)
+				data, err = authc.BuildAuthInfoPayload(*authAuthInfoGramSessionTokenFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "get-deployment":
 				endpoint = c.GetDeployment()
-				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentGramSessionFlag)
+				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentGramSessionTokenFlag)
 			case "create-deployment":
 				endpoint = c.CreateDeployment()
-				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentGramSessionFlag)
+				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentGramSessionTokenFlag)
 			case "list-deployments":
 				endpoint = c.ListDeployments()
-				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsLimitFlag, *deploymentsListDeploymentsGramSessionFlag)
+				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsLimitFlag, *deploymentsListDeploymentsGramSessionTokenFlag)
 			}
 		case "system":
 			c := systemc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -261,37 +261,37 @@ Example:
 }
 
 func authAuthSwitchScopesUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-switch-scopes -organization-id STRING -project-id STRING -gram-session STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-switch-scopes -organization-id STRING -project-id STRING -gram-session-token STRING
 
 Switches the authentication scope to a different organization.
     -organization-id STRING: 
     -project-id STRING: 
-    -gram-session STRING: 
+    -gram-session-token STRING: 
 
 Example:
-    %[1]s auth auth-switch-scopes --organization-id "Qui laborum qui quaerat debitis." --project-id "Hic maxime consequuntur ipsum accusantium in." --gram-session "Deserunt non autem."
+    %[1]s auth auth-switch-scopes --organization-id "Qui laborum qui quaerat debitis." --project-id "Hic maxime consequuntur ipsum accusantium in." --gram-session-token "Deserunt non autem."
 `, os.Args[0])
 }
 
 func authAuthLogoutUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-logout -gram-session STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-logout -gram-session-token STRING
 
 Logs out the current user by clearing their session.
-    -gram-session STRING: 
+    -gram-session-token STRING: 
 
 Example:
-    %[1]s auth auth-logout --gram-session "Qui aut quia maxime rem."
+    %[1]s auth auth-logout --gram-session-token "Qui aut quia maxime rem."
 `, os.Args[0])
 }
 
 func authAuthInfoUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-info -gram-session STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-info -gram-session-token STRING
 
 Provides information about the current authentication status.
-    -gram-session STRING: 
+    -gram-session-token STRING: 
 
 Example:
-    %[1]s auth auth-info --gram-session "Eaque quae."
+    %[1]s auth auth-info --gram-session-token "Eaque quae."
 `, os.Args[0])
 }
 
@@ -312,42 +312,42 @@ Additional help:
 `, os.Args[0])
 }
 func deploymentsGetDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -gram-session STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -gram-session-token STRING
 
 Create a deployment to load tool definitions.
     -id STRING: 
-    -gram-session STRING: 
+    -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session "Asperiores dolorem voluptas."
+    %[1]s deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session-token "Asperiores dolorem voluptas."
 `, os.Args[0])
 }
 
 func deploymentsCreateDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -gram-session STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -gram-session-token STRING
 
 Create a deployment to load tool definitions.
     -body JSON: 
-    -gram-session STRING: 
+    -gram-session-token STRING: 
 
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       "external_url": "https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6"
-   }' --gram-session "Nemo accusantium architecto ducimus."
+   }' --gram-session-token "Nemo accusantium architecto ducimus."
 `, os.Args[0])
 }
 
 func deploymentsListDeploymentsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -limit INT -gram-session STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -limit INT -gram-session-token STRING
 
 List all deployments in descending order of creation.
     -cursor STRING: 
     -limit INT: 
-    -gram-session STRING: 
+    -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Doloremque voluptas et culpa." --limit 37 --gram-session "Quos earum optio quasi rem quia ipsa."
+    %[1]s deployments list-deployments --cursor "Doloremque voluptas et culpa." --limit 37 --gram-session-token "Quos earum optio quasi rem quia ipsa."
 `, os.Args[0])
 }
 

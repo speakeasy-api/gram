@@ -11,7 +11,7 @@ var GramSession = APIKeySecurity("gram_session", func() {
 
 // KeyPayload defines the structure of the session key
 var SessionPayload = Type("SessionPayload", func() {
-	APIKey("gram_session", "gram_session", String)
+	APIKey("gram_session", "gram_session_token", String)
 })
 
 var WriteSessionCookie = func() {
@@ -24,7 +24,7 @@ var WriteSessionCookie = func() {
 }
 
 var DeleteSessionCookie = func() {
-	Cookie("gram_session", String, func() {
+	Cookie("gram_session_cookie:gram_session", String, func() {
 	})
 	CookieMaxAge(0)
 	CookieSecure()
@@ -32,5 +32,5 @@ var DeleteSessionCookie = func() {
 }
 
 var SessionHeader = func() {
-	Header("gram_session:X-Gram-Session", String, "Session header")
+	Header("gram_session_token:X-Gram-Session", String, "Session header")
 }

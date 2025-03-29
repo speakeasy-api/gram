@@ -990,11 +990,11 @@ components:
         SessionPayload:
             type: object
             properties:
-                gram_session:
+                gram_session_token:
                     type: string
                     example: Rem sint illum mollitia non aut qui.
             example:
-                gram_session: Aspernatur porro rerum explicabo.
+                gram_session_token: Aspernatur porro rerum explicabo.
     securitySchemes:
         gram_session_header_X-Gram-Session:
             type: apiKey

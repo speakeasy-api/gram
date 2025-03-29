@@ -71,7 +71,7 @@ func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchS
 	}
 
 	return &gen.AuthSwitchScopesResult{
-		GramSession:       session.ID,
+		GramSessionToken:  session.ID,
 		GramSessionCookie: session.ID,
 	}, nil
 }
@@ -85,7 +85,7 @@ func (s *Service) AuthLogout(ctx context.Context, payload *gen.AuthLogoutPayload
 	if err := s.sessions.ClearSession(ctx, *session); err != nil {
 		return nil, err
 	}
-	return &gen.AuthLogoutResult{GramSession: ""}, nil
+	return &gen.AuthLogoutResult{GramSessionCookie: ""}, nil
 }
 func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (res *gen.AuthInfoResult, err error) {
 	session, ok := sessions.GetSessionValueFromContext(ctx)
@@ -110,7 +110,7 @@ func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (r
 	}
 
 	return &gen.AuthInfoResult{
-		GramSession:          session.ID,
+		GramSessionToken:     session.ID,
 		GramSessionCookie:    session.ID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		ActiveProjectID:      session.ActiveProjectID,

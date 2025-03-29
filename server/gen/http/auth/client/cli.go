@@ -26,7 +26,7 @@ func BuildAuthCallbackPayload(authAuthCallbackSharedToken string) (*auth.AuthCal
 
 // BuildAuthSwitchScopesPayload builds the payload for the auth auth switch
 // scopes endpoint from CLI flags.
-func BuildAuthSwitchScopesPayload(authAuthSwitchScopesOrganizationID string, authAuthSwitchScopesProjectID string, authAuthSwitchScopesGramSession string) (*auth.AuthSwitchScopesPayload, error) {
+func BuildAuthSwitchScopesPayload(authAuthSwitchScopesOrganizationID string, authAuthSwitchScopesProjectID string, authAuthSwitchScopesGramSessionToken string) (*auth.AuthSwitchScopesPayload, error) {
 	var organizationID *string
 	{
 		if authAuthSwitchScopesOrganizationID != "" {
@@ -39,46 +39,46 @@ func BuildAuthSwitchScopesPayload(authAuthSwitchScopesOrganizationID string, aut
 			projectID = &authAuthSwitchScopesProjectID
 		}
 	}
-	var gramSession *string
+	var gramSessionToken *string
 	{
-		if authAuthSwitchScopesGramSession != "" {
-			gramSession = &authAuthSwitchScopesGramSession
+		if authAuthSwitchScopesGramSessionToken != "" {
+			gramSessionToken = &authAuthSwitchScopesGramSessionToken
 		}
 	}
 	v := &auth.AuthSwitchScopesPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 
 	return v, nil
 }
 
 // BuildAuthLogoutPayload builds the payload for the auth auth logout endpoint
 // from CLI flags.
-func BuildAuthLogoutPayload(authAuthLogoutGramSession string) (*auth.AuthLogoutPayload, error) {
-	var gramSession *string
+func BuildAuthLogoutPayload(authAuthLogoutGramSessionToken string) (*auth.AuthLogoutPayload, error) {
+	var gramSessionToken *string
 	{
-		if authAuthLogoutGramSession != "" {
-			gramSession = &authAuthLogoutGramSession
+		if authAuthLogoutGramSessionToken != "" {
+			gramSessionToken = &authAuthLogoutGramSessionToken
 		}
 	}
 	v := &auth.AuthLogoutPayload{}
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 
 	return v, nil
 }
 
 // BuildAuthInfoPayload builds the payload for the auth auth info endpoint from
 // CLI flags.
-func BuildAuthInfoPayload(authAuthInfoGramSession string) (*auth.AuthInfoPayload, error) {
-	var gramSession *string
+func BuildAuthInfoPayload(authAuthInfoGramSessionToken string) (*auth.AuthInfoPayload, error) {
+	var gramSessionToken *string
 	{
-		if authAuthInfoGramSession != "" {
-			gramSession = &authAuthInfoGramSession
+		if authAuthInfoGramSessionToken != "" {
+			gramSessionToken = &authAuthInfoGramSessionToken
 		}
 	}
 	v := &auth.AuthInfoPayload{}
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 
 	return v, nil
 }

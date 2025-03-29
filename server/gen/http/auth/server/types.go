@@ -65,27 +65,27 @@ func NewAuthCallbackPayload(sharedToken string) *auth.AuthCallbackPayload {
 
 // NewAuthSwitchScopesPayload builds a auth service auth switch scopes endpoint
 // payload.
-func NewAuthSwitchScopesPayload(organizationID *string, projectID *string, gramSession *string) *auth.AuthSwitchScopesPayload {
+func NewAuthSwitchScopesPayload(organizationID *string, projectID *string, gramSessionToken *string) *auth.AuthSwitchScopesPayload {
 	v := &auth.AuthSwitchScopesPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 
 	return v
 }
 
 // NewAuthLogoutPayload builds a auth service auth logout endpoint payload.
-func NewAuthLogoutPayload(gramSession *string) *auth.AuthLogoutPayload {
+func NewAuthLogoutPayload(gramSessionToken *string) *auth.AuthLogoutPayload {
 	v := &auth.AuthLogoutPayload{}
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 
 	return v
 }
 
 // NewAuthInfoPayload builds a auth service auth info endpoint payload.
-func NewAuthInfoPayload(gramSession *string) *auth.AuthInfoPayload {
+func NewAuthInfoPayload(gramSessionToken *string) *auth.AuthInfoPayload {
 	v := &auth.AuthInfoPayload{}
-	v.GramSession = gramSession
+	v.GramSessionToken = gramSessionToken
 
 	return v
 }

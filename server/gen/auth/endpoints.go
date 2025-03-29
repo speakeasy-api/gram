@@ -63,8 +63,8 @@ func NewAuthSwitchScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSession != nil {
-			key = *p.GramSession
+		if p.GramSessionToken != nil {
+			key = *p.GramSessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -86,8 +86,8 @@ func NewAuthLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSession != nil {
-			key = *p.GramSession
+		if p.GramSessionToken != nil {
+			key = *p.GramSessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -109,8 +109,8 @@ func NewAuthInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSession != nil {
-			key = *p.GramSession
+		if p.GramSessionToken != nil {
+			key = *p.GramSessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {

@@ -69,20 +69,20 @@ func DecodeAuthCallbackResponse(decoder func(*http.Response) goahttp.Decoder, re
 		switch resp.StatusCode {
 		case http.StatusTemporaryRedirect:
 			var (
-				location    string
-				gramSession string
-				err         error
+				location         string
+				gramSessionToken string
+				err              error
 			)
 			locationRaw := resp.Header.Get("Location")
 			if locationRaw == "" {
 				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
 			}
 			location = locationRaw
-			gramSessionRaw := resp.Header.Get("X-Gram-Session")
-			if gramSessionRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session", "header"))
+			gramSessionTokenRaw := resp.Header.Get("X-Gram-Session")
+			if gramSessionTokenRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_token", "header"))
 			}
-			gramSession = gramSessionRaw
+			gramSessionToken = gramSessionTokenRaw
 			var (
 				gramSessionCookie    string
 				gramSessionCookieRaw string
@@ -102,7 +102,7 @@ func DecodeAuthCallbackResponse(decoder func(*http.Response) goahttp.Decoder, re
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "auth callback", err)
 			}
-			res := NewAuthCallbackResultTemporaryRedirect(location, gramSession, gramSessionCookie)
+			res := NewAuthCallbackResultTemporaryRedirect(location, gramSessionToken, gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -134,8 +134,8 @@ func EncodeAuthSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if !ok {
 			return goahttp.ErrInvalidType("auth", "auth switch scopes", "*auth.AuthSwitchScopesPayload", v)
 		}
-		if p.GramSession != nil {
-			head := *p.GramSession
+		if p.GramSessionToken != nil {
+			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
 		}
 		values := req.URL.Query()
@@ -170,14 +170,14 @@ func DecodeAuthSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				gramSession string
-				err         error
+				gramSessionToken string
+				err              error
 			)
-			gramSessionRaw := resp.Header.Get("X-Gram-Session")
-			if gramSessionRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session", "header"))
+			gramSessionTokenRaw := resp.Header.Get("X-Gram-Session")
+			if gramSessionTokenRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_token", "header"))
 			}
-			gramSession = gramSessionRaw
+			gramSessionToken = gramSessionTokenRaw
 			var (
 				gramSessionCookie    string
 				gramSessionCookieRaw string
@@ -197,7 +197,7 @@ func DecodeAuthSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "auth switch scopes", err)
 			}
-			res := NewAuthSwitchScopesResultOK(gramSession, gramSessionCookie)
+			res := NewAuthSwitchScopesResultOK(gramSessionToken, gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -229,8 +229,8 @@ func EncodeAuthLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		if !ok {
 			return goahttp.ErrInvalidType("auth", "auth logout", "*auth.AuthLogoutPayload", v)
 		}
-		if p.GramSession != nil {
-			head := *p.GramSession
+		if p.GramSessionToken != nil {
+			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
 		}
 		return nil
@@ -257,8 +257,8 @@ func DecodeAuthLogoutResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				gramSession    string
-				gramSessionRaw string
+				gramSessionCookie    string
+				gramSessionCookieRaw string
 
 				cookies = resp.Cookies()
 				err     error
@@ -266,17 +266,17 @@ func DecodeAuthLogoutResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			for _, c := range cookies {
 				switch c.Name {
 				case "gram_session":
-					gramSessionRaw = c.Value
+					gramSessionCookieRaw = c.Value
 				}
 			}
-			if gramSessionRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session", "cookie"))
+			if gramSessionCookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_cookie", "cookie"))
 			}
-			gramSession = gramSessionRaw
+			gramSessionCookie = gramSessionCookieRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "auth logout", err)
 			}
-			res := NewAuthLogoutResultOK(gramSession)
+			res := NewAuthLogoutResultOK(gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -308,8 +308,8 @@ func EncodeAuthInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if !ok {
 			return goahttp.ErrInvalidType("auth", "auth info", "*auth.AuthInfoPayload", v)
 		}
-		if p.GramSession != nil {
-			head := *p.GramSession
+		if p.GramSessionToken != nil {
+			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
 		}
 		return nil
@@ -348,13 +348,13 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				return nil, goahttp.ErrValidationError("auth", "auth info", err)
 			}
 			var (
-				gramSession string
+				gramSessionToken string
 			)
-			gramSessionRaw := resp.Header.Get("X-Gram-Session")
-			if gramSessionRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session", "header"))
+			gramSessionTokenRaw := resp.Header.Get("X-Gram-Session")
+			if gramSessionTokenRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_token", "header"))
 			}
-			gramSession = gramSessionRaw
+			gramSessionToken = gramSessionTokenRaw
 			var (
 				gramSessionCookie    string
 				gramSessionCookieRaw string
@@ -374,7 +374,7 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "auth info", err)
 			}
-			res := NewAuthInfoResultOK(&body, gramSession, gramSessionCookie)
+			res := NewAuthInfoResultOK(&body, gramSessionToken, gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)

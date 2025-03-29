@@ -51,8 +51,8 @@ func NewGetDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSession != nil {
-			key = *p.GramSession
+		if p.GramSessionToken != nil {
+			key = *p.GramSessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -74,8 +74,8 @@ func NewCreateDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSession != nil {
-			key = *p.GramSession
+		if p.GramSessionToken != nil {
+			key = *p.GramSessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -97,8 +97,8 @@ func NewListDeploymentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSession != nil {
-			key = *p.GramSession
+		if p.GramSessionToken != nil {
+			key = *p.GramSessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {

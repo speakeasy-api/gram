@@ -23,7 +23,7 @@ func EncodeAuthCallbackResponse(encoder func(context.Context, http.ResponseWrite
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*auth.AuthCallbackResult)
 		w.Header().Set("Location", res.Location)
-		w.Header().Set("X-Gram-Session", res.GramSession)
+		w.Header().Set("X-Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
@@ -63,7 +63,7 @@ func DecodeAuthCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 func EncodeAuthSwitchScopesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*auth.AuthSwitchScopesResult)
-		w.Header().Set("X-Gram-Session", res.GramSession)
+		w.Header().Set("X-Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
@@ -82,9 +82,9 @@ func EncodeAuthSwitchScopesResponse(encoder func(context.Context, http.ResponseW
 func DecodeAuthSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			organizationID *string
-			projectID      *string
-			gramSession    *string
+			organizationID   *string
+			projectID        *string
+			gramSessionToken *string
 		)
 		qp := r.URL.Query()
 		organizationIDRaw := qp.Get("organization_id")
@@ -95,16 +95,16 @@ func DecodeAuthSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if projectIDRaw != "" {
 			projectID = &projectIDRaw
 		}
-		gramSessionRaw := r.Header.Get("X-Gram-Session")
-		if gramSessionRaw != "" {
-			gramSession = &gramSessionRaw
+		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionTokenRaw != "" {
+			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewAuthSwitchScopesPayload(organizationID, projectID, gramSession)
-		if payload.GramSession != nil {
-			if strings.Contains(*payload.GramSession, " ") {
+		payload := NewAuthSwitchScopesPayload(organizationID, projectID, gramSessionToken)
+		if payload.GramSessionToken != nil {
+			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
-				payload.GramSession = &cred
+				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
+				payload.GramSessionToken = &cred
 			}
 		}
 
@@ -117,10 +117,10 @@ func DecodeAuthSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request
 func EncodeAuthLogoutResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*auth.AuthLogoutResult)
-		gramSession := res.GramSession
+		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
-			Value:    gramSession,
+			Value:    gramSessionCookie,
 			MaxAge:   0,
 			Secure:   true,
 			HttpOnly: true,
@@ -135,18 +135,18 @@ func EncodeAuthLogoutResponse(encoder func(context.Context, http.ResponseWriter)
 func DecodeAuthLogoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			gramSession *string
+			gramSessionToken *string
 		)
-		gramSessionRaw := r.Header.Get("X-Gram-Session")
-		if gramSessionRaw != "" {
-			gramSession = &gramSessionRaw
+		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionTokenRaw != "" {
+			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewAuthLogoutPayload(gramSession)
-		if payload.GramSession != nil {
-			if strings.Contains(*payload.GramSession, " ") {
+		payload := NewAuthLogoutPayload(gramSessionToken)
+		if payload.GramSessionToken != nil {
+			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
-				payload.GramSession = &cred
+				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
+				payload.GramSessionToken = &cred
 			}
 		}
 
@@ -161,7 +161,7 @@ func EncodeAuthInfoResponse(encoder func(context.Context, http.ResponseWriter) g
 		res, _ := v.(*auth.AuthInfoResult)
 		enc := encoder(ctx, w)
 		body := NewAuthInfoResponseBody(res)
-		w.Header().Set("X-Gram-Session", res.GramSession)
+		w.Header().Set("X-Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
@@ -180,18 +180,18 @@ func EncodeAuthInfoResponse(encoder func(context.Context, http.ResponseWriter) g
 func DecodeAuthInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			gramSession *string
+			gramSessionToken *string
 		)
-		gramSessionRaw := r.Header.Get("X-Gram-Session")
-		if gramSessionRaw != "" {
-			gramSession = &gramSessionRaw
+		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		if gramSessionTokenRaw != "" {
+			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewAuthInfoPayload(gramSession)
-		if payload.GramSession != nil {
-			if strings.Contains(*payload.GramSession, " ") {
+		payload := NewAuthInfoPayload(gramSessionToken)
+		if payload.GramSessionToken != nil {
+			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSession, " ", 2)[1]
-				payload.GramSession = &cred
+				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
+				payload.GramSessionToken = &cred
 			}
 		}
 

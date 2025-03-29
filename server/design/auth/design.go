@@ -7,9 +7,12 @@ import (
 
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
+	Security(sessions.GramSession)
 
 	Method("auth callback", func() {
 		Description("Handles the authentication callback.")
+
+		NoSecurity()
 
 		Payload(func() {
 			Attribute("shared_token", String, "The shared token for authentication from the speakeasy system")
@@ -18,9 +21,9 @@ var _ = Service("auth", func() {
 
 		Result(func() {
 			Attribute("location", String, "The URL to redirect to after authentication")
-			Attribute("gram_session", String, "The authentication session")
+			Attribute("gram_session_token", String, "The authentication session")
 			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("location", "gram_session", "gram_session_cookie")
+			Required("location", "gram_session_token", "gram_session_cookie")
 		})
 
 		HTTP(func() {
@@ -39,8 +42,6 @@ var _ = Service("auth", func() {
 	Method("auth switch scopes", func() {
 		Description("Switches the authentication scope to a different organization.")
 
-		Security(sessions.GramSession)
-
 		Payload(func() {
 			Attribute("organization_id", String, "The organization slug to switch scopes")
 			Attribute("project_id", String, "The project id to switch scopes too")
@@ -48,9 +49,9 @@ var _ = Service("auth", func() {
 		})
 
 		Result(func() {
-			Attribute("gram_session", String, "The authentication session")
+			Attribute("gram_session_token", String, "The authentication session")
 			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("gram_session", "gram_session_cookie")
+			Required("gram_session_token", "gram_session_cookie")
 		})
 
 		HTTP(func() {
@@ -67,15 +68,14 @@ var _ = Service("auth", func() {
 
 	Method("auth logout", func() {
 		Description("Logs out the current user by clearing their session.")
-		Security(sessions.GramSession)
 
 		Payload(func() {
 			Extend(sessions.SessionPayload)
 		})
 
 		Result(func() {
-			Attribute("gram_session", String, "Empty string to clear the session")
-			Required("gram_session")
+			Attribute("gram_session_cookie", String, "Empty string to clear the session")
+			Required("gram_session_cookie")
 		})
 
 		HTTP(func() {
@@ -91,7 +91,6 @@ var _ = Service("auth", func() {
 	Method("auth info", func() {
 
 		Description("Provides information about the current authentication status.")
-		Security(sessions.GramSession)
 
 		Payload(func() {
 			Extend(sessions.SessionPayload)
@@ -103,9 +102,9 @@ var _ = Service("auth", func() {
 			Attribute("active_organization_id", String)
 			Attribute("active_project_id", String)
 			Attribute("organizations", ArrayOf("Organization")) // <-- here too
-			Attribute("gram_session", String, "The authentication session")
+			Attribute("gram_session_token", String, "The authentication session")
 			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("user_id", "user_email", "active_organization_id", "active_project_id", "organizations", "gram_session", "gram_session_cookie")
+			Required("user_id", "user_email", "active_organization_id", "active_project_id", "organizations", "gram_session_token", "gram_session_cookie")
 		})
 
 		HTTP(func() {
