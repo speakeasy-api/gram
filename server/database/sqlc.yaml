@@ -2,46 +2,48 @@ version: "2"
 servers:
   - engine: postgresql
     uri: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable
+overrides:
+  go:
+    overrides:
+      - db_type: "uuid"
+        go_type:
+          import: "github.com/google/uuid"
+          type: "UUID"
+        nullable: false
+      - db_type: "uuid"
+        go_type:
+          import: "github.com/google/uuid"
+          type: "NullUUID"
+        nullable: true
 sql:
   - schema: schema.sql
-    queries: ../internal/deployments/queries.sql
+    queries: ./stub.sql
     engine: postgresql
     database:
       managed: true
+    gen:
+      go:
+        package: "database"
+        out: "../internal/database"
+        sql_package: "pgx/v5"
+        omit_unused_structs: false
+
+  - schema: schema.sql
+    queries: ../internal/deployments/queries.sql
+    engine: postgresql
     gen:
       go:
         package: "repo"
         out: "../internal/deployments/repo"
         sql_package: "pgx/v5"
-        overrides:
-          - db_type: "uuid"
-            go_type:
-              import: "github.com/google/uuid"
-              type: "UUID"
-            nullable: false
-          - db_type: "uuid"
-            go_type:
-              import: "github.com/google/uuid"
-              type: "NullUUID"
-            nullable: true
+        omit_unused_structs: true
+
   - schema: schema.sql
     queries: ../internal/projects/queries.sql
     engine: postgresql
-    database:
-      managed: true
     gen:
       go:
         package: "repo"
         out: "../internal/projects/repo"
         sql_package: "pgx/v5"
-        overrides:
-          - db_type: "uuid"
-            go_type:
-              import: "github.com/google/uuid"
-              type: "UUID"
-            nullable: false
-          - db_type: "uuid"
-            go_type:
-              import: "github.com/google/uuid"
-              type: "NullUUID"
-            nullable: true
+        omit_unused_structs: true
