@@ -26,7 +26,7 @@ RETURNING
   , deleted
 `
 
-func (q *Queries) CreateProject(ctx context.Context, organizationID uuid.NullUUID) (Project, error) {
+func (q *Queries) CreateProject(ctx context.Context, organizationID uuid.UUID) (Project, error) {
 	row := q.db.QueryRow(ctx, createProject, organizationID)
 	var i Project
 	err := row.Scan(
@@ -80,7 +80,7 @@ WHERE organization_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID uuid.NullUUID) ([]Project, error) {
+func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID uuid.UUID) ([]Project, error) {
 	rows, err := q.db.Query(ctx, listProjectsByOrganization, organizationID)
 	if err != nil {
 		return nil, err

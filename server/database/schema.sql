@@ -30,7 +30,7 @@ volatile;
 CREATE TABLE IF NOT EXISTS projects (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  organization_id uuid,
+  organization_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -42,9 +42,9 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  user_id uuid,
-  project_id uuid,
-  organization_id uuid,
+  user_id varchar,
+  project_id uuid NOT NULL,
+  organization_id uuid NOT NULL,
   manifest_version text NOT NULL,
   manifest_url text NOT NULL,
 
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS deployment_statuses (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   seq BIGSERIAL NOT NULL,
 
-  deployment_id uuid,
+  deployment_id uuid NOT NULL,
   status text NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -87,8 +87,8 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   seq BIGSERIAL NOT NULL,
 
   event text NOT NULL,
-  deployment_id uuid,
-  project_id uuid,
+  deployment_id uuid NOT NULL,
+  project_id uuid NOT NULL,
   tooltemplate_id uuid,
   tooltemplate_type text CHECK (
     -- Cannot be null if tooltemplate_id is not null
@@ -109,8 +109,8 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  organization_id uuid,
-  project_id uuid,
+  organization_id uuid NOT NULL,
+  project_id uuid NOT NULL,
   name text NOT NULL,
   description text NOT NULL,
 

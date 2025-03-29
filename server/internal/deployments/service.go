@@ -2,6 +2,7 @@ package deployments
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -54,9 +55,9 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	return &gen.DeploymentGetResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  must.UUID(deployment.OrganizationID).String(),
-		ProjectID:       must.UUID(deployment.ProjectID).String(),
-		UserID:          must.UUID(deployment.UserID).String(),
+		OrganizationID:  deployment.OrganizationID.String(),
+		ProjectID:       deployment.ProjectID.String(),
+		UserID:          deployment.UserID.String,
 		ExternalID:      conv.FromPGText(deployment.ExternalID),
 		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
 		Openapi3p1Tools: []*gen.OpenAPI3P1ToolForm{},
@@ -68,10 +69,15 @@ func (s *Service) ListDeployments(context.Context, *gen.ListDeploymentsPayload) 
 }
 
 func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeploymentPayload) (*gen.DeploymentCreateResult, error) {
+	session, ok := sessions.GetSessionValueFromContext(ctx)
+	if !ok || session == nil {
+		return nil, errors.New("session not found in context")
+	}
+
 	deployment, err := s.repo.CreateDeployment(ctx, repo.CreateDeploymentParams{
-		UserID:         uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
-		OrganizationID: uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
-		ProjectID:      uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
+		OrganizationID: must.Value(uuid.NewV7()),
+		ProjectID:      must.Value(uuid.NewV7()),
+		UserID:         pgtype.Text{String: session.UserID, Valid: true},
 		ExternalID:     pgtype.Text{String: *form.ExternalID, Valid: true},
 		ExternalUrl:    pgtype.Text{String: *form.ExternalURL, Valid: true},
 	})
@@ -82,9 +88,9 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	return &gen.DeploymentCreateResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  must.UUID(deployment.OrganizationID).String(),
-		ProjectID:       must.UUID(deployment.ProjectID).String(),
-		UserID:          must.UUID(deployment.UserID).String(),
+		OrganizationID:  deployment.OrganizationID.String(),
+		ProjectID:       deployment.ProjectID.String(),
+		UserID:          deployment.UserID.String,
 		ExternalID:      conv.FromPGText(deployment.ExternalID),
 		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
 		Openapi3p1Tools: []*gen.OpenAPI3P1ToolForm{},

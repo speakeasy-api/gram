@@ -11,9 +11,9 @@ import (
 
 type Deployment struct {
 	ID              uuid.UUID
-	UserID          uuid.NullUUID
-	ProjectID       uuid.NullUUID
-	OrganizationID  uuid.NullUUID
+	UserID          pgtype.Text
+	ProjectID       uuid.UUID
+	OrganizationID  uuid.UUID
 	ManifestVersion string
 	ManifestUrl     string
 	GithubRepo      pgtype.Text
@@ -28,8 +28,8 @@ type DeploymentLog struct {
 	ID               uuid.UUID
 	Seq              int64
 	Event            string
-	DeploymentID     uuid.NullUUID
-	ProjectID        uuid.NullUUID
+	DeploymentID     uuid.UUID
+	ProjectID        uuid.UUID
 	TooltemplateID   uuid.NullUUID
 	TooltemplateType pgtype.Text
 	CollectionID     uuid.NullUUID
@@ -40,7 +40,7 @@ type DeploymentLog struct {
 type DeploymentStatus struct {
 	ID           uuid.UUID
 	Seq          int64
-	DeploymentID uuid.NullUUID
+	DeploymentID uuid.UUID
 	Status       string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
@@ -48,8 +48,8 @@ type DeploymentStatus struct {
 
 type HttpToolDefinition struct {
 	ID               uuid.UUID
-	OrganizationID   uuid.NullUUID
-	ProjectID        uuid.NullUUID
+	OrganizationID   uuid.UUID
+	ProjectID        uuid.UUID
 	Name             string
 	Description      string
 	ServerEnvVar     string
@@ -72,7 +72,7 @@ type HttpToolDefinition struct {
 
 type Project struct {
 	ID             uuid.UUID
-	OrganizationID uuid.NullUUID
+	OrganizationID uuid.UUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

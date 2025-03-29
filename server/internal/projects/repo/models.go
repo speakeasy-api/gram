@@ -11,7 +11,7 @@ import (
 
 type Project struct {
 	ID             uuid.UUID
-	OrganizationID uuid.NullUUID
+	OrganizationID uuid.UUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
