@@ -15,6 +15,10 @@ func (s *Sessions) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (s *Sessions) InvalidateUserInfoCache(ctx context.Context, userID string) error {
+	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID})
+}
+
 func (s *Sessions) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, error) {
 	if userInfo, err := s.userInfoCache.Get(ctx, UserInfoCacheKey(userID)); err == nil {
 		return &userInfo, nil

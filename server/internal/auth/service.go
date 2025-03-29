@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/sessions"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -18,12 +19,13 @@ type Service struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
 	sessions *sessions.Sessions
+	projects *projects.Service
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, sessions: sessions.New()}
+	return &Service{logger: logger, db: db, sessions: sessions.New(), projects: projects.NewService(logger, db)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
@@ -101,12 +103,24 @@ func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (r
 	// Fully unpack the userInfo object
 	organizations := make([]*gen.Organization, len(userInfo.Organizations))
 	for i, org := range userInfo.Organizations {
+		projectRows, err := s.projects.GetProjectsOrCreateDefault(ctx, org.OrganizationID)
+		if err != nil {
+			return nil, err
+		}
+		var orgProjects []*gen.Project
+		for _, project := range projectRows {
+			orgProjects = append(orgProjects, &gen.Project{
+				ProjectID: project.ID.String(),
+			})
+		}
 		organizations[i] = &gen.Organization{
 			OrganizationID:   org.OrganizationID,
 			OrganizationName: org.OrganizationName,
 			OrganizationSlug: org.OrganizationSlug,
 			AccountType:      org.AccountType,
+			Projects:         orgProjects,
 		}
+
 	}
 
 	return &gen.AuthInfoResult{

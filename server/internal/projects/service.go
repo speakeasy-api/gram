@@ -21,8 +21,21 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
 	return &Service{logger: logger, db: db, repo: repo.New(db)}
 }
 
-func (s *Service) ListProjectsByOrganizationID(ctx context.Context, organizationID string) ([]repo.Project, error) {
-	return s.repo.ListProjectsByOrganization(ctx, must.Value(uuid.Parse(organizationID)))
+func (s *Service) GetProjectsOrCreateDefault(ctx context.Context, organizationID string) ([]repo.Project, error) {
+	projects, err := s.repo.ListProjectsByOrganization(ctx, must.Value(uuid.Parse(organizationID)))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(projects) == 0 {
+		project, err := s.CreateProject(ctx, organizationID)
+		if err != nil {
+			return nil, err
+		}
+		projects = append(projects, project)
+	}
+
+	return projects, nil
 }
 
 func (s *Service) CreateProject(ctx context.Context, organizationID string) (repo.Project, error) {
