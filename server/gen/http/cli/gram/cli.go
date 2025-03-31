@@ -16,6 +16,7 @@ import (
 	authc "github.com/speakeasy-api/gram/gen/http/auth/client"
 	deploymentsc "github.com/speakeasy-api/gram/gen/http/deployments/client"
 	systemc "github.com/speakeasy-api/gram/gen/http/system/client"
+	toolsetsc "github.com/speakeasy-api/gram/gen/http/toolsets/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -27,14 +28,23 @@ func UsageCommands() string {
 	return `auth (callback|switch-scopes|logout|info)
 deployments (get-deployment|create-deployment|list-deployments)
 system health-check
+toolsets (create-toolset|list-toolsets|update-toolset|get-toolset-details)
 `
 }
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` auth callback --shared-token "Nisi quos occaecati suscipit."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session-token "Asperiores dolorem voluptas."` + "\n" +
+	return os.Args[0] + ` auth callback --shared-token "Quae et consequatur deleniti similique."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Aut impedit recusandae facilis." --gram-session-token "Et eaque magni."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
+		os.Args[0] + ` toolsets create-toolset --body '{
+      "description": "Officia voluptas aspernatur quibusdam.",
+      "http_tool_ids": [
+         "Consequatur itaque.",
+         "Modi aliquam aut provident incidunt suscipit."
+      ],
+      "name": "Rerum animi expedita."
+   }' --gram-session-token "Minus ea est."` + "\n" +
 		""
 }
 
@@ -82,6 +92,24 @@ func ParseEndpoint(
 		systemFlags = flag.NewFlagSet("system", flag.ContinueOnError)
 
 		systemHealthCheckFlags = flag.NewFlagSet("health-check", flag.ExitOnError)
+
+		toolsetsFlags = flag.NewFlagSet("toolsets", flag.ContinueOnError)
+
+		toolsetsCreateToolsetFlags                = flag.NewFlagSet("create-toolset", flag.ExitOnError)
+		toolsetsCreateToolsetBodyFlag             = toolsetsCreateToolsetFlags.String("body", "REQUIRED", "")
+		toolsetsCreateToolsetGramSessionTokenFlag = toolsetsCreateToolsetFlags.String("gram-session-token", "", "")
+
+		toolsetsListToolsetsFlags                = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
+		toolsetsListToolsetsGramSessionTokenFlag = toolsetsListToolsetsFlags.String("gram-session-token", "", "")
+
+		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
+		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
+		toolsetsUpdateToolsetIDFlag               = toolsetsUpdateToolsetFlags.String("id", "REQUIRED", "The ID of the toolset to update")
+		toolsetsUpdateToolsetGramSessionTokenFlag = toolsetsUpdateToolsetFlags.String("gram-session-token", "", "")
+
+		toolsetsGetToolsetDetailsFlags                = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
+		toolsetsGetToolsetDetailsIDFlag               = toolsetsGetToolsetDetailsFlags.String("id", "REQUIRED", "The ID of the toolset")
+		toolsetsGetToolsetDetailsGramSessionTokenFlag = toolsetsGetToolsetDetailsFlags.String("gram-session-token", "", "")
 	)
 	authFlags.Usage = authUsage
 	authCallbackFlags.Usage = authCallbackUsage
@@ -96,6 +124,12 @@ func ParseEndpoint(
 
 	systemFlags.Usage = systemUsage
 	systemHealthCheckFlags.Usage = systemHealthCheckUsage
+
+	toolsetsFlags.Usage = toolsetsUsage
+	toolsetsCreateToolsetFlags.Usage = toolsetsCreateToolsetUsage
+	toolsetsListToolsetsFlags.Usage = toolsetsListToolsetsUsage
+	toolsetsUpdateToolsetFlags.Usage = toolsetsUpdateToolsetUsage
+	toolsetsGetToolsetDetailsFlags.Usage = toolsetsGetToolsetDetailsUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -118,6 +152,8 @@ func ParseEndpoint(
 			svcf = deploymentsFlags
 		case "system":
 			svcf = systemFlags
+		case "toolsets":
+			svcf = toolsetsFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
 		}
@@ -166,6 +202,22 @@ func ParseEndpoint(
 			switch epn {
 			case "health-check":
 				epf = systemHealthCheckFlags
+
+			}
+
+		case "toolsets":
+			switch epn {
+			case "create-toolset":
+				epf = toolsetsCreateToolsetFlags
+
+			case "list-toolsets":
+				epf = toolsetsListToolsetsFlags
+
+			case "update-toolset":
+				epf = toolsetsUpdateToolsetFlags
+
+			case "get-toolset-details":
+				epf = toolsetsGetToolsetDetailsFlags
 
 			}
 
@@ -224,6 +276,22 @@ func ParseEndpoint(
 			case "health-check":
 				endpoint = c.HealthCheck()
 			}
+		case "toolsets":
+			c := toolsetsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-toolset":
+				endpoint = c.CreateToolset()
+				data, err = toolsetsc.BuildCreateToolsetPayload(*toolsetsCreateToolsetBodyFlag, *toolsetsCreateToolsetGramSessionTokenFlag)
+			case "list-toolsets":
+				endpoint = c.ListToolsets()
+				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsGramSessionTokenFlag)
+			case "update-toolset":
+				endpoint = c.UpdateToolset()
+				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetIDFlag, *toolsetsUpdateToolsetGramSessionTokenFlag)
+			case "get-toolset-details":
+				endpoint = c.GetToolsetDetails()
+				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsIDFlag, *toolsetsGetToolsetDetailsGramSessionTokenFlag)
+			}
 		}
 	}
 	if err != nil {
@@ -256,7 +324,7 @@ Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth callback --shared-token "Nisi quos occaecati suscipit."
+    %[1]s auth callback --shared-token "Quae et consequatur deleniti similique."
 `, os.Args[0])
 }
 
@@ -269,7 +337,7 @@ Switches the authentication scope to a different organization.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Qui laborum qui quaerat debitis." --project-id "Hic maxime consequuntur ipsum accusantium in." --gram-session-token "Deserunt non autem."
+    %[1]s auth switch-scopes --organization-id "Maxime eos." --project-id "Non quisquam sunt dolores." --gram-session-token "Vel odio ipsam voluptatum omnis."
 `, os.Args[0])
 }
 
@@ -280,7 +348,7 @@ Logs out the current user by clearing their session.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth logout --gram-session-token "Qui aut quia maxime rem."
+    %[1]s auth logout --gram-session-token "Voluptate deserunt id perferendis voluptatum error excepturi."
 `, os.Args[0])
 }
 
@@ -291,7 +359,7 @@ Provides information about the current authentication status.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth info --gram-session-token "Eaque quae."
+    %[1]s auth info --gram-session-token "Quis enim atque consequatur."
 `, os.Args[0])
 }
 
@@ -319,7 +387,7 @@ Create a deployment to load tool definitions.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session-token "Asperiores dolorem voluptas."
+    %[1]s deployments get-deployment --id "Aut impedit recusandae facilis." --gram-session-token "Et eaque magni."
 `, os.Args[0])
 }
 
@@ -334,7 +402,7 @@ Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       "external_url": "https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6"
-   }' --gram-session-token "Nemo accusantium architecto ducimus."
+   }' --gram-session-token "Et ipsum repellendus."
 `, os.Args[0])
 }
 
@@ -347,7 +415,7 @@ List all deployments in descending order of creation.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Doloremque voluptas et culpa." --limit 37 --gram-session-token "Quos earum optio quasi rem quia ipsa."
+    %[1]s deployments list-deployments --cursor "Esse voluptas modi laudantium." --limit 52 --gram-session-token "Ex ipsum saepe quis et."
 `, os.Args[0])
 }
 
@@ -371,5 +439,89 @@ Check the health of the service.
 
 Example:
     %[1]s system health-check
+`, os.Args[0])
+}
+
+// toolsetsUsage displays the usage of the toolsets command and its subcommands.
+func toolsetsUsage() {
+	fmt.Fprintf(os.Stderr, `Managed toolsets for gram AI consumers.
+Usage:
+    %[1]s [globalflags] toolsets COMMAND [flags]
+
+COMMAND:
+    create-toolset: Create a new toolset with associated tools
+    list-toolsets: List all toolsets for a project
+    update-toolset: Update a toolset's properties including name, description, and HTTP tools
+    get-toolset-details: Get detailed information about a toolset including full HTTP tool definitions
+
+Additional help:
+    %[1]s toolsets COMMAND --help
+`, os.Args[0])
+}
+func toolsetsCreateToolsetUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets create-toolset -body JSON -gram-session-token STRING
+
+Create a new toolset with associated tools
+    -body JSON: 
+    -gram-session-token STRING: 
+
+Example:
+    %[1]s toolsets create-toolset --body '{
+      "description": "Officia voluptas aspernatur quibusdam.",
+      "http_tool_ids": [
+         "Consequatur itaque.",
+         "Modi aliquam aut provident incidunt suscipit."
+      ],
+      "name": "Rerum animi expedita."
+   }' --gram-session-token "Minus ea est."
+`, os.Args[0])
+}
+
+func toolsetsListToolsetsUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets list-toolsets -gram-session-token STRING
+
+List all toolsets for a project
+    -gram-session-token STRING: 
+
+Example:
+    %[1]s toolsets list-toolsets --gram-session-token "Reprehenderit quia doloribus pariatur minus laudantium."
+`, os.Args[0])
+}
+
+func toolsetsUpdateToolsetUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets update-toolset -body JSON -id STRING -gram-session-token STRING
+
+Update a toolset's properties including name, description, and HTTP tools
+    -body JSON: 
+    -id STRING: The ID of the toolset to update
+    -gram-session-token STRING: 
+
+Example:
+    %[1]s toolsets update-toolset --body '{
+      "description": "Quaerat illo qui et.",
+      "http_tool_ids_to_add": [
+         "Dolores ipsum amet perspiciatis.",
+         "Et dignissimos veniam vel.",
+         "Iste id suscipit corrupti ea et quaerat."
+      ],
+      "http_tool_ids_to_remove": [
+         "Molestias corrupti voluptas.",
+         "Dolor nisi nesciunt et dolores.",
+         "Aut ipsam voluptate non iusto et ut."
+      ],
+      "name": "Quos quis fugit."
+   }' --id "Et voluptatum." --gram-session-token "Autem quasi vel."
+`, os.Args[0])
+}
+
+func toolsetsGetToolsetDetailsUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -id STRING -gram-session-token STRING
+
+Get detailed information about a toolset including full HTTP tool definitions
+    -id STRING: The ID of the toolset
+    -gram-session-token STRING: 
+
+Example:
+    %[1]s toolsets get-toolset-details --id "Fugit perferendis libero sint ut." --gram-session-token "Aut saepe vel voluptatum nisi dolorem."
 `, os.Args[0])
 }

@@ -138,3 +138,22 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
   CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS toolsets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  name text NOT NULL,
+  description text,
+  http_tool_ids uuid[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT toolsets_pkey PRIMARY KEY (id),
+  CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_project_id_name_key UNIQUE (project_id, name)
+);

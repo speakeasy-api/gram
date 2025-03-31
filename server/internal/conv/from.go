@@ -12,3 +12,11 @@ func FromPGText(t pgtype.Text) *string {
 	}
 	return &t.String
 }
+
+func FromBytes(b []byte) *string {
+	if len(b) == 0 {
+		return nil
+	}
+	s := string(b)
+	return &s
+}

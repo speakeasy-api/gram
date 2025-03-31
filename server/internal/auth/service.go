@@ -113,6 +113,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 				ProjectID: project.ID.String(),
 			})
 		}
+
 		organizations[i] = &gen.Organization{
 			OrganizationID:   org.OrganizationID,
 			OrganizationName: org.OrganizationName,
