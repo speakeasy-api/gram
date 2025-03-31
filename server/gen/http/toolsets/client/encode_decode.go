@@ -120,6 +120,9 @@ func EncodeListToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("project_id", p.ProjectID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

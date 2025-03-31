@@ -17,7 +17,6 @@ type InfoResponseBody struct {
 	UserID               string                      `form:"user_id" json:"user_id" xml:"user_id"`
 	UserEmail            string                      `form:"user_email" json:"user_email" xml:"user_email"`
 	ActiveOrganizationID string                      `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
-	ActiveProjectID      string                      `form:"active_project_id" json:"active_project_id" xml:"active_project_id"`
 	Organizations        []*OrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
@@ -42,7 +41,6 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		UserID:               res.UserID,
 		UserEmail:            res.UserEmail,
 		ActiveOrganizationID: res.ActiveOrganizationID,
-		ActiveProjectID:      res.ActiveProjectID,
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationResponseBody, len(res.Organizations))

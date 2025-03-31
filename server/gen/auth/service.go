@@ -73,7 +73,6 @@ type InfoResult struct {
 	UserID               string
 	UserEmail            string
 	ActiveOrganizationID string
-	ActiveProjectID      string
 	Organizations        []*Organization
 	// The authentication session
 	GramSessionToken string

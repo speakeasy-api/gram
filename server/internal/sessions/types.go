@@ -12,7 +12,7 @@ const (
 )
 
 type GramSession struct {
-	ID, ActiveOrganizationID, ActiveProjectID, UserID, UserEmail string
+	ID, ActiveOrganizationID, UserID, UserEmail string
 }
 
 func GramSessionCacheKey(ID string) string {

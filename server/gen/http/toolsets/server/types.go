@@ -17,6 +17,8 @@ import (
 type CreateToolsetRequestBody struct {
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The project ID this toolset belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs to include
@@ -246,6 +248,7 @@ func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetD
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *string) *toolsets.CreateToolsetPayload {
 	v := &toolsets.CreateToolsetPayload{
 		Name:        *body.Name,
+		ProjectID:   *body.ProjectID,
 		Description: body.Description,
 	}
 	if body.HTTPToolIds != nil {
@@ -261,8 +264,9 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *s
 
 // NewListToolsetsPayload builds a toolsets service listToolsets endpoint
 // payload.
-func NewListToolsetsPayload(gramSessionToken *string) *toolsets.ListToolsetsPayload {
+func NewListToolsetsPayload(projectID string, gramSessionToken *string) *toolsets.ListToolsetsPayload {
 	v := &toolsets.ListToolsetsPayload{}
+	v.ProjectID = projectID
 	v.GramSessionToken = gramSessionToken
 
 	return v
@@ -308,6 +312,9 @@ func NewGetToolsetDetailsPayload(id string, gramSessionToken *string) *toolsets.
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
 	return
 }

@@ -13,12 +13,18 @@ import (
 
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
-    organization_id
+    name
+  , slug
+  , organization_id
 ) VALUES (
     $1
+  , $2
+  , $3
 )
 RETURNING 
     id
+  , name
+  , slug
   , organization_id
   , created_at
   , updated_at
@@ -26,11 +32,19 @@ RETURNING
   , deleted
 `
 
-func (q *Queries) CreateProject(ctx context.Context, organizationID uuid.UUID) (Project, error) {
-	row := q.db.QueryRow(ctx, createProject, organizationID)
+type CreateProjectParams struct {
+	Name           string
+	Slug           string
+	OrganizationID uuid.UUID
+}
+
+func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
+	row := q.db.QueryRow(ctx, createProject, arg.Name, arg.Slug, arg.OrganizationID)
 	var i Project
 	err := row.Scan(
 		&i.ID,
+		&i.Name,
+		&i.Slug,
 		&i.OrganizationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -43,6 +57,8 @@ func (q *Queries) CreateProject(ctx context.Context, organizationID uuid.UUID) (
 const getProject = `-- name: GetProject :one
 SELECT 
     id
+  , name
+  , slug
   , organization_id
   , created_at
   , updated_at
@@ -57,6 +73,8 @@ func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error)
 	var i Project
 	err := row.Scan(
 		&i.ID,
+		&i.Name,
+		&i.Slug,
 		&i.OrganizationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -69,6 +87,8 @@ func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error)
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
 SELECT 
     id
+  , name
+  , slug
   , organization_id
   , created_at
   , updated_at
@@ -91,6 +111,8 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 		var i Project
 		if err := rows.Scan(
 			&i.ID,
+			&i.Name,
+			&i.Slug,
 			&i.OrganizationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,

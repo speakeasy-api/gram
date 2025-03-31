@@ -47,7 +47,7 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID: must.Value(uuid.Parse(session.ActiveOrganizationID)),
-		ProjectID:      must.Value(uuid.Parse(session.ActiveProjectID)),
+		ProjectID:      must.Value(uuid.Parse(p.ProjectID)),
 		Name:           p.Name,
 	}
 
@@ -94,7 +94,7 @@ func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) 
 		return nil, errors.New("session not found in context")
 	}
 
-	projectID := must.Value(uuid.Parse(session.ActiveProjectID))
+	projectID := must.Value(uuid.Parse(p.ProjectID))
 
 	toolsets, err := s.repo.ListToolsetsByProject(ctx, projectID)
 	if err != nil {

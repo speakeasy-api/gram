@@ -30,6 +30,8 @@ var _ = Service("toolsets", func() {
 		Description("List all toolsets for a project")
 
 		Payload(func() {
+			Attribute("project_id", String, "The project ID this toolset belongs to")
+			Required("project_id")
 			Extend(sessions.SessionPayload)
 		})
 
@@ -37,6 +39,7 @@ var _ = Service("toolsets", func() {
 
 		HTTP(func() {
 			GET("/rpc/toolsets.list")
+			Param("project_id")
 			sessions.SessionHeader()
 			Response(StatusOK)
 		})
@@ -82,9 +85,10 @@ var _ = Service("toolsets", func() {
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("name", String, "The name of the toolset")
+	Attribute("project_id", String, "The project ID this toolset belongs to")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs to include")
-	Required("name")
+	Required("name", "project_id")
 })
 
 var Toolset = Type("Toolset", func() {

@@ -92,13 +92,22 @@ func EncodeListToolsetsResponse(encoder func(context.Context, http.ResponseWrite
 func DecodeListToolsetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
+			projectID        string
 			gramSessionToken *string
+			err              error
 		)
+		projectID = r.URL.Query().Get("project_id")
+		if projectID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
+		}
 		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewListToolsetsPayload(gramSessionToken)
+		if err != nil {
+			return nil, err
+		}
+		payload := NewListToolsetsPayload(projectID, gramSessionToken)
 		if payload.GramSessionToken != nil {
 			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

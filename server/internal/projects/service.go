@@ -2,7 +2,9 @@ package projects
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,6 +12,8 @@ import (
 
 	"github.com/speakeasy-api/gram/internal/projects/repo"
 )
+
+var ErrProjectNameExists = errors.New("project name already exists")
 
 type Service struct {
 	logger *slog.Logger
@@ -28,7 +32,7 @@ func (s *Service) GetProjectsOrCreateDefault(ctx context.Context, organizationID
 	}
 
 	if len(projects) == 0 {
-		project, err := s.CreateProject(ctx, organizationID)
+		project, err := s.CreateProject(ctx, organizationID, "Default")
 		if err != nil {
 			return nil, err
 		}
@@ -38,8 +42,19 @@ func (s *Service) GetProjectsOrCreateDefault(ctx context.Context, organizationID
 	return projects, nil
 }
 
-func (s *Service) CreateProject(ctx context.Context, organizationID string) (repo.Project, error) {
-	return s.repo.CreateProject(ctx, must.Value(uuid.Parse(organizationID)))
+func (s *Service) CreateProject(ctx context.Context, organizationID, name string) (repo.Project, error) {
+	slug := strings.ReplaceAll(strings.ToLower(name), " ", "-")
+	project, err := s.repo.CreateProject(ctx, repo.CreateProjectParams{
+		OrganizationID: must.Value(uuid.Parse(organizationID)),
+		Name:           name,
+		Slug:           slug,
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "unique constraint") {
+			return project, errors.New("project slug already exists")
+		}
+	}
+	return project, nil
 }
 
 func (s *Service) GetProject(ctx context.Context, projectID string) (repo.Project, error) {

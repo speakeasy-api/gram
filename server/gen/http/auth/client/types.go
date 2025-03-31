@@ -18,7 +18,6 @@ type InfoResponseBody struct {
 	UserID               *string                     `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	UserEmail            *string                     `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	ActiveOrganizationID *string                     `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
-	ActiveProjectID      *string                     `form:"active_project_id,omitempty" json:"active_project_id,omitempty" xml:"active_project_id,omitempty"`
 	Organizations        []*OrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
@@ -73,7 +72,6 @@ func NewInfoResultOK(body *InfoResponseBody, gramSessionToken string, gramSessio
 		UserID:               *body.UserID,
 		UserEmail:            *body.UserEmail,
 		ActiveOrganizationID: *body.ActiveOrganizationID,
-		ActiveProjectID:      *body.ActiveProjectID,
 	}
 	v.Organizations = make([]*auth.Organization, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -95,9 +93,6 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.ActiveOrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_organization_id", "body"))
-	}
-	if body.ActiveProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("active_project_id", "body"))
 	}
 	if body.Organizations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))

@@ -29,6 +29,8 @@ volatile;
 
 CREATE TABLE IF NOT EXISTS projects (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  name text NOT NULL,
+  slug text NOT NULL,
 
   organization_id uuid NOT NULL,
 
@@ -37,7 +39,8 @@ CREATE TABLE IF NOT EXISTS projects (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT projects_pkey PRIMARY KEY (id)
+  CONSTRAINT projects_pkey PRIMARY KEY (id),
+  CONSTRAINT projects_organization_id_slug_key UNIQUE (organization_id, slug)
 );
 
 CREATE TABLE IF NOT EXISTS deployments (

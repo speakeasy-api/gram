@@ -72,6 +72,8 @@ type HttpToolDefinition struct {
 
 type Project struct {
 	ID             uuid.UUID
+	Name           string
+	Slug           string
 	OrganizationID uuid.UUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz

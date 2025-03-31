@@ -121,14 +121,12 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			AccountType:      org.AccountType,
 			Projects:         orgProjects,
 		}
-
 	}
 
 	return &gen.InfoResult{
 		GramSessionToken:     session.ID,
 		GramSessionCookie:    session.ID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
-		ActiveProjectID:      session.ActiveProjectID,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,
 		Organizations:        organizations,

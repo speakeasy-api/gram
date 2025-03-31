@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Officia voluptas aspernatur quibusdam.\",\n      \"http_tool_ids\": [\n         \"Consequatur itaque.\",\n         \"Modi aliquam aut provident incidunt suscipit.\"\n      ],\n      \"name\": \"Rerum animi expedita.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Aliquam consequatur itaque enim modi.\",\n      \"http_tool_ids\": [\n         \"Provident incidunt suscipit et minus ea est.\",\n         \"Consequatur deserunt sequi maxime.\",\n         \"Assumenda quas dolor mollitia laboriosam voluptatem.\"\n      ],\n      \"name\": \"Rerum animi expedita.\",\n      \"project_id\": \"Officia voluptas aspernatur quibusdam.\"\n   }'")
 		}
 	}
 	var gramSessionToken *string
@@ -33,6 +33,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	}
 	v := &toolsets.CreateToolsetPayload{
 		Name:        body.Name,
+		ProjectID:   body.ProjectID,
 		Description: body.Description,
 	}
 	if body.HTTPToolIds != nil {
@@ -48,7 +49,11 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 
 // BuildListToolsetsPayload builds the payload for the toolsets listToolsets
 // endpoint from CLI flags.
-func BuildListToolsetsPayload(toolsetsListToolsetsGramSessionToken string) (*toolsets.ListToolsetsPayload, error) {
+func BuildListToolsetsPayload(toolsetsListToolsetsProjectID string, toolsetsListToolsetsGramSessionToken string) (*toolsets.ListToolsetsPayload, error) {
+	var projectID string
+	{
+		projectID = toolsetsListToolsetsProjectID
+	}
 	var gramSessionToken *string
 	{
 		if toolsetsListToolsetsGramSessionToken != "" {
@@ -56,6 +61,7 @@ func BuildListToolsetsPayload(toolsetsListToolsetsGramSessionToken string) (*too
 		}
 	}
 	v := &toolsets.ListToolsetsPayload{}
+	v.ProjectID = projectID
 	v.GramSessionToken = gramSessionToken
 
 	return v, nil
@@ -69,7 +75,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Quaerat illo qui et.\",\n      \"http_tool_ids_to_add\": [\n         \"Dolores ipsum amet perspiciatis.\",\n         \"Et dignissimos veniam vel.\",\n         \"Iste id suscipit corrupti ea et quaerat.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Molestias corrupti voluptas.\",\n         \"Dolor nisi nesciunt et dolores.\",\n         \"Aut ipsam voluptate non iusto et ut.\"\n      ],\n      \"name\": \"Quos quis fugit.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Quaerat ut voluptates molestias corrupti.\",\n      \"http_tool_ids_to_add\": [\n         \"Dolor nisi nesciunt et dolores.\",\n         \"Aut ipsam voluptate non iusto et ut.\",\n         \"Et voluptatum.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Quasi vel consequatur quasi enim doloribus omnis.\",\n         \"Culpa non consectetur.\"\n      ],\n      \"name\": \"Voluptatem iste id suscipit corrupti ea.\"\n   }'")
 		}
 	}
 	var id string
