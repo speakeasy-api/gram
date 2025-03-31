@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/must"
+	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/sessions"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 	goahttp "goa.design/goa/v3/http"
@@ -23,12 +24,13 @@ type Service struct {
 	db       *pgxpool.Pool
 	repo     *repo.Queries
 	sessions *sessions.Sessions
+	projects *projects.Service
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New()}
+	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New(), projects: projects.NewService(logger, db)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
@@ -43,6 +45,11 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
+	}
+
+	project, err := s.projects.GetProject(ctx, p.ProjectID)
+	if project.OrganizationID.String() != session.ActiveOrganizationID {
+		return nil, errors.New("project does not belong to active organization")
 	}
 
 	createToolParams := repo.CreateToolsetParams{
@@ -94,6 +101,11 @@ func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) 
 		return nil, errors.New("session not found in context")
 	}
 
+	project, err := s.projects.GetProject(ctx, p.ProjectID)
+	if project.OrganizationID.String() != session.ActiveOrganizationID {
+		return nil, errors.New("project does not belong to active organization")
+	}
+
 	projectID := must.Value(uuid.Parse(p.ProjectID))
 
 	toolsets, err := s.repo.ListToolsetsByProject(ctx, projectID)
@@ -126,11 +138,19 @@ func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) 
 
 func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload) (*gen.Toolset, error) {
 	toolsetID := must.Value(uuid.Parse(p.ID))
+	session, ok := sessions.GetSessionValueFromContext(ctx)
+	if !ok || session == nil {
+		return nil, errors.New("session not found in context")
+	}
 
 	// First get the existing toolset
 	existingToolset, err := s.repo.GetToolset(ctx, toolsetID)
 	if err != nil {
 		return nil, err
+	}
+
+	if existingToolset.OrganizationID.String() != session.ActiveOrganizationID {
+		return nil, errors.New("toolset does not belong to active organization")
 	}
 
 	// Convert update params
@@ -196,10 +216,18 @@ func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload
 
 func (s *Service) GetToolsetDetails(ctx context.Context, p *gen.GetToolsetDetailsPayload) (*gen.ToolsetDetails, error) {
 	toolsetID := must.Value(uuid.Parse(p.ID))
+	session, ok := sessions.GetSessionValueFromContext(ctx)
+	if !ok || session == nil {
+		return nil, errors.New("session not found in context")
+	}
 
 	toolset, err := s.repo.GetToolset(ctx, toolsetID)
 	if err != nil {
 		return nil, err
+	}
+
+	if toolset.OrganizationID.String() != session.ActiveOrganizationID {
+		return nil, errors.New("toolset does not belong to active organization")
 	}
 
 	var httpTools []*gen.HTTPToolDefinition
