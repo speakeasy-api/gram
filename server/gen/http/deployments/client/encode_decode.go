@@ -84,7 +84,7 @@ func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, r
 			if err != nil {
 				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
 			}
-			res := NewGetDeploymentDeploymentGetResultOK(&body)
+			res := NewGetDeploymentResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -159,7 +159,7 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 			if err != nil {
 				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
 			}
-			res := NewCreateDeploymentDeploymentCreateResultOK(&body)
+			res := NewCreateDeploymentResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -236,7 +236,7 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
 			}
-			res := NewListDeploymentsDeploymentListResultOK(&body)
+			res := NewListDeploymentsListDeploymentResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)

@@ -14,11 +14,11 @@ var _ = Service("deployments", func() {
 		Description("Create a deployment to load tool definitions.")
 
 		Payload(func() {
-			Extend(DeploymentGetForm)
+			Extend(GetDeploymentForm)
 			Extend(sessions.SessionPayload)
 		})
 
-		Result(DeploymentGetResult)
+		Result(GetDeploymentResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.get")
@@ -32,11 +32,11 @@ var _ = Service("deployments", func() {
 		Description("Create a deployment to load tool definitions.")
 
 		Payload(func() {
-			Extend(DeploymentCreateForm)
+			Extend(CreateDeploymentForm)
 			Extend(sessions.SessionPayload)
 		})
 
-		Result(DeploymentCreateResult)
+		Result(CreateDeploymentResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.create")
@@ -49,11 +49,11 @@ var _ = Service("deployments", func() {
 		Description("List all deployments in descending order of creation.")
 
 		Payload(func() {
-			Extend(DeploymentListForm)
+			Extend(ListDeploymentForm)
 			Extend(sessions.SessionPayload)
 		})
 
-		Result(DeploymentListResult)
+		Result(ListDeploymentResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.list")
@@ -99,7 +99,7 @@ var Deployment = Type("Deployment", func() {
 	})
 })
 
-var DeploymentCreateForm = Type("DeploymentCreateForm", func() {
+var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 	Attribute("external_id", String, func() {
 		Description("The external ID to refer to the deployment. This can be a git commit hash for example.")
 		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
@@ -114,11 +114,11 @@ var DeploymentCreateForm = Type("DeploymentCreateForm", func() {
 	})
 })
 
-var DeploymentCreateResult = Type("DeploymentCreateResult", func() {
+var CreateDeploymentResult = Type("CreateDeploymentResult", func() {
 	Extend(Deployment)
 })
 
-var DeploymentListForm = Type("DeploymentListForm", func() {
+var ListDeploymentForm = Type("ListDeploymentForm", func() {
 	Attribute("cursor", String, "The cursor to fetch results from")
 	Attribute("limit", Int, "Results per page", func() {
 		Minimum(1)
@@ -127,7 +127,7 @@ var DeploymentListForm = Type("DeploymentListForm", func() {
 	})
 })
 
-var DeploymentListResult = Type("DeploymentListResult", func() {
+var ListDeploymentResult = Type("ListDeploymentResult", func() {
 	Required("items")
 
 	Attribute("next_cursor", String, "The cursor to fetch results from", func() {
@@ -136,11 +136,11 @@ var DeploymentListResult = Type("DeploymentListResult", func() {
 	Attribute("items", ArrayOf(Deployment), "A list of deployments")
 })
 
-var DeploymentGetForm = Type("DeploymentGetForm", func() {
+var GetDeploymentForm = Type("GetDeploymentForm", func() {
 	Required("id")
 	Attribute("id", String, "The ID of the deployment")
 })
 
-var DeploymentGetResult = Type("DeploymentGetResult", func() {
+var GetDeploymentResult = Type("GetDeploymentResult", func() {
 	Extend(Deployment)
 })

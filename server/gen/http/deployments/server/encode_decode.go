@@ -24,7 +24,7 @@ import (
 // deployments getDeployment endpoint.
 func EncodeGetDeploymentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*deployments.DeploymentGetResult)
+		res, _ := v.(*deployments.GetDeploymentResult)
 		enc := encoder(ctx, w)
 		body := NewGetDeploymentResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -69,7 +69,7 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 // the deployments createDeployment endpoint.
 func EncodeCreateDeploymentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*deployments.DeploymentCreateResult)
+		res, _ := v.(*deployments.CreateDeploymentResult)
 		enc := encoder(ctx, w)
 		body := NewCreateDeploymentResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -125,7 +125,7 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 // the deployments listDeployments endpoint.
 func EncodeListDeploymentsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*deployments.DeploymentListResult)
+		res, _ := v.(*deployments.ListDeploymentResult)
 		enc := encoder(ctx, w)
 		body := NewListDeploymentsResponseBody(res)
 		w.WriteHeader(http.StatusOK)

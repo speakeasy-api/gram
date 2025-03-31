@@ -16,11 +16,11 @@ import (
 // Manages deployments of tools from upstream sources.
 type Service interface {
 	// Create a deployment to load tool definitions.
-	GetDeployment(context.Context, *GetDeploymentPayload) (res *DeploymentGetResult, err error)
+	GetDeployment(context.Context, *GetDeploymentPayload) (res *GetDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
-	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *DeploymentCreateResult, err error)
+	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
 	// List all deployments in descending order of creation.
-	ListDeployments(context.Context, *ListDeploymentsPayload) (res *DeploymentListResult, err error)
+	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -59,6 +59,29 @@ type CreateDeploymentPayload struct {
 	GramSessionToken *string
 }
 
+// CreateDeploymentResult is the result type of the deployments service
+// createDeployment method.
+type CreateDeploymentResult struct {
+	// The ID to of the deployment.
+	ID string
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string
+	// The ID of the project that the deployment belongs to.
+	ProjectID string
+	// The ID of the user that created the deployment.
+	UserID string
+	// The creation date of the deployment.
+	CreatedAt string
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolForm
+}
+
 type Deployment struct {
 	// The ID to of the deployment.
 	ID string
@@ -80,61 +103,6 @@ type Deployment struct {
 	Openapi3p1Tools []*OpenAPI3P1ToolForm
 }
 
-// DeploymentCreateResult is the result type of the deployments service
-// createDeployment method.
-type DeploymentCreateResult struct {
-	// The ID to of the deployment.
-	ID string
-	// The ID of the organization that the deployment belongs to.
-	OrganizationID string
-	// The ID of the project that the deployment belongs to.
-	ProjectID string
-	// The ID of the user that created the deployment.
-	UserID string
-	// The creation date of the deployment.
-	CreatedAt string
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
-}
-
-// DeploymentGetResult is the result type of the deployments service
-// getDeployment method.
-type DeploymentGetResult struct {
-	// The ID to of the deployment.
-	ID string
-	// The ID of the organization that the deployment belongs to.
-	OrganizationID string
-	// The ID of the project that the deployment belongs to.
-	ProjectID string
-	// The ID of the user that created the deployment.
-	UserID string
-	// The creation date of the deployment.
-	CreatedAt string
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
-}
-
-// DeploymentListResult is the result type of the deployments service
-// listDeployments method.
-type DeploymentListResult struct {
-	// The cursor to fetch results from
-	NextCursor *string
-	// A list of deployments
-	Items []*Deployment
-}
-
 // GetDeploymentPayload is the payload type of the deployments service
 // getDeployment method.
 type GetDeploymentPayload struct {
@@ -143,7 +111,39 @@ type GetDeploymentPayload struct {
 	GramSessionToken *string
 }
 
+// GetDeploymentResult is the result type of the deployments service
+// getDeployment method.
+type GetDeploymentResult struct {
+	// The ID to of the deployment.
+	ID string
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string
+	// The ID of the project that the deployment belongs to.
+	ProjectID string
+	// The ID of the user that created the deployment.
+	UserID string
+	// The creation date of the deployment.
+	CreatedAt string
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolForm
+}
+
 type JSONSchema string
+
+// ListDeploymentResult is the result type of the deployments service
+// listDeployments method.
+type ListDeploymentResult struct {
+	// The cursor to fetch results from
+	NextCursor *string
+	// A list of deployments
+	Items []*Deployment
+}
 
 // ListDeploymentsPayload is the payload type of the deployments service
 // listDeployments method.

@@ -41,7 +41,7 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 	)
 }
 
-func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayload) (res *gen.DeploymentGetResult, err error) {
+func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayload) (res *gen.GetDeploymentResult, err error) {
 	id, err := uuid.Parse(form.ID)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		return nil, err
 	}
 
-	return &gen.DeploymentGetResult{
+	return &gen.GetDeploymentResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
 		OrganizationID:  deployment.OrganizationID.String(),
@@ -64,11 +64,11 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}, nil
 }
 
-func (s *Service) ListDeployments(context.Context, *gen.ListDeploymentsPayload) (res *gen.DeploymentListResult, err error) {
-	return &gen.DeploymentListResult{}, nil
+func (s *Service) ListDeployments(context.Context, *gen.ListDeploymentsPayload) (res *gen.ListDeploymentResult, err error) {
+	return &gen.ListDeploymentResult{}, nil
 }
 
-func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeploymentPayload) (*gen.DeploymentCreateResult, error) {
+func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeploymentPayload) (*gen.CreateDeploymentResult, error) {
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
@@ -85,7 +85,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, err
 	}
 
-	return &gen.DeploymentCreateResult{
+	return &gen.CreateDeploymentResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
 		OrganizationID:  deployment.OrganizationID.String(),

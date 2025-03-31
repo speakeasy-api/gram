@@ -207,7 +207,7 @@ type OpenAPI3P1ParameterSchemaRequestBody struct {
 
 // NewGetDeploymentResponseBody builds the HTTP response body from the result
 // of the "getDeployment" endpoint of the "deployments" service.
-func NewGetDeploymentResponseBody(res *deployments.DeploymentGetResult) *GetDeploymentResponseBody {
+func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDeploymentResponseBody {
 	body := &GetDeploymentResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
@@ -228,7 +228,7 @@ func NewGetDeploymentResponseBody(res *deployments.DeploymentGetResult) *GetDepl
 
 // NewCreateDeploymentResponseBody builds the HTTP response body from the
 // result of the "createDeployment" endpoint of the "deployments" service.
-func NewCreateDeploymentResponseBody(res *deployments.DeploymentCreateResult) *CreateDeploymentResponseBody {
+func NewCreateDeploymentResponseBody(res *deployments.CreateDeploymentResult) *CreateDeploymentResponseBody {
 	body := &CreateDeploymentResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
@@ -249,7 +249,7 @@ func NewCreateDeploymentResponseBody(res *deployments.DeploymentCreateResult) *C
 
 // NewListDeploymentsResponseBody builds the HTTP response body from the result
 // of the "listDeployments" endpoint of the "deployments" service.
-func NewListDeploymentsResponseBody(res *deployments.DeploymentListResult) *ListDeploymentsResponseBody {
+func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *ListDeploymentsResponseBody {
 	body := &ListDeploymentsResponseBody{
 		NextCursor: res.NextCursor,
 	}
