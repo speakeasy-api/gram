@@ -16,13 +16,13 @@ import (
 // Managed auth for gram producers and dashboard.
 type Service interface {
 	// Handles the authentication callback.
-	AuthCallback(context.Context, *AuthCallbackPayload) (res *AuthCallbackResult, err error)
+	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
 	// Switches the authentication scope to a different organization.
-	AuthSwitchScopes(context.Context, *AuthSwitchScopesPayload) (res *AuthSwitchScopesResult, err error)
+	SwitchScopes(context.Context, *SwitchScopesPayload) (res *SwitchScopesResult, err error)
 	// Logs out the current user by clearing their session.
-	AuthLogout(context.Context, *AuthLogoutPayload) (res *AuthLogoutResult, err error)
+	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
 	// Provides information about the current authentication status.
-	AuthInfo(context.Context, *AuthInfoPayload) (res *AuthInfoResult, err error)
+	Info(context.Context, *InfoPayload) (res *InfoResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,18 +45,16 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"auth callback", "auth switch scopes", "auth logout", "auth info"}
+var MethodNames = [4]string{"callback", "switchScopes", "logout", "info"}
 
-// AuthCallbackPayload is the payload type of the auth service auth callback
-// method.
-type AuthCallbackPayload struct {
+// CallbackPayload is the payload type of the auth service callback method.
+type CallbackPayload struct {
 	// The shared token for authentication from the speakeasy system
 	SharedToken string
 }
 
-// AuthCallbackResult is the result type of the auth service auth callback
-// method.
-type AuthCallbackResult struct {
+// CallbackResult is the result type of the auth service callback method.
+type CallbackResult struct {
 	// The URL to redirect to after authentication
 	Location string
 	// The authentication session
@@ -65,13 +63,13 @@ type AuthCallbackResult struct {
 	GramSessionCookie string
 }
 
-// AuthInfoPayload is the payload type of the auth service auth info method.
-type AuthInfoPayload struct {
+// InfoPayload is the payload type of the auth service info method.
+type InfoPayload struct {
 	GramSessionToken *string
 }
 
-// AuthInfoResult is the result type of the auth service auth info method.
-type AuthInfoResult struct {
+// InfoResult is the result type of the auth service info method.
+type InfoResult struct {
 	UserID               string
 	UserEmail            string
 	ActiveOrganizationID string
@@ -83,33 +81,14 @@ type AuthInfoResult struct {
 	GramSessionCookie string
 }
 
-// AuthLogoutPayload is the payload type of the auth service auth logout method.
-type AuthLogoutPayload struct {
+// LogoutPayload is the payload type of the auth service logout method.
+type LogoutPayload struct {
 	GramSessionToken *string
 }
 
-// AuthLogoutResult is the result type of the auth service auth logout method.
-type AuthLogoutResult struct {
+// LogoutResult is the result type of the auth service logout method.
+type LogoutResult struct {
 	// Empty string to clear the session
-	GramSessionCookie string
-}
-
-// AuthSwitchScopesPayload is the payload type of the auth service auth switch
-// scopes method.
-type AuthSwitchScopesPayload struct {
-	// The organization slug to switch scopes
-	OrganizationID *string
-	// The project id to switch scopes too
-	ProjectID        *string
-	GramSessionToken *string
-}
-
-// AuthSwitchScopesResult is the result type of the auth service auth switch
-// scopes method.
-type AuthSwitchScopesResult struct {
-	// The authentication session
-	GramSessionToken string
-	// The authentication session
 	GramSessionCookie string
 }
 
@@ -123,4 +102,23 @@ type Organization struct {
 
 type Project struct {
 	ProjectID string
+}
+
+// SwitchScopesPayload is the payload type of the auth service switchScopes
+// method.
+type SwitchScopesPayload struct {
+	// The organization slug to switch scopes
+	OrganizationID *string
+	// The project id to switch scopes too
+	ProjectID        *string
+	GramSessionToken *string
+}
+
+// SwitchScopesResult is the result type of the auth service switchScopes
+// method.
+type SwitchScopesResult struct {
+	// The authentication session
+	GramSessionToken string
+	// The authentication session
+	GramSessionCookie string
 }

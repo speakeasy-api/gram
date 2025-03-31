@@ -15,59 +15,58 @@ import (
 
 // Client is the "auth" service client.
 type Client struct {
-	AuthCallbackEndpoint     goa.Endpoint
-	AuthSwitchScopesEndpoint goa.Endpoint
-	AuthLogoutEndpoint       goa.Endpoint
-	AuthInfoEndpoint         goa.Endpoint
+	CallbackEndpoint     goa.Endpoint
+	SwitchScopesEndpoint goa.Endpoint
+	LogoutEndpoint       goa.Endpoint
+	InfoEndpoint         goa.Endpoint
 }
 
 // NewClient initializes a "auth" service client given the endpoints.
-func NewClient(authCallback, authSwitchScopes, authLogout, authInfo goa.Endpoint) *Client {
+func NewClient(callback, switchScopes, logout, info goa.Endpoint) *Client {
 	return &Client{
-		AuthCallbackEndpoint:     authCallback,
-		AuthSwitchScopesEndpoint: authSwitchScopes,
-		AuthLogoutEndpoint:       authLogout,
-		AuthInfoEndpoint:         authInfo,
+		CallbackEndpoint:     callback,
+		SwitchScopesEndpoint: switchScopes,
+		LogoutEndpoint:       logout,
+		InfoEndpoint:         info,
 	}
 }
 
-// AuthCallback calls the "auth callback" endpoint of the "auth" service.
-func (c *Client) AuthCallback(ctx context.Context, p *AuthCallbackPayload) (res *AuthCallbackResult, err error) {
+// Callback calls the "callback" endpoint of the "auth" service.
+func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *CallbackResult, err error) {
 	var ires any
-	ires, err = c.AuthCallbackEndpoint(ctx, p)
+	ires, err = c.CallbackEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*AuthCallbackResult), nil
+	return ires.(*CallbackResult), nil
 }
 
-// AuthSwitchScopes calls the "auth switch scopes" endpoint of the "auth"
-// service.
-func (c *Client) AuthSwitchScopes(ctx context.Context, p *AuthSwitchScopesPayload) (res *AuthSwitchScopesResult, err error) {
+// SwitchScopes calls the "switchScopes" endpoint of the "auth" service.
+func (c *Client) SwitchScopes(ctx context.Context, p *SwitchScopesPayload) (res *SwitchScopesResult, err error) {
 	var ires any
-	ires, err = c.AuthSwitchScopesEndpoint(ctx, p)
+	ires, err = c.SwitchScopesEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*AuthSwitchScopesResult), nil
+	return ires.(*SwitchScopesResult), nil
 }
 
-// AuthLogout calls the "auth logout" endpoint of the "auth" service.
-func (c *Client) AuthLogout(ctx context.Context, p *AuthLogoutPayload) (res *AuthLogoutResult, err error) {
+// Logout calls the "logout" endpoint of the "auth" service.
+func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResult, err error) {
 	var ires any
-	ires, err = c.AuthLogoutEndpoint(ctx, p)
+	ires, err = c.LogoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*AuthLogoutResult), nil
+	return ires.(*LogoutResult), nil
 }
 
-// AuthInfo calls the "auth info" endpoint of the "auth" service.
-func (c *Client) AuthInfo(ctx context.Context, p *AuthInfoPayload) (res *AuthInfoResult, err error) {
+// Info calls the "info" endpoint of the "auth" service.
+func (c *Client) Info(ctx context.Context, p *InfoPayload) (res *InfoResult, err error) {
 	var ires any
-	ires, err = c.AuthInfoEndpoint(ctx, p)
+	ires, err = c.InfoEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*AuthInfoResult), nil
+	return ires.(*InfoResult), nil
 }

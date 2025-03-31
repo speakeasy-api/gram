@@ -36,14 +36,14 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 	)
 }
 
-func (s *Service) AuthCallback(context.Context, *gen.AuthCallbackPayload) (res *gen.AuthCallbackResult, err error) {
+func (s *Service) Callback(context.Context, *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	// TODO: Exchange sharedToken with speakeasy backend for user information OIDC. Token will either be a JWT userID or another short term redis backed token
 	// TODO: Populate an auth session from that information, redirect back to gram
 	// TODO: This will call GET api.speakeasy.com/v1/gram/info/{userID}
-	return &gen.AuthCallbackResult{}, nil
+	return &gen.CallbackResult{}, nil
 }
 
-func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchScopesPayload) (res *gen.AuthSwitchScopesResult, err error) {
+func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
@@ -72,13 +72,13 @@ func (s *Service) AuthSwitchScopes(ctx context.Context, payload *gen.AuthSwitchS
 		return nil, err
 	}
 
-	return &gen.AuthSwitchScopesResult{
+	return &gen.SwitchScopesResult{
 		GramSessionToken:  session.ID,
 		GramSessionCookie: session.ID,
 	}, nil
 }
 
-func (s *Service) AuthLogout(ctx context.Context, payload *gen.AuthLogoutPayload) (res *gen.AuthLogoutResult, err error) {
+func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *gen.LogoutResult, err error) {
 	// Clears cookie and invalidates session
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
@@ -87,9 +87,9 @@ func (s *Service) AuthLogout(ctx context.Context, payload *gen.AuthLogoutPayload
 	if err := s.sessions.ClearSession(ctx, *session); err != nil {
 		return nil, err
 	}
-	return &gen.AuthLogoutResult{GramSessionCookie: ""}, nil
+	return &gen.LogoutResult{GramSessionCookie: ""}, nil
 }
-func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (res *gen.AuthInfoResult, err error) {
+func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.InfoResult, err error) {
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
@@ -123,7 +123,7 @@ func (s *Service) AuthInfo(ctx context.Context, payload *gen.AuthInfoPayload) (r
 
 	}
 
-	return &gen.AuthInfoResult{
+	return &gen.InfoResult{
 		GramSessionToken:     session.ID,
 		GramSessionCookie:    session.ID,
 		ActiveOrganizationID: session.ActiveOrganizationID,

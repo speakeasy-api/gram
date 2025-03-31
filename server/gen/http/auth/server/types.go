@@ -11,9 +11,9 @@ import (
 	auth "github.com/speakeasy-api/gram/gen/auth"
 )
 
-// AuthInfoResponseBody is the type of the "auth" service "auth info" endpoint
-// HTTP response body.
-type AuthInfoResponseBody struct {
+// InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
+// response body.
+type InfoResponseBody struct {
 	UserID               string                      `form:"user_id" json:"user_id" xml:"user_id"`
 	UserEmail            string                      `form:"user_email" json:"user_email" xml:"user_email"`
 	ActiveOrganizationID string                      `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
@@ -35,10 +35,10 @@ type ProjectResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 }
 
-// NewAuthInfoResponseBody builds the HTTP response body from the result of the
-// "auth info" endpoint of the "auth" service.
-func NewAuthInfoResponseBody(res *auth.AuthInfoResult) *AuthInfoResponseBody {
-	body := &AuthInfoResponseBody{
+// NewInfoResponseBody builds the HTTP response body from the result of the
+// "info" endpoint of the "auth" service.
+func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
+	body := &InfoResponseBody{
 		UserID:               res.UserID,
 		UserEmail:            res.UserEmail,
 		ActiveOrganizationID: res.ActiveOrganizationID,
@@ -55,18 +55,17 @@ func NewAuthInfoResponseBody(res *auth.AuthInfoResult) *AuthInfoResponseBody {
 	return body
 }
 
-// NewAuthCallbackPayload builds a auth service auth callback endpoint payload.
-func NewAuthCallbackPayload(sharedToken string) *auth.AuthCallbackPayload {
-	v := &auth.AuthCallbackPayload{}
+// NewCallbackPayload builds a auth service callback endpoint payload.
+func NewCallbackPayload(sharedToken string) *auth.CallbackPayload {
+	v := &auth.CallbackPayload{}
 	v.SharedToken = sharedToken
 
 	return v
 }
 
-// NewAuthSwitchScopesPayload builds a auth service auth switch scopes endpoint
-// payload.
-func NewAuthSwitchScopesPayload(organizationID *string, projectID *string, gramSessionToken *string) *auth.AuthSwitchScopesPayload {
-	v := &auth.AuthSwitchScopesPayload{}
+// NewSwitchScopesPayload builds a auth service switchScopes endpoint payload.
+func NewSwitchScopesPayload(organizationID *string, projectID *string, gramSessionToken *string) *auth.SwitchScopesPayload {
+	v := &auth.SwitchScopesPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
 	v.GramSessionToken = gramSessionToken
@@ -74,17 +73,17 @@ func NewAuthSwitchScopesPayload(organizationID *string, projectID *string, gramS
 	return v
 }
 
-// NewAuthLogoutPayload builds a auth service auth logout endpoint payload.
-func NewAuthLogoutPayload(gramSessionToken *string) *auth.AuthLogoutPayload {
-	v := &auth.AuthLogoutPayload{}
+// NewLogoutPayload builds a auth service logout endpoint payload.
+func NewLogoutPayload(gramSessionToken *string) *auth.LogoutPayload {
+	v := &auth.LogoutPayload{}
 	v.GramSessionToken = gramSessionToken
 
 	return v
 }
 
-// NewAuthInfoPayload builds a auth service auth info endpoint payload.
-func NewAuthInfoPayload(gramSessionToken *string) *auth.AuthInfoPayload {
-	v := &auth.AuthInfoPayload{}
+// NewInfoPayload builds a auth service info endpoint payload.
+func NewInfoPayload(gramSessionToken *string) *auth.InfoPayload {
+	v := &auth.InfoPayload{}
 	v.GramSessionToken = gramSessionToken
 
 	return v

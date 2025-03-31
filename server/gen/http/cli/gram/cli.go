@@ -24,7 +24,7 @@ import (
 //
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() string {
-	return `auth (auth-callback|auth-switch-scopes|auth-logout|auth-info)
+	return `auth (callback|switch-scopes|logout|info)
 deployments (get-deployment|create-deployment|list-deployments)
 system health-check
 `
@@ -32,7 +32,7 @@ system health-check
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` auth auth-callback --shared-token "Nisi quos occaecati suscipit."` + "\n" +
+	return os.Args[0] + ` auth callback --shared-token "Nisi quos occaecati suscipit."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session-token "Asperiores dolorem voluptas."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		""
@@ -50,19 +50,19 @@ func ParseEndpoint(
 	var (
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
-		authAuthCallbackFlags           = flag.NewFlagSet("auth-callback", flag.ExitOnError)
-		authAuthCallbackSharedTokenFlag = authAuthCallbackFlags.String("shared-token", "REQUIRED", "")
+		authCallbackFlags           = flag.NewFlagSet("callback", flag.ExitOnError)
+		authCallbackSharedTokenFlag = authCallbackFlags.String("shared-token", "REQUIRED", "")
 
-		authAuthSwitchScopesFlags                = flag.NewFlagSet("auth-switch-scopes", flag.ExitOnError)
-		authAuthSwitchScopesOrganizationIDFlag   = authAuthSwitchScopesFlags.String("organization-id", "", "")
-		authAuthSwitchScopesProjectIDFlag        = authAuthSwitchScopesFlags.String("project-id", "", "")
-		authAuthSwitchScopesGramSessionTokenFlag = authAuthSwitchScopesFlags.String("gram-session-token", "", "")
+		authSwitchScopesFlags                = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
+		authSwitchScopesOrganizationIDFlag   = authSwitchScopesFlags.String("organization-id", "", "")
+		authSwitchScopesProjectIDFlag        = authSwitchScopesFlags.String("project-id", "", "")
+		authSwitchScopesGramSessionTokenFlag = authSwitchScopesFlags.String("gram-session-token", "", "")
 
-		authAuthLogoutFlags                = flag.NewFlagSet("auth-logout", flag.ExitOnError)
-		authAuthLogoutGramSessionTokenFlag = authAuthLogoutFlags.String("gram-session-token", "", "")
+		authLogoutFlags                = flag.NewFlagSet("logout", flag.ExitOnError)
+		authLogoutGramSessionTokenFlag = authLogoutFlags.String("gram-session-token", "", "")
 
-		authAuthInfoFlags                = flag.NewFlagSet("auth-info", flag.ExitOnError)
-		authAuthInfoGramSessionTokenFlag = authAuthInfoFlags.String("gram-session-token", "", "")
+		authInfoFlags                = flag.NewFlagSet("info", flag.ExitOnError)
+		authInfoGramSessionTokenFlag = authInfoFlags.String("gram-session-token", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
@@ -84,10 +84,10 @@ func ParseEndpoint(
 		systemHealthCheckFlags = flag.NewFlagSet("health-check", flag.ExitOnError)
 	)
 	authFlags.Usage = authUsage
-	authAuthCallbackFlags.Usage = authAuthCallbackUsage
-	authAuthSwitchScopesFlags.Usage = authAuthSwitchScopesUsage
-	authAuthLogoutFlags.Usage = authAuthLogoutUsage
-	authAuthInfoFlags.Usage = authAuthInfoUsage
+	authCallbackFlags.Usage = authCallbackUsage
+	authSwitchScopesFlags.Usage = authSwitchScopesUsage
+	authLogoutFlags.Usage = authLogoutUsage
+	authInfoFlags.Usage = authInfoUsage
 
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
@@ -135,17 +135,17 @@ func ParseEndpoint(
 		switch svcn {
 		case "auth":
 			switch epn {
-			case "auth-callback":
-				epf = authAuthCallbackFlags
+			case "callback":
+				epf = authCallbackFlags
 
-			case "auth-switch-scopes":
-				epf = authAuthSwitchScopesFlags
+			case "switch-scopes":
+				epf = authSwitchScopesFlags
 
-			case "auth-logout":
-				epf = authAuthLogoutFlags
+			case "logout":
+				epf = authLogoutFlags
 
-			case "auth-info":
-				epf = authAuthInfoFlags
+			case "info":
+				epf = authInfoFlags
 
 			}
 
@@ -192,18 +192,18 @@ func ParseEndpoint(
 		case "auth":
 			c := authc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "auth-callback":
-				endpoint = c.AuthCallback()
-				data, err = authc.BuildAuthCallbackPayload(*authAuthCallbackSharedTokenFlag)
-			case "auth-switch-scopes":
-				endpoint = c.AuthSwitchScopes()
-				data, err = authc.BuildAuthSwitchScopesPayload(*authAuthSwitchScopesOrganizationIDFlag, *authAuthSwitchScopesProjectIDFlag, *authAuthSwitchScopesGramSessionTokenFlag)
-			case "auth-logout":
-				endpoint = c.AuthLogout()
-				data, err = authc.BuildAuthLogoutPayload(*authAuthLogoutGramSessionTokenFlag)
-			case "auth-info":
-				endpoint = c.AuthInfo()
-				data, err = authc.BuildAuthInfoPayload(*authAuthInfoGramSessionTokenFlag)
+			case "callback":
+				endpoint = c.Callback()
+				data, err = authc.BuildCallbackPayload(*authCallbackSharedTokenFlag)
+			case "switch-scopes":
+				endpoint = c.SwitchScopes()
+				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesGramSessionTokenFlag)
+			case "logout":
+				endpoint = c.Logout()
+				data, err = authc.BuildLogoutPayload(*authLogoutGramSessionTokenFlag)
+			case "info":
+				endpoint = c.Info()
+				data, err = authc.BuildInfoPayload(*authInfoGramSessionTokenFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -240,28 +240,28 @@ Usage:
     %[1]s [globalflags] auth COMMAND [flags]
 
 COMMAND:
-    auth-callback: Handles the authentication callback.
-    auth-switch-scopes: Switches the authentication scope to a different organization.
-    auth-logout: Logs out the current user by clearing their session.
-    auth-info: Provides information about the current authentication status.
+    callback: Handles the authentication callback.
+    switch-scopes: Switches the authentication scope to a different organization.
+    logout: Logs out the current user by clearing their session.
+    info: Provides information about the current authentication status.
 
 Additional help:
     %[1]s auth COMMAND --help
 `, os.Args[0])
 }
-func authAuthCallbackUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-callback -shared-token STRING
+func authCallbackUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth callback -shared-token STRING
 
 Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth auth-callback --shared-token "Nisi quos occaecati suscipit."
+    %[1]s auth callback --shared-token "Nisi quos occaecati suscipit."
 `, os.Args[0])
 }
 
-func authAuthSwitchScopesUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-switch-scopes -organization-id STRING -project-id STRING -gram-session-token STRING
+func authSwitchScopesUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth switch-scopes -organization-id STRING -project-id STRING -gram-session-token STRING
 
 Switches the authentication scope to a different organization.
     -organization-id STRING: 
@@ -269,29 +269,29 @@ Switches the authentication scope to a different organization.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth auth-switch-scopes --organization-id "Qui laborum qui quaerat debitis." --project-id "Hic maxime consequuntur ipsum accusantium in." --gram-session-token "Deserunt non autem."
+    %[1]s auth switch-scopes --organization-id "Qui laborum qui quaerat debitis." --project-id "Hic maxime consequuntur ipsum accusantium in." --gram-session-token "Deserunt non autem."
 `, os.Args[0])
 }
 
-func authAuthLogoutUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-logout -gram-session-token STRING
+func authLogoutUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth logout -gram-session-token STRING
 
 Logs out the current user by clearing their session.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth auth-logout --gram-session-token "Qui aut quia maxime rem."
+    %[1]s auth logout --gram-session-token "Qui aut quia maxime rem."
 `, os.Args[0])
 }
 
-func authAuthInfoUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth auth-info -gram-session-token STRING
+func authInfoUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth info -gram-session-token STRING
 
 Provides information about the current authentication status.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth auth-info --gram-session-token "Eaque quae."
+    %[1]s auth info --gram-session-token "Eaque quae."
 `, os.Args[0])
 }
 

@@ -11,41 +11,41 @@ import (
 	auth "github.com/speakeasy-api/gram/gen/auth"
 )
 
-// BuildAuthCallbackPayload builds the payload for the auth auth callback
-// endpoint from CLI flags.
-func BuildAuthCallbackPayload(authAuthCallbackSharedToken string) (*auth.AuthCallbackPayload, error) {
+// BuildCallbackPayload builds the payload for the auth callback endpoint from
+// CLI flags.
+func BuildCallbackPayload(authCallbackSharedToken string) (*auth.CallbackPayload, error) {
 	var sharedToken string
 	{
-		sharedToken = authAuthCallbackSharedToken
+		sharedToken = authCallbackSharedToken
 	}
-	v := &auth.AuthCallbackPayload{}
+	v := &auth.CallbackPayload{}
 	v.SharedToken = sharedToken
 
 	return v, nil
 }
 
-// BuildAuthSwitchScopesPayload builds the payload for the auth auth switch
-// scopes endpoint from CLI flags.
-func BuildAuthSwitchScopesPayload(authAuthSwitchScopesOrganizationID string, authAuthSwitchScopesProjectID string, authAuthSwitchScopesGramSessionToken string) (*auth.AuthSwitchScopesPayload, error) {
+// BuildSwitchScopesPayload builds the payload for the auth switchScopes
+// endpoint from CLI flags.
+func BuildSwitchScopesPayload(authSwitchScopesOrganizationID string, authSwitchScopesProjectID string, authSwitchScopesGramSessionToken string) (*auth.SwitchScopesPayload, error) {
 	var organizationID *string
 	{
-		if authAuthSwitchScopesOrganizationID != "" {
-			organizationID = &authAuthSwitchScopesOrganizationID
+		if authSwitchScopesOrganizationID != "" {
+			organizationID = &authSwitchScopesOrganizationID
 		}
 	}
 	var projectID *string
 	{
-		if authAuthSwitchScopesProjectID != "" {
-			projectID = &authAuthSwitchScopesProjectID
+		if authSwitchScopesProjectID != "" {
+			projectID = &authSwitchScopesProjectID
 		}
 	}
 	var gramSessionToken *string
 	{
-		if authAuthSwitchScopesGramSessionToken != "" {
-			gramSessionToken = &authAuthSwitchScopesGramSessionToken
+		if authSwitchScopesGramSessionToken != "" {
+			gramSessionToken = &authSwitchScopesGramSessionToken
 		}
 	}
-	v := &auth.AuthSwitchScopesPayload{}
+	v := &auth.SwitchScopesPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
 	v.GramSessionToken = gramSessionToken
@@ -53,31 +53,31 @@ func BuildAuthSwitchScopesPayload(authAuthSwitchScopesOrganizationID string, aut
 	return v, nil
 }
 
-// BuildAuthLogoutPayload builds the payload for the auth auth logout endpoint
-// from CLI flags.
-func BuildAuthLogoutPayload(authAuthLogoutGramSessionToken string) (*auth.AuthLogoutPayload, error) {
+// BuildLogoutPayload builds the payload for the auth logout endpoint from CLI
+// flags.
+func BuildLogoutPayload(authLogoutGramSessionToken string) (*auth.LogoutPayload, error) {
 	var gramSessionToken *string
 	{
-		if authAuthLogoutGramSessionToken != "" {
-			gramSessionToken = &authAuthLogoutGramSessionToken
+		if authLogoutGramSessionToken != "" {
+			gramSessionToken = &authLogoutGramSessionToken
 		}
 	}
-	v := &auth.AuthLogoutPayload{}
+	v := &auth.LogoutPayload{}
 	v.GramSessionToken = gramSessionToken
 
 	return v, nil
 }
 
-// BuildAuthInfoPayload builds the payload for the auth auth info endpoint from
-// CLI flags.
-func BuildAuthInfoPayload(authAuthInfoGramSessionToken string) (*auth.AuthInfoPayload, error) {
+// BuildInfoPayload builds the payload for the auth info endpoint from CLI
+// flags.
+func BuildInfoPayload(authInfoGramSessionToken string) (*auth.InfoPayload, error) {
 	var gramSessionToken *string
 	{
-		if authAuthInfoGramSessionToken != "" {
-			gramSessionToken = &authAuthInfoGramSessionToken
+		if authInfoGramSessionToken != "" {
+			gramSessionToken = &authInfoGramSessionToken
 		}
 	}
-	v := &auth.AuthInfoPayload{}
+	v := &auth.InfoPayload{}
 	v.GramSessionToken = gramSessionToken
 
 	return v, nil

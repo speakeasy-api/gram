@@ -12,9 +12,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// AuthInfoResponseBody is the type of the "auth" service "auth info" endpoint
-// HTTP response body.
-type AuthInfoResponseBody struct {
+// InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
+// response body.
+type InfoResponseBody struct {
 	UserID               *string                     `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	UserEmail            *string                     `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	ActiveOrganizationID *string                     `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
@@ -36,10 +36,10 @@ type ProjectResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
-// NewAuthCallbackResultTemporaryRedirect builds a "auth" service "auth
-// callback" endpoint result from a HTTP "TemporaryRedirect" response.
-func NewAuthCallbackResultTemporaryRedirect(location string, gramSessionToken string, gramSessionCookie string) *auth.AuthCallbackResult {
-	v := &auth.AuthCallbackResult{}
+// NewCallbackResultTemporaryRedirect builds a "auth" service "callback"
+// endpoint result from a HTTP "TemporaryRedirect" response.
+func NewCallbackResultTemporaryRedirect(location string, gramSessionToken string, gramSessionCookie string) *auth.CallbackResult {
+	v := &auth.CallbackResult{}
 	v.Location = location
 	v.GramSessionToken = gramSessionToken
 	v.GramSessionCookie = gramSessionCookie
@@ -47,29 +47,29 @@ func NewAuthCallbackResultTemporaryRedirect(location string, gramSessionToken st
 	return v
 }
 
-// NewAuthSwitchScopesResultOK builds a "auth" service "auth switch scopes"
-// endpoint result from a HTTP "OK" response.
-func NewAuthSwitchScopesResultOK(gramSessionToken string, gramSessionCookie string) *auth.AuthSwitchScopesResult {
-	v := &auth.AuthSwitchScopesResult{}
+// NewSwitchScopesResultOK builds a "auth" service "switchScopes" endpoint
+// result from a HTTP "OK" response.
+func NewSwitchScopesResultOK(gramSessionToken string, gramSessionCookie string) *auth.SwitchScopesResult {
+	v := &auth.SwitchScopesResult{}
 	v.GramSessionToken = gramSessionToken
 	v.GramSessionCookie = gramSessionCookie
 
 	return v
 }
 
-// NewAuthLogoutResultOK builds a "auth" service "auth logout" endpoint result
-// from a HTTP "OK" response.
-func NewAuthLogoutResultOK(gramSessionCookie string) *auth.AuthLogoutResult {
-	v := &auth.AuthLogoutResult{}
+// NewLogoutResultOK builds a "auth" service "logout" endpoint result from a
+// HTTP "OK" response.
+func NewLogoutResultOK(gramSessionCookie string) *auth.LogoutResult {
+	v := &auth.LogoutResult{}
 	v.GramSessionCookie = gramSessionCookie
 
 	return v
 }
 
-// NewAuthInfoResultOK builds a "auth" service "auth info" endpoint result from
-// a HTTP "OK" response.
-func NewAuthInfoResultOK(body *AuthInfoResponseBody, gramSessionToken string, gramSessionCookie string) *auth.AuthInfoResult {
-	v := &auth.AuthInfoResult{
+// NewInfoResultOK builds a "auth" service "info" endpoint result from a HTTP
+// "OK" response.
+func NewInfoResultOK(body *InfoResponseBody, gramSessionToken string, gramSessionCookie string) *auth.InfoResult {
+	v := &auth.InfoResult{
 		UserID:               *body.UserID,
 		UserEmail:            *body.UserEmail,
 		ActiveOrganizationID: *body.ActiveOrganizationID,
@@ -85,9 +85,8 @@ func NewAuthInfoResultOK(body *AuthInfoResponseBody, gramSessionToken string, gr
 	return v
 }
 
-// ValidateAuthInfoResponseBody runs the validations defined on Auth
-// InfoResponseBody
-func ValidateAuthInfoResponseBody(body *AuthInfoResponseBody) (err error) {
+// ValidateInfoResponseBody runs the validations defined on InfoResponseBody
+func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}

@@ -18,11 +18,11 @@ import (
 
 // Server lists the auth service endpoint HTTP handlers.
 type Server struct {
-	Mounts           []*MountPoint
-	AuthCallback     http.Handler
-	AuthSwitchScopes http.Handler
-	AuthLogout       http.Handler
-	AuthInfo         http.Handler
+	Mounts       []*MountPoint
+	Callback     http.Handler
+	SwitchScopes http.Handler
+	Logout       http.Handler
+	Info         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,15 +52,15 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"AuthCallback", "GET", "/rpc/auth.callback"},
-			{"AuthSwitchScopes", "POST", "/rpc/auth.switch"},
-			{"AuthLogout", "GET", "/rpc/auth.logout"},
-			{"AuthInfo", "GET", "/rpc/auth.info"},
+			{"Callback", "GET", "/rpc/auth.callback"},
+			{"SwitchScopes", "POST", "/rpc/auth.switchScopes"},
+			{"Logout", "GET", "/rpc/auth.logout"},
+			{"Info", "GET", "/rpc/auth.info"},
 		},
-		AuthCallback:     NewAuthCallbackHandler(e.AuthCallback, mux, decoder, encoder, errhandler, formatter),
-		AuthSwitchScopes: NewAuthSwitchScopesHandler(e.AuthSwitchScopes, mux, decoder, encoder, errhandler, formatter),
-		AuthLogout:       NewAuthLogoutHandler(e.AuthLogout, mux, decoder, encoder, errhandler, formatter),
-		AuthInfo:         NewAuthInfoHandler(e.AuthInfo, mux, decoder, encoder, errhandler, formatter),
+		Callback:     NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		SwitchScopes: NewSwitchScopesHandler(e.SwitchScopes, mux, decoder, encoder, errhandler, formatter),
+		Logout:       NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		Info:         NewInfoHandler(e.Info, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -69,10 +69,10 @@ func (s *Server) Service() string { return "auth" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.AuthCallback = m(s.AuthCallback)
-	s.AuthSwitchScopes = m(s.AuthSwitchScopes)
-	s.AuthLogout = m(s.AuthLogout)
-	s.AuthInfo = m(s.AuthInfo)
+	s.Callback = m(s.Callback)
+	s.SwitchScopes = m(s.SwitchScopes)
+	s.Logout = m(s.Logout)
+	s.Info = m(s.Info)
 }
 
 // MethodNames returns the methods served.
@@ -80,10 +80,10 @@ func (s *Server) MethodNames() []string { return auth.MethodNames[:] }
 
 // Mount configures the mux to serve the auth endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountAuthCallbackHandler(mux, h.AuthCallback)
-	MountAuthSwitchScopesHandler(mux, h.AuthSwitchScopes)
-	MountAuthLogoutHandler(mux, h.AuthLogout)
-	MountAuthInfoHandler(mux, h.AuthInfo)
+	MountCallbackHandler(mux, h.Callback)
+	MountSwitchScopesHandler(mux, h.SwitchScopes)
+	MountLogoutHandler(mux, h.Logout)
+	MountInfoHandler(mux, h.Info)
 }
 
 // Mount configures the mux to serve the auth endpoints.
@@ -91,9 +91,9 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountAuthCallbackHandler configures the mux to serve the "auth" service
-// "auth callback" endpoint.
-func MountAuthCallbackHandler(mux goahttp.Muxer, h http.Handler) {
+// MountCallbackHandler configures the mux to serve the "auth" service
+// "callback" endpoint.
+func MountCallbackHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
@@ -103,9 +103,9 @@ func MountAuthCallbackHandler(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("GET", "/rpc/auth.callback", f)
 }
 
-// NewAuthCallbackHandler creates a HTTP handler which loads the HTTP request
-// and calls the "auth" service "auth callback" endpoint.
-func NewAuthCallbackHandler(
+// NewCallbackHandler creates a HTTP handler which loads the HTTP request and
+// calls the "auth" service "callback" endpoint.
+func NewCallbackHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -114,13 +114,13 @@ func NewAuthCallbackHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeAuthCallbackRequest(mux, decoder)
-		encodeResponse = EncodeAuthCallbackResponse(encoder)
+		decodeRequest  = DecodeCallbackRequest(mux, decoder)
+		encodeResponse = EncodeCallbackResponse(encoder)
 		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "auth callback")
+		ctx = context.WithValue(ctx, goa.MethodKey, "callback")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -142,21 +142,21 @@ func NewAuthCallbackHandler(
 	})
 }
 
-// MountAuthSwitchScopesHandler configures the mux to serve the "auth" service
-// "auth switch scopes" endpoint.
-func MountAuthSwitchScopesHandler(mux goahttp.Muxer, h http.Handler) {
+// MountSwitchScopesHandler configures the mux to serve the "auth" service
+// "switchScopes" endpoint.
+func MountSwitchScopesHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/auth.switch", f)
+	mux.Handle("POST", "/rpc/auth.switchScopes", f)
 }
 
-// NewAuthSwitchScopesHandler creates a HTTP handler which loads the HTTP
-// request and calls the "auth" service "auth switch scopes" endpoint.
-func NewAuthSwitchScopesHandler(
+// NewSwitchScopesHandler creates a HTTP handler which loads the HTTP request
+// and calls the "auth" service "switchScopes" endpoint.
+func NewSwitchScopesHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -165,13 +165,13 @@ func NewAuthSwitchScopesHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeAuthSwitchScopesRequest(mux, decoder)
-		encodeResponse = EncodeAuthSwitchScopesResponse(encoder)
+		decodeRequest  = DecodeSwitchScopesRequest(mux, decoder)
+		encodeResponse = EncodeSwitchScopesResponse(encoder)
 		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "auth switch scopes")
+		ctx = context.WithValue(ctx, goa.MethodKey, "switchScopes")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -193,9 +193,9 @@ func NewAuthSwitchScopesHandler(
 	})
 }
 
-// MountAuthLogoutHandler configures the mux to serve the "auth" service "auth
-// logout" endpoint.
-func MountAuthLogoutHandler(mux goahttp.Muxer, h http.Handler) {
+// MountLogoutHandler configures the mux to serve the "auth" service "logout"
+// endpoint.
+func MountLogoutHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
@@ -205,9 +205,9 @@ func MountAuthLogoutHandler(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("GET", "/rpc/auth.logout", f)
 }
 
-// NewAuthLogoutHandler creates a HTTP handler which loads the HTTP request and
-// calls the "auth" service "auth logout" endpoint.
-func NewAuthLogoutHandler(
+// NewLogoutHandler creates a HTTP handler which loads the HTTP request and
+// calls the "auth" service "logout" endpoint.
+func NewLogoutHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -216,13 +216,13 @@ func NewAuthLogoutHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeAuthLogoutRequest(mux, decoder)
-		encodeResponse = EncodeAuthLogoutResponse(encoder)
+		decodeRequest  = DecodeLogoutRequest(mux, decoder)
+		encodeResponse = EncodeLogoutResponse(encoder)
 		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "auth logout")
+		ctx = context.WithValue(ctx, goa.MethodKey, "logout")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -244,9 +244,9 @@ func NewAuthLogoutHandler(
 	})
 }
 
-// MountAuthInfoHandler configures the mux to serve the "auth" service "auth
-// info" endpoint.
-func MountAuthInfoHandler(mux goahttp.Muxer, h http.Handler) {
+// MountInfoHandler configures the mux to serve the "auth" service "info"
+// endpoint.
+func MountInfoHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
@@ -256,9 +256,9 @@ func MountAuthInfoHandler(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("GET", "/rpc/auth.info", f)
 }
 
-// NewAuthInfoHandler creates a HTTP handler which loads the HTTP request and
-// calls the "auth" service "auth info" endpoint.
-func NewAuthInfoHandler(
+// NewInfoHandler creates a HTTP handler which loads the HTTP request and calls
+// the "auth" service "info" endpoint.
+func NewInfoHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -267,13 +267,13 @@ func NewAuthInfoHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeAuthInfoRequest(mux, decoder)
-		encodeResponse = EncodeAuthInfoResponse(encoder)
+		decodeRequest  = DecodeInfoRequest(mux, decoder)
+		encodeResponse = EncodeInfoResponse(encoder)
 		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "auth info")
+		ctx = context.WithValue(ctx, goa.MethodKey, "info")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
 		payload, err := decodeRequest(r)
 		if err != nil {

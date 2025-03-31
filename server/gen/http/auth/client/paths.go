@@ -7,22 +7,22 @@
 
 package client
 
-// AuthCallbackAuthPath returns the URL path to the auth service auth callback HTTP endpoint.
-func AuthCallbackAuthPath() string {
+// CallbackAuthPath returns the URL path to the auth service callback HTTP endpoint.
+func CallbackAuthPath() string {
 	return "/rpc/auth.callback"
 }
 
-// AuthSwitchScopesAuthPath returns the URL path to the auth service auth switch scopes HTTP endpoint.
-func AuthSwitchScopesAuthPath() string {
-	return "/rpc/auth.switch"
+// SwitchScopesAuthPath returns the URL path to the auth service switchScopes HTTP endpoint.
+func SwitchScopesAuthPath() string {
+	return "/rpc/auth.switchScopes"
 }
 
-// AuthLogoutAuthPath returns the URL path to the auth service auth logout HTTP endpoint.
-func AuthLogoutAuthPath() string {
+// LogoutAuthPath returns the URL path to the auth service logout HTTP endpoint.
+func LogoutAuthPath() string {
 	return "/rpc/auth.logout"
 }
 
-// AuthInfoAuthPath returns the URL path to the auth service auth info HTTP endpoint.
-func AuthInfoAuthPath() string {
+// InfoAuthPath returns the URL path to the auth service info HTTP endpoint.
+func InfoAuthPath() string {
 	return "/rpc/auth.info"
 }

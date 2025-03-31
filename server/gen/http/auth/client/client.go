@@ -17,21 +17,19 @@ import (
 
 // Client lists the auth service endpoint HTTP clients.
 type Client struct {
-	// AuthCallback Doer is the HTTP client used to make requests to the auth
-	// callback endpoint.
-	AuthCallbackDoer goahttp.Doer
-
-	// AuthSwitchScopes Doer is the HTTP client used to make requests to the auth
-	// switch scopes endpoint.
-	AuthSwitchScopesDoer goahttp.Doer
-
-	// AuthLogout Doer is the HTTP client used to make requests to the auth logout
+	// Callback Doer is the HTTP client used to make requests to the callback
 	// endpoint.
-	AuthLogoutDoer goahttp.Doer
+	CallbackDoer goahttp.Doer
 
-	// AuthInfo Doer is the HTTP client used to make requests to the auth info
-	// endpoint.
-	AuthInfoDoer goahttp.Doer
+	// SwitchScopes Doer is the HTTP client used to make requests to the
+	// switchScopes endpoint.
+	SwitchScopesDoer goahttp.Doer
+
+	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
+	LogoutDoer goahttp.Doer
+
+	// Info Doer is the HTTP client used to make requests to the info endpoint.
+	InfoDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -53,27 +51,27 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		AuthCallbackDoer:     doer,
-		AuthSwitchScopesDoer: doer,
-		AuthLogoutDoer:       doer,
-		AuthInfoDoer:         doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		CallbackDoer:        doer,
+		SwitchScopesDoer:    doer,
+		LogoutDoer:          doer,
+		InfoDoer:            doer,
+		RestoreResponseBody: restoreBody,
+		scheme:              scheme,
+		host:                host,
+		decoder:             dec,
+		encoder:             enc,
 	}
 }
 
-// AuthCallback returns an endpoint that makes HTTP requests to the auth
-// service auth callback server.
-func (c *Client) AuthCallback() goa.Endpoint {
+// Callback returns an endpoint that makes HTTP requests to the auth service
+// callback server.
+func (c *Client) Callback() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeAuthCallbackRequest(c.encoder)
-		decodeResponse = DecodeAuthCallbackResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeCallbackRequest(c.encoder)
+		decodeResponse = DecodeCallbackResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildAuthCallbackRequest(ctx, v)
+		req, err := c.BuildCallbackRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -81,23 +79,23 @@ func (c *Client) AuthCallback() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.AuthCallbackDoer.Do(req)
+		resp, err := c.CallbackDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("auth", "auth callback", err)
+			return nil, goahttp.ErrRequestError("auth", "callback", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// AuthSwitchScopes returns an endpoint that makes HTTP requests to the auth
-// service auth switch scopes server.
-func (c *Client) AuthSwitchScopes() goa.Endpoint {
+// SwitchScopes returns an endpoint that makes HTTP requests to the auth
+// service switchScopes server.
+func (c *Client) SwitchScopes() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeAuthSwitchScopesRequest(c.encoder)
-		decodeResponse = DecodeAuthSwitchScopesResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeSwitchScopesRequest(c.encoder)
+		decodeResponse = DecodeSwitchScopesResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildAuthSwitchScopesRequest(ctx, v)
+		req, err := c.BuildSwitchScopesRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -105,23 +103,23 @@ func (c *Client) AuthSwitchScopes() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.AuthSwitchScopesDoer.Do(req)
+		resp, err := c.SwitchScopesDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("auth", "auth switch scopes", err)
+			return nil, goahttp.ErrRequestError("auth", "switchScopes", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// AuthLogout returns an endpoint that makes HTTP requests to the auth service
-// auth logout server.
-func (c *Client) AuthLogout() goa.Endpoint {
+// Logout returns an endpoint that makes HTTP requests to the auth service
+// logout server.
+func (c *Client) Logout() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeAuthLogoutRequest(c.encoder)
-		decodeResponse = DecodeAuthLogoutResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeLogoutRequest(c.encoder)
+		decodeResponse = DecodeLogoutResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildAuthLogoutRequest(ctx, v)
+		req, err := c.BuildLogoutRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -129,23 +127,23 @@ func (c *Client) AuthLogout() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.AuthLogoutDoer.Do(req)
+		resp, err := c.LogoutDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("auth", "auth logout", err)
+			return nil, goahttp.ErrRequestError("auth", "logout", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// AuthInfo returns an endpoint that makes HTTP requests to the auth service
-// auth info server.
-func (c *Client) AuthInfo() goa.Endpoint {
+// Info returns an endpoint that makes HTTP requests to the auth service info
+// server.
+func (c *Client) Info() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeAuthInfoRequest(c.encoder)
-		decodeResponse = DecodeAuthInfoResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeInfoRequest(c.encoder)
+		decodeResponse = DecodeInfoResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildAuthInfoRequest(ctx, v)
+		req, err := c.BuildInfoRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -153,9 +151,9 @@ func (c *Client) AuthInfo() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.AuthInfoDoer.Do(req)
+		resp, err := c.InfoDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("auth", "auth info", err)
+			return nil, goahttp.ErrRequestError("auth", "info", err)
 		}
 		return decodeResponse(resp)
 	}

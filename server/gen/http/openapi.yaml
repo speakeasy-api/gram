@@ -33,9 +33,9 @@ paths:
         get:
             tags:
                 - auth
-            summary: auth callback auth
+            summary: callback auth
             description: Handles the authentication callback.
-            operationId: auth#auth callback
+            operationId: auth#callback
             parameters:
                 - name: shared_token
                   in: query
@@ -58,9 +58,9 @@ paths:
         get:
             tags:
                 - auth
-            summary: auth info auth
+            summary: info auth
             description: Provides information about the current authentication status.
-            operationId: auth#auth info
+            operationId: auth#info
             parameters:
                 - name: X-Gram-Session
                   in: header
@@ -71,7 +71,7 @@ paths:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/AuthAuthInfoResponseBody'
+                        $ref: '#/definitions/AuthInfoResponseBody'
                         required:
                             - user_id
                             - user_email
@@ -90,9 +90,9 @@ paths:
         get:
             tags:
                 - auth
-            summary: auth logout auth
+            summary: logout auth
             description: Logs out the current user by clearing their session.
-            operationId: auth#auth logout
+            operationId: auth#logout
             parameters:
                 - name: X-Gram-Session
                   in: header
@@ -106,13 +106,13 @@ paths:
                 - http
             security:
                 - gram_session_header_X-Gram-Session: []
-    /rpc/auth.switch:
+    /rpc/auth.switchScopes:
         post:
             tags:
                 - auth
-            summary: auth switch scopes auth
+            summary: switchScopes auth
             description: Switches the authentication scope to a different organization.
-            operationId: auth#auth switch scopes
+            operationId: auth#switchScopes
             parameters:
                 - name: organization_id
                   in: query
@@ -244,8 +244,8 @@ paths:
             security:
                 - gram_session_header_X-Gram-Session: []
 definitions:
-    AuthAuthInfoResponseBody:
-        title: AuthAuthInfoResponseBody
+    AuthInfoResponseBody:
+        title: AuthInfoResponseBody
         type: object
         properties:
             active_organization_id:

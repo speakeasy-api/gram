@@ -17,11 +17,11 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeAuthCallbackResponse returns an encoder for responses returned by the
-// auth auth callback endpoint.
-func EncodeAuthCallbackResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeCallbackResponse returns an encoder for responses returned by the auth
+// callback endpoint.
+func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*auth.AuthCallbackResult)
+		res, _ := v.(*auth.CallbackResult)
 		w.Header().Set("Location", res.Location)
 		w.Header().Set("X-Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
@@ -37,9 +37,9 @@ func EncodeAuthCallbackResponse(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
-// DecodeAuthCallbackRequest returns a decoder for requests sent to the auth
-// auth callback endpoint.
-func DecodeAuthCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+// DecodeCallbackRequest returns a decoder for requests sent to the auth
+// callback endpoint.
+func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
 			sharedToken string
@@ -52,17 +52,17 @@ func DecodeAuthCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return nil, err
 		}
-		payload := NewAuthCallbackPayload(sharedToken)
+		payload := NewCallbackPayload(sharedToken)
 
 		return payload, nil
 	}
 }
 
-// EncodeAuthSwitchScopesResponse returns an encoder for responses returned by
-// the auth auth switch scopes endpoint.
-func EncodeAuthSwitchScopesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeSwitchScopesResponse returns an encoder for responses returned by the
+// auth switchScopes endpoint.
+func EncodeSwitchScopesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*auth.AuthSwitchScopesResult)
+		res, _ := v.(*auth.SwitchScopesResult)
 		w.Header().Set("X-Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
@@ -77,9 +77,9 @@ func EncodeAuthSwitchScopesResponse(encoder func(context.Context, http.ResponseW
 	}
 }
 
-// DecodeAuthSwitchScopesRequest returns a decoder for requests sent to the
-// auth auth switch scopes endpoint.
-func DecodeAuthSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+// DecodeSwitchScopesRequest returns a decoder for requests sent to the auth
+// switchScopes endpoint.
+func DecodeSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
 			organizationID   *string
@@ -99,7 +99,7 @@ func DecodeAuthSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewAuthSwitchScopesPayload(organizationID, projectID, gramSessionToken)
+		payload := NewSwitchScopesPayload(organizationID, projectID, gramSessionToken)
 		if payload.GramSessionToken != nil {
 			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -112,11 +112,11 @@ func DecodeAuthSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request
 	}
 }
 
-// EncodeAuthLogoutResponse returns an encoder for responses returned by the
-// auth auth logout endpoint.
-func EncodeAuthLogoutResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeLogoutResponse returns an encoder for responses returned by the auth
+// logout endpoint.
+func EncodeLogoutResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*auth.AuthLogoutResult)
+		res, _ := v.(*auth.LogoutResult)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
@@ -130,9 +130,9 @@ func EncodeAuthLogoutResponse(encoder func(context.Context, http.ResponseWriter)
 	}
 }
 
-// DecodeAuthLogoutRequest returns a decoder for requests sent to the auth auth
-// logout endpoint.
-func DecodeAuthLogoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+// DecodeLogoutRequest returns a decoder for requests sent to the auth logout
+// endpoint.
+func DecodeLogoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
 			gramSessionToken *string
@@ -141,7 +141,7 @@ func DecodeAuthLogoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewAuthLogoutPayload(gramSessionToken)
+		payload := NewLogoutPayload(gramSessionToken)
 		if payload.GramSessionToken != nil {
 			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -154,13 +154,13 @@ func DecodeAuthLogoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	}
 }
 
-// EncodeAuthInfoResponse returns an encoder for responses returned by the auth
-// auth info endpoint.
-func EncodeAuthInfoResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeInfoResponse returns an encoder for responses returned by the auth
+// info endpoint.
+func EncodeInfoResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*auth.AuthInfoResult)
+		res, _ := v.(*auth.InfoResult)
 		enc := encoder(ctx, w)
-		body := NewAuthInfoResponseBody(res)
+		body := NewInfoResponseBody(res)
 		w.Header().Set("X-Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
@@ -175,9 +175,9 @@ func EncodeAuthInfoResponse(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
-// DecodeAuthInfoRequest returns a decoder for requests sent to the auth auth
-// info endpoint.
-func DecodeAuthInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+// DecodeInfoRequest returns a decoder for requests sent to the auth info
+// endpoint.
+func DecodeInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
 			gramSessionToken *string
@@ -186,7 +186,7 @@ func DecodeAuthInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
-		payload := NewAuthInfoPayload(gramSessionToken)
+		payload := NewInfoPayload(gramSessionToken)
 		if payload.GramSessionToken != nil {
 			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

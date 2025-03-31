@@ -9,7 +9,7 @@ var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
 	Security(sessions.GramSession)
 
-	Method("auth callback", func() {
+	Method("callback", func() {
 		Description("Handles the authentication callback.")
 
 		NoSecurity()
@@ -39,7 +39,7 @@ var _ = Service("auth", func() {
 		})
 	})
 
-	Method("auth switch scopes", func() {
+	Method("switchScopes", func() {
 		Description("Switches the authentication scope to a different organization.")
 
 		Payload(func() {
@@ -55,7 +55,7 @@ var _ = Service("auth", func() {
 		})
 
 		HTTP(func() {
-			POST("/rpc/auth.switch")
+			POST("/rpc/auth.switchScopes")
 			Param("organization_id")
 			Param("project_id")
 			sessions.SessionHeader()
@@ -66,7 +66,7 @@ var _ = Service("auth", func() {
 		})
 	})
 
-	Method("auth logout", func() {
+	Method("logout", func() {
 		Description("Logs out the current user by clearing their session.")
 
 		Payload(func() {
@@ -88,7 +88,7 @@ var _ = Service("auth", func() {
 		})
 	})
 
-	Method("auth info", func() {
+	Method("info", func() {
 
 		Description("Provides information about the current authentication status.")
 

@@ -16,10 +16,10 @@ import (
 
 // Endpoints wraps the "auth" service endpoints.
 type Endpoints struct {
-	AuthCallback     goa.Endpoint
-	AuthSwitchScopes goa.Endpoint
-	AuthLogout       goa.Endpoint
-	AuthInfo         goa.Endpoint
+	Callback     goa.Endpoint
+	SwitchScopes goa.Endpoint
+	Logout       goa.Endpoint
+	Info         goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "auth" service with endpoints.
@@ -27,35 +27,35 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		AuthCallback:     NewAuthCallbackEndpoint(s),
-		AuthSwitchScopes: NewAuthSwitchScopesEndpoint(s, a.APIKeyAuth),
-		AuthLogout:       NewAuthLogoutEndpoint(s, a.APIKeyAuth),
-		AuthInfo:         NewAuthInfoEndpoint(s, a.APIKeyAuth),
+		Callback:     NewCallbackEndpoint(s),
+		SwitchScopes: NewSwitchScopesEndpoint(s, a.APIKeyAuth),
+		Logout:       NewLogoutEndpoint(s, a.APIKeyAuth),
+		Info:         NewInfoEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "auth" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.AuthCallback = m(e.AuthCallback)
-	e.AuthSwitchScopes = m(e.AuthSwitchScopes)
-	e.AuthLogout = m(e.AuthLogout)
-	e.AuthInfo = m(e.AuthInfo)
+	e.Callback = m(e.Callback)
+	e.SwitchScopes = m(e.SwitchScopes)
+	e.Logout = m(e.Logout)
+	e.Info = m(e.Info)
 }
 
-// NewAuthCallbackEndpoint returns an endpoint function that calls the method
-// "auth callback" of service "auth".
-func NewAuthCallbackEndpoint(s Service) goa.Endpoint {
+// NewCallbackEndpoint returns an endpoint function that calls the method
+// "callback" of service "auth".
+func NewCallbackEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*AuthCallbackPayload)
-		return s.AuthCallback(ctx, p)
+		p := req.(*CallbackPayload)
+		return s.Callback(ctx, p)
 	}
 }
 
-// NewAuthSwitchScopesEndpoint returns an endpoint function that calls the
-// method "auth switch scopes" of service "auth".
-func NewAuthSwitchScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewSwitchScopesEndpoint returns an endpoint function that calls the method
+// "switchScopes" of service "auth".
+func NewSwitchScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*AuthSwitchScopesPayload)
+		p := req.(*SwitchScopesPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "gram_session",
@@ -70,15 +70,15 @@ func NewAuthSwitchScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			return nil, err
 		}
-		return s.AuthSwitchScopes(ctx, p)
+		return s.SwitchScopes(ctx, p)
 	}
 }
 
-// NewAuthLogoutEndpoint returns an endpoint function that calls the method
-// "auth logout" of service "auth".
-func NewAuthLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewLogoutEndpoint returns an endpoint function that calls the method
+// "logout" of service "auth".
+func NewLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*AuthLogoutPayload)
+		p := req.(*LogoutPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "gram_session",
@@ -93,15 +93,15 @@ func NewAuthLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		if err != nil {
 			return nil, err
 		}
-		return s.AuthLogout(ctx, p)
+		return s.Logout(ctx, p)
 	}
 }
 
-// NewAuthInfoEndpoint returns an endpoint function that calls the method "auth
-// info" of service "auth".
-func NewAuthInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewInfoEndpoint returns an endpoint function that calls the method "info" of
+// service "auth".
+func NewInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*AuthInfoPayload)
+		p := req.(*InfoPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "gram_session",
@@ -116,6 +116,6 @@ func NewAuthInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 		if err != nil {
 			return nil, err
 		}
-		return s.AuthInfo(ctx, p)
+		return s.Info(ctx, p)
 	}
 }

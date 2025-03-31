@@ -19,13 +19,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildAuthCallbackRequest instantiates a HTTP request object with method and
-// path set to call the "auth" service "auth callback" endpoint
-func (c *Client) BuildAuthCallbackRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AuthCallbackAuthPath()}
+// BuildCallbackRequest instantiates a HTTP request object with method and path
+// set to call the "auth" service "callback" endpoint
+func (c *Client) BuildCallbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CallbackAuthPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("auth", "auth callback", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("auth", "callback", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -34,13 +34,13 @@ func (c *Client) BuildAuthCallbackRequest(ctx context.Context, v any) (*http.Req
 	return req, nil
 }
 
-// EncodeAuthCallbackRequest returns an encoder for requests sent to the auth
-// auth callback server.
-func EncodeAuthCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeCallbackRequest returns an encoder for requests sent to the auth
+// callback server.
+func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*auth.AuthCallbackPayload)
+		p, ok := v.(*auth.CallbackPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("auth", "auth callback", "*auth.AuthCallbackPayload", v)
+			return goahttp.ErrInvalidType("auth", "callback", "*auth.CallbackPayload", v)
 		}
 		values := req.URL.Query()
 		values.Add("shared_token", p.SharedToken)
@@ -49,10 +49,10 @@ func EncodeAuthCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func
 	}
 }
 
-// DecodeAuthCallbackResponse returns a decoder for responses returned by the
-// auth auth callback endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-func DecodeAuthCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+// DecodeCallbackResponse returns a decoder for responses returned by the auth
+// callback endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -100,24 +100,24 @@ func DecodeAuthCallbackResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			gramSessionCookie = gramSessionCookieRaw
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "auth callback", err)
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
 			}
-			res := NewAuthCallbackResultTemporaryRedirect(location, gramSessionToken, gramSessionCookie)
+			res := NewCallbackResultTemporaryRedirect(location, gramSessionToken, gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("auth", "auth callback", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("auth", "callback", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildAuthSwitchScopesRequest instantiates a HTTP request object with method
-// and path set to call the "auth" service "auth switch scopes" endpoint
-func (c *Client) BuildAuthSwitchScopesRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AuthSwitchScopesAuthPath()}
+// BuildSwitchScopesRequest instantiates a HTTP request object with method and
+// path set to call the "auth" service "switchScopes" endpoint
+func (c *Client) BuildSwitchScopesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SwitchScopesAuthPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("auth", "auth switch scopes", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("auth", "switchScopes", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -126,13 +126,13 @@ func (c *Client) BuildAuthSwitchScopesRequest(ctx context.Context, v any) (*http
 	return req, nil
 }
 
-// EncodeAuthSwitchScopesRequest returns an encoder for requests sent to the
-// auth auth switch scopes server.
-func EncodeAuthSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeSwitchScopesRequest returns an encoder for requests sent to the auth
+// switchScopes server.
+func EncodeSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*auth.AuthSwitchScopesPayload)
+		p, ok := v.(*auth.SwitchScopesPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("auth", "auth switch scopes", "*auth.AuthSwitchScopesPayload", v)
+			return goahttp.ErrInvalidType("auth", "switchScopes", "*auth.SwitchScopesPayload", v)
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
@@ -150,10 +150,10 @@ func EncodeAuthSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) 
 	}
 }
 
-// DecodeAuthSwitchScopesResponse returns a decoder for responses returned by
-// the auth auth switch scopes endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-func DecodeAuthSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+// DecodeSwitchScopesResponse returns a decoder for responses returned by the
+// auth switchScopes endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -195,24 +195,24 @@ func DecodeAuthSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			gramSessionCookie = gramSessionCookieRaw
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "auth switch scopes", err)
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
 			}
-			res := NewAuthSwitchScopesResultOK(gramSessionToken, gramSessionCookie)
+			res := NewSwitchScopesResultOK(gramSessionToken, gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("auth", "auth switch scopes", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("auth", "switchScopes", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildAuthLogoutRequest instantiates a HTTP request object with method and
-// path set to call the "auth" service "auth logout" endpoint
-func (c *Client) BuildAuthLogoutRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AuthLogoutAuthPath()}
+// BuildLogoutRequest instantiates a HTTP request object with method and path
+// set to call the "auth" service "logout" endpoint
+func (c *Client) BuildLogoutRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LogoutAuthPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("auth", "auth logout", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("auth", "logout", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -221,13 +221,13 @@ func (c *Client) BuildAuthLogoutRequest(ctx context.Context, v any) (*http.Reque
 	return req, nil
 }
 
-// EncodeAuthLogoutRequest returns an encoder for requests sent to the auth
-// auth logout server.
-func EncodeAuthLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeLogoutRequest returns an encoder for requests sent to the auth logout
+// server.
+func EncodeLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*auth.AuthLogoutPayload)
+		p, ok := v.(*auth.LogoutPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("auth", "auth logout", "*auth.AuthLogoutPayload", v)
+			return goahttp.ErrInvalidType("auth", "logout", "*auth.LogoutPayload", v)
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
@@ -237,10 +237,10 @@ func EncodeAuthLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 	}
 }
 
-// DecodeAuthLogoutResponse returns a decoder for responses returned by the
-// auth auth logout endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-func DecodeAuthLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+// DecodeLogoutResponse returns a decoder for responses returned by the auth
+// logout endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -274,24 +274,24 @@ func DecodeAuthLogoutResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			gramSessionCookie = gramSessionCookieRaw
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "auth logout", err)
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
 			}
-			res := NewAuthLogoutResultOK(gramSessionCookie)
+			res := NewLogoutResultOK(gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("auth", "auth logout", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("auth", "logout", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildAuthInfoRequest instantiates a HTTP request object with method and path
-// set to call the "auth" service "auth info" endpoint
-func (c *Client) BuildAuthInfoRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AuthInfoAuthPath()}
+// BuildInfoRequest instantiates a HTTP request object with method and path set
+// to call the "auth" service "info" endpoint
+func (c *Client) BuildInfoRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: InfoAuthPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("auth", "auth info", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("auth", "info", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -300,13 +300,13 @@ func (c *Client) BuildAuthInfoRequest(ctx context.Context, v any) (*http.Request
 	return req, nil
 }
 
-// EncodeAuthInfoRequest returns an encoder for requests sent to the auth auth
-// info server.
-func EncodeAuthInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeInfoRequest returns an encoder for requests sent to the auth info
+// server.
+func EncodeInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*auth.AuthInfoPayload)
+		p, ok := v.(*auth.InfoPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("auth", "auth info", "*auth.AuthInfoPayload", v)
+			return goahttp.ErrInvalidType("auth", "info", "*auth.InfoPayload", v)
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
@@ -316,10 +316,10 @@ func EncodeAuthInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 	}
 }
 
-// DecodeAuthInfoResponse returns a decoder for responses returned by the auth
-// auth info endpoint. restoreBody controls whether the response body should be
-// restored after having been read.
-func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+// DecodeInfoResponse returns a decoder for responses returned by the auth info
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -336,16 +336,16 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body AuthInfoResponseBody
+				body InfoResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "auth info", err)
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
 			}
-			err = ValidateAuthInfoResponseBody(&body)
+			err = ValidateInfoResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "auth info", err)
+				return nil, goahttp.ErrValidationError("auth", "info", err)
 			}
 			var (
 				gramSessionToken string
@@ -372,13 +372,13 @@ func DecodeAuthInfoResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			gramSessionCookie = gramSessionCookieRaw
 			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "auth info", err)
+				return nil, goahttp.ErrValidationError("auth", "info", err)
 			}
-			res := NewAuthInfoResultOK(&body, gramSessionToken, gramSessionCookie)
+			res := NewInfoResultOK(&body, gramSessionToken, gramSessionCookie)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("auth", "auth info", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("auth", "info", resp.StatusCode, string(body))
 		}
 	}
 }
