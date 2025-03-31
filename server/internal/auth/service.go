@@ -113,6 +113,14 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 				ProjectID: project.ID.String(),
 			})
 		}
+
+		if session.ActiveProjectID == "" && session.ActiveOrganizationID == org.OrganizationID {
+			session.ActiveProjectID = projectRows[0].ID.String()
+			if err := s.sessions.UpdateSession(ctx, *session); err != nil {
+				return nil, err
+			}
+		}
+
 		organizations[i] = &gen.Organization{
 			OrganizationID:   org.OrganizationID,
 			OrganizationName: org.OrganizationName,
@@ -120,7 +128,6 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			AccountType:      org.AccountType,
 			Projects:         orgProjects,
 		}
-
 	}
 
 	return &gen.InfoResult{

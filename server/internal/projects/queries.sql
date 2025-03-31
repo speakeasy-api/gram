@@ -1,6 +1,8 @@
 -- name: GetProject :one
 SELECT 
     id
+  , name
+  , slug
   , organization_id
   , created_at
   , updated_at
@@ -11,12 +13,18 @@ WHERE id = @id;
 
 -- name: CreateProject :one
 INSERT INTO projects (
-    organization_id
+    name
+  , slug
+  , organization_id
 ) VALUES (
-    @organization_id
+    @name
+  , @slug
+  , @organization_id
 )
 RETURNING 
     id
+  , name
+  , slug
   , organization_id
   , created_at
   , updated_at
@@ -26,6 +34,8 @@ RETURNING
 -- name: ListProjectsByOrganization :many
 SELECT 
     id
+  , name
+  , slug
   , organization_id
   , created_at
   , updated_at
