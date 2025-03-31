@@ -102,7 +102,6 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 			UserID:               userID,
 			UserEmail:            userInfo.UserEmail,
 			ActiveOrganizationID: userInfo.Organizations[0].OrgID,
-			ActiveProjectID:      "",
 		}
 		break
 	}

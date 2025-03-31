@@ -114,13 +114,6 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			})
 		}
 
-		if session.ActiveProjectID == "" && session.ActiveOrganizationID == org.OrganizationID {
-			session.ActiveProjectID = projectRows[0].ID.String()
-			if err := s.sessions.UpdateSession(ctx, *session); err != nil {
-				return nil, err
-			}
-		}
-
 		organizations[i] = &gen.Organization{
 			OrganizationID:   org.OrganizationID,
 			OrganizationName: org.OrganizationName,
@@ -134,7 +127,6 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		GramSessionToken:     session.ID,
 		GramSessionCookie:    session.ID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
-		ActiveProjectID:      session.ActiveProjectID,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,
 		Organizations:        organizations,

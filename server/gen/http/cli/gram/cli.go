@@ -32,8 +32,8 @@ system health-check
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` auth callback --shared-token "Nisi quos occaecati suscipit."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session-token "Asperiores dolorem voluptas."` + "\n" +
+	return os.Args[0] + ` auth callback --shared-token "Omnis eligendi a nostrum illo quis eos."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Eum sed." --gram-session-token "Illo laborum reprehenderit sit aspernatur."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		""
 }
@@ -256,7 +256,7 @@ Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth callback --shared-token "Nisi quos occaecati suscipit."
+    %[1]s auth callback --shared-token "Omnis eligendi a nostrum illo quis eos."
 `, os.Args[0])
 }
 
@@ -269,7 +269,7 @@ Switches the authentication scope to a different organization.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Qui laborum qui quaerat debitis." --project-id "Hic maxime consequuntur ipsum accusantium in." --gram-session-token "Deserunt non autem."
+    %[1]s auth switch-scopes --organization-id "Repellat nam." --project-id "Veniam et ipsa quasi dolore illum accusamus." --gram-session-token "Qui laborum qui quaerat debitis."
 `, os.Args[0])
 }
 
@@ -280,7 +280,7 @@ Logs out the current user by clearing their session.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth logout --gram-session-token "Qui aut quia maxime rem."
+    %[1]s auth logout --gram-session-token "Veritatis aspernatur natus ipsam."
 `, os.Args[0])
 }
 
@@ -291,7 +291,7 @@ Provides information about the current authentication status.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth info --gram-session-token "Eaque quae."
+    %[1]s auth info --gram-session-token "Qui aut quia maxime rem."
 `, os.Args[0])
 }
 
@@ -319,7 +319,7 @@ Create a deployment to load tool definitions.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Voluptate et qui non dolores beatae." --gram-session-token "Asperiores dolorem voluptas."
+    %[1]s deployments get-deployment --id "Eum sed." --gram-session-token "Illo laborum reprehenderit sit aspernatur."
 `, os.Args[0])
 }
 
@@ -334,7 +334,7 @@ Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       "external_url": "https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6"
-   }' --gram-session-token "Nemo accusantium architecto ducimus."
+   }' --gram-session-token "Voluptatem deserunt minima quam quae qui minima."
 `, os.Args[0])
 }
 
@@ -347,7 +347,7 @@ List all deployments in descending order of creation.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Doloremque voluptas et culpa." --limit 37 --gram-session-token "Quos earum optio quasi rem quia ipsa."
+    %[1]s deployments list-deployments --cursor "Eum molestias iste quam nesciunt nostrum." --limit 10 --gram-session-token "Aliquam ipsa."
 `, os.Args[0])
 }
 

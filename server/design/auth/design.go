@@ -100,11 +100,10 @@ var _ = Service("auth", func() {
 			Attribute("user_id", String)
 			Attribute("user_email", String)
 			Attribute("active_organization_id", String)
-			Attribute("active_project_id", String)
 			Attribute("organizations", ArrayOf("Organization")) // <-- here too
 			Attribute("gram_session_token", String, "The authentication session")
 			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("user_id", "user_email", "active_organization_id", "active_project_id", "organizations", "gram_session_token", "gram_session_cookie")
+			Required("user_id", "user_email", "active_organization_id", "organizations", "gram_session_token", "gram_session_cookie")
 		})
 
 		HTTP(func() {
