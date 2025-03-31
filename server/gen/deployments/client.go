@@ -31,7 +31,7 @@ func NewClient(getDeployment, createDeployment, listDeployments goa.Endpoint) *C
 
 // GetDeployment calls the "getDeployment" endpoint of the "deployments"
 // service.
-func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentForm) (res *GetDeploymentResult, err error) {
+func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (res *GetDeploymentResult, err error) {
 	var ires any
 	ires, err = c.GetDeploymentEndpoint(ctx, p)
 	if err != nil {
@@ -42,7 +42,7 @@ func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentForm) (res *
 
 // CreateDeployment calls the "createDeployment" endpoint of the "deployments"
 // service.
-func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentForm) (res *CreateDeploymentResult, err error) {
+func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayload) (res *CreateDeploymentResult, err error) {
 	var ires any
 	ires, err = c.CreateDeploymentEndpoint(ctx, p)
 	if err != nil {
@@ -53,7 +53,7 @@ func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentForm) 
 
 // ListDeployments calls the "listDeployments" endpoint of the "deployments"
 // service.
-func (c *Client) ListDeployments(ctx context.Context, p *ListDeploymentForm) (res *ListDeploymentResult, err error) {
+func (c *Client) ListDeployments(ctx context.Context, p *ListDeploymentsPayload) (res *ListDeploymentResult, err error) {
 	var ires any
 	ires, err = c.ListDeploymentsEndpoint(ctx, p)
 	if err != nil {

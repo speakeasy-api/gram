@@ -15,8 +15,10 @@ import (
 	"github.com/urfave/cli/v2"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/deployments"
 	"github.com/speakeasy-api/gram/internal/log"
+	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/system"
 )
 
@@ -49,8 +51,11 @@ func newStartCommand() *cli.Command {
 			defer db.Close()
 
 			mux := goahttp.NewMuxer()
+			mux.Use(middleware.RequestLoggingMiddleware)
+			mux.Use(middleware.GramSessionMiddleware)
 			system.Attach(mux, system.NewService())
 			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db))
+			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),

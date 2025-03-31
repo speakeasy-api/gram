@@ -27,74 +27,24 @@ $$
 language plpgsql
 volatile;
 
-CREATE TABLE IF NOT EXISTS organizations (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-
-  name text NOT NULL,
-  slug text NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT organizations_pkey PRIMARY KEY (id),
-  CONSTRAINT organizations_slug_key UNIQUE (slug)
-);
-
-CREATE TABLE IF NOT EXISTS users (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-
-  email text NOT NULL,
-  verification uuid NOT NULL DEFAULT generate_uuidv7(),
-  verified_at timestamptz,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT users_pkey PRIMARY KEY (id),
-  CONSTRAINT users_email_key UNIQUE (email)
-);
-
-CREATE TABLE IF NOT EXISTS memberships (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-
-  user_id uuid,
-  organization_id uuid,
-  role text NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT memberships_pkey PRIMARY KEY (id),
-  CONSTRAINT memberships_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL,
-  CONSTRAINT memberships_user_id_fkey FOREIGN key (user_id) REFERENCES users (id) ON DELETE SET NULL,
-  CONSTRAINT memberships_user_id_organization_id_key UNIQUE (user_id, organization_id, deleted)
-);
-
 CREATE TABLE IF NOT EXISTS projects (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  organization_id uuid,
+  organization_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT projects_pkey PRIMARY KEY (id),
-  CONSTRAINT projects_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL
+  CONSTRAINT projects_pkey PRIMARY KEY (id)
 );
 
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  user_id uuid,
-  project_id uuid,
-  organization_id uuid,
+  user_id varchar,
+  project_id uuid NOT NULL,
+  organization_id uuid NOT NULL,
   manifest_version text NOT NULL,
   manifest_url text NOT NULL,
 
@@ -115,25 +65,21 @@ CREATE TABLE IF NOT EXISTS deployments (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT deployments_pkey PRIMARY KEY (id),
-  CONSTRAINT deployments_user_id_fkey FOREIGN key (user_id) REFERENCES users (id) ON DELETE SET NULL,
-  CONSTRAINT deployments_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT deployments_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL
+  CONSTRAINT deployments_pkey PRIMARY KEY (id)
 );
 
 CREATE TABLE IF NOT EXISTS deployment_statuses (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   seq BIGSERIAL NOT NULL,
 
-  deployment_id uuid,
+  deployment_id uuid NOT NULL,
   status text NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT deployment_statuses_pkey PRIMARY KEY (id),
-  CONSTRAINT deployment_statuses_seq_key UNIQUE (seq),
-  CONSTRAINT deployment_statuses_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL
+  CONSTRAINT deployment_statuses_seq_key UNIQUE (seq)
 );
 
 CREATE TABLE IF NOT EXISTS deployment_logs (
@@ -141,8 +87,8 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   seq BIGSERIAL NOT NULL,
 
   event text NOT NULL,
-  deployment_id uuid,
-  project_id uuid,
+  deployment_id uuid NOT NULL,
+  project_id uuid NOT NULL,
   tooltemplate_id uuid,
   tooltemplate_type text CHECK (
     -- Cannot be null if tooltemplate_id is not null
@@ -163,8 +109,8 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  organization_id uuid,
-  project_id uuid,
+  organization_id uuid NOT NULL,
+  project_id uuid NOT NULL,
   name text NOT NULL,
   description text NOT NULL,
 
@@ -190,6 +136,5 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
-  CONSTRAINT http_tool_definitions_organization_id_fkey FOREIGN key (organization_id) REFERENCES organizations (id) ON DELETE SET NULL,
   CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );

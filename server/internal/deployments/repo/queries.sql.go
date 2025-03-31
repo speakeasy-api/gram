@@ -50,11 +50,11 @@ RETURNING
 `
 
 type CreateDeploymentParams struct {
-	UserID          uuid.NullUUID
+	UserID          pgtype.Text
 	ManifestVersion string
 	ManifestUrl     string
-	OrganizationID  uuid.NullUUID
-	ProjectID       uuid.NullUUID
+	OrganizationID  uuid.UUID
+	ProjectID       uuid.UUID
 	GithubRepo      pgtype.Text
 	GithubPr        pgtype.Text
 	ExternalID      pgtype.Text
@@ -63,9 +63,9 @@ type CreateDeploymentParams struct {
 
 type CreateDeploymentRow struct {
 	ID              uuid.UUID
-	UserID          uuid.NullUUID
-	OrganizationID  uuid.NullUUID
-	ProjectID       uuid.NullUUID
+	UserID          pgtype.Text
+	OrganizationID  uuid.UUID
+	ProjectID       uuid.UUID
 	ManifestVersion string
 	ManifestUrl     string
 	GithubRepo      pgtype.Text
@@ -126,9 +126,9 @@ WHERE id = $1
 
 type GetDeploymentRow struct {
 	ID              uuid.UUID
-	UserID          uuid.NullUUID
-	OrganizationID  uuid.NullUUID
-	ProjectID       uuid.NullUUID
+	UserID          pgtype.Text
+	OrganizationID  uuid.UUID
+	ProjectID       uuid.UUID
 	ManifestVersion string
 	ManifestUrl     string
 	GithubRepo      pgtype.Text

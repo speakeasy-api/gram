@@ -9,16 +9,24 @@ package deployments
 
 import (
 	"context"
+
+	"goa.design/goa/v3/security"
 )
 
 // Manages deployments of tools from upstream sources.
 type Service interface {
 	// Create a deployment to load tool definitions.
-	GetDeployment(context.Context, *GetDeploymentForm) (res *GetDeploymentResult, err error)
+	GetDeployment(context.Context, *GetDeploymentPayload) (res *GetDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
-	CreateDeployment(context.Context, *CreateDeploymentForm) (res *CreateDeploymentResult, err error)
+	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
 	// List all deployments in descending order of creation.
-	ListDeployments(context.Context, *ListDeploymentForm) (res *ListDeploymentResult, err error)
+	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
+}
+
+// Auther defines the authorization functions to be implemented by the service.
+type Auther interface {
+	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
+	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -37,9 +45,9 @@ const ServiceName = "deployments"
 // MethodKey key.
 var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployments"}
 
-// CreateDeploymentForm is the payload type of the deployments service
+// CreateDeploymentPayload is the payload type of the deployments service
 // createDeployment method.
-type CreateDeploymentForm struct {
+type CreateDeploymentPayload struct {
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string
@@ -47,7 +55,8 @@ type CreateDeploymentForm struct {
 	// commit hash or pull request.
 	ExternalURL *string
 	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
+	Openapi3p1Tools  []*OpenAPI3P1ToolForm
+	GramSessionToken *string
 }
 
 // CreateDeploymentResult is the result type of the deployments service
@@ -94,11 +103,12 @@ type Deployment struct {
 	Openapi3p1Tools []*OpenAPI3P1ToolForm
 }
 
-// GetDeploymentForm is the payload type of the deployments service
+// GetDeploymentPayload is the payload type of the deployments service
 // getDeployment method.
-type GetDeploymentForm struct {
+type GetDeploymentPayload struct {
 	// The ID of the deployment
-	ID string
+	ID               string
+	GramSessionToken *string
 }
 
 // GetDeploymentResult is the result type of the deployments service
@@ -126,15 +136,6 @@ type GetDeploymentResult struct {
 
 type JSONSchema string
 
-// ListDeploymentForm is the payload type of the deployments service
-// listDeployments method.
-type ListDeploymentForm struct {
-	// The cursor to fetch results from
-	Cursor *string
-	// Results per page
-	Limit int
-}
-
 // ListDeploymentResult is the result type of the deployments service
 // listDeployments method.
 type ListDeploymentResult struct {
@@ -142,6 +143,16 @@ type ListDeploymentResult struct {
 	NextCursor *string
 	// A list of deployments
 	Items []*Deployment
+}
+
+// ListDeploymentsPayload is the payload type of the deployments service
+// listDeployments method.
+type ListDeploymentsPayload struct {
+	// The cursor to fetch results from
+	Cursor *string
+	// Results per page
+	Limit            int
+	GramSessionToken *string
 }
 
 type OpenAPI3P1ParameterSchema struct {

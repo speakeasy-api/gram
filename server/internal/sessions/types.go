@@ -1,0 +1,46 @@
+package sessions
+
+import (
+	"time"
+
+	"github.com/speakeasy-api/gram/gen/auth"
+)
+
+const (
+	sessionCacheExpiry  = 15 * 24 * time.Hour
+	userInfoCacheExpiry = 15 * time.Minute
+)
+
+type GramSession struct {
+	ID, ActiveOrganizationID, ActiveProjectID, UserID, UserEmail string
+}
+
+func GramSessionCacheKey(ID string) string {
+	return "gramSession:" + ID
+}
+
+func (s GramSession) CacheKey() string {
+	return GramSessionCacheKey(s.ID)
+}
+
+func (s GramSession) AdditionalCacheKeys() []string {
+	return []string{}
+}
+
+type CachedUserInfo struct {
+	UserID        string
+	Email         string
+	Organizations []auth.Organization
+}
+
+func UserInfoCacheKey(userID string) string {
+	return "speakeasyUserInfo:" + userID
+}
+
+func (c CachedUserInfo) CacheKey() string {
+	return UserInfoCacheKey(c.UserID)
+}
+
+func (c CachedUserInfo) AdditionalCacheKeys() []string {
+	return []string{}
+}

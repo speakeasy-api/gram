@@ -18,20 +18,27 @@ import (
 
 // BuildGetDeploymentPayload builds the payload for the deployments
 // getDeployment endpoint from CLI flags.
-func BuildGetDeploymentPayload(deploymentsGetDeploymentID string) (*deployments.GetDeploymentForm, error) {
+func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentGramSessionToken string) (*deployments.GetDeploymentPayload, error) {
 	var id string
 	{
 		id = deploymentsGetDeploymentID
 	}
-	v := &deployments.GetDeploymentForm{}
+	var gramSessionToken *string
+	{
+		if deploymentsGetDeploymentGramSessionToken != "" {
+			gramSessionToken = &deploymentsGetDeploymentGramSessionToken
+		}
+	}
+	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
+	v.GramSessionToken = gramSessionToken
 
 	return v, nil
 }
 
 // BuildCreateDeploymentPayload builds the payload for the deployments
 // createDeployment endpoint from CLI flags.
-func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string) (*deployments.CreateDeploymentForm, error) {
+func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentGramSessionToken string) (*deployments.CreateDeploymentPayload, error) {
 	var err error
 	var body CreateDeploymentRequestBody
 	{
@@ -40,7 +47,13 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string) (*depl
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\"\n   }'")
 		}
 	}
-	v := &deployments.CreateDeploymentForm{
+	var gramSessionToken *string
+	{
+		if deploymentsCreateDeploymentGramSessionToken != "" {
+			gramSessionToken = &deploymentsCreateDeploymentGramSessionToken
+		}
+	}
+	v := &deployments.CreateDeploymentPayload{
 		ExternalID:  body.ExternalID,
 		ExternalURL: body.ExternalURL,
 	}
@@ -50,13 +63,14 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string) (*depl
 			v.Openapi3p1Tools[i] = marshalOpenAPI3P1ToolFormRequestBodyToDeploymentsOpenAPI3P1ToolForm(val)
 		}
 	}
+	v.GramSessionToken = gramSessionToken
 
 	return v, nil
 }
 
 // BuildListDeploymentsPayload builds the payload for the deployments
 // listDeployments endpoint from CLI flags.
-func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsLimit string) (*deployments.ListDeploymentForm, error) {
+func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsLimit string, deploymentsListDeploymentsGramSessionToken string) (*deployments.ListDeploymentsPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -84,9 +98,16 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 			}
 		}
 	}
-	v := &deployments.ListDeploymentForm{}
+	var gramSessionToken *string
+	{
+		if deploymentsListDeploymentsGramSessionToken != "" {
+			gramSessionToken = &deploymentsListDeploymentsGramSessionToken
+		}
+	}
+	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.GramSessionToken = gramSessionToken
 
 	return v, nil
 }

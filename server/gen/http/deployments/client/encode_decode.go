@@ -38,9 +38,13 @@ func (c *Client) BuildGetDeploymentRequest(ctx context.Context, v any) (*http.Re
 // deployments getDeployment server.
 func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*deployments.GetDeploymentForm)
+		p, ok := v.(*deployments.GetDeploymentPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("deployments", "getDeployment", "*deployments.GetDeploymentForm", v)
+			return goahttp.ErrInvalidType("deployments", "getDeployment", "*deployments.GetDeploymentPayload", v)
+		}
+		if p.GramSessionToken != nil {
+			head := *p.GramSessionToken
+			req.Header.Set("X-Gram-Session", head)
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
@@ -108,9 +112,13 @@ func (c *Client) BuildCreateDeploymentRequest(ctx context.Context, v any) (*http
 // deployments createDeployment server.
 func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*deployments.CreateDeploymentForm)
+		p, ok := v.(*deployments.CreateDeploymentPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("deployments", "createDeployment", "*deployments.CreateDeploymentForm", v)
+			return goahttp.ErrInvalidType("deployments", "createDeployment", "*deployments.CreateDeploymentPayload", v)
+		}
+		if p.GramSessionToken != nil {
+			head := *p.GramSessionToken
+			req.Header.Set("X-Gram-Session", head)
 		}
 		body := NewCreateDeploymentRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -179,9 +187,13 @@ func (c *Client) BuildListDeploymentsRequest(ctx context.Context, v any) (*http.
 // deployments listDeployments server.
 func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*deployments.ListDeploymentForm)
+		p, ok := v.(*deployments.ListDeploymentsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("deployments", "listDeployments", "*deployments.ListDeploymentForm", v)
+			return goahttp.ErrInvalidType("deployments", "listDeployments", "*deployments.ListDeploymentsPayload", v)
+		}
+		if p.GramSessionToken != nil {
+			head := *p.GramSessionToken
+			req.Header.Set("X-Gram-Session", head)
 		}
 		values := req.URL.Query()
 		if p.Cursor != nil {

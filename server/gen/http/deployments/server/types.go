@@ -264,19 +264,20 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 	return body
 }
 
-// NewGetDeploymentForm builds a deployments service getDeployment endpoint
+// NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
-func NewGetDeploymentForm(id string) *deployments.GetDeploymentForm {
-	v := &deployments.GetDeploymentForm{}
+func NewGetDeploymentPayload(id string, gramSessionToken *string) *deployments.GetDeploymentPayload {
+	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
+	v.GramSessionToken = gramSessionToken
 
 	return v
 }
 
-// NewCreateDeploymentForm builds a deployments service createDeployment
+// NewCreateDeploymentPayload builds a deployments service createDeployment
 // endpoint payload.
-func NewCreateDeploymentForm(body *CreateDeploymentRequestBody) *deployments.CreateDeploymentForm {
-	v := &deployments.CreateDeploymentForm{
+func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, gramSessionToken *string) *deployments.CreateDeploymentPayload {
+	v := &deployments.CreateDeploymentPayload{
 		ExternalID:  body.ExternalID,
 		ExternalURL: body.ExternalURL,
 	}
@@ -286,16 +287,18 @@ func NewCreateDeploymentForm(body *CreateDeploymentRequestBody) *deployments.Cre
 			v.Openapi3p1Tools[i] = unmarshalOpenAPI3P1ToolFormRequestBodyToDeploymentsOpenAPI3P1ToolForm(val)
 		}
 	}
+	v.GramSessionToken = gramSessionToken
 
 	return v
 }
 
-// NewListDeploymentsListDeploymentForm builds a deployments service
-// listDeployments endpoint payload.
-func NewListDeploymentsListDeploymentForm(cursor *string, limit int) *deployments.ListDeploymentForm {
-	v := &deployments.ListDeploymentForm{}
+// NewListDeploymentsPayload builds a deployments service listDeployments
+// endpoint payload.
+func NewListDeploymentsPayload(cursor *string, limit int, gramSessionToken *string) *deployments.ListDeploymentsPayload {
+	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.GramSessionToken = gramSessionToken
 
 	return v
 }
