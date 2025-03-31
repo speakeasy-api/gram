@@ -40,7 +40,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 // "getDeployment" of service "deployments".
 func NewGetDeploymentEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeploymentGetForm)
+		p := req.(*GetDeploymentForm)
 		return s.GetDeployment(ctx, p)
 	}
 }
@@ -49,7 +49,7 @@ func NewGetDeploymentEndpoint(s Service) goa.Endpoint {
 // method "createDeployment" of service "deployments".
 func NewCreateDeploymentEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeploymentCreateForm)
+		p := req.(*CreateDeploymentForm)
 		return s.CreateDeployment(ctx, p)
 	}
 }
@@ -58,7 +58,7 @@ func NewCreateDeploymentEndpoint(s Service) goa.Endpoint {
 // method "listDeployments" of service "deployments".
 func NewListDeploymentsEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeploymentListForm)
+		p := req.(*ListDeploymentForm)
 		return s.ListDeployments(ctx, p)
 	}
 }

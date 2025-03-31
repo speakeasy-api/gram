@@ -35,7 +35,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/DeploymentCreateForm'
+                            $ref: '#/components/schemas/CreateDeploymentForm'
                         example:
                             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                             external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -45,7 +45,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DeploymentCreateResult'
+                                $ref: '#/components/schemas/CreateDeploymentResult'
                             example:
                                 created_at: "1974-03-02T15:24:35Z"
                                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -78,7 +78,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DeploymentGetResult'
+                                $ref: '#/components/schemas/GetDeploymentResult'
                             example:
                                 created_at: "1980-09-04T13:53:19Z"
                                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -123,7 +123,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DeploymentListResult'
+                                $ref: '#/components/schemas/ListDeploymentResult'
                             example:
                                 items:
                                     - created_at: "1998-07-07T16:38:05Z"
@@ -143,6 +143,76 @@ paths:
                                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
 components:
     schemas:
+        CreateDeploymentForm:
+            type: object
+            properties:
+                external_id:
+                    type: string
+                    description: The external ID to refer to the deployment. This can be a git commit hash for example.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url:
+                    type: string
+                    description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                openapi_3p1_tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
+                    description: The HTTP tools available in the deployment.
+            example:
+                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+        CreateDeploymentResult:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the deployment.
+                    example: "2011-06-30T07:43:40Z"
+                    format: date-time
+                external_id:
+                    type: string
+                    description: The external ID to refer to the deployment. This can be a git commit hash for example.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url:
+                    type: string
+                    description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                id:
+                    type: string
+                    description: The ID to of the deployment.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                openapi_3p1_tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
+                    description: The HTTP tools available in the deployment.
+                organization_id:
+                    type: string
+                    description: The ID of the organization that the deployment belongs to.
+                    example: Perferendis alias alias iure.
+                project_id:
+                    type: string
+                    description: The ID of the project that the deployment belongs to.
+                    example: Repellendus dolorum.
+                user_id:
+                    type: string
+                    description: The ID of the user that created the deployment.
+                    example: Nobis velit aperiam aut quae et.
+            example:
+                created_at: "1970-04-07T15:30:23Z"
+                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                organization_id: Itaque totam quae asperiores modi nobis dicta.
+                project_id: Voluptas eos.
+                user_id: Necessitatibus qui repudiandae magni ea consequatur est.
+            required:
+                - id
+                - created_at
+                - organization_id
+                - project_id
+                - user_id
         Deployment:
             type: object
             properties:
@@ -194,77 +264,7 @@ components:
                 - organization_id
                 - project_id
                 - user_id
-        DeploymentCreateForm:
-            type: object
-            properties:
-                external_id:
-                    type: string
-                    description: The external ID to refer to the deployment. This can be a git commit hash for example.
-                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url:
-                    type: string
-                    description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                openapi_3p1_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
-                    description: The HTTP tools available in the deployment.
-            example:
-                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-        DeploymentCreateResult:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: The creation date of the deployment.
-                    example: "2011-06-30T07:43:40Z"
-                    format: date-time
-                external_id:
-                    type: string
-                    description: The external ID to refer to the deployment. This can be a git commit hash for example.
-                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url:
-                    type: string
-                    description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                id:
-                    type: string
-                    description: The ID to of the deployment.
-                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                openapi_3p1_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
-                    description: The HTTP tools available in the deployment.
-                organization_id:
-                    type: string
-                    description: The ID of the organization that the deployment belongs to.
-                    example: Perferendis alias alias iure.
-                project_id:
-                    type: string
-                    description: The ID of the project that the deployment belongs to.
-                    example: Repellendus dolorum.
-                user_id:
-                    type: string
-                    description: The ID of the user that created the deployment.
-                    example: Nobis velit aperiam aut quae et.
-            example:
-                created_at: "1970-04-07T15:30:23Z"
-                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                organization_id: Itaque totam quae asperiores modi nobis dicta.
-                project_id: Voluptas eos.
-                user_id: Necessitatibus qui repudiandae magni ea consequatur est.
-            required:
-                - id
-                - created_at
-                - organization_id
-                - project_id
-                - user_id
-        DeploymentGetForm:
+        GetDeploymentForm:
             type: object
             properties:
                 id:
@@ -275,7 +275,7 @@ components:
                 id: Dolor deleniti porro.
             required:
                 - id
-        DeploymentGetResult:
+        GetDeploymentResult:
             type: object
             properties:
                 created_at:
@@ -326,7 +326,18 @@ components:
                 - organization_id
                 - project_id
                 - user_id
-        DeploymentListForm:
+        HealthCheckResult:
+            type: object
+            properties:
+                status:
+                    type: string
+                    description: The status of the service.
+                    example: Sit voluptas in maxime est.
+            example:
+                status: Nihil cupiditate.
+            required:
+                - status
+        ListDeploymentForm:
             type: object
             properties:
                 cursor:
@@ -344,7 +355,7 @@ components:
             example:
                 cursor: Voluptas dolor magnam voluptates est.
                 limit: 42
-        DeploymentListResult:
+        ListDeploymentResult:
             type: object
             properties:
                 items:
@@ -404,17 +415,6 @@ components:
                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
-        HealthCheckResult:
-            type: object
-            properties:
-                status:
-                    type: string
-                    description: The status of the service.
-                    example: Sit voluptas in maxime est.
-            example:
-                status: Nihil cupiditate.
-            required:
-                - status
         OpenAPI3P1ParameterSchema:
             type: object
             properties:

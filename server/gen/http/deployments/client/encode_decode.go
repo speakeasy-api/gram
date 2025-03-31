@@ -38,9 +38,9 @@ func (c *Client) BuildGetDeploymentRequest(ctx context.Context, v any) (*http.Re
 // deployments getDeployment server.
 func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*deployments.DeploymentGetForm)
+		p, ok := v.(*deployments.GetDeploymentForm)
 		if !ok {
-			return goahttp.ErrInvalidType("deployments", "getDeployment", "*deployments.DeploymentGetForm", v)
+			return goahttp.ErrInvalidType("deployments", "getDeployment", "*deployments.GetDeploymentForm", v)
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
@@ -80,7 +80,7 @@ func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, r
 			if err != nil {
 				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
 			}
-			res := NewGetDeploymentDeploymentGetResultOK(&body)
+			res := NewGetDeploymentResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -108,9 +108,9 @@ func (c *Client) BuildCreateDeploymentRequest(ctx context.Context, v any) (*http
 // deployments createDeployment server.
 func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*deployments.DeploymentCreateForm)
+		p, ok := v.(*deployments.CreateDeploymentForm)
 		if !ok {
-			return goahttp.ErrInvalidType("deployments", "createDeployment", "*deployments.DeploymentCreateForm", v)
+			return goahttp.ErrInvalidType("deployments", "createDeployment", "*deployments.CreateDeploymentForm", v)
 		}
 		body := NewCreateDeploymentRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -151,7 +151,7 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 			if err != nil {
 				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
 			}
-			res := NewCreateDeploymentDeploymentCreateResultOK(&body)
+			res := NewCreateDeploymentResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -179,9 +179,9 @@ func (c *Client) BuildListDeploymentsRequest(ctx context.Context, v any) (*http.
 // deployments listDeployments server.
 func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*deployments.DeploymentListForm)
+		p, ok := v.(*deployments.ListDeploymentForm)
 		if !ok {
-			return goahttp.ErrInvalidType("deployments", "listDeployments", "*deployments.DeploymentListForm", v)
+			return goahttp.ErrInvalidType("deployments", "listDeployments", "*deployments.ListDeploymentForm", v)
 		}
 		values := req.URL.Query()
 		if p.Cursor != nil {
@@ -224,7 +224,7 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
 			}
-			res := NewListDeploymentsDeploymentListResultOK(&body)
+			res := NewListDeploymentsListDeploymentResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)

@@ -37,7 +37,7 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 	)
 }
 
-func (s *Service) GetDeployment(ctx context.Context, form *gen.DeploymentGetForm) (*gen.DeploymentGetResult, error) {
+func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentForm) (*gen.GetDeploymentResult, error) {
 	id, err := uuid.Parse(form.ID)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.DeploymentGetForm
 		return nil, err
 	}
 
-	return &gen.DeploymentGetResult{
+	return &gen.GetDeploymentResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
 		OrganizationID:  must.UUID(deployment.OrganizationID).String(),
@@ -60,11 +60,11 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.DeploymentGetForm
 	}, nil
 }
 
-func (s *Service) ListDeployments(context.Context, *gen.DeploymentListForm) (res *gen.DeploymentListResult, err error) {
-	return &gen.DeploymentListResult{}, nil
+func (s *Service) ListDeployments(context.Context, *gen.ListDeploymentForm) (res *gen.ListDeploymentResult, err error) {
+	return &gen.ListDeploymentResult{}, nil
 }
 
-func (s *Service) CreateDeployment(ctx context.Context, form *gen.DeploymentCreateForm) (*gen.DeploymentCreateResult, error) {
+func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeploymentForm) (*gen.CreateDeploymentResult, error) {
 	deployment, err := s.repo.CreateDeployment(ctx, repo.CreateDeploymentParams{
 		UserID:         uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
 		OrganizationID: uuid.NullUUID{UUID: must.Value(uuid.NewV7()), Valid: true},
@@ -76,7 +76,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.DeploymentCrea
 		return nil, err
 	}
 
-	return &gen.DeploymentCreateResult{
+	return &gen.CreateDeploymentResult{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
 		OrganizationID:  must.UUID(deployment.OrganizationID).String(),

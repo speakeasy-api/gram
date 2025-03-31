@@ -207,7 +207,7 @@ type DeploymentResponseBody struct {
 
 // NewCreateDeploymentRequestBody builds the HTTP request body from the payload
 // of the "createDeployment" endpoint of the "deployments" service.
-func NewCreateDeploymentRequestBody(p *deployments.DeploymentCreateForm) *CreateDeploymentRequestBody {
+func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentForm) *CreateDeploymentRequestBody {
 	body := &CreateDeploymentRequestBody{
 		ExternalID:  p.ExternalID,
 		ExternalURL: p.ExternalURL,
@@ -221,10 +221,10 @@ func NewCreateDeploymentRequestBody(p *deployments.DeploymentCreateForm) *Create
 	return body
 }
 
-// NewGetDeploymentDeploymentGetResultOK builds a "deployments" service
-// "getDeployment" endpoint result from a HTTP "OK" response.
-func NewGetDeploymentDeploymentGetResultOK(body *GetDeploymentResponseBody) *deployments.DeploymentGetResult {
-	v := &deployments.DeploymentGetResult{
+// NewGetDeploymentResultOK builds a "deployments" service "getDeployment"
+// endpoint result from a HTTP "OK" response.
+func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetDeploymentResult {
+	v := &deployments.GetDeploymentResult{
 		ID:             *body.ID,
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
@@ -243,10 +243,10 @@ func NewGetDeploymentDeploymentGetResultOK(body *GetDeploymentResponseBody) *dep
 	return v
 }
 
-// NewCreateDeploymentDeploymentCreateResultOK builds a "deployments" service
+// NewCreateDeploymentResultOK builds a "deployments" service
 // "createDeployment" endpoint result from a HTTP "OK" response.
-func NewCreateDeploymentDeploymentCreateResultOK(body *CreateDeploymentResponseBody) *deployments.DeploymentCreateResult {
-	v := &deployments.DeploymentCreateResult{
+func NewCreateDeploymentResultOK(body *CreateDeploymentResponseBody) *deployments.CreateDeploymentResult {
+	v := &deployments.CreateDeploymentResult{
 		ID:             *body.ID,
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
@@ -265,10 +265,10 @@ func NewCreateDeploymentDeploymentCreateResultOK(body *CreateDeploymentResponseB
 	return v
 }
 
-// NewListDeploymentsDeploymentListResultOK builds a "deployments" service
+// NewListDeploymentsListDeploymentResultOK builds a "deployments" service
 // "listDeployments" endpoint result from a HTTP "OK" response.
-func NewListDeploymentsDeploymentListResultOK(body *ListDeploymentsResponseBody) *deployments.DeploymentListResult {
-	v := &deployments.DeploymentListResult{
+func NewListDeploymentsListDeploymentResultOK(body *ListDeploymentsResponseBody) *deployments.ListDeploymentResult {
+	v := &deployments.ListDeploymentResult{
 		NextCursor: body.NextCursor,
 	}
 	v.Items = make([]*deployments.Deployment, len(body.Items))

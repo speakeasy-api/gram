@@ -14,11 +14,11 @@ import (
 // Manages deployments of tools from upstream sources.
 type Service interface {
 	// Create a deployment to load tool definitions.
-	GetDeployment(context.Context, *DeploymentGetForm) (res *DeploymentGetResult, err error)
+	GetDeployment(context.Context, *GetDeploymentForm) (res *GetDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
-	CreateDeployment(context.Context, *DeploymentCreateForm) (res *DeploymentCreateResult, err error)
+	CreateDeployment(context.Context, *CreateDeploymentForm) (res *CreateDeploymentResult, err error)
 	// List all deployments in descending order of creation.
-	ListDeployments(context.Context, *DeploymentListForm) (res *DeploymentListResult, err error)
+	ListDeployments(context.Context, *ListDeploymentForm) (res *ListDeploymentResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -36,6 +36,42 @@ const ServiceName = "deployments"
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
 var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployments"}
+
+// CreateDeploymentForm is the payload type of the deployments service
+// createDeployment method.
+type CreateDeploymentForm struct {
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolForm
+}
+
+// CreateDeploymentResult is the result type of the deployments service
+// createDeployment method.
+type CreateDeploymentResult struct {
+	// The ID to of the deployment.
+	ID string
+	// The ID of the organization that the deployment belongs to.
+	OrganizationID string
+	// The ID of the project that the deployment belongs to.
+	ProjectID string
+	// The ID of the user that created the deployment.
+	UserID string
+	// The creation date of the deployment.
+	CreatedAt string
+	// The external ID to refer to the deployment. This can be a git commit hash
+	// for example.
+	ExternalID *string
+	// The upstream URL a deployment can refer to. This can be a github url to a
+	// commit hash or pull request.
+	ExternalURL *string
+	// The HTTP tools available in the deployment.
+	Openapi3p1Tools []*OpenAPI3P1ToolForm
+}
 
 type Deployment struct {
 	// The ID to of the deployment.
@@ -58,52 +94,16 @@ type Deployment struct {
 	Openapi3p1Tools []*OpenAPI3P1ToolForm
 }
 
-// DeploymentCreateForm is the payload type of the deployments service
-// createDeployment method.
-type DeploymentCreateForm struct {
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
-}
-
-// DeploymentCreateResult is the result type of the deployments service
-// createDeployment method.
-type DeploymentCreateResult struct {
-	// The ID to of the deployment.
-	ID string
-	// The ID of the organization that the deployment belongs to.
-	OrganizationID string
-	// The ID of the project that the deployment belongs to.
-	ProjectID string
-	// The ID of the user that created the deployment.
-	UserID string
-	// The creation date of the deployment.
-	CreatedAt string
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
-}
-
-// DeploymentGetForm is the payload type of the deployments service
+// GetDeploymentForm is the payload type of the deployments service
 // getDeployment method.
-type DeploymentGetForm struct {
+type GetDeploymentForm struct {
 	// The ID of the deployment
 	ID string
 }
 
-// DeploymentGetResult is the result type of the deployments service
+// GetDeploymentResult is the result type of the deployments service
 // getDeployment method.
-type DeploymentGetResult struct {
+type GetDeploymentResult struct {
 	// The ID to of the deployment.
 	ID string
 	// The ID of the organization that the deployment belongs to.
@@ -124,25 +124,25 @@ type DeploymentGetResult struct {
 	Openapi3p1Tools []*OpenAPI3P1ToolForm
 }
 
-// DeploymentListForm is the payload type of the deployments service
+type JSONSchema string
+
+// ListDeploymentForm is the payload type of the deployments service
 // listDeployments method.
-type DeploymentListForm struct {
+type ListDeploymentForm struct {
 	// The cursor to fetch results from
 	Cursor *string
 	// Results per page
 	Limit int
 }
 
-// DeploymentListResult is the result type of the deployments service
+// ListDeploymentResult is the result type of the deployments service
 // listDeployments method.
-type DeploymentListResult struct {
+type ListDeploymentResult struct {
 	// The cursor to fetch results from
 	NextCursor *string
 	// A list of deployments
 	Items []*Deployment
 }
-
-type JSONSchema string
 
 type OpenAPI3P1ParameterSchema struct {
 	// The name of the parameter.

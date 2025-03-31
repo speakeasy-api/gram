@@ -18,12 +18,12 @@ import (
 
 // BuildGetDeploymentPayload builds the payload for the deployments
 // getDeployment endpoint from CLI flags.
-func BuildGetDeploymentPayload(deploymentsGetDeploymentID string) (*deployments.DeploymentGetForm, error) {
+func BuildGetDeploymentPayload(deploymentsGetDeploymentID string) (*deployments.GetDeploymentForm, error) {
 	var id string
 	{
 		id = deploymentsGetDeploymentID
 	}
-	v := &deployments.DeploymentGetForm{}
+	v := &deployments.GetDeploymentForm{}
 	v.ID = id
 
 	return v, nil
@@ -31,7 +31,7 @@ func BuildGetDeploymentPayload(deploymentsGetDeploymentID string) (*deployments.
 
 // BuildCreateDeploymentPayload builds the payload for the deployments
 // createDeployment endpoint from CLI flags.
-func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string) (*deployments.DeploymentCreateForm, error) {
+func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string) (*deployments.CreateDeploymentForm, error) {
 	var err error
 	var body CreateDeploymentRequestBody
 	{
@@ -40,7 +40,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string) (*depl
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\"\n   }'")
 		}
 	}
-	v := &deployments.DeploymentCreateForm{
+	v := &deployments.CreateDeploymentForm{
 		ExternalID:  body.ExternalID,
 		ExternalURL: body.ExternalURL,
 	}
@@ -56,7 +56,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string) (*depl
 
 // BuildListDeploymentsPayload builds the payload for the deployments
 // listDeployments endpoint from CLI flags.
-func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsLimit string) (*deployments.DeploymentListForm, error) {
+func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsLimit string) (*deployments.ListDeploymentForm, error) {
 	var err error
 	var cursor *string
 	{
@@ -84,7 +84,7 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 			}
 		}
 	}
-	v := &deployments.DeploymentListForm{}
+	v := &deployments.ListDeploymentForm{}
 	v.Cursor = cursor
 	v.Limit = limit
 
