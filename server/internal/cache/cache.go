@@ -128,6 +128,51 @@ func (d *Cache[T]) Store(context context.Context, obj T) error {
 	return nil
 }
 
+// Update Updates an object in cache preserving the existing TTL
+func (d *Cache[T]) Update(ctx context.Context, obj T) error {
+	if d.cache == nil {
+		return errors.New("cache is not configured")
+	}
+
+	updateKey := func(key string) error {
+		fullKey := d.fullKey(key)
+
+		ttl, err := d.rdb.TTL(ctx, fullKey).Result()
+		if err != nil {
+			return fmt.Errorf("failed to fetch TTL for key %s: %w", fullKey, err)
+		}
+
+		if ttl <= 0 {
+			return fmt.Errorf("failed to fetch TTL for key %s", fullKey)
+		}
+
+		err = d.cache.Set(&redisCache.Item{
+			Ctx:   ctx,
+			Key:   fullKey,
+			Value: obj,
+			TTL:   ttl,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update key %s: %w", fullKey, err)
+		}
+		return nil
+	}
+
+	// Update primary key
+	if err := updateKey(obj.CacheKey()); err != nil {
+		return err
+	}
+
+	// Update additional keys
+	for _, key := range obj.AdditionalCacheKeys() {
+		if err := updateKey(key); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func New[T Cacheable[T]](ttl time.Duration) Cache[T] {
 	// TODO: Stable server versions
 	var serverVersion string

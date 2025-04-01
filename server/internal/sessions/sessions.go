@@ -54,7 +54,7 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 }
 
 func (s *Sessions) UpdateSession(ctx context.Context, session GramSession) error {
-	return s.sessionCache.Store(ctx, session)
+	return s.sessionCache.Update(ctx, session)
 }
 
 func (s *Sessions) ClearSession(ctx context.Context, session GramSession) error {
