@@ -17,6 +17,7 @@ INSERT INTO toolsets (
     organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
 ) VALUES (
@@ -24,13 +25,15 @@ INSERT INTO toolsets (
   , $2
   , $3
   , $4
-  , NULLIF($5::uuid[], '{}'::uuid[])
+  , $5
+  , NULLIF($6::uuid[], '{}'::uuid[])
 )
 RETURNING 
     id
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at
@@ -43,6 +46,7 @@ type CreateToolsetParams struct {
 	OrganizationID uuid.UUID
 	ProjectID      uuid.UUID
 	Name           string
+	Slug           string
 	Description    pgtype.Text
 	HttpToolIds    []uuid.UUID
 }
@@ -52,6 +56,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Name,
+		arg.Slug,
 		arg.Description,
 		arg.HttpToolIds,
 	)
@@ -61,6 +66,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.HttpToolIds,
 		&i.CreatedAt,
@@ -158,6 +164,7 @@ SELECT
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at
@@ -176,6 +183,7 @@ func (q *Queries) GetToolset(ctx context.Context, id uuid.UUID) (Toolset, error)
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.HttpToolIds,
 		&i.CreatedAt,
@@ -192,6 +200,7 @@ SELECT
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at
@@ -218,6 +227,7 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.OrganizationID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Slug,
 			&i.Description,
 			&i.HttpToolIds,
 			&i.CreatedAt,
@@ -248,6 +258,7 @@ RETURNING
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at
@@ -276,6 +287,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.HttpToolIds,
 		&i.CreatedAt,

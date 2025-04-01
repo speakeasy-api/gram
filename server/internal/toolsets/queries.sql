@@ -4,6 +4,7 @@ SELECT
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at
@@ -18,12 +19,14 @@ INSERT INTO toolsets (
     organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
 ) VALUES (
     @organization_id
   , @project_id
   , @name
+  , @slug
   , @description
   , NULLIF(@http_tool_ids::uuid[], '{}'::uuid[])
 )
@@ -32,6 +35,7 @@ RETURNING
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at
@@ -45,6 +49,7 @@ SELECT
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at
@@ -69,6 +74,7 @@ RETURNING
   , organization_id
   , project_id
   , name
+  , slug
   , description
   , http_tool_ids
   , created_at

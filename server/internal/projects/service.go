@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/must"
 
 	"github.com/speakeasy-api/gram/internal/projects/repo"
@@ -43,11 +44,10 @@ func (s *Service) GetProjectsOrCreateDefault(ctx context.Context, organizationID
 }
 
 func (s *Service) CreateProject(ctx context.Context, organizationID, name string) (repo.Project, error) {
-	slug := strings.ReplaceAll(strings.ToLower(name), " ", "-")
 	project, err := s.repo.CreateProject(ctx, repo.CreateProjectParams{
 		OrganizationID: must.Value(uuid.Parse(organizationID)),
 		Name:           name,
-		Slug:           slug,
+		Slug:           conv.ToSlug(name),
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "unique constraint") {

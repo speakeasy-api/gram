@@ -341,6 +341,7 @@ func unmarshalToolsetResponseBodyToToolsetsToolset(v *ToolsetResponseBody) *tool
 		ProjectID:      *v.ProjectID,
 		OrganizationID: *v.OrganizationID,
 		Name:           *v.Name,
+		Slug:           *v.Slug,
 		Description:    v.Description,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,

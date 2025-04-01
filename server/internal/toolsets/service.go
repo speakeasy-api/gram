@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,6 +57,7 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 		OrganizationID: must.Value(uuid.Parse(session.ActiveOrganizationID)),
 		ProjectID:      must.Value(uuid.Parse(p.ProjectID)),
 		Name:           p.Name,
+		Slug:           conv.ToSlug(p.Name),
 	}
 
 	if p.Description != nil {
@@ -75,6 +77,10 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 
 	createdToolset, err := s.repo.CreateToolset(ctx, createToolParams)
 	if err != nil {
+		if strings.Contains(err.Error(), "unique constraint") {
+			return nil, errors.New("project slug already exists")
+		}
+
 		return nil, err
 	}
 
@@ -88,6 +94,7 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 		OrganizationID: createdToolset.OrganizationID.String(),
 		ProjectID:      createdToolset.ProjectID.String(),
 		Name:           createdToolset.Name,
+		Slug:           createdToolset.Slug,
 		Description:    conv.FromPGText(createdToolset.Description),
 		HTTPToolIds:    httpToolIds,
 		CreatedAt:      createdToolset.CreatedAt.Time.String(),
@@ -124,6 +131,7 @@ func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) 
 			OrganizationID: toolset.OrganizationID.String(),
 			ProjectID:      toolset.ProjectID.String(),
 			Name:           toolset.Name,
+			Slug:           toolset.Slug,
 			Description:    conv.FromPGText(toolset.Description),
 			HTTPToolIds:    httpToolIds,
 			CreatedAt:      toolset.CreatedAt.Time.String(),
@@ -207,6 +215,7 @@ func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload
 		OrganizationID: updatedToolset.OrganizationID.String(),
 		ProjectID:      updatedToolset.ProjectID.String(),
 		Name:           updatedToolset.Name,
+		Slug:           updatedToolset.Slug,
 		Description:    conv.FromPGText(updatedToolset.Description),
 		HTTPToolIds:    httpToolIds,
 		CreatedAt:      updatedToolset.CreatedAt.Time.String(),
@@ -264,6 +273,7 @@ func (s *Service) GetToolsetDetails(ctx context.Context, p *gen.GetToolsetDetail
 		OrganizationID: toolset.OrganizationID.String(),
 		ProjectID:      toolset.ProjectID.String(),
 		Name:           toolset.Name,
+		Slug:           toolset.Slug,
 		Description:    conv.FromPGText(toolset.Description),
 		HTTPTools:      httpTools,
 		CreatedAt:      toolset.CreatedAt.Time.String(),

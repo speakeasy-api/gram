@@ -49,6 +49,8 @@ type CreateToolsetResponseBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
@@ -77,6 +79,8 @@ type UpdateToolsetResponseBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
@@ -98,6 +102,8 @@ type GetToolsetDetailsResponseBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The HTTP tools in this toolset
@@ -118,6 +124,8 @@ type ToolsetResponseBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
@@ -171,6 +179,7 @@ func NewCreateToolsetResponseBody(res *toolsets.Toolset) *CreateToolsetResponseB
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
 		Name:           res.Name,
+		Slug:           res.Slug,
 		Description:    res.Description,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -207,6 +216,7 @@ func NewUpdateToolsetResponseBody(res *toolsets.Toolset) *UpdateToolsetResponseB
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
 		Name:           res.Name,
+		Slug:           res.Slug,
 		Description:    res.Description,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -228,6 +238,7 @@ func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetD
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
 		Name:           res.Name,
+		Slug:           res.Slug,
 		Description:    res.Description,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,

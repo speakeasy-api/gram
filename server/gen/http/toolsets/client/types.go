@@ -49,6 +49,8 @@ type CreateToolsetResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
@@ -77,6 +79,8 @@ type UpdateToolsetResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
@@ -98,6 +102,8 @@ type GetToolsetDetailsResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The HTTP tools in this toolset
@@ -118,6 +124,8 @@ type ToolsetResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
@@ -210,6 +218,7 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *toolsets.Toolse
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
+		Slug:           *body.Slug,
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
@@ -244,6 +253,7 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *toolsets.Toolse
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
+		Slug:           *body.Slug,
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
@@ -266,6 +276,7 @@ func NewGetToolsetDetailsToolsetDetailsOK(body *GetToolsetDetailsResponseBody) *
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
+		Slug:           *body.Slug,
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
@@ -292,6 +303,9 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -333,6 +347,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -356,6 +373,9 @@ func ValidateGetToolsetDetailsResponseBody(body *GetToolsetDetailsResponseBody) 
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.HTTPTools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
@@ -390,6 +410,9 @@ func ValidateToolsetResponseBody(body *ToolsetResponseBody) (err error) {
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

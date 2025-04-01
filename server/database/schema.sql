@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   organization_id uuid NOT NULL,
   project_id uuid NOT NULL,
   name text NOT NULL,
+  slug text NOT NULL,
   description text,
   http_tool_ids uuid[],
 
@@ -150,7 +151,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
 
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
   CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_project_id_name_key UNIQUE (project_id, name)
+  CONSTRAINT toolsets_project_id_slug_key UNIQUE (project_id, slug)
 );
 
 CREATE TABLE IF NOT EXISTS assets (

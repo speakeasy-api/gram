@@ -38,6 +38,7 @@ type Toolset struct {
 	OrganizationID uuid.UUID
 	ProjectID      uuid.UUID
 	Name           string
+	Slug           string
 	Description    pgtype.Text
 	HttpToolIds    []uuid.UUID
 	CreatedAt      pgtype.Timestamptz

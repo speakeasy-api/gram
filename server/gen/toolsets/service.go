@@ -127,6 +127,8 @@ type Toolset struct {
 	OrganizationID string
 	// The name of the toolset
 	Name string
+	// The slug of the toolset
+	Slug string
 	// Description of the toolset
 	Description *string
 	// List of HTTP tool IDs included in this toolset
@@ -148,6 +150,8 @@ type ToolsetDetails struct {
 	OrganizationID string
 	// The name of the toolset
 	Name string
+	// The slug of the toolset
+	Slug string
 	// Description of the toolset
 	Description *string
 	// The HTTP tools in this toolset
