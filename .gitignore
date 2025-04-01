@@ -7,3 +7,4 @@ junit-report.xml
 .assets
 .vscode/*
 !.vscode/extensions.json
+.idea
