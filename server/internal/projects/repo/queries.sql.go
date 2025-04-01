@@ -35,7 +35,7 @@ RETURNING
 type CreateProjectParams struct {
 	Name           string
 	Slug           string
-	OrganizationID uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -100,7 +100,7 @@ WHERE organization_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID uuid.UUID) ([]Project, error) {
+func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID string) ([]Project, error) {
 	rows, err := q.db.Query(ctx, listProjectsByOrganization, organizationID)
 	if err != nil {
 		return nil, err

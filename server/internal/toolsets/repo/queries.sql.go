@@ -43,7 +43,7 @@ RETURNING
 `
 
 type CreateToolsetParams struct {
-	OrganizationID uuid.UUID
+	OrganizationID string
 	ProjectID      uuid.UUID
 	Name           string
 	Slug           string

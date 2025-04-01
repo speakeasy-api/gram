@@ -27,7 +27,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
 }
 
 func (s *Service) GetProjectsOrCreateDefault(ctx context.Context, organizationID string) ([]repo.Project, error) {
-	projects, err := s.repo.ListProjectsByOrganization(ctx, must.Value(uuid.Parse(organizationID)))
+	projects, err := s.repo.ListProjectsByOrganization(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (s *Service) GetProjectsOrCreateDefault(ctx context.Context, organizationID
 
 func (s *Service) CreateProject(ctx context.Context, organizationID, name string) (repo.Project, error) {
 	project, err := s.repo.CreateProject(ctx, repo.CreateProjectParams{
-		OrganizationID: must.Value(uuid.Parse(organizationID)),
+		OrganizationID: organizationID,
 		Name:           name,
 		Slug:           conv.ToSlug(name),
 	})

@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name text NOT NULL,
   slug text NOT NULL,
 
-  organization_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -45,9 +45,9 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  user_id varchar,
+  user_id TEXT,
   project_id uuid NOT NULL,
-  organization_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
   manifest_version text NOT NULL,
   manifest_url text NOT NULL,
 
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  organization_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   name text NOT NULL,
   description text NOT NULL,
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  organization_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   name text NOT NULL,
   slug text NOT NULL,

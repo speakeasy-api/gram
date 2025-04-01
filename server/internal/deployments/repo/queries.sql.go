@@ -53,7 +53,7 @@ type CreateDeploymentParams struct {
 	UserID          pgtype.Text
 	ManifestVersion string
 	ManifestUrl     string
-	OrganizationID  uuid.UUID
+	OrganizationID  string
 	ProjectID       uuid.UUID
 	GithubRepo      pgtype.Text
 	GithubPr        pgtype.Text
@@ -64,7 +64,7 @@ type CreateDeploymentParams struct {
 type CreateDeploymentRow struct {
 	ID              uuid.UUID
 	UserID          pgtype.Text
-	OrganizationID  uuid.UUID
+	OrganizationID  string
 	ProjectID       uuid.UUID
 	ManifestVersion string
 	ManifestUrl     string
@@ -127,7 +127,7 @@ WHERE id = $1
 type GetDeploymentRow struct {
 	ID              uuid.UUID
 	UserID          pgtype.Text
-	OrganizationID  uuid.UUID
+	OrganizationID  string
 	ProjectID       uuid.UUID
 	ManifestVersion string
 	ManifestUrl     string

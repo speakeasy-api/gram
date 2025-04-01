@@ -11,7 +11,7 @@ import (
 
 type HttpToolDefinition struct {
 	ID               uuid.UUID
-	OrganizationID   uuid.UUID
+	OrganizationID   string
 	ProjectID        uuid.UUID
 	Name             string
 	Description      string
@@ -35,7 +35,7 @@ type HttpToolDefinition struct {
 
 type Toolset struct {
 	ID             uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID string
 	ProjectID      uuid.UUID
 	Name           string
 	Slug           string

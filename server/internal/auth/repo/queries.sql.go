@@ -22,7 +22,7 @@ LIMIT 1
 `
 
 type CanAccessProjectParams struct {
-	OrganizationID uuid.UUID
+	OrganizationID string
 	ProjectSlug    string
 }
 

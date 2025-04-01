@@ -49,12 +49,12 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 	}
 
 	project, err := s.projects.GetProject(ctx, p.ProjectID)
-	if project.OrganizationID.String() != session.ActiveOrganizationID {
+	if project.OrganizationID != session.ActiveOrganizationID {
 		return nil, errors.New("project does not belong to active organization")
 	}
 
 	createToolParams := repo.CreateToolsetParams{
-		OrganizationID: must.Value(uuid.Parse(session.ActiveOrganizationID)),
+		OrganizationID: session.ActiveOrganizationID,
 		ProjectID:      must.Value(uuid.Parse(p.ProjectID)),
 		Name:           p.Name,
 		Slug:           conv.ToSlug(p.Name),
@@ -91,7 +91,7 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 
 	return &gen.Toolset{
 		ID:             createdToolset.ID.String(),
-		OrganizationID: createdToolset.OrganizationID.String(),
+		OrganizationID: createdToolset.OrganizationID,
 		ProjectID:      createdToolset.ProjectID.String(),
 		Name:           createdToolset.Name,
 		Slug:           createdToolset.Slug,
@@ -109,7 +109,7 @@ func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) 
 	}
 
 	project, err := s.projects.GetProject(ctx, p.ProjectID)
-	if project.OrganizationID.String() != session.ActiveOrganizationID {
+	if project.OrganizationID != session.ActiveOrganizationID {
 		return nil, errors.New("project does not belong to active organization")
 	}
 
@@ -128,7 +128,7 @@ func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) 
 		}
 		result[i] = &gen.Toolset{
 			ID:             toolset.ID.String(),
-			OrganizationID: toolset.OrganizationID.String(),
+			OrganizationID: toolset.OrganizationID,
 			ProjectID:      toolset.ProjectID.String(),
 			Name:           toolset.Name,
 			Slug:           toolset.Slug,
@@ -157,7 +157,7 @@ func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload
 		return nil, err
 	}
 
-	if existingToolset.OrganizationID.String() != session.ActiveOrganizationID {
+	if existingToolset.OrganizationID != session.ActiveOrganizationID {
 		return nil, errors.New("toolset does not belong to active organization")
 	}
 
@@ -212,7 +212,7 @@ func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload
 
 	return &gen.Toolset{
 		ID:             updatedToolset.ID.String(),
-		OrganizationID: updatedToolset.OrganizationID.String(),
+		OrganizationID: updatedToolset.OrganizationID,
 		ProjectID:      updatedToolset.ProjectID.String(),
 		Name:           updatedToolset.Name,
 		Slug:           updatedToolset.Slug,
@@ -235,7 +235,7 @@ func (s *Service) GetToolsetDetails(ctx context.Context, p *gen.GetToolsetDetail
 		return nil, err
 	}
 
-	if toolset.OrganizationID.String() != session.ActiveOrganizationID {
+	if toolset.OrganizationID != session.ActiveOrganizationID {
 		return nil, errors.New("toolset does not belong to active organization")
 	}
 
@@ -270,7 +270,7 @@ func (s *Service) GetToolsetDetails(ctx context.Context, p *gen.GetToolsetDetail
 
 	return &gen.ToolsetDetails{
 		ID:             toolset.ID.String(),
-		OrganizationID: toolset.OrganizationID.String(),
+		OrganizationID: toolset.OrganizationID,
 		ProjectID:      toolset.ProjectID.String(),
 		Name:           toolset.Name,
 		Slug:           toolset.Slug,

@@ -55,7 +55,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	return &gen.GetDeploymentResult{
 		ID:                deployment.ID.String(),
 		CreatedAt:         deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:    deployment.OrganizationID.String(),
+		OrganizationID:    deployment.OrganizationID,
 		ProjectID:         deployment.ProjectID.String(),
 		UserID:            deployment.UserID.String,
 		ExternalID:        conv.FromPGText(deployment.ExternalID),
@@ -75,8 +75,8 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	}
 
 	deployment, err := s.repo.CreateDeployment(ctx, repo.CreateDeploymentParams{
-		OrganizationID: must.Value(uuid.NewV7()),
-		ProjectID:      must.Value(uuid.NewV7()),
+		OrganizationID: session.ActiveOrganizationID,
+		ProjectID:      must.Value(uuid.NewV7()), // This needs to be the project passed in
 		UserID:         pgtype.Text{String: session.UserID, Valid: true},
 		ExternalID:     pgtype.Text{String: *form.ExternalID, Valid: true},
 		ExternalUrl:    pgtype.Text{String: *form.ExternalURL, Valid: true},
@@ -89,7 +89,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		Deployment: &gen.Deployment{
 			ID:                deployment.ID.String(),
 			CreatedAt:         deployment.CreatedAt.Time.Format(time.RFC3339),
-			OrganizationID:    deployment.OrganizationID.String(),
+			OrganizationID:    deployment.OrganizationID,
 			ProjectID:         deployment.ProjectID.String(),
 			UserID:            deployment.UserID.String,
 			ExternalID:        conv.FromPGText(deployment.ExternalID),

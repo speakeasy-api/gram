@@ -28,7 +28,7 @@ type Deployment struct {
 	ID              uuid.UUID
 	UserID          pgtype.Text
 	ProjectID       uuid.UUID
-	OrganizationID  uuid.UUID
+	OrganizationID  string
 	ManifestVersion string
 	ManifestUrl     string
 	GithubRepo      pgtype.Text
@@ -63,7 +63,7 @@ type DeploymentStatus struct {
 
 type HttpToolDefinition struct {
 	ID               uuid.UUID
-	OrganizationID   uuid.UUID
+	OrganizationID   string
 	ProjectID        uuid.UUID
 	Name             string
 	Description      string
@@ -89,7 +89,7 @@ type Project struct {
 	ID             uuid.UUID
 	Name           string
 	Slug           string
-	OrganizationID uuid.UUID
+	OrganizationID string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
@@ -98,7 +98,7 @@ type Project struct {
 
 type Toolset struct {
 	ID             uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID string
 	ProjectID      uuid.UUID
 	Name           string
 	Slug           string

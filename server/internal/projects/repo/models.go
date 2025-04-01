@@ -13,7 +13,7 @@ type Project struct {
 	ID             uuid.UUID
 	Name           string
 	Slug           string
-	OrganizationID uuid.UUID
+	OrganizationID string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

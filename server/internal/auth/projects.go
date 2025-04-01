@@ -35,15 +35,9 @@ func EnsureProjectAccess(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return nil, fmt.Errorf("project access: %w", ErrAuthNoSession)
 	}
 
-	oid, err := uuid.Parse(session.ActiveOrganizationID)
-	if err != nil || oid == uuid.Nil {
-		logger.ErrorContext(ctx, "org id parse error", slog.String("org_id", session.ActiveOrganizationID), slog.String("error", err.Error()))
-		return nil, fmt.Errorf("project access: %w: malformed id", ErrAuthInvalidOrgID)
-	}
-
 	r := repo.New(db)
 	row, err := r.CanAccessProject(ctx, repo.CanAccessProjectParams{
-		OrganizationID: oid,
+		OrganizationID: session.ActiveOrganizationID,
 		ProjectSlug:    projectSlug,
 	})
 	switch {
