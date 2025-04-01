@@ -1,0 +1,56 @@
+configVersion: 2.0.0
+generation:
+  devContainers:
+    enabled: true
+    schemaPath: server/gen/http/openapi3.yaml
+  sdkClassName: Gram
+  maintainOpenAPIOrder: true
+  usageSnippets:
+    optionalPropertyRendering: withExample
+  useClassNamesForArrayFields: true
+  fixes:
+    nameResolutionDec2023: true
+    nameResolutionFeb2025: false
+    parameterOrderingFeb2024: true
+    requestResponseComponentNamesFeb2024: true
+    securityFeb2025: true
+  auth:
+    oAuth2ClientCredentialsEnabled: true
+    oAuth2PasswordEnabled: true
+typescript:
+  version: 0.2.1
+  additionalDependencies:
+    dependencies: {}
+    devDependencies: {}
+    peerDependencies: {}
+  additionalPackageJSON: {}
+  author: Speakeasy
+  clientServerStatusCodesAsErrors: true
+  compileCommand:
+    - ./scripts/compile.sh
+  defaultErrorName: APIError
+  enableCustomCodeRegions: false
+  enableMCPServer: true
+  enableReactQuery: true
+  enumFormat: union
+  envVarPrefix: GRAM
+  flattenGlobalSecurity: true
+  flatteningOrder: parameters-first
+  imports:
+    option: openapi
+    paths:
+      callbacks: models/callbacks
+      errors: models/errors
+      operations: models/operations
+      shared: models/components
+      webhooks: models/webhooks
+  inputModelSuffix: input
+  jsonpath: rfc9535
+  maxMethodParams: 0
+  methodArguments: infer-optional-args
+  moduleFormat: esm
+  outputModelSuffix: output
+  packageName: '@gram/sdk'
+  responseFormat: flat
+  templateVersion: v2
+  useIndexModules: true

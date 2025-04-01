@@ -1,0 +1,32 @@
+# Organization
+
+## Example Usage
+
+```typescript
+import { Organization } from "@gram/sdk/models/components";
+
+let value: Organization = {
+  accountType: "Incidunt qui est repellendus consectetur velit.",
+  organizationId: "Neque expedita.",
+  organizationName: "Est quasi consequatur voluptatem aut nemo.",
+  organizationSlug: "Officia ut exercitationem aut inventore vero vero.",
+  projects: [
+    {
+      projectId: "Quo quas culpa eos.",
+    },
+    {
+      projectId: "Quo quas culpa eos.",
+    },
+  ],
+};
+```
+
+## Fields
+
+| Field                                                                                                                                                                  | Type                                                                                                                                                                   | Required                                                                                                                                                               | Description                                                                                                                                                            | Example                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accountType`                                                                                                                                                          | *string*                                                                                                                                                               | :heavy_check_mark:                                                                                                                                                     | N/A                                                                                                                                                                    | Et qui in illum dolor quia.                                                                                                                                            |
+| `organizationId`                                                                                                                                                       | *string*                                                                                                                                                               | :heavy_check_mark:                                                                                                                                                     | N/A                                                                                                                                                                    | Et tempora occaecati vel.                                                                                                                                              |
+| `organizationName`                                                                                                                                                     | *string*                                                                                                                                                               | :heavy_check_mark:                                                                                                                                                     | N/A                                                                                                                                                                    | Delectus ipsam aperiam beatae eos.                                                                                                                                     |
+| `organizationSlug`                                                                                                                                                     | *string*                                                                                                                                                               | :heavy_check_mark:                                                                                                                                                     | N/A                                                                                                                                                                    | Et accusantium soluta incidunt veniam sunt.                                                                                                                            |
+| `projects`                                                                                                                                                             | [components.Project](../../models/components/project.md)[]                                                                                                             | :heavy_check_mark:                                                                                                                                                     | N/A                                                                                                                                                                    | [<br/>{<br/>"project_id": "Quo quas culpa eos."<br/>},<br/>{<br/>"project_id": "Quo quas culpa eos."<br/>},<br/>{<br/>"project_id": "Quo quas culpa eos."<br/>},<br/>{<br/>"project_id": "Quo quas culpa eos."<br/>}<br/>] |
