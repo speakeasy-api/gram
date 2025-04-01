@@ -16,13 +16,13 @@ import (
 
 // BuildCreateToolsetPayload builds the payload for the toolsets createToolset
 // endpoint from CLI flags.
-func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetGramSessionToken string) (*toolsets.CreateToolsetPayload, error) {
+func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetGramSessionToken string, toolsetsCreateToolsetProjectSlug string) (*toolsets.CreateToolsetPayload, error) {
 	var err error
 	var body CreateToolsetRequestBody
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Voluptas unde laboriosam laborum sint quasi itaque.\",\n      \"http_tool_ids\": [\n         \"Ea aut et.\",\n         \"Similique nostrum.\",\n         \"Explicabo omnis aspernatur.\"\n      ],\n      \"name\": \"Eveniet repellat voluptatem aliquid non.\",\n      \"project_id\": \"Sapiente atque ut minima quia iure sequi.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Deleniti ea tenetur a ut.\",\n      \"http_tool_ids\": [\n         \"Enim sit quia et.\",\n         \"Autem architecto eaque eum.\",\n         \"Aliquid magnam voluptatem quam.\"\n      ],\n      \"name\": \"Explicabo omnis aspernatur.\"\n   }'")
 		}
 	}
 	var gramSessionToken *string
@@ -31,9 +31,12 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 			gramSessionToken = &toolsetsCreateToolsetGramSessionToken
 		}
 	}
+	var projectSlug string
+	{
+		projectSlug = toolsetsCreateToolsetProjectSlug
+	}
 	v := &toolsets.CreateToolsetPayload{
 		Name:        body.Name,
-		ProjectID:   body.ProjectID,
 		Description: body.Description,
 	}
 	if body.HTTPToolIds != nil {
@@ -43,39 +46,40 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 		}
 	}
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v, nil
 }
 
 // BuildListToolsetsPayload builds the payload for the toolsets listToolsets
 // endpoint from CLI flags.
-func BuildListToolsetsPayload(toolsetsListToolsetsProjectID string, toolsetsListToolsetsGramSessionToken string) (*toolsets.ListToolsetsPayload, error) {
-	var projectID string
-	{
-		projectID = toolsetsListToolsetsProjectID
-	}
+func BuildListToolsetsPayload(toolsetsListToolsetsGramSessionToken string, toolsetsListToolsetsProjectSlug string) (*toolsets.ListToolsetsPayload, error) {
 	var gramSessionToken *string
 	{
 		if toolsetsListToolsetsGramSessionToken != "" {
 			gramSessionToken = &toolsetsListToolsetsGramSessionToken
 		}
 	}
+	var projectSlug string
+	{
+		projectSlug = toolsetsListToolsetsProjectSlug
+	}
 	v := &toolsets.ListToolsetsPayload{}
-	v.ProjectID = projectID
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v, nil
 }
 
 // BuildUpdateToolsetPayload builds the payload for the toolsets updateToolset
 // endpoint from CLI flags.
-func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetID string, toolsetsUpdateToolsetGramSessionToken string) (*toolsets.UpdateToolsetPayload, error) {
+func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetID string, toolsetsUpdateToolsetGramSessionToken string, toolsetsUpdateToolsetProjectSlug string) (*toolsets.UpdateToolsetPayload, error) {
 	var err error
 	var body UpdateToolsetRequestBody
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Reiciendis aspernatur.\",\n      \"http_tool_ids_to_add\": [\n         \"Et quia consectetur voluptatibus.\",\n         \"Iusto perspiciatis sit.\",\n         \"Sint enim consequatur dolorum.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Totam sint assumenda perspiciatis sed facere sed.\",\n         \"Corrupti harum voluptates autem impedit consequatur consequatur.\",\n         \"Ut odio.\"\n      ],\n      \"name\": \"Voluptatem aspernatur dolores nihil mollitia.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Perspiciatis sed facere sed.\",\n      \"http_tool_ids_to_add\": [\n         \"Harum voluptates autem.\",\n         \"Consequatur consequatur minima ut odio sunt officiis.\",\n         \"Et quos quis fugit ut.\",\n         \"Illo qui et est aut dolores.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Perspiciatis illum et dignissimos veniam vel.\",\n         \"Iste id suscipit corrupti ea et quaerat.\"\n      ],\n      \"name\": \"Consequatur dolorum autem ut totam sint.\"\n   }'")
 		}
 	}
 	var id string
@@ -87,6 +91,10 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		if toolsetsUpdateToolsetGramSessionToken != "" {
 			gramSessionToken = &toolsetsUpdateToolsetGramSessionToken
 		}
+	}
+	var projectSlug string
+	{
+		projectSlug = toolsetsUpdateToolsetProjectSlug
 	}
 	v := &toolsets.UpdateToolsetPayload{
 		Name:        body.Name,
@@ -106,13 +114,14 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	}
 	v.ID = id
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v, nil
 }
 
 // BuildGetToolsetDetailsPayload builds the payload for the toolsets
 // getToolsetDetails endpoint from CLI flags.
-func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsGetToolsetDetailsGramSessionToken string) (*toolsets.GetToolsetDetailsPayload, error) {
+func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsGetToolsetDetailsGramSessionToken string, toolsetsGetToolsetDetailsProjectSlug string) (*toolsets.GetToolsetDetailsPayload, error) {
 	var id string
 	{
 		id = toolsetsGetToolsetDetailsID
@@ -123,9 +132,14 @@ func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsG
 			gramSessionToken = &toolsetsGetToolsetDetailsGramSessionToken
 		}
 	}
+	var projectSlug string
+	{
+		projectSlug = toolsetsGetToolsetDetailsProjectSlug
+	}
 	v := &toolsets.GetToolsetDetailsPayload{}
 	v.ID = id
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v, nil
 }

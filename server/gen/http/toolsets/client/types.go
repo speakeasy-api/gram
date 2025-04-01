@@ -17,8 +17,6 @@ import (
 type CreateToolsetRequestBody struct {
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
-	// The project ID this toolset belongs to
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs to include
@@ -176,7 +174,6 @@ type HTTPToolDefinitionResponseBody struct {
 func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolsetRequestBody {
 	body := &CreateToolsetRequestBody{
 		Name:        p.Name,
-		ProjectID:   p.ProjectID,
 		Description: p.Description,
 	}
 	if p.HTTPToolIds != nil {

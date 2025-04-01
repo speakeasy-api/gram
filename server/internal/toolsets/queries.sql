@@ -12,7 +12,7 @@ SELECT
   , deleted_at
   , deleted
 FROM toolsets
-WHERE id = @id;
+WHERE id = @id AND project_id = @project_id;
 
 -- name: CreateToolset :one
 INSERT INTO toolsets (

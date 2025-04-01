@@ -66,7 +66,7 @@ type UploadOpenAPIv3Payload struct {
 	GramSessionToken *string
 	ContentType      string
 	ContentLength    int64
-	// The project the OpenAPI document belongs to
+	// The project the action belongs too
 	ProjectSlug string
 }
 

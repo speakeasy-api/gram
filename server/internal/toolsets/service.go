@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/gen/http/toolsets/server"
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
+	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/projects"
@@ -42,31 +43,31 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 	)
 }
 
-func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload) (*gen.Toolset, error) {
+func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*gen.Toolset, error) {
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
 	}
 
-	project, err := s.projects.GetProject(ctx, p.ProjectID)
-	if project.OrganizationID != session.ActiveOrganizationID {
-		return nil, errors.New("project does not belong to active organization")
+	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
+	if err != nil {
+		return nil, err
 	}
 
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID: session.ActiveOrganizationID,
-		ProjectID:      must.Value(uuid.Parse(p.ProjectID)),
-		Name:           p.Name,
-		Slug:           conv.ToSlug(p.Name),
+		ProjectID:      access.ProjectID,
+		Name:           payload.Name,
+		Slug:           conv.ToSlug(payload.Name),
 	}
 
-	if p.Description != nil {
-		createToolParams.Description = pgtype.Text{String: *p.Description, Valid: true}
+	if payload.Description != nil {
+		createToolParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
-	if len(p.HTTPToolIds) > 0 {
-		createToolParams.HttpToolIds = make([]uuid.UUID, len(p.HTTPToolIds))
-		for i, id := range p.HTTPToolIds {
+	if len(payload.HTTPToolIds) > 0 {
+		createToolParams.HttpToolIds = make([]uuid.UUID, len(payload.HTTPToolIds))
+		for i, id := range payload.HTTPToolIds {
 			toolID, err := uuid.Parse(id)
 			if err != nil {
 				return nil, err
@@ -102,20 +103,18 @@ func (s *Service) CreateToolset(ctx context.Context, p *gen.CreateToolsetPayload
 	}, nil
 }
 
-func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
+func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
 	}
 
-	project, err := s.projects.GetProject(ctx, p.ProjectID)
-	if project.OrganizationID != session.ActiveOrganizationID {
-		return nil, errors.New("project does not belong to active organization")
+	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
+	if err != nil {
+		return nil, err
 	}
 
-	projectID := must.Value(uuid.Parse(p.ProjectID))
-
-	toolsets, err := s.repo.ListToolsetsByProject(ctx, projectID)
+	toolsets, err := s.repo.ListToolsetsByProject(ctx, access.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -144,15 +143,23 @@ func (s *Service) ListToolsets(ctx context.Context, p *gen.ListToolsetsPayload) 
 	}, nil
 }
 
-func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload) (*gen.Toolset, error) {
-	toolsetID := must.Value(uuid.Parse(p.ID))
+func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.Toolset, error) {
+	toolsetID := must.Value(uuid.Parse(payload.ID))
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
 	}
 
+	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
+	if err != nil {
+		return nil, err
+	}
+
 	// First get the existing toolset
-	existingToolset, err := s.repo.GetToolset(ctx, toolsetID)
+	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		ID:        toolsetID,
+		ProjectID: access.ProjectID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -167,11 +174,11 @@ func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload
 		Description: existingToolset.Description,
 		Name:        existingToolset.Name,
 	}
-	if p.Name != nil {
-		updateParams.Name = *p.Name
+	if payload.Name != nil {
+		updateParams.Name = *payload.Name
 	}
-	if p.Description != nil {
-		updateParams.Description = pgtype.Text{String: *p.Description, Valid: true}
+	if payload.Description != nil {
+		updateParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
 	toolIDSet := make(map[uuid.UUID]bool, len(existingToolset.HttpToolIds))
@@ -180,13 +187,13 @@ func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload
 	}
 
 	// Add new tools
-	for _, idStr := range p.HTTPToolIdsToAdd {
+	for _, idStr := range payload.HTTPToolIdsToAdd {
 		id := must.Value(uuid.Parse(idStr))
 		toolIDSet[id] = true
 	}
 
 	// Remove tools
-	for _, idStr := range p.HTTPToolIdsToRemove {
+	for _, idStr := range payload.HTTPToolIdsToRemove {
 		id := must.Value(uuid.Parse(idStr))
 		delete(toolIDSet, id)
 	}
@@ -223,14 +230,22 @@ func (s *Service) UpdateToolset(ctx context.Context, p *gen.UpdateToolsetPayload
 	}, nil
 }
 
-func (s *Service) GetToolsetDetails(ctx context.Context, p *gen.GetToolsetDetailsPayload) (*gen.ToolsetDetails, error) {
-	toolsetID := must.Value(uuid.Parse(p.ID))
+func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolsetDetailsPayload) (*gen.ToolsetDetails, error) {
+	toolsetID := must.Value(uuid.Parse(payload.ID))
 	session, ok := sessions.GetSessionValueFromContext(ctx)
 	if !ok || session == nil {
 		return nil, errors.New("session not found in context")
 	}
 
-	toolset, err := s.repo.GetToolset(ctx, toolsetID)
+	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		ID:        toolsetID,
+		ProjectID: access.ProjectID,
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -36,20 +36,19 @@ toolsets (create-toolset|list-toolsets|update-toolset|get-toolset-details)
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Eveniet repellendus minus ratione nobis vero." --content-length 6863388175291744025 --project-slug "Sit eum molestias iste quam nesciunt nostrum." --gram-session-token "Ut aliquam." --stream "goa.png"` + "\n" +
-		os.Args[0] + ` auth callback --shared-token "Accusantium dicta corporis."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Error adipisci dolor voluptas." --gram-session-token "Id autem."` + "\n" +
+	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Non assumenda inventore placeat et illum." --content-length 420045487307077182 --project-slug "Perferendis asperiores est officiis natus." --gram-session-token "Vitae voluptatem aut saepe impedit." --stream "goa.png"` + "\n" +
+		os.Args[0] + ` auth callback --shared-token "Nihil veniam voluptatem optio dolorem."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Laudantium consequatur placeat." --gram-session-token "Ipsum saepe quis."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		os.Args[0] + ` toolsets create-toolset --body '{
-      "description": "Voluptas unde laboriosam laborum sint quasi itaque.",
+      "description": "Deleniti ea tenetur a ut.",
       "http_tool_ids": [
-         "Ea aut et.",
-         "Similique nostrum.",
-         "Explicabo omnis aspernatur."
+         "Enim sit quia et.",
+         "Autem architecto eaque eum.",
+         "Aliquid magnam voluptatem quam."
       ],
-      "name": "Eveniet repellat voluptatem aliquid non.",
-      "project_id": "Sapiente atque ut minima quia iure sequi."
-   }' --gram-session-token "Deleniti ea tenetur a ut."` + "\n" +
+      "name": "Explicabo omnis aspernatur."
+   }' --gram-session-token "Praesentium maxime laborum." --project-slug "Ut libero saepe magnam."` + "\n" +
 		""
 }
 
@@ -112,19 +111,22 @@ func ParseEndpoint(
 		toolsetsCreateToolsetFlags                = flag.NewFlagSet("create-toolset", flag.ExitOnError)
 		toolsetsCreateToolsetBodyFlag             = toolsetsCreateToolsetFlags.String("body", "REQUIRED", "")
 		toolsetsCreateToolsetGramSessionTokenFlag = toolsetsCreateToolsetFlags.String("gram-session-token", "", "")
+		toolsetsCreateToolsetProjectSlugFlag      = toolsetsCreateToolsetFlags.String("project-slug", "REQUIRED", "")
 
 		toolsetsListToolsetsFlags                = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
-		toolsetsListToolsetsProjectIDFlag        = toolsetsListToolsetsFlags.String("project-id", "REQUIRED", "")
 		toolsetsListToolsetsGramSessionTokenFlag = toolsetsListToolsetsFlags.String("gram-session-token", "", "")
+		toolsetsListToolsetsProjectSlugFlag      = toolsetsListToolsetsFlags.String("project-slug", "REQUIRED", "")
 
 		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
 		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
 		toolsetsUpdateToolsetIDFlag               = toolsetsUpdateToolsetFlags.String("id", "REQUIRED", "The ID of the toolset to update")
 		toolsetsUpdateToolsetGramSessionTokenFlag = toolsetsUpdateToolsetFlags.String("gram-session-token", "", "")
+		toolsetsUpdateToolsetProjectSlugFlag      = toolsetsUpdateToolsetFlags.String("project-slug", "REQUIRED", "")
 
 		toolsetsGetToolsetDetailsFlags                = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
 		toolsetsGetToolsetDetailsIDFlag               = toolsetsGetToolsetDetailsFlags.String("id", "REQUIRED", "The ID of the toolset")
 		toolsetsGetToolsetDetailsGramSessionTokenFlag = toolsetsGetToolsetDetailsFlags.String("gram-session-token", "", "")
+		toolsetsGetToolsetDetailsProjectSlugFlag      = toolsetsGetToolsetDetailsFlags.String("project-slug", "REQUIRED", "")
 	)
 	assetsFlags.Usage = assetsUsage
 	assetsUploadOpenAPIv3Flags.Usage = assetsUploadOpenAPIv3Usage
@@ -318,16 +320,16 @@ func ParseEndpoint(
 			switch epn {
 			case "create-toolset":
 				endpoint = c.CreateToolset()
-				data, err = toolsetsc.BuildCreateToolsetPayload(*toolsetsCreateToolsetBodyFlag, *toolsetsCreateToolsetGramSessionTokenFlag)
+				data, err = toolsetsc.BuildCreateToolsetPayload(*toolsetsCreateToolsetBodyFlag, *toolsetsCreateToolsetGramSessionTokenFlag, *toolsetsCreateToolsetProjectSlugFlag)
 			case "list-toolsets":
 				endpoint = c.ListToolsets()
-				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsProjectIDFlag, *toolsetsListToolsetsGramSessionTokenFlag)
+				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsGramSessionTokenFlag, *toolsetsListToolsetsProjectSlugFlag)
 			case "update-toolset":
 				endpoint = c.UpdateToolset()
-				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetIDFlag, *toolsetsUpdateToolsetGramSessionTokenFlag)
+				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetIDFlag, *toolsetsUpdateToolsetGramSessionTokenFlag, *toolsetsUpdateToolsetProjectSlugFlag)
 			case "get-toolset-details":
 				endpoint = c.GetToolsetDetails()
-				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsIDFlag, *toolsetsGetToolsetDetailsGramSessionTokenFlag)
+				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsIDFlag, *toolsetsGetToolsetDetailsGramSessionTokenFlag, *toolsetsGetToolsetDetailsProjectSlugFlag)
 			}
 		}
 	}
@@ -362,7 +364,7 @@ Upload an OpenAPI v3 document to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Eveniet repellendus minus ratione nobis vero." --content-length 6863388175291744025 --project-slug "Sit eum molestias iste quam nesciunt nostrum." --gram-session-token "Ut aliquam." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Non assumenda inventore placeat et illum." --content-length 420045487307077182 --project-slug "Perferendis asperiores est officiis natus." --gram-session-token "Vitae voluptatem aut saepe impedit." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -389,7 +391,7 @@ Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth callback --shared-token "Accusantium dicta corporis."
+    %[1]s auth callback --shared-token "Nihil veniam voluptatem optio dolorem."
 `, os.Args[0])
 }
 
@@ -402,7 +404,7 @@ Switches the authentication scope to a different organization.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Id nihil." --project-id "Voluptatem optio dolorem nihil iusto consequatur." --gram-session-token "Facilis accusantium totam a velit nisi vero."
+    %[1]s auth switch-scopes --organization-id "Aliquam ut minima omnis rem perferendis beatae." --project-id "Autem molestiae aut sit." --gram-session-token "Aliquid voluptatem."
 `, os.Args[0])
 }
 
@@ -413,7 +415,7 @@ Logs out the current user by clearing their session.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth logout --gram-session-token "Beatae quae autem molestiae aut."
+    %[1]s auth logout --gram-session-token "Voluptas quis alias."
 `, os.Args[0])
 }
 
@@ -424,7 +426,7 @@ Provides information about the current authentication status.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth info --gram-session-token "Quos deserunt doloribus velit non laboriosam ut."
+    %[1]s auth info --gram-session-token "Nobis adipisci qui aut ullam."
 `, os.Args[0])
 }
 
@@ -452,7 +454,7 @@ Create a deployment to load tool definitions.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Error adipisci dolor voluptas." --gram-session-token "Id autem."
+    %[1]s deployments get-deployment --id "Laudantium consequatur placeat." --gram-session-token "Ipsum saepe quis."
 `, os.Args[0])
 }
 
@@ -466,16 +468,15 @@ Create a deployment to load tool definitions.
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Adipisci beatae eveniet illum doloribus tempora sequi.",
+      "external_url": "Beatae aut veniam voluptas at.",
       "github_repo": "speakeasyapi/gram",
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m",
       "openapiv3_asset_ids": [
-         "Itaque perferendis.",
-         "Veritatis debitis et qui accusantium.",
-         "Ducimus eius provident tenetur excepturi."
+         "Laborum quam.",
+         "Facere accusamus illum quibusdam deleniti."
       ]
-   }' --gram-session-token "Est ad."
+   }' --gram-session-token "Ab in quisquam saepe dicta ea libero."
 `, os.Args[0])
 }
 
@@ -488,7 +489,7 @@ List all deployments in descending order of creation.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Enim officiis dignissimos distinctio." --limit 14 --gram-session-token "Maiores ea vero dolor maxime quam vel."
+    %[1]s deployments list-deployments --cursor "Quos voluptas unde laboriosam laborum sint quasi." --limit 55 --gram-session-token "Qui ea aut."
 `, os.Args[0])
 }
 
@@ -532,72 +533,74 @@ Additional help:
 `, os.Args[0])
 }
 func toolsetsCreateToolsetUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets create-toolset -body JSON -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets create-toolset -body JSON -gram-session-token STRING -project-slug STRING
 
 Create a new toolset with associated tools
     -body JSON: 
     -gram-session-token STRING: 
+    -project-slug STRING: 
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "description": "Voluptas unde laboriosam laborum sint quasi itaque.",
+      "description": "Deleniti ea tenetur a ut.",
       "http_tool_ids": [
-         "Ea aut et.",
-         "Similique nostrum.",
-         "Explicabo omnis aspernatur."
+         "Enim sit quia et.",
+         "Autem architecto eaque eum.",
+         "Aliquid magnam voluptatem quam."
       ],
-      "name": "Eveniet repellat voluptatem aliquid non.",
-      "project_id": "Sapiente atque ut minima quia iure sequi."
-   }' --gram-session-token "Deleniti ea tenetur a ut."
+      "name": "Explicabo omnis aspernatur."
+   }' --gram-session-token "Praesentium maxime laborum." --project-slug "Ut libero saepe magnam."
 `, os.Args[0])
 }
 
 func toolsetsListToolsetsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets list-toolsets -project-id STRING -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets list-toolsets -gram-session-token STRING -project-slug STRING
 
 List all toolsets for a project
-    -project-id STRING: 
     -gram-session-token STRING: 
+    -project-slug STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --project-id "Consequatur deserunt sequi maxime." --gram-session-token "Assumenda quas dolor mollitia laboriosam voluptatem."
+    %[1]s toolsets list-toolsets --gram-session-token "Maxime error voluptatum dolore debitis." --project-slug "Doloribus magnam nostrum aut sunt itaque."
 `, os.Args[0])
 }
 
 func toolsetsUpdateToolsetUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets update-toolset -body JSON -id STRING -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets update-toolset -body JSON -id STRING -gram-session-token STRING -project-slug STRING
 
 Update a toolset's properties including name, description, and HTTP tools
     -body JSON: 
     -id STRING: The ID of the toolset to update
     -gram-session-token STRING: 
+    -project-slug STRING: 
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "description": "Reiciendis aspernatur.",
+      "description": "Perspiciatis sed facere sed.",
       "http_tool_ids_to_add": [
-         "Et quia consectetur voluptatibus.",
-         "Iusto perspiciatis sit.",
-         "Sint enim consequatur dolorum."
+         "Harum voluptates autem.",
+         "Consequatur consequatur minima ut odio sunt officiis.",
+         "Et quos quis fugit ut.",
+         "Illo qui et est aut dolores."
       ],
       "http_tool_ids_to_remove": [
-         "Totam sint assumenda perspiciatis sed facere sed.",
-         "Corrupti harum voluptates autem impedit consequatur consequatur.",
-         "Ut odio."
+         "Perspiciatis illum et dignissimos veniam vel.",
+         "Iste id suscipit corrupti ea et quaerat."
       ],
-      "name": "Voluptatem aspernatur dolores nihil mollitia."
-   }' --id "Officiis ab et." --gram-session-token "Quis fugit ut quaerat."
+      "name": "Consequatur dolorum autem ut totam sint."
+   }' --id "Voluptates molestias corrupti." --gram-session-token "Corporis dolor." --project-slug "Nesciunt et dolores deleniti aut ipsam."
 `, os.Args[0])
 }
 
 func toolsetsGetToolsetDetailsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -id STRING -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -id STRING -gram-session-token STRING -project-slug STRING
 
 Get detailed information about a toolset including full HTTP tool definitions
     -id STRING: The ID of the toolset
     -gram-session-token STRING: 
+    -project-slug STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --id "Velit aspernatur qui." --gram-session-token "Praesentium voluptas dolor magnam voluptates est."
+    %[1]s toolsets get-toolset-details --id "Rem voluptatem ea corrupti." --gram-session-token "Ipsa architecto et accusantium cumque quo." --project-slug "Sit iste itaque itaque."
 `, os.Args[0])
 }

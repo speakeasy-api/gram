@@ -15,6 +15,7 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Extend(CreateToolsetForm)
 			Extend(sessions.SessionPayload)
+			Extend(sessions.ProjectPayload)
 		})
 
 		Result(Toolset)
@@ -22,6 +23,7 @@ var _ = Service("toolsets", func() {
 		HTTP(func() {
 			POST("/rpc/toolsets.create")
 			sessions.SessionHeader()
+			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
 	})
@@ -30,17 +32,16 @@ var _ = Service("toolsets", func() {
 		Description("List all toolsets for a project")
 
 		Payload(func() {
-			Attribute("project_id", String, "The project ID this toolset belongs to")
-			Required("project_id")
 			Extend(sessions.SessionPayload)
+			Extend(sessions.ProjectPayload)
 		})
 
 		Result(ListToolsetsResult)
 
 		HTTP(func() {
 			GET("/rpc/toolsets.list")
-			Param("project_id")
 			sessions.SessionHeader()
+			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
 	})
@@ -51,6 +52,7 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Extend(UpdateToolsetForm)
 			Extend(sessions.SessionPayload)
+			Extend(sessions.ProjectPayload)
 		})
 
 		Result(Toolset)
@@ -59,6 +61,7 @@ var _ = Service("toolsets", func() {
 			Param("id")
 			POST("/rpc/toolsets.update/{id}")
 			sessions.SessionHeader()
+			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
 	})
@@ -70,6 +73,7 @@ var _ = Service("toolsets", func() {
 			Attribute("id", String, "The ID of the toolset")
 			Required("id")
 			Extend(sessions.SessionPayload)
+			Extend(sessions.ProjectPayload)
 		})
 
 		Result(ToolsetDetails)
@@ -77,6 +81,7 @@ var _ = Service("toolsets", func() {
 		HTTP(func() {
 			Param("id")
 			sessions.SessionHeader()
+			sessions.ProjectHeader()
 			GET("/rpc/toolsets.get/{id}")
 			Response(StatusOK)
 		})
@@ -85,10 +90,9 @@ var _ = Service("toolsets", func() {
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("name", String, "The name of the toolset")
-	Attribute("project_id", String, "The project ID this toolset belongs to")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs to include")
-	Required("name", "project_id")
+	Required("name")
 })
 
 var Toolset = Type("Toolset", func() {

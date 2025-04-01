@@ -172,11 +172,16 @@ SELECT
   , deleted_at
   , deleted
 FROM toolsets
-WHERE id = $1
+WHERE id = $1 AND project_id = $2
 `
 
-func (q *Queries) GetToolset(ctx context.Context, id uuid.UUID) (Toolset, error) {
-	row := q.db.QueryRow(ctx, getToolset, id)
+type GetToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, getToolset, arg.ID, arg.ProjectID)
 	var i Toolset
 	err := row.Scan(
 		&i.ID,

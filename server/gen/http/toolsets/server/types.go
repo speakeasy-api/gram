@@ -17,8 +17,6 @@ import (
 type CreateToolsetRequestBody struct {
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The project ID this toolset belongs to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs to include
@@ -256,10 +254,9 @@ func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetD
 
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
-func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *string) *toolsets.CreateToolsetPayload {
+func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *string, projectSlug string) *toolsets.CreateToolsetPayload {
 	v := &toolsets.CreateToolsetPayload{
 		Name:        *body.Name,
-		ProjectID:   *body.ProjectID,
 		Description: body.Description,
 	}
 	if body.HTTPToolIds != nil {
@@ -269,23 +266,24 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *s
 		}
 	}
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v
 }
 
 // NewListToolsetsPayload builds a toolsets service listToolsets endpoint
 // payload.
-func NewListToolsetsPayload(projectID string, gramSessionToken *string) *toolsets.ListToolsetsPayload {
+func NewListToolsetsPayload(gramSessionToken *string, projectSlug string) *toolsets.ListToolsetsPayload {
 	v := &toolsets.ListToolsetsPayload{}
-	v.ProjectID = projectID
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v
 }
 
 // NewUpdateToolsetPayload builds a toolsets service updateToolset endpoint
 // payload.
-func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, id string, gramSessionToken *string) *toolsets.UpdateToolsetPayload {
+func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, id string, gramSessionToken *string, projectSlug string) *toolsets.UpdateToolsetPayload {
 	v := &toolsets.UpdateToolsetPayload{
 		Name:        body.Name,
 		Description: body.Description,
@@ -304,16 +302,18 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, id string, gramSess
 	}
 	v.ID = id
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v
 }
 
 // NewGetToolsetDetailsPayload builds a toolsets service getToolsetDetails
 // endpoint payload.
-func NewGetToolsetDetailsPayload(id string, gramSessionToken *string) *toolsets.GetToolsetDetailsPayload {
+func NewGetToolsetDetailsPayload(id string, gramSessionToken *string, projectSlug string) *toolsets.GetToolsetDetailsPayload {
 	v := &toolsets.GetToolsetDetailsPayload{}
 	v.ID = id
 	v.GramSessionToken = gramSessionToken
+	v.ProjectSlug = projectSlug
 
 	return v
 }
@@ -323,9 +323,6 @@ func NewGetToolsetDetailsPayload(id string, gramSessionToken *string) *toolsets.
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
 	return
 }

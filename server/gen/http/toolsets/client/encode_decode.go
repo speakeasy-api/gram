@@ -45,6 +45,10 @@ func EncodeCreateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
 		}
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
+		}
 		body := NewCreateToolsetRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("toolsets", "createToolset", err)
@@ -120,9 +124,10 @@ func EncodeListToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
 		}
-		values := req.URL.Query()
-		values.Add("project_id", p.ProjectID)
-		req.URL.RawQuery = values.Encode()
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
+		}
 		return nil
 	}
 }
@@ -203,6 +208,10 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
+		}
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
 		}
 		body := NewUpdateToolsetRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -288,6 +297,10 @@ func EncodeGetToolsetDetailsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
 			req.Header.Set("X-Gram-Session", head)
+		}
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
 		}
 		return nil
 	}
