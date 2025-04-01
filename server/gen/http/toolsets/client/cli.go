@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Sed a et culpa voluptatem.\",\n      \"http_tool_ids\": [\n         \"Explicabo et sit in vel labore.\",\n         \"At praesentium voluptates error sed.\"\n      ],\n      \"name\": \"Voluptatem ipsa molestiae.\",\n      \"project_id\": \"Nemo autem iusto voluptas.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Voluptas unde laboriosam laborum sint quasi itaque.\",\n      \"http_tool_ids\": [\n         \"Ea aut et.\",\n         \"Similique nostrum.\",\n         \"Explicabo omnis aspernatur.\"\n      ],\n      \"name\": \"Eveniet repellat voluptatem aliquid non.\",\n      \"project_id\": \"Sapiente atque ut minima quia iure sequi.\"\n   }'")
 		}
 	}
 	var gramSessionToken *string
@@ -75,7 +75,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Occaecati assumenda ut consectetur et ut velit.\",\n      \"http_tool_ids_to_add\": [\n         \"Et sunt tenetur.\",\n         \"Accusantium voluptas vel.\",\n         \"Consequuntur est soluta reprehenderit quia doloribus.\",\n         \"Minus laudantium dolore.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Quis modi velit maiores laudantium ab dolorum.\",\n         \"Aspernatur voluptatem aspernatur dolores nihil.\"\n      ],\n      \"name\": \"Aut sunt.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Reiciendis aspernatur.\",\n      \"http_tool_ids_to_add\": [\n         \"Et quia consectetur voluptatibus.\",\n         \"Iusto perspiciatis sit.\",\n         \"Sint enim consequatur dolorum.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Totam sint assumenda perspiciatis sed facere sed.\",\n         \"Corrupti harum voluptates autem impedit consequatur consequatur.\",\n         \"Ut odio.\"\n      ],\n      \"name\": \"Voluptatem aspernatur dolores nihil mollitia.\"\n   }'")
 		}
 	}
 	var id string

@@ -120,7 +120,9 @@ var _ = Service("auth", func() {
 
 var Project = Type("Project", func() {
 	Attribute("project_id", String)
-	Required("project_id")
+	Attribute("project_name", String)
+	Attribute("project_slug", String)
+	Required("project_id", "project_name", "project_slug")
 })
 
 var Organization = Type("Organization", func() {

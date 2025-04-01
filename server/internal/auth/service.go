@@ -110,7 +110,9 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		var orgProjects []*gen.Project
 		for _, project := range projectRows {
 			orgProjects = append(orgProjects, &gen.Project{
-				ProjectID: project.ID.String(),
+				ProjectID:   project.ID.String(),
+				ProjectName: project.Name,
+				ProjectSlug: project.Slug,
 			})
 		}
 

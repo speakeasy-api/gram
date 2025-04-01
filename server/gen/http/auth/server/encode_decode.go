@@ -224,7 +224,9 @@ func marshalAuthOrganizationToOrganizationResponseBody(v *auth.Organization) *Or
 // *ProjectResponseBody from a value of type *auth.Project.
 func marshalAuthProjectToProjectResponseBody(v *auth.Project) *ProjectResponseBody {
 	res := &ProjectResponseBody{
-		ProjectID: v.ProjectID,
+		ProjectID:   v.ProjectID,
+		ProjectName: v.ProjectName,
+		ProjectSlug: v.ProjectSlug,
 	}
 
 	return res

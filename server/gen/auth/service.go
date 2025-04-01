@@ -100,7 +100,9 @@ type Organization struct {
 }
 
 type Project struct {
-	ProjectID string
+	ProjectID   string
+	ProjectName string
+	ProjectSlug string
 }
 
 // SwitchScopesPayload is the payload type of the auth service switchScopes

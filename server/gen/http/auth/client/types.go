@@ -32,7 +32,9 @@ type OrganizationResponseBody struct {
 
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ProjectID   *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
 }
 
 // NewCallbackResultTemporaryRedirect builds a "auth" service "callback"
@@ -140,6 +142,12 @@ func ValidateOrganizationResponseBody(body *OrganizationResponseBody) (err error
 func ValidateProjectResponseBody(body *ProjectResponseBody) (err error) {
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.ProjectSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
 	}
 	return
 }

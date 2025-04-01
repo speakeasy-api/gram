@@ -404,7 +404,9 @@ func unmarshalOrganizationResponseBodyToAuthOrganization(v *OrganizationResponse
 // *auth.Project from a value of type *ProjectResponseBody.
 func unmarshalProjectResponseBodyToAuthProject(v *ProjectResponseBody) *auth.Project {
 	res := &auth.Project{
-		ProjectID: *v.ProjectID,
+		ProjectID:   *v.ProjectID,
+		ProjectName: *v.ProjectName,
+		ProjectSlug: *v.ProjectSlug,
 	}
 
 	return res

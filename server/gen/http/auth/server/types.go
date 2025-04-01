@@ -31,7 +31,9 @@ type OrganizationResponseBody struct {
 
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	ProjectID   string `form:"project_id" json:"project_id" xml:"project_id"`
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
 }
 
 // NewInfoResponseBody builds the HTTP response body from the result of the
