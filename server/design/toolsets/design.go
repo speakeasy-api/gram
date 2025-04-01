@@ -14,8 +14,7 @@ var _ = Service("toolsets", func() {
 
 		Payload(func() {
 			Extend(CreateToolsetForm)
-			Extend(sessions.SessionPayload)
-			Extend(sessions.ProjectPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(Toolset)
@@ -32,8 +31,8 @@ var _ = Service("toolsets", func() {
 		Description("List all toolsets for a project")
 
 		Payload(func() {
-			Extend(sessions.SessionPayload)
-			Extend(sessions.ProjectPayload)
+			sessions.SessionPayload()
+			sessions.ProjectPayload()
 		})
 
 		Result(ListToolsetsResult)
@@ -51,8 +50,7 @@ var _ = Service("toolsets", func() {
 
 		Payload(func() {
 			Extend(UpdateToolsetForm)
-			Extend(sessions.SessionPayload)
-			Extend(sessions.ProjectPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(Toolset)
@@ -72,8 +70,8 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Attribute("id", String, "The ID of the toolset")
 			Required("id")
-			Extend(sessions.SessionPayload)
-			Extend(sessions.ProjectPayload)
+			sessions.SessionPayload()
+			sessions.ProjectPayload()
 		})
 
 		Result(ToolsetDetails)
@@ -92,6 +90,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs to include")
+	sessions.ProjectPayload()
 	Required("name")
 })
 
@@ -119,6 +118,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("description", String, "The new description of the toolset")
 	Attribute("http_tool_ids_to_add", ArrayOf(String), "HTTP tool IDs to add to the toolset")
 	Attribute("http_tool_ids_to_remove", ArrayOf(String), "HTTP tool IDs to remove from the toolset")
+	sessions.ProjectPayload()
 	Required("id")
 })
 

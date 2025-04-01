@@ -15,7 +15,7 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(GetDeploymentForm)
-			Extend(sessions.SessionPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(GetDeploymentResult)
@@ -33,7 +33,7 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(CreateDeploymentForm)
-			Extend(sessions.SessionPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(CreateDeploymentResult)
@@ -50,7 +50,7 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(ListDeploymentForm)
-			Extend(sessions.SessionPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(ListDeploymentResult)

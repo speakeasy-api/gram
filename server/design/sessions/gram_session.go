@@ -9,10 +9,9 @@ var GramSession = APIKeySecurity("gram_session", func() {
 	Description("Gram Session based auth. By cookie or header.")
 })
 
-// KeyPayload defines the structure of the session key
-var SessionPayload = Type("SessionPayload", func() {
+var SessionPayload = func() {
 	APIKey("gram_session", "gram_session_token", String)
-})
+}
 
 var WriteSessionCookie = func() {
 	Cookie("gram_session_cookie:gram_session", String, func() {

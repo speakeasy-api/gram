@@ -14,9 +14,7 @@ var _ = Service("assets", func() {
 		Description("Upload an OpenAPI v3 document to Gram.")
 
 		Payload(func() {
-			Extend(sessions.SessionPayload)
 			Extend(UploadOpenAPIv3Form)
-			Extend(sessions.ProjectPayload)
 		})
 
 		Result(UploadOpenAPIv3Result)
@@ -34,6 +32,8 @@ var _ = Service("assets", func() {
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
 	Required("content_type", "content_length")
+	sessions.SessionPayload()
+	sessions.ProjectPayload()
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)

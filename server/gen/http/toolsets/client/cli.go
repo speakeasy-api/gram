@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Deleniti ea tenetur a ut.\",\n      \"http_tool_ids\": [\n         \"Enim sit quia et.\",\n         \"Autem architecto eaque eum.\",\n         \"Aliquid magnam voluptatem quam.\"\n      ],\n      \"name\": \"Explicabo omnis aspernatur.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Qui ea aut.\",\n      \"http_tool_ids\": [\n         \"Similique nostrum.\",\n         \"Explicabo omnis aspernatur.\",\n         \"Deleniti ea tenetur a ut.\"\n      ],\n      \"name\": \"Voluptas unde laboriosam laborum sint quasi itaque.\"\n   }'")
 		}
 	}
 	var gramSessionToken *string

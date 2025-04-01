@@ -50,13 +50,13 @@ var MethodNames = [4]string{"createToolset", "listToolsets", "updateToolset", "g
 // CreateToolsetPayload is the payload type of the toolsets service
 // createToolset method.
 type CreateToolsetPayload struct {
+	GramSessionToken *string
 	// The name of the toolset
 	Name string
 	// Description of the toolset
 	Description *string
 	// List of HTTP tool IDs to include
-	HTTPToolIds      []string
-	GramSessionToken *string
+	HTTPToolIds []string
 	// The project the action belongs too
 	ProjectSlug string
 }
@@ -167,6 +167,7 @@ type ToolsetDetails struct {
 // UpdateToolsetPayload is the payload type of the toolsets service
 // updateToolset method.
 type UpdateToolsetPayload struct {
+	GramSessionToken *string
 	// The ID of the toolset to update
 	ID string
 	// The new name of the toolset
@@ -177,7 +178,6 @@ type UpdateToolsetPayload struct {
 	HTTPToolIdsToAdd []string
 	// HTTP tool IDs to remove from the toolset
 	HTTPToolIdsToRemove []string
-	GramSessionToken    *string
 	// The project the action belongs too
 	ProjectSlug string
 }

@@ -36,19 +36,19 @@ toolsets (create-toolset|list-toolsets|update-toolset|get-toolset-details)
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Non assumenda inventore placeat et illum." --content-length 420045487307077182 --project-slug "Perferendis asperiores est officiis natus." --gram-session-token "Vitae voluptatem aut saepe impedit." --stream "goa.png"` + "\n" +
-		os.Args[0] + ` auth callback --shared-token "Nihil veniam voluptatem optio dolorem."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Laudantium consequatur placeat." --gram-session-token "Ipsum saepe quis."` + "\n" +
+	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Saepe ut aliquam ipsa molestiae." --content-length 2396935383531909119 --project-slug "Assumenda inventore placeat et." --gram-session-token "Et perspiciatis perferendis asperiores est officiis natus." --stream "goa.png"` + "\n" +
+		os.Args[0] + ` auth callback --shared-token "Quasi et."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Magnam dolor id totam inventore officiis quia." --gram-session-token "Laudantium quia animi praesentium quas vitae esse."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		os.Args[0] + ` toolsets create-toolset --body '{
-      "description": "Deleniti ea tenetur a ut.",
+      "description": "Qui ea aut.",
       "http_tool_ids": [
-         "Enim sit quia et.",
-         "Autem architecto eaque eum.",
-         "Aliquid magnam voluptatem quam."
+         "Similique nostrum.",
+         "Explicabo omnis aspernatur.",
+         "Deleniti ea tenetur a ut."
       ],
-      "name": "Explicabo omnis aspernatur."
-   }' --gram-session-token "Praesentium maxime laborum." --project-slug "Ut libero saepe magnam."` + "\n" +
+      "name": "Voluptas unde laboriosam laborum sint quasi itaque."
+   }' --gram-session-token "Deleniti enim sit quia et aut autem." --project-slug "Eaque eum repellat aliquid magnam."` + "\n" +
 		""
 }
 
@@ -364,7 +364,7 @@ Upload an OpenAPI v3 document to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Non assumenda inventore placeat et illum." --content-length 420045487307077182 --project-slug "Perferendis asperiores est officiis natus." --gram-session-token "Vitae voluptatem aut saepe impedit." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Saepe ut aliquam ipsa molestiae." --content-length 2396935383531909119 --project-slug "Assumenda inventore placeat et." --gram-session-token "Et perspiciatis perferendis asperiores est officiis natus." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -391,7 +391,7 @@ Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth callback --shared-token "Nihil veniam voluptatem optio dolorem."
+    %[1]s auth callback --shared-token "Quasi et."
 `, os.Args[0])
 }
 
@@ -404,7 +404,7 @@ Switches the authentication scope to a different organization.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Aliquam ut minima omnis rem perferendis beatae." --project-id "Autem molestiae aut sit." --gram-session-token "Aliquid voluptatem."
+    %[1]s auth switch-scopes --organization-id "Velit nisi vero inventore ab ut." --project-id "Amet temporibus autem eaque qui." --gram-session-token "Aliquam ut minima omnis rem perferendis beatae."
 `, os.Args[0])
 }
 
@@ -415,7 +415,7 @@ Logs out the current user by clearing their session.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth logout --gram-session-token "Voluptas quis alias."
+    %[1]s auth logout --gram-session-token "Quos deserunt doloribus velit non laboriosam ut."
 `, os.Args[0])
 }
 
@@ -426,7 +426,7 @@ Provides information about the current authentication status.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth info --gram-session-token "Nobis adipisci qui aut ullam."
+    %[1]s auth info --gram-session-token "Voluptas quis alias."
 `, os.Args[0])
 }
 
@@ -454,7 +454,7 @@ Create a deployment to load tool definitions.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Laudantium consequatur placeat." --gram-session-token "Ipsum saepe quis."
+    %[1]s deployments get-deployment --id "Magnam dolor id totam inventore officiis quia." --gram-session-token "Laudantium quia animi praesentium quas vitae esse."
 `, os.Args[0])
 }
 
@@ -468,15 +468,17 @@ Create a deployment to load tool definitions.
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Beatae aut veniam voluptas at.",
+      "external_url": "Alias itaque perferendis molestias veritatis debitis et.",
       "github_repo": "speakeasyapi/gram",
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m",
       "openapiv3_asset_ids": [
-         "Laborum quam.",
-         "Facere accusamus illum quibusdam deleniti."
+         "Commodi ducimus.",
+         "Provident tenetur excepturi architecto est.",
+         "Ut voluptatibus soluta velit.",
+         "Beatae aut veniam voluptas at."
       ]
-   }' --gram-session-token "Ab in quisquam saepe dicta ea libero."
+   }' --gram-session-token "Ut laborum quam architecto facere accusamus."
 `, os.Args[0])
 }
 
@@ -489,7 +491,7 @@ List all deployments in descending order of creation.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Quos voluptas unde laboriosam laborum sint quasi." --limit 55 --gram-session-token "Qui ea aut."
+    %[1]s deployments list-deployments --cursor "Qui dolorem natus porro aut." --limit 7 --gram-session-token "Repellat voluptatem aliquid."
 `, os.Args[0])
 }
 
@@ -542,14 +544,14 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "description": "Deleniti ea tenetur a ut.",
+      "description": "Qui ea aut.",
       "http_tool_ids": [
-         "Enim sit quia et.",
-         "Autem architecto eaque eum.",
-         "Aliquid magnam voluptatem quam."
+         "Similique nostrum.",
+         "Explicabo omnis aspernatur.",
+         "Deleniti ea tenetur a ut."
       ],
-      "name": "Explicabo omnis aspernatur."
-   }' --gram-session-token "Praesentium maxime laborum." --project-slug "Ut libero saepe magnam."
+      "name": "Voluptas unde laboriosam laborum sint quasi itaque."
+   }' --gram-session-token "Deleniti enim sit quia et aut autem." --project-slug "Eaque eum repellat aliquid magnam."
 `, os.Args[0])
 }
 
@@ -561,7 +563,7 @@ List all toolsets for a project
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --gram-session-token "Maxime error voluptatum dolore debitis." --project-slug "Doloribus magnam nostrum aut sunt itaque."
+    %[1]s toolsets list-toolsets --gram-session-token "Error et enim nostrum doloremque." --project-slug "Maxime error voluptatum dolore debitis."
 `, os.Args[0])
 }
 

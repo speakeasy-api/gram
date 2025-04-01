@@ -48,6 +48,7 @@ var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployment
 // CreateDeploymentPayload is the payload type of the deployments service
 // createDeployment method.
 type CreateDeploymentPayload struct {
+	GramSessionToken *string
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey string
 	// The github repository in the form of "owner/repo".
@@ -63,7 +64,6 @@ type CreateDeploymentPayload struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3AssetIds []string
-	GramSessionToken  *string
 }
 
 // CreateDeploymentResult is the result type of the deployments service
@@ -104,9 +104,9 @@ type Deployment struct {
 // GetDeploymentPayload is the payload type of the deployments service
 // getDeployment method.
 type GetDeploymentPayload struct {
-	// The ID of the deployment
-	ID               string
 	GramSessionToken *string
+	// The ID of the deployment
+	ID string
 }
 
 // GetDeploymentResult is the result type of the deployments service
@@ -151,9 +151,9 @@ type ListDeploymentResult struct {
 // ListDeploymentsPayload is the payload type of the deployments service
 // listDeployments method.
 type ListDeploymentsPayload struct {
+	GramSessionToken *string
 	// The cursor to fetch results from
 	Cursor *string
 	// Results per page
-	Limit            int
-	GramSessionToken *string
+	Limit int
 }

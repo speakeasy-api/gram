@@ -45,7 +45,7 @@ var _ = Service("auth", func() {
 		Payload(func() {
 			Attribute("organization_id", String, "The organization slug to switch scopes")
 			Attribute("project_id", String, "The project id to switch scopes too")
-			Extend(sessions.SessionPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(func() {
@@ -70,7 +70,7 @@ var _ = Service("auth", func() {
 		Description("Logs out the current user by clearing their session.")
 
 		Payload(func() {
-			Extend(sessions.SessionPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(func() {
@@ -93,7 +93,7 @@ var _ = Service("auth", func() {
 		Description("Provides information about the current authentication status.")
 
 		Payload(func() {
-			Extend(sessions.SessionPayload)
+			sessions.SessionPayload()
 		})
 
 		Result(func() {

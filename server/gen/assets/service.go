@@ -64,10 +64,10 @@ type Asset struct {
 // uploadOpenAPIv3 method.
 type UploadOpenAPIv3Payload struct {
 	GramSessionToken *string
-	ContentType      string
-	ContentLength    int64
 	// The project the action belongs too
-	ProjectSlug string
+	ProjectSlug   string
+	ContentType   string
+	ContentLength int64
 }
 
 // UploadOpenAPIv3Result is the result type of the assets service
