@@ -12,7 +12,7 @@ check_command() {
 
     if ! command -v "$cmd" &> /dev/null; then
         missing_tools=true
-        declare -g "${var_name}=false"
+        eval "$var_name=false"
     fi
 }
 
