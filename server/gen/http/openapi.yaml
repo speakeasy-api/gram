@@ -46,9 +46,9 @@ paths:
                   required: true
                   type: integer
                   format: int64
-                - name: Gram-Project-ID
+                - name: Gram-Project
                   in: header
-                  description: The project ID the OpenAPI document belongs to
+                  description: The project the OpenAPI document belongs to
                   required: true
                   type: string
                 - name: X-Gram-Session

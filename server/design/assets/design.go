@@ -24,7 +24,7 @@ var _ = Service("assets", func() {
 			POST("/rpc/assets.uploadOpenAPIv3")
 			Header("content_type:Content-Type")
 			Header("content_length:Content-Length")
-			Header("project_id:Gram-Project-ID")
+			Header("project_slug:Gram-Project")
 			sessions.SessionHeader()
 			SkipRequestBodyEncodeDecode()
 		})
@@ -32,11 +32,11 @@ var _ = Service("assets", func() {
 })
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
-	Required("content_type", "content_length", "project_id", "idempotency_key")
+	Required("content_type", "content_length", "project_slug")
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
-	Attribute("project_id", String, "The project ID the OpenAPI document belongs to")
+	Attribute("project_slug", String, "The project the OpenAPI document belongs to")
 })
 
 var UploadOpenAPIv3Result = Type("UploadOpenAPIv3Result", func() {

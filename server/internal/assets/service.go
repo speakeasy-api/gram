@@ -23,7 +23,7 @@ import (
 	gen "github.com/speakeasy-api/gram/gen/assets"
 	srv "github.com/speakeasy-api/gram/gen/http/assets/server"
 	"github.com/speakeasy-api/gram/internal/assets/repo"
-	"github.com/speakeasy-api/gram/internal/must"
+	"github.com/speakeasy-api/gram/internal/auth"
 	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 	"github.com/speakeasy-api/gram/internal/sessions"
 )
@@ -67,6 +67,11 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Payload, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
 	defer reader.Close()
 
+	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
+	if err != nil {
+		return nil, err
+	}
+
 	if payload.ContentLength == 0 {
 		return nil, fmt.Errorf("no content")
 	}
@@ -98,7 +103,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	sha := hex.EncodeToString(hash.Sum(nil))
 
 	asset, err := s.repo.GetProjectAssetBySHA256(ctx, repo.GetProjectAssetBySHA256Params{
-		ProjectID: must.Value(uuid.NewV7()),
+		ProjectID: access.ProjectID,
 		Sha256:    sha,
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -143,7 +148,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		return nil, fmt.Errorf("seek to start: offset not 0: %d", off)
 	}
 
-	dst, uri, err := s.storage.Write(ctx, path.Join(payload.ProjectID, filename), f, contentType)
+	dst, uri, err := s.storage.Write(ctx, path.Join(access.ProjectID.String(), filename), f, contentType)
 	if err != nil {
 		return nil, fmt.Errorf("write to blob storage: %w", err)
 	}
@@ -164,7 +169,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	asset, err = s.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
-		ProjectID:     must.Value(uuid.NewV7()),
+		ProjectID:     access.ProjectID,
 		Sha256:        sha,
 		Kind:          "openapiv3",
 		ContentType:   contentType,

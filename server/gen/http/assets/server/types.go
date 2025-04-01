@@ -49,11 +49,11 @@ func NewUploadOpenAPIv3ResponseBody(res *assets.UploadOpenAPIv3Result) *UploadOp
 
 // NewUploadOpenAPIv3Payload builds a assets service uploadOpenAPIv3 endpoint
 // payload.
-func NewUploadOpenAPIv3Payload(contentType string, contentLength int64, projectID string, gramSessionToken *string) *assets.UploadOpenAPIv3Payload {
+func NewUploadOpenAPIv3Payload(contentType string, contentLength int64, projectSlug string, gramSessionToken *string) *assets.UploadOpenAPIv3Payload {
 	v := &assets.UploadOpenAPIv3Payload{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
-	v.ProjectID = projectID
+	v.ProjectSlug = projectSlug
 	v.GramSessionToken = gramSessionToken
 
 	return v

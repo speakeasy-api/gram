@@ -36,7 +36,7 @@ toolsets (create-toolset|list-toolsets|update-toolset|get-toolset-details)
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Ea et." --content-length 9067420233255761910 --project-id "Recusandae tenetur distinctio debitis." --gram-session-token "Nobis quas dicta dolor aut." --stream "goa.png"` + "\n" +
+	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Ea et." --content-length 9067420233255761910 --project-slug "Recusandae tenetur distinctio debitis." --gram-session-token "Nobis quas dicta dolor aut." --stream "goa.png"` + "\n" +
 		os.Args[0] + ` auth callback --shared-token "Veniam ipsum placeat quibusdam ut velit."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Aliquam ut minima omnis rem perferendis beatae." --gram-session-token "Autem molestiae aut sit."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
@@ -68,7 +68,7 @@ func ParseEndpoint(
 		assetsUploadOpenAPIv3Flags                = flag.NewFlagSet("upload-open-ap-iv3", flag.ExitOnError)
 		assetsUploadOpenAPIv3ContentTypeFlag      = assetsUploadOpenAPIv3Flags.String("content-type", "REQUIRED", "")
 		assetsUploadOpenAPIv3ContentLengthFlag    = assetsUploadOpenAPIv3Flags.String("content-length", "REQUIRED", "")
-		assetsUploadOpenAPIv3ProjectIDFlag        = assetsUploadOpenAPIv3Flags.String("project-id", "REQUIRED", "")
+		assetsUploadOpenAPIv3ProjectSlugFlag      = assetsUploadOpenAPIv3Flags.String("project-slug", "REQUIRED", "")
 		assetsUploadOpenAPIv3GramSessionTokenFlag = assetsUploadOpenAPIv3Flags.String("gram-session-token", "", "")
 		assetsUploadOpenAPIv3StreamFlag           = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
@@ -273,7 +273,7 @@ func ParseEndpoint(
 			switch epn {
 			case "upload-open-ap-iv3":
 				endpoint = c.UploadOpenAPIv3()
-				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ProjectIDFlag, *assetsUploadOpenAPIv3GramSessionTokenFlag)
+				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ProjectSlugFlag, *assetsUploadOpenAPIv3GramSessionTokenFlag)
 				if err == nil {
 					data, err = assetsc.BuildUploadOpenAPIv3StreamPayload(data, *assetsUploadOpenAPIv3StreamFlag)
 				}
@@ -352,17 +352,17 @@ Additional help:
 `, os.Args[0])
 }
 func assetsUploadOpenAPIv3Usage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -project-id STRING -gram-session-token STRING -stream STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -project-slug STRING -gram-session-token STRING -stream STRING
 
 Upload an OpenAPI v3 document to Gram.
     -content-type STRING: 
     -content-length INT64: 
-    -project-id STRING: 
+    -project-slug STRING: 
     -gram-session-token STRING: 
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Ea et." --content-length 9067420233255761910 --project-id "Recusandae tenetur distinctio debitis." --gram-session-token "Nobis quas dicta dolor aut." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Ea et." --content-length 9067420233255761910 --project-slug "Recusandae tenetur distinctio debitis." --gram-session-token "Nobis quas dicta dolor aut." --stream "goa.png"
 `, os.Args[0])
 }
 

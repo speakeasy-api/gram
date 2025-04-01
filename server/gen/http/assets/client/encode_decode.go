@@ -62,8 +62,8 @@ func EncodeUploadOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) f
 			req.Header.Set("Content-Length", headStr)
 		}
 		{
-			head := p.ProjectID
-			req.Header.Set("Gram-Project-ID", head)
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken

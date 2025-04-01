@@ -37,7 +37,7 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			contentType      string
 			contentLength    int64
-			projectID        string
+			projectSlug      string
 			gramSessionToken *string
 			err              error
 		)
@@ -56,9 +56,9 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 			}
 			contentLength = v
 		}
-		projectID = r.Header.Get("Gram-Project-ID")
-		if projectID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "header"))
+		projectSlug = r.Header.Get("Gram-Project")
+		if projectSlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
 		}
 		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
 		if gramSessionTokenRaw != "" {
@@ -67,7 +67,7 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return nil, err
 		}
-		payload := NewUploadOpenAPIv3Payload(contentType, contentLength, projectID, gramSessionToken)
+		payload := NewUploadOpenAPIv3Payload(contentType, contentLength, projectSlug, gramSessionToken)
 		if payload.GramSessionToken != nil {
 			if strings.Contains(*payload.GramSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

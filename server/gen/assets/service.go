@@ -66,8 +66,8 @@ type UploadOpenAPIv3Payload struct {
 	GramSessionToken *string
 	ContentType      string
 	ContentLength    int64
-	// The project ID the OpenAPI document belongs to
-	ProjectID string
+	// The project the OpenAPI document belongs to
+	ProjectSlug string
 }
 
 // UploadOpenAPIv3Result is the result type of the assets service

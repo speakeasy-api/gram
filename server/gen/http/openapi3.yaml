@@ -48,14 +48,14 @@ paths:
                     example: 6470788354242161151
                     format: int64
                   example: 7164378408374254091
-                - name: Gram-Project-ID
+                - name: Gram-Project
                   in: header
-                  description: The project ID the OpenAPI document belongs to
+                  description: The project the OpenAPI document belongs to
                   allowEmptyValue: true
                   required: true
                   schema:
                     type: string
-                    description: The project ID the OpenAPI document belongs to
+                    description: The project the OpenAPI document belongs to
                     example: Repellendus est facere asperiores qui minima voluptatem.
                   example: Et ratione et in.
                 - name: X-Gram-Session
@@ -2043,19 +2043,18 @@ components:
                 content_type:
                     type: string
                     example: Cupiditate unde magni dolorem.
-                project_id:
+                project_slug:
                     type: string
-                    description: The project ID the OpenAPI document belongs to
+                    description: The project the OpenAPI document belongs to
                     example: Quisquam rerum odit distinctio accusantium consequatur ut.
             example:
                 content_length: 3317453073663463301
                 content_type: Qui ea dolorum error minima eaque autem.
-                project_id: Ad ab quod voluptas ut.
+                project_slug: Ad ab quod voluptas ut.
             required:
                 - content_type
                 - content_length
-                - project_id
-                - idempotency_key
+                - project_slug
         UploadOpenAPIv3Result:
             type: object
             properties:
