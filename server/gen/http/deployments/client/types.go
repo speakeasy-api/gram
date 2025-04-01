@@ -8,8 +8,6 @@
 package client
 
 import (
-	"unicode/utf8"
-
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -17,14 +15,21 @@ import (
 // CreateDeploymentRequestBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP request body.
 type CreateDeploymentRequestBody struct {
+	// A unique identifier that will mitigate against duplicate deployments.
+	IdempotencyKey string `form:"idempotency_key" json:"idempotency_key" xml:"idempotency_key"`
+	// The github repository in the form of "owner/repo".
+	GithubRepo *string `form:"github_repo,omitempty" json:"github_repo,omitempty" xml:"github_repo,omitempty"`
+	// The commit hash that triggered the deployment.
+	GithubSha *string `form:"github_sha,omitempty" json:"github_sha,omitempty" xml:"github_sha,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolFormRequestBody `form:"openapi_3p1_tools,omitempty" json:"openapi_3p1_tools,omitempty" xml:"openapi_3p1_tools,omitempty"`
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	Openapiv3AssetIds []string `form:"openapiv3_asset_ids,omitempty" json:"openapiv3_asset_ids,omitempty" xml:"openapiv3_asset_ids,omitempty"`
 }
 
 // GetDeploymentResponseBody is the type of the "deployments" service
@@ -40,37 +45,28 @@ type GetDeploymentResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// A unique identifier that will mitigate against duplicate deployments.
+	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
+	// The github repository in the form of "owner/repo".
+	GithubRepo *string `form:"github_repo,omitempty" json:"github_repo,omitempty" xml:"github_repo,omitempty"`
+	// The commit hash that triggered the deployment.
+	GithubSha *string `form:"github_sha,omitempty" json:"github_sha,omitempty" xml:"github_sha,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolFormResponseBody `form:"openapi_3p1_tools,omitempty" json:"openapi_3p1_tools,omitempty" xml:"openapi_3p1_tools,omitempty"`
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	Openapiv3AssetIds []string `form:"openapiv3_asset_ids,omitempty" json:"openapiv3_asset_ids,omitempty" xml:"openapiv3_asset_ids,omitempty"`
 }
 
 // CreateDeploymentResponseBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP response body.
 type CreateDeploymentResponseBody struct {
-	// The ID to of the deployment.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the organization that the deployment belongs to.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The ID of the project that the deployment belongs to.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The ID of the user that created the deployment.
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// The creation date of the deployment.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolFormResponseBody `form:"openapi_3p1_tools,omitempty" json:"openapi_3p1_tools,omitempty" xml:"openapi_3p1_tools,omitempty"`
+	// A deployment that was successfully created.
+	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
 }
 
 // ListDeploymentsResponseBody is the type of the "deployments" service
@@ -80,107 +76,6 @@ type ListDeploymentsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// A list of deployments
 	Items []*DeploymentResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
-}
-
-// OpenAPI3P1ToolFormResponseBody is used to define fields on response body
-// types.
-type OpenAPI3P1ToolFormResponseBody struct {
-	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
-	// The name of the tool.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The description that is provided with the tool.
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The tags that are associated with the tool.
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
-	// The path of the HTTP endpoint.
-	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// The method to use for the HTTP request.
-	Method *string `form:"method,omitempty" json:"method,omitempty" xml:"method,omitempty"`
-	// A map of path parameters to interpolate into the path of the HTTP request.
-	PathParameters map[string]*OpenAPI3P1ParameterSchemaResponseBody `form:"path_parameters,omitempty" json:"path_parameters,omitempty" xml:"path_parameters,omitempty"`
-	// A map of header schemas to send with the HTTP request.
-	HeaderParameters map[string]*OpenAPI3P1ParameterSchemaResponseBody `form:"header_parameters,omitempty" json:"header_parameters,omitempty" xml:"header_parameters,omitempty"`
-	// A map of query parameters to send with the HTTP request.
-	QueryParameters map[string]*OpenAPI3P1ParameterSchemaResponseBody `form:"query_parameters,omitempty" json:"query_parameters,omitempty" xml:"query_parameters,omitempty"`
-	// The JSON Schema describing the body of the HTTP request.
-	Body *string `form:"body,omitempty" json:"body,omitempty" xml:"body,omitempty"`
-}
-
-// OpenAPI3P1ParameterSchemaResponseBody is used to define fields on response
-// body types.
-type OpenAPI3P1ParameterSchemaResponseBody struct {
-	// The name of the parameter.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// A brief description of the parameter.
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The location of the parameter in an HTTP request.
-	In *string `form:"in,omitempty" json:"in,omitempty" xml:"in,omitempty"`
-	// Whether the parameter is required.
-	Required *bool `form:"required,omitempty" json:"required,omitempty" xml:"required,omitempty"`
-	// The style of the parameter.
-	Style *string `form:"style,omitempty" json:"style,omitempty" xml:"style,omitempty"`
-	// Whether the parameter is exploded.
-	Explode *bool `form:"explode,omitempty" json:"explode,omitempty" xml:"explode,omitempty"`
-	// Whether the parameter is allowed to be reserved.
-	AllowReserved *bool `form:"allowReserved,omitempty" json:"allowReserved,omitempty" xml:"allowReserved,omitempty"`
-	// The JSON Schema describing the parameter.
-	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
-	// A brief description of the parameter.
-	Deprecated *bool `form:"deprecated,omitempty" json:"deprecated,omitempty" xml:"deprecated,omitempty"`
-	// An example value for the parameter.
-	Example any `form:"example,omitempty" json:"example,omitempty" xml:"example,omitempty"`
-	// Examples of the parameter.
-	Examples map[string]any `form:"examples,omitempty" json:"examples,omitempty" xml:"examples,omitempty"`
-}
-
-// OpenAPI3P1ToolFormRequestBody is used to define fields on request body types.
-type OpenAPI3P1ToolFormRequestBody struct {
-	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// The name of the tool.
-	Name string `form:"name" json:"name" xml:"name"`
-	// The description that is provided with the tool.
-	Description string `form:"description" json:"description" xml:"description"`
-	// The tags that are associated with the tool.
-	Tags []string `form:"tags" json:"tags" xml:"tags"`
-	// The path of the HTTP endpoint.
-	Path string `form:"path" json:"path" xml:"path"`
-	// The method to use for the HTTP request.
-	Method string `form:"method" json:"method" xml:"method"`
-	// A map of path parameters to interpolate into the path of the HTTP request.
-	PathParameters map[string]*OpenAPI3P1ParameterSchemaRequestBody `form:"path_parameters" json:"path_parameters" xml:"path_parameters"`
-	// A map of header schemas to send with the HTTP request.
-	HeaderParameters map[string]*OpenAPI3P1ParameterSchemaRequestBody `form:"header_parameters" json:"header_parameters" xml:"header_parameters"`
-	// A map of query parameters to send with the HTTP request.
-	QueryParameters map[string]*OpenAPI3P1ParameterSchemaRequestBody `form:"query_parameters" json:"query_parameters" xml:"query_parameters"`
-	// The JSON Schema describing the body of the HTTP request.
-	Body string `form:"body" json:"body" xml:"body"`
-}
-
-// OpenAPI3P1ParameterSchemaRequestBody is used to define fields on request
-// body types.
-type OpenAPI3P1ParameterSchemaRequestBody struct {
-	// The name of the parameter.
-	Name string `form:"name" json:"name" xml:"name"`
-	// A brief description of the parameter.
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The location of the parameter in an HTTP request.
-	In string `form:"in" json:"in" xml:"in"`
-	// Whether the parameter is required.
-	Required bool `form:"required" json:"required" xml:"required"`
-	// The style of the parameter.
-	Style *string `form:"style,omitempty" json:"style,omitempty" xml:"style,omitempty"`
-	// Whether the parameter is exploded.
-	Explode *bool `form:"explode,omitempty" json:"explode,omitempty" xml:"explode,omitempty"`
-	// Whether the parameter is allowed to be reserved.
-	AllowReserved *bool `form:"allowReserved,omitempty" json:"allowReserved,omitempty" xml:"allowReserved,omitempty"`
-	// The JSON Schema describing the parameter.
-	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
-	// A brief description of the parameter.
-	Deprecated bool `form:"deprecated" json:"deprecated" xml:"deprecated"`
-	// An example value for the parameter.
-	Example any `form:"example,omitempty" json:"example,omitempty" xml:"example,omitempty"`
-	// Examples of the parameter.
-	Examples map[string]any `form:"examples,omitempty" json:"examples,omitempty" xml:"examples,omitempty"`
 }
 
 // DeploymentResponseBody is used to define fields on response body types.
@@ -195,27 +90,37 @@ type DeploymentResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// A unique identifier that will mitigate against duplicate deployments.
+	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
+	// The github repository in the form of "owner/repo".
+	GithubRepo *string `form:"github_repo,omitempty" json:"github_repo,omitempty" xml:"github_repo,omitempty"`
+	// The commit hash that triggered the deployment.
+	GithubSha *string `form:"github_sha,omitempty" json:"github_sha,omitempty" xml:"github_sha,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolFormResponseBody `form:"openapi_3p1_tools,omitempty" json:"openapi_3p1_tools,omitempty" xml:"openapi_3p1_tools,omitempty"`
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	Openapiv3AssetIds []string `form:"openapiv3_asset_ids,omitempty" json:"openapiv3_asset_ids,omitempty" xml:"openapiv3_asset_ids,omitempty"`
 }
 
 // NewCreateDeploymentRequestBody builds the HTTP request body from the payload
 // of the "createDeployment" endpoint of the "deployments" service.
 func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *CreateDeploymentRequestBody {
 	body := &CreateDeploymentRequestBody{
-		ExternalID:  p.ExternalID,
-		ExternalURL: p.ExternalURL,
+		IdempotencyKey: p.IdempotencyKey,
+		GithubRepo:     p.GithubRepo,
+		GithubSha:      p.GithubSha,
+		ExternalID:     p.ExternalID,
+		ExternalURL:    p.ExternalURL,
 	}
-	if p.Openapi3p1Tools != nil {
-		body.Openapi3p1Tools = make([]*OpenAPI3P1ToolFormRequestBody, len(p.Openapi3p1Tools))
-		for i, val := range p.Openapi3p1Tools {
-			body.Openapi3p1Tools[i] = marshalDeploymentsOpenAPI3P1ToolFormToOpenAPI3P1ToolFormRequestBody(val)
+	if p.Openapiv3AssetIds != nil {
+		body.Openapiv3AssetIds = make([]string, len(p.Openapiv3AssetIds))
+		for i, val := range p.Openapiv3AssetIds {
+			body.Openapiv3AssetIds[i] = val
 		}
 	}
 	return body
@@ -230,14 +135,15 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 		ProjectID:      *body.ProjectID,
 		UserID:         *body.UserID,
 		CreatedAt:      *body.CreatedAt,
+		IdempotencyKey: body.IdempotencyKey,
+		GithubRepo:     body.GithubRepo,
+		GithubSha:      body.GithubSha,
 		ExternalID:     body.ExternalID,
 		ExternalURL:    body.ExternalURL,
 	}
-	if body.Openapi3p1Tools != nil {
-		v.Openapi3p1Tools = make([]*deployments.OpenAPI3P1ToolForm, len(body.Openapi3p1Tools))
-		for i, val := range body.Openapi3p1Tools {
-			v.Openapi3p1Tools[i] = unmarshalOpenAPI3P1ToolFormResponseBodyToDeploymentsOpenAPI3P1ToolForm(val)
-		}
+	v.Openapiv3AssetIds = make([]string, len(body.Openapiv3AssetIds))
+	for i, val := range body.Openapiv3AssetIds {
+		v.Openapiv3AssetIds[i] = val
 	}
 
 	return v
@@ -246,20 +152,9 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 // NewCreateDeploymentResultOK builds a "deployments" service
 // "createDeployment" endpoint result from a HTTP "OK" response.
 func NewCreateDeploymentResultOK(body *CreateDeploymentResponseBody) *deployments.CreateDeploymentResult {
-	v := &deployments.CreateDeploymentResult{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		ProjectID:      *body.ProjectID,
-		UserID:         *body.UserID,
-		CreatedAt:      *body.CreatedAt,
-		ExternalID:     body.ExternalID,
-		ExternalURL:    body.ExternalURL,
-	}
-	if body.Openapi3p1Tools != nil {
-		v.Openapi3p1Tools = make([]*deployments.OpenAPI3P1ToolForm, len(body.Openapi3p1Tools))
-		for i, val := range body.Openapi3p1Tools {
-			v.Openapi3p1Tools[i] = unmarshalOpenAPI3P1ToolFormResponseBodyToDeploymentsOpenAPI3P1ToolForm(val)
-		}
+	v := &deployments.CreateDeploymentResult{}
+	if body.Deployment != nil {
+		v.Deployment = unmarshalDeploymentResponseBodyToDeploymentsDeployment(body.Deployment)
 	}
 
 	return v
@@ -297,15 +192,11 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
+	if body.Openapiv3AssetIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_asset_ids", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	for _, e := range body.Openapi3p1Tools {
-		if e != nil {
-			if err2 := ValidateOpenAPI3P1ToolFormResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	return
 }
@@ -313,29 +204,9 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 // ValidateCreateDeploymentResponseBody runs the validations defined on
 // CreateDeploymentResponseBody
 func ValidateCreateDeploymentResponseBody(body *CreateDeploymentResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	for _, e := range body.Openapi3p1Tools {
-		if e != nil {
-			if err2 := ValidateOpenAPI3P1ToolFormResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Deployment != nil {
+		if err2 := ValidateDeploymentResponseBody(body.Deployment); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -353,193 +224,6 @@ func ValidateListDeploymentsResponseBody(body *ListDeploymentsResponseBody) (err
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	return
-}
-
-// ValidateOpenAPI3P1ToolFormResponseBody runs the validations defined on
-// OpenAPI3P1ToolFormResponseBody
-func ValidateOpenAPI3P1ToolFormResponseBody(body *OpenAPI3P1ToolFormResponseBody) (err error) {
-	if body.Kind == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Description == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
-	}
-	if body.Method == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("method", "body"))
-	}
-	if body.Path == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
-	}
-	if body.PathParameters == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("path_parameters", "body"))
-	}
-	if body.HeaderParameters == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("header_parameters", "body"))
-	}
-	if body.QueryParameters == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("query_parameters", "body"))
-	}
-	if body.Body == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("body", "body"))
-	}
-	if body.Kind != nil {
-		if !(*body.Kind == "oas3p1_operation") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"oas3p1_operation"}))
-		}
-	}
-	if body.Name != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-zA-Z](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?$"))
-	}
-	if body.Name != nil {
-		if utf8.RuneCountInString(*body.Name) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
-		}
-	}
-	if body.Name != nil {
-		if utf8.RuneCountInString(*body.Name) > 50 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 50, false))
-		}
-	}
-	if len(body.Tags) > 10 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 10, false))
-	}
-	for _, e := range body.Tags {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.tags[*]", e, "^[a-z](?:[a-z0-9_-]*[a-z0-9])?$"))
-	}
-	if body.Method != nil {
-		if !(*body.Method == "GET" || *body.Method == "POST" || *body.Method == "PUT" || *body.Method == "DELETE" || *body.Method == "HEAD" || *body.Method == "QUERY" || *body.Method == "SEARCH") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.method", *body.Method, []any{"GET", "POST", "PUT", "DELETE", "HEAD", "QUERY", "SEARCH"}))
-		}
-	}
-	for _, v := range body.PathParameters {
-		if v != nil {
-			if err2 := ValidateOpenAPI3P1ParameterSchemaResponseBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, v := range body.HeaderParameters {
-		if v != nil {
-			if err2 := ValidateOpenAPI3P1ParameterSchemaResponseBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, v := range body.QueryParameters {
-		if v != nil {
-			if err2 := ValidateOpenAPI3P1ParameterSchemaResponseBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.Body != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.body", *body.Body, goa.FormatJSON))
-	}
-	return
-}
-
-// ValidateOpenAPI3P1ParameterSchemaResponseBody runs the validations defined
-// on OpenAPI3P1ParameterSchemaResponseBody
-func ValidateOpenAPI3P1ParameterSchemaResponseBody(body *OpenAPI3P1ParameterSchemaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.In == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("in", "body"))
-	}
-	if body.Required == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("required", "body"))
-	}
-	if body.In != nil {
-		if !(*body.In == "query" || *body.In == "header" || *body.In == "path" || *body.In == "cookie") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.in", *body.In, []any{"query", "header", "path", "cookie"}))
-		}
-	}
-	if body.Style != nil {
-		if !(*body.Style == "form" || *body.Style == "simple" || *body.Style == "spaceDelimited" || *body.Style == "pipeDelimited" || *body.Style == "deepObject") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.style", *body.Style, []any{"form", "simple", "spaceDelimited", "pipeDelimited", "deepObject"}))
-		}
-	}
-	if body.Schema != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.schema", *body.Schema, goa.FormatJSON))
-	}
-	return
-}
-
-// ValidateOpenAPI3P1ToolFormRequestBody runs the validations defined on
-// OpenAPI3P1ToolFormRequestBody
-func ValidateOpenAPI3P1ToolFormRequestBody(body *OpenAPI3P1ToolFormRequestBody) (err error) {
-	if body.PathParameters == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("path_parameters", "body"))
-	}
-	if body.HeaderParameters == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("header_parameters", "body"))
-	}
-	if body.QueryParameters == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("query_parameters", "body"))
-	}
-	if !(body.Kind == "oas3p1_operation") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"oas3p1_operation"}))
-	}
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-zA-Z](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?$"))
-	if utf8.RuneCountInString(body.Name) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
-	}
-	if utf8.RuneCountInString(body.Name) > 50 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 50, false))
-	}
-	if len(body.Tags) > 10 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 10, false))
-	}
-	for _, e := range body.Tags {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.tags[*]", e, "^[a-z](?:[a-z0-9_-]*[a-z0-9])?$"))
-	}
-	if !(body.Method == "GET" || body.Method == "POST" || body.Method == "PUT" || body.Method == "DELETE" || body.Method == "HEAD" || body.Method == "QUERY" || body.Method == "SEARCH") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.method", body.Method, []any{"GET", "POST", "PUT", "DELETE", "HEAD", "QUERY", "SEARCH"}))
-	}
-	for _, v := range body.PathParameters {
-		if v != nil {
-			if err2 := ValidateOpenAPI3P1ParameterSchemaRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, v := range body.HeaderParameters {
-		if v != nil {
-			if err2 := ValidateOpenAPI3P1ParameterSchemaRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, v := range body.QueryParameters {
-		if v != nil {
-			if err2 := ValidateOpenAPI3P1ParameterSchemaRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	err = goa.MergeErrors(err, goa.ValidateFormat("body.body", body.Body, goa.FormatJSON))
-	return
-}
-
-// ValidateOpenAPI3P1ParameterSchemaRequestBody runs the validations defined on
-// OpenAPI3P1ParameterSchemaRequestBody
-func ValidateOpenAPI3P1ParameterSchemaRequestBody(body *OpenAPI3P1ParameterSchemaRequestBody) (err error) {
-	if !(body.In == "query" || body.In == "header" || body.In == "path" || body.In == "cookie") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.in", body.In, []any{"query", "header", "path", "cookie"}))
-	}
-	if body.Style != nil {
-		if !(*body.Style == "form" || *body.Style == "simple" || *body.Style == "spaceDelimited" || *body.Style == "pipeDelimited" || *body.Style == "deepObject") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.style", *body.Style, []any{"form", "simple", "spaceDelimited", "pipeDelimited", "deepObject"}))
-		}
-	}
-	if body.Schema != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.schema", *body.Schema, goa.FormatJSON))
 	}
 	return
 }
@@ -562,15 +246,11 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
+	if body.Openapiv3AssetIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_asset_ids", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	for _, e := range body.Openapi3p1Tools {
-		if e != nil {
-			if err2 := ValidateOpenAPI3P1ToolFormResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	return
 }

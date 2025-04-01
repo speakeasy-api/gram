@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "tamasfe.even-better-toml",
+    "golang.go",
+    "hverlin.mise-vscode",
+    "esbenp.prettier-vscode"
+  ]
+}

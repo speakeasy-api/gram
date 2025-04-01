@@ -22,7 +22,70 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/HealthCheckResult'
                             example:
-                                status: Magnam reprehenderit eum officia et.
+                                status: Animi explicabo fuga voluptas perspiciatis quod perspiciatis.
+    /rpc/assets.uploadOpenAPIv3:
+        post:
+            tags:
+                - assets
+            summary: uploadOpenAPIv3 assets
+            description: Upload an OpenAPI v3 document to Gram.
+            operationId: assets#uploadOpenAPIv3
+            parameters:
+                - name: Content-Type
+                  in: header
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    example: Repellendus quibusdam aliquid.
+                  example: In doloribus nihil et in non eos.
+                - name: Content-Length
+                  in: header
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: integer
+                    example: 6470788354242161151
+                    format: int64
+                  example: 7164378408374254091
+                - name: Gram-Project-ID
+                  in: header
+                  description: The project ID the OpenAPI document belongs to
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: The project ID the OpenAPI document belongs to
+                    example: Repellendus est facere asperiores qui minima voluptatem.
+                  example: Et ratione et in.
+                - name: X-Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                    example: Fugiat in.
+                  example: Et repellat sed ipsam ipsam saepe.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadOpenAPIv3Result'
+                            example:
+                                asset:
+                                    content_length: 6414322186540582575
+                                    content_type: Ipsam velit quis id.
+                                    created_at: "2008-06-07T05:35:59Z"
+                                    id: Inventore ut aut.
+                                    kind: unknown
+                                    sha256: Accusantium architecto ducimus.
+                                    updated_at: "2014-11-18T06:03:49Z"
+                                    url: Recusandae facilis voluptatem et eaque magni quia.
+            security:
+                - gram_session_header_X-Gram-Session: []
     /rpc/auth.callback:
         get:
             tags:
@@ -39,8 +102,8 @@ paths:
                   schema:
                     type: string
                     description: The shared token for authentication from the speakeasy system
-                    example: Consectetur laudantium eos deleniti et iste ex.
-                  example: Et deleniti qui quasi deserunt.
+                    example: Autem alias.
+                  example: Mollitia labore et id nihil id.
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -50,22 +113,22 @@ paths:
                             schema:
                                 type: string
                                 description: The URL to redirect to after authentication
-                                example: Ad aut nemo perspiciatis pariatur aut eos.
-                            example: Ut doloribus mollitia saepe iure.
+                                example: Amet eos quia aut et.
+                            example: Saepe fugiat enim.
                         Set-Cookie:
                             description: The authentication session
                             schema:
                                 type: string
                                 description: The authentication session
-                                example: Enim natus saepe sint magni id.
-                            example: Id quos.
+                                example: Voluptatum totam dignissimos dolorem autem nesciunt.
+                            example: Est rerum ea.
                         X-Gram-Session:
                             description: Session header
                             schema:
                                 type: string
                                 description: Session header
-                                example: Quis tempora voluptas.
-                            example: Expedita necessitatibus.
+                                example: Explicabo animi.
+                            example: Aliquid at pariatur vero est.
     /rpc/auth.info:
         get:
             tags:
@@ -81,8 +144,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Dolor quasi veritatis totam dolor vel.
-                  example: Est rerum ea.
+                    example: Dolorum et dolorum.
+                  example: Recusandae et soluta ex.
             responses:
                 "200":
                     description: OK response.
@@ -92,48 +155,38 @@ paths:
                             schema:
                                 type: string
                                 description: The authentication session
-                                example: Vero odio voluptas aut.
-                            example: Molestiae mollitia voluptatem.
+                                example: Voluptatum fuga.
+                            example: Beatae quos eos hic tenetur.
                         X-Gram-Session:
                             description: Session header
                             schema:
                                 type: string
                                 description: Session header
-                                example: Veniam accusantium consectetur.
-                            example: Porro officiis.
+                                example: Et voluptates sit recusandae perspiciatis quae repudiandae.
+                            example: Aspernatur nulla nulla aut sunt adipisci.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/InfoResponseBody'
                             example:
-                                active_organization_id: Dolor aut.
+                                active_organization_id: Ab ut omnis amet temporibus autem eaque.
                                 organizations:
-                                    - account_type: Consectetur voluptatem deserunt minima quam.
-                                      organization_id: Architecto et provident in dolores.
-                                      organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                                      organization_slug: Quam quas quia vel nesciunt.
+                                    - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                                      organization_id: Sunt provident velit accusantium.
+                                      organization_name: Corporis placeat neque enim omnis.
+                                      organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                                       projects:
-                                        - project_id: Minima impedit commodi nihil.
-                                        - project_id: Minima impedit commodi nihil.
-                                        - project_id: Minima impedit commodi nihil.
-                                    - account_type: Consectetur voluptatem deserunt minima quam.
-                                      organization_id: Architecto et provident in dolores.
-                                      organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                                      organization_slug: Quam quas quia vel nesciunt.
+                                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                                    - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                                      organization_id: Sunt provident velit accusantium.
+                                      organization_name: Corporis placeat neque enim omnis.
+                                      organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                                       projects:
-                                        - project_id: Minima impedit commodi nihil.
-                                        - project_id: Minima impedit commodi nihil.
-                                        - project_id: Minima impedit commodi nihil.
-                                    - account_type: Consectetur voluptatem deserunt minima quam.
-                                      organization_id: Architecto et provident in dolores.
-                                      organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                                      organization_slug: Quam quas quia vel nesciunt.
-                                      projects:
-                                        - project_id: Minima impedit commodi nihil.
-                                        - project_id: Minima impedit commodi nihil.
-                                        - project_id: Minima impedit commodi nihil.
-                                user_email: Tenetur distinctio debitis et nobis quas.
-                                user_id: Qui id ea et officia quisquam.
+                                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                                user_email: Nisi vero.
+                                user_id: Totam a.
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/auth.logout:
@@ -151,8 +204,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Saepe fugiat enim.
-                  example: Explicabo animi.
+                    example: Alias quas expedita quod vero aperiam.
+                  example: A atque voluptatum non velit iste possimus.
             responses:
                 "200":
                     description: OK response.
@@ -162,8 +215,8 @@ paths:
                             schema:
                                 type: string
                                 description: Empty string to clear the session
-                                example: Ipsum dignissimos eligendi placeat.
-                            example: Voluptatum totam dignissimos dolorem autem nesciunt.
+                                example: Accusamus enim reiciendis tenetur dolorem totam.
+                            example: Iste asperiores voluptas dolores repellendus voluptatem.
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/auth.switchScopes:
@@ -181,8 +234,8 @@ paths:
                   schema:
                     type: string
                     description: The organization slug to switch scopes
-                    example: Commodi qui ut dolor ut.
-                  example: Repellendus quibusdam aliquid.
+                    example: Veniam accusantium consectetur.
+                  example: Quaerat tenetur et rerum non.
                 - name: project_id
                   in: query
                   description: The project id to switch scopes too
@@ -190,8 +243,8 @@ paths:
                   schema:
                     type: string
                     description: The project id to switch scopes too
-                    example: In doloribus nihil et in non eos.
-                  example: Et maxime repellendus.
+                    example: Porro officiis.
+                  example: Vero odio voluptas aut.
                 - name: X-Gram-Session
                   in: header
                   description: Session header
@@ -199,8 +252,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Facere asperiores qui minima voluptatem.
-                  example: Et ratione et in.
+                    example: Est nobis consequatur.
+                  example: Molestiae mollitia voluptatem.
             responses:
                 "200":
                     description: OK response.
@@ -210,15 +263,15 @@ paths:
                             schema:
                                 type: string
                                 description: The authentication session
-                                example: Mollitia labore et id nihil id.
-                            example: Dolorem velit eveniet sit nostrum tempore ea.
+                                example: Et doloremque.
+                            example: Vero nostrum labore et eaque perspiciatis fuga.
                         X-Gram-Session:
                             description: Session header
                             schema:
                                 type: string
                                 description: Session header
-                                example: Fugiat in.
-                            example: Autem alias.
+                                example: Architecto natus cumque.
+                            example: Aut neque quisquam error at.
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/deployments.create:
@@ -236,8 +289,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Tempore similique voluptatum nemo eum ex.
-                  example: Vero nostrum labore et eaque perspiciatis fuga.
+                    example: Et dolores nulla enim et.
+                  example: Sint autem aut.
             requestBody:
                 required: true
                 content:
@@ -246,7 +299,15 @@ paths:
                             $ref: '#/components/schemas/CreateDeploymentForm'
                         example:
                             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                            external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                            external_url: Laudantium quia animi praesentium quas vitae esse.
+                            github_repo: speakeasyapi/gram
+                            github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+                            idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                            openapiv3_asset_ids:
+                                - Laudantium consequatur placeat.
+                                - Ipsum saepe quis.
+                                - Nobis enim illum molestiae ut.
+                                - Excepturi ad excepturi consectetur enim cum.
             responses:
                 "200":
                     description: OK response.
@@ -254,14 +315,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/CreateDeploymentResult'
-                            example:
-                                created_at: "1970-05-05T21:30:05Z"
-                                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                organization_id: Adipisci qui aut ullam velit est saepe.
-                                project_id: Maxime sed error ratione.
-                                user_id: Esse quaerat quas quos.
+                            example: {}
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/deployments.get:
@@ -280,8 +334,8 @@ paths:
                   schema:
                     type: string
                     description: The ID of the deployment
-                    example: Architecto natus cumque.
-                  example: Velit ducimus.
+                    example: Debitis voluptas autem ea cum pariatur.
+                  example: Exercitationem totam neque.
                 - name: X-Gram-Session
                   in: header
                   description: Session header
@@ -289,8 +343,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Aut neque quisquam error at.
-                  example: Et doloremque.
+                    example: Qui eaque.
+                  example: Reiciendis quibusdam.
             responses:
                 "200":
                     description: OK response.
@@ -299,13 +353,20 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/GetDeploymentResult'
                             example:
-                                created_at: "1977-04-17T03:59:24Z"
+                                created_at: "2010-01-01T02:39:09Z"
                                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                                external_url: Adipisci dolor voluptas molestias.
+                                github_repo: speakeasyapi/gram
+                                github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                organization_id: Occaecati quasi.
-                                project_id: Amet aperiam dolor voluptatem magnam doloribus.
-                                user_id: Id nihil.
+                                idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                                openapiv3_asset_ids:
+                                    - Saepe incidunt velit reiciendis.
+                                    - Harum et.
+                                    - Magnam dolor id totam inventore officiis quia.
+                                organization_id: Aliquid voluptatem.
+                                project_id: Quos deserunt doloribus velit non laboriosam ut.
+                                user_id: Est et est.
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/deployments.list:
@@ -323,8 +384,8 @@ paths:
                   schema:
                     type: string
                     description: The cursor to fetch results from
-                    example: Alias quas expedita quod vero aperiam.
-                  example: A atque voluptatum non velit iste possimus.
+                    example: Nihil tempora aspernatur dolor dolorem.
+                  example: Dolores nisi quos magni quo.
                 - name: limit
                   in: query
                   description: Results per page
@@ -333,11 +394,11 @@ paths:
                     type: integer
                     description: Results per page
                     default: 10
-                    example: 17
+                    example: 8
                     format: int64
                     minimum: 1
                     maximum: 100
-                  example: 50
+                  example: 36
                 - name: X-Gram-Session
                   in: header
                   description: Session header
@@ -345,8 +406,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Reiciendis tenetur dolorem totam quaerat aut.
-                  example: Culpa adipisci.
+                    example: Velit fugit quibusdam et quae quidem odio.
+                  example: Tempore voluptatum sunt quo.
             responses:
                 "200":
                     description: OK response.
@@ -356,34 +417,66 @@ paths:
                                 $ref: '#/components/schemas/ListDeploymentResult'
                             example:
                                 items:
-                                    - created_at: "2008-07-29T03:32:37Z"
+                                    - created_at: "1994-12-22T18:47:02Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                                      external_url: Est ad.
+                                      github_repo: speakeasyapi/gram
+                                      github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      organization_id: Enim illum molestiae ut ea excepturi ad.
-                                      project_id: Consectetur enim cum.
-                                      user_id: Et asperiores tempore blanditiis esse eos.
-                                    - created_at: "2008-07-29T03:32:37Z"
+                                      idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                                      openapiv3_asset_ids:
+                                        - Soluta velit dolores.
+                                        - Aut veniam voluptas at unde ut.
+                                        - Quam architecto facere accusamus illum quibusdam deleniti.
+                                        - Ab in quisquam saepe dicta ea libero.
+                                      organization_id: Rerum at eaque qui libero aut.
+                                      project_id: Quia distinctio cumque assumenda veniam excepturi.
+                                      user_id: Et voluptates ratione.
+                                    - created_at: "1994-12-22T18:47:02Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                                      external_url: Est ad.
+                                      github_repo: speakeasyapi/gram
+                                      github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      organization_id: Enim illum molestiae ut ea excepturi ad.
-                                      project_id: Consectetur enim cum.
-                                      user_id: Et asperiores tempore blanditiis esse eos.
-                                    - created_at: "2008-07-29T03:32:37Z"
+                                      idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                                      openapiv3_asset_ids:
+                                        - Soluta velit dolores.
+                                        - Aut veniam voluptas at unde ut.
+                                        - Quam architecto facere accusamus illum quibusdam deleniti.
+                                        - Ab in quisquam saepe dicta ea libero.
+                                      organization_id: Rerum at eaque qui libero aut.
+                                      project_id: Quia distinctio cumque assumenda veniam excepturi.
+                                      user_id: Et voluptates ratione.
+                                    - created_at: "1994-12-22T18:47:02Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                                      external_url: Est ad.
+                                      github_repo: speakeasyapi/gram
+                                      github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      organization_id: Enim illum molestiae ut ea excepturi ad.
-                                      project_id: Consectetur enim cum.
-                                      user_id: Et asperiores tempore blanditiis esse eos.
-                                    - created_at: "2008-07-29T03:32:37Z"
+                                      idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                                      openapiv3_asset_ids:
+                                        - Soluta velit dolores.
+                                        - Aut veniam voluptas at unde ut.
+                                        - Quam architecto facere accusamus illum quibusdam deleniti.
+                                        - Ab in quisquam saepe dicta ea libero.
+                                      organization_id: Rerum at eaque qui libero aut.
+                                      project_id: Quia distinctio cumque assumenda veniam excepturi.
+                                      user_id: Et voluptates ratione.
+                                    - created_at: "1994-12-22T18:47:02Z"
                                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                                      external_url: Est ad.
+                                      github_repo: speakeasyapi/gram
+                                      github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                                      organization_id: Enim illum molestiae ut ea excepturi ad.
-                                      project_id: Consectetur enim cum.
-                                      user_id: Et asperiores tempore blanditiis esse eos.
+                                      idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                                      openapiv3_asset_ids:
+                                        - Soluta velit dolores.
+                                        - Aut veniam voluptas at unde ut.
+                                        - Quam architecto facere accusamus illum quibusdam deleniti.
+                                        - Ab in quisquam saepe dicta ea libero.
+                                      organization_id: Rerum at eaque qui libero aut.
+                                      project_id: Quia distinctio cumque assumenda veniam excepturi.
+                                      user_id: Et voluptates ratione.
                                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             security:
                 - gram_session_header_X-Gram-Session: []
@@ -402,8 +495,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Libero ex iste.
-                  example: Voluptas dolores repellendus.
+                    example: A dolores labore accusamus non qui optio.
+                  example: Earum dolorum ipsam enim temporibus aut omnis.
             requestBody:
                 required: true
                 content:
@@ -411,13 +504,13 @@ paths:
                         schema:
                             $ref: '#/components/schemas/CreateToolsetForm'
                         example:
-                            description: Aliquam consequatur itaque enim modi.
+                            description: Voluptatem mollitia dolor explicabo doloribus.
                             http_tool_ids:
-                                - Provident incidunt suscipit et minus ea est.
-                                - Consequatur deserunt sequi maxime.
-                                - Assumenda quas dolor mollitia laboriosam voluptatem.
-                            name: Rerum animi expedita.
-                            project_id: Officia voluptas aspernatur quibusdam.
+                                - Assumenda commodi pariatur reprehenderit.
+                                - Ipsa molestiae voluptas nemo.
+                                - Iusto voluptas culpa sed.
+                            name: Labore consectetur doloribus distinctio officiis.
+                            project_id: Eos dolorem excepturi voluptatibus quisquam.
             responses:
                 "200":
                     description: OK response.
@@ -426,17 +519,16 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Toolset'
                             example:
-                                created_at: Reprehenderit quia doloribus pariatur minus laudantium.
-                                description: Assumenda ut.
+                                created_at: Quos voluptas unde laboriosam laborum sint quasi.
+                                description: Qui dolorem natus porro aut.
                                 http_tool_ids:
-                                    - Ut velit iure veniam et.
-                                    - Tenetur sit accusantium.
-                                    - Vel sit consequuntur est.
-                                id: Fuga id ea et esse.
-                                name: Doloribus magnam nostrum aut sunt itaque.
-                                organization_id: Maxime error voluptatum dolore debitis.
-                                project_id: Error et enim nostrum doloremque.
-                                updated_at: Cum dignissimos quis modi velit maiores.
+                                    - Repellat voluptatem aliquid.
+                                    - Labore sapiente atque ut minima quia iure.
+                                id: Asperiores explicabo et sit in vel labore.
+                                name: Dolor maxime quam vel ut.
+                                organization_id: Officiis dignissimos distinctio mollitia tempora maiores ea.
+                                project_id: At praesentium voluptates error sed.
+                                updated_at: Consequatur qui ea aut.
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/toolsets.get/{id}:
@@ -454,8 +546,8 @@ paths:
                   schema:
                     type: string
                     description: The ID of the toolset
-                    example: Eos exercitationem totam neque et qui.
-                  example: Veritatis reiciendis.
+                    example: Consequuntur voluptatem.
+                  example: Et consectetur velit asperiores.
                 - name: X-Gram-Session
                   in: header
                   description: Session header
@@ -463,8 +555,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Repellendus et dolores nulla enim.
-                  example: Pariatur sint autem.
+                    example: Modi quidem inventore.
+                  example: Optio qui quo.
             responses:
                 "200":
                     description: OK response.
@@ -473,59 +565,74 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ToolsetDetails'
                             example:
-                                created_at: Beatae sint aspernatur nesciunt similique suscipit.
-                                description: Culpa repellat nihil harum sit est libero.
+                                created_at: Accusantium cumque.
+                                description: Voluptatem ea corrupti non ipsa.
                                 http_tools:
-                                    - apikey_env_var: Quis enim error labore vero ut.
-                                      bearer_env_var: Non temporibus at expedita magni perferendis amet.
-                                      body_schema: Rerum debitis culpa molestiae.
-                                      description: Accusantium occaecati eum in voluptatum nemo mollitia.
-                                      headers_schema: Unde sint nemo rerum recusandae harum.
-                                      http_method: Quis unde sit rerum.
-                                      id: Et aut consequatur provident animi.
-                                      name: Et aut consequatur.
-                                      password_env_var: Repellendus vel sed.
-                                      path: Perspiciatis nostrum minus repellendus dolore qui.
-                                      pathparams_schema: Nobis enim quas dolorem et inventore.
-                                      queries_schema: Sapiente aliquam sit aperiam.
-                                      security_type: Ullam quod occaecati consectetur voluptatem animi aut.
-                                      server_env_var: Eos dignissimos suscipit architecto culpa praesentium.
-                                      username_env_var: Iure perferendis et deleniti quia.
-                                    - apikey_env_var: Quis enim error labore vero ut.
-                                      bearer_env_var: Non temporibus at expedita magni perferendis amet.
-                                      body_schema: Rerum debitis culpa molestiae.
-                                      description: Accusantium occaecati eum in voluptatum nemo mollitia.
-                                      headers_schema: Unde sint nemo rerum recusandae harum.
-                                      http_method: Quis unde sit rerum.
-                                      id: Et aut consequatur provident animi.
-                                      name: Et aut consequatur.
-                                      password_env_var: Repellendus vel sed.
-                                      path: Perspiciatis nostrum minus repellendus dolore qui.
-                                      pathparams_schema: Nobis enim quas dolorem et inventore.
-                                      queries_schema: Sapiente aliquam sit aperiam.
-                                      security_type: Ullam quod occaecati consectetur voluptatem animi aut.
-                                      server_env_var: Eos dignissimos suscipit architecto culpa praesentium.
-                                      username_env_var: Iure perferendis et deleniti quia.
-                                    - apikey_env_var: Quis enim error labore vero ut.
-                                      bearer_env_var: Non temporibus at expedita magni perferendis amet.
-                                      body_schema: Rerum debitis culpa molestiae.
-                                      description: Accusantium occaecati eum in voluptatum nemo mollitia.
-                                      headers_schema: Unde sint nemo rerum recusandae harum.
-                                      http_method: Quis unde sit rerum.
-                                      id: Et aut consequatur provident animi.
-                                      name: Et aut consequatur.
-                                      password_env_var: Repellendus vel sed.
-                                      path: Perspiciatis nostrum minus repellendus dolore qui.
-                                      pathparams_schema: Nobis enim quas dolorem et inventore.
-                                      queries_schema: Sapiente aliquam sit aperiam.
-                                      security_type: Ullam quod occaecati consectetur voluptatem animi aut.
-                                      server_env_var: Eos dignissimos suscipit architecto culpa praesentium.
-                                      username_env_var: Iure perferendis et deleniti quia.
-                                id: Perferendis illo.
-                                name: Voluptates dolore ut.
-                                organization_id: Sed modi suscipit laboriosam.
-                                project_id: Non vel.
-                                updated_at: Iste est voluptas.
+                                    - apikey_env_var: Nesciunt et dolores deleniti aut ipsam.
+                                      bearer_env_var: Corporis dolor.
+                                      body_schema: Praesentium voluptas dolor magnam voluptates est.
+                                      description: Et dignissimos veniam vel.
+                                      headers_schema: Omnis eos.
+                                      http_method: Autem quasi vel.
+                                      id: Quaerat illo qui et.
+                                      name: Aut dolores ipsum amet perspiciatis.
+                                      password_env_var: Et voluptatum.
+                                      path: Quasi enim.
+                                      pathparams_schema: Velit aspernatur qui.
+                                      queries_schema: Non consectetur.
+                                      security_type: Voluptates molestias corrupti.
+                                      server_env_var: Iste id suscipit corrupti ea et quaerat.
+                                      username_env_var: Non iusto et ut.
+                                    - apikey_env_var: Nesciunt et dolores deleniti aut ipsam.
+                                      bearer_env_var: Corporis dolor.
+                                      body_schema: Praesentium voluptas dolor magnam voluptates est.
+                                      description: Et dignissimos veniam vel.
+                                      headers_schema: Omnis eos.
+                                      http_method: Autem quasi vel.
+                                      id: Quaerat illo qui et.
+                                      name: Aut dolores ipsum amet perspiciatis.
+                                      password_env_var: Et voluptatum.
+                                      path: Quasi enim.
+                                      pathparams_schema: Velit aspernatur qui.
+                                      queries_schema: Non consectetur.
+                                      security_type: Voluptates molestias corrupti.
+                                      server_env_var: Iste id suscipit corrupti ea et quaerat.
+                                      username_env_var: Non iusto et ut.
+                                    - apikey_env_var: Nesciunt et dolores deleniti aut ipsam.
+                                      bearer_env_var: Corporis dolor.
+                                      body_schema: Praesentium voluptas dolor magnam voluptates est.
+                                      description: Et dignissimos veniam vel.
+                                      headers_schema: Omnis eos.
+                                      http_method: Autem quasi vel.
+                                      id: Quaerat illo qui et.
+                                      name: Aut dolores ipsum amet perspiciatis.
+                                      password_env_var: Et voluptatum.
+                                      path: Quasi enim.
+                                      pathparams_schema: Velit aspernatur qui.
+                                      queries_schema: Non consectetur.
+                                      security_type: Voluptates molestias corrupti.
+                                      server_env_var: Iste id suscipit corrupti ea et quaerat.
+                                      username_env_var: Non iusto et ut.
+                                    - apikey_env_var: Nesciunt et dolores deleniti aut ipsam.
+                                      bearer_env_var: Corporis dolor.
+                                      body_schema: Praesentium voluptas dolor magnam voluptates est.
+                                      description: Et dignissimos veniam vel.
+                                      headers_schema: Omnis eos.
+                                      http_method: Autem quasi vel.
+                                      id: Quaerat illo qui et.
+                                      name: Aut dolores ipsum amet perspiciatis.
+                                      password_env_var: Et voluptatum.
+                                      path: Quasi enim.
+                                      pathparams_schema: Velit aspernatur qui.
+                                      queries_schema: Non consectetur.
+                                      security_type: Voluptates molestias corrupti.
+                                      server_env_var: Iste id suscipit corrupti ea et quaerat.
+                                      username_env_var: Non iusto et ut.
+                                id: Corporis labore.
+                                name: Saepe distinctio blanditiis qui vel explicabo sint.
+                                organization_id: Porro qui rerum ut reiciendis nisi et.
+                                project_id: Amet dolor.
+                                updated_at: Odit sit iste itaque itaque atque.
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/toolsets.list:
@@ -544,8 +651,8 @@ paths:
                   schema:
                     type: string
                     description: The project ID this toolset belongs to
-                    example: Voluptatem dolorum et dolorum ut recusandae.
-                  example: Soluta ex aut et voluptates.
+                    example: Rem ullam consectetur ex sed fugit est.
+                  example: Quos neque voluptatum rerum veniam commodi.
                 - name: X-Gram-Session
                   in: header
                   description: Session header
@@ -553,8 +660,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Recusandae perspiciatis.
-                  example: Repudiandae voluptatem tenetur totam.
+                    example: Porro sapiente voluptatibus nostrum esse.
+                  example: Atque fuga.
             responses:
                 "200":
                     description: OK response.
@@ -564,50 +671,39 @@ paths:
                                 $ref: '#/components/schemas/ListToolsetsResult'
                             example:
                                 toolsets:
-                                    - created_at: Illo qui et est aut dolores.
-                                      description: Facere sed fuga corrupti.
+                                    - created_at: Modi aliquam aut provident incidunt suscipit.
+                                      description: Odit ut libero saepe.
                                       http_tool_ids:
-                                        - Autem impedit consequatur.
-                                        - Minima ut odio sunt officiis.
-                                        - Et quos quis fugit ut.
-                                      id: Reiciendis aspernatur.
-                                      name: Autem ut totam sint assumenda perspiciatis.
-                                      organization_id: Sit deleniti sint enim consequatur.
-                                      project_id: Magni et quia consectetur voluptatibus voluptas iusto.
-                                      updated_at: Amet perspiciatis.
-                                    - created_at: Illo qui et est aut dolores.
-                                      description: Facere sed fuga corrupti.
+                                        - Eum officia et nemo rerum animi.
+                                        - Numquam officia voluptas aspernatur quibusdam veritatis.
+                                        - Consequatur itaque.
+                                      id: Deleniti ea tenetur a ut.
+                                      name: Quam nisi praesentium maxime.
+                                      organization_id: Eaque eum repellat aliquid magnam.
+                                      project_id: Deleniti enim sit quia et aut autem.
+                                      updated_at: Minus ea est.
+                                    - created_at: Modi aliquam aut provident incidunt suscipit.
+                                      description: Odit ut libero saepe.
                                       http_tool_ids:
-                                        - Autem impedit consequatur.
-                                        - Minima ut odio sunt officiis.
-                                        - Et quos quis fugit ut.
-                                      id: Reiciendis aspernatur.
-                                      name: Autem ut totam sint assumenda perspiciatis.
-                                      organization_id: Sit deleniti sint enim consequatur.
-                                      project_id: Magni et quia consectetur voluptatibus voluptas iusto.
-                                      updated_at: Amet perspiciatis.
-                                    - created_at: Illo qui et est aut dolores.
-                                      description: Facere sed fuga corrupti.
+                                        - Eum officia et nemo rerum animi.
+                                        - Numquam officia voluptas aspernatur quibusdam veritatis.
+                                        - Consequatur itaque.
+                                      id: Deleniti ea tenetur a ut.
+                                      name: Quam nisi praesentium maxime.
+                                      organization_id: Eaque eum repellat aliquid magnam.
+                                      project_id: Deleniti enim sit quia et aut autem.
+                                      updated_at: Minus ea est.
+                                    - created_at: Modi aliquam aut provident incidunt suscipit.
+                                      description: Odit ut libero saepe.
                                       http_tool_ids:
-                                        - Autem impedit consequatur.
-                                        - Minima ut odio sunt officiis.
-                                        - Et quos quis fugit ut.
-                                      id: Reiciendis aspernatur.
-                                      name: Autem ut totam sint assumenda perspiciatis.
-                                      organization_id: Sit deleniti sint enim consequatur.
-                                      project_id: Magni et quia consectetur voluptatibus voluptas iusto.
-                                      updated_at: Amet perspiciatis.
-                                    - created_at: Illo qui et est aut dolores.
-                                      description: Facere sed fuga corrupti.
-                                      http_tool_ids:
-                                        - Autem impedit consequatur.
-                                        - Minima ut odio sunt officiis.
-                                        - Et quos quis fugit ut.
-                                      id: Reiciendis aspernatur.
-                                      name: Autem ut totam sint assumenda perspiciatis.
-                                      organization_id: Sit deleniti sint enim consequatur.
-                                      project_id: Magni et quia consectetur voluptatibus voluptas iusto.
-                                      updated_at: Amet perspiciatis.
+                                        - Eum officia et nemo rerum animi.
+                                        - Numquam officia voluptas aspernatur quibusdam veritatis.
+                                        - Consequatur itaque.
+                                      id: Deleniti ea tenetur a ut.
+                                      name: Quam nisi praesentium maxime.
+                                      organization_id: Eaque eum repellat aliquid magnam.
+                                      project_id: Deleniti enim sit quia et aut autem.
+                                      updated_at: Minus ea est.
             security:
                 - gram_session_header_X-Gram-Session: []
     /rpc/toolsets.update/{id}:
@@ -625,8 +721,8 @@ paths:
                   schema:
                     type: string
                     description: The ID of the toolset to update
-                    example: Sint cupiditate aspernatur nulla nulla aut.
-                  example: Adipisci et voluptatum.
+                    example: Voluptatem sint delectus voluptatem vel.
+                  example: Eius debitis esse fugiat architecto.
                 - name: X-Gram-Session
                   in: header
                   description: Session header
@@ -634,8 +730,8 @@ paths:
                   schema:
                     type: string
                     description: Session header
-                    example: Id consequatur illum culpa beatae quos eos.
-                  example: Tenetur non debitis voluptas autem ea cum.
+                    example: Voluptatem totam quaerat labore.
+                  example: Aut nam labore quidem.
             requestBody:
                 required: true
                 content:
@@ -643,15 +739,15 @@ paths:
                         schema:
                             $ref: '#/components/schemas/UpdateToolsetRequestBody'
                         example:
-                            description: Quaerat ut voluptates molestias corrupti.
+                            description: Laboriosam voluptatem ullam doloribus ut quaerat.
                             http_tool_ids_to_add:
-                                - Dolor nisi nesciunt et dolores.
-                                - Aut ipsam voluptate non iusto et ut.
-                                - Et voluptatum.
+                                - Fuga id ea et esse.
+                                - Error et enim nostrum doloremque.
+                                - Maxime error voluptatum dolore debitis.
                             http_tool_ids_to_remove:
-                                - Quasi vel consequatur quasi enim doloribus omnis.
-                                - Culpa non consectetur.
-                            name: Voluptatem iste id suscipit corrupti ea.
+                                - Magnam nostrum aut sunt itaque.
+                                - Assumenda ut.
+                            name: Nemo assumenda quas dolor.
             responses:
                 "200":
                     description: OK response.
@@ -660,22 +756,80 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Toolset'
                             example:
-                                created_at: Architecto odit quo.
-                                description: Voluptatem ea corrupti non ipsa.
+                                created_at: Autem ut totam sint assumenda perspiciatis.
+                                description: Velit maiores laudantium.
                                 http_tool_ids:
-                                    - Accusantium cumque.
-                                    - Odit sit iste itaque itaque atque.
-                                    - Fugit perferendis libero sint ut.
-                                    - Aut saepe vel voluptatum nisi dolorem.
-                                id: Corporis labore.
-                                name: Saepe distinctio blanditiis qui vel explicabo sint.
-                                organization_id: Porro qui rerum ut reiciendis nisi et.
-                                project_id: Amet dolor.
-                                updated_at: Deserunt tenetur.
+                                    - Repellendus aspernatur voluptatem aspernatur dolores nihil.
+                                    - Est reiciendis aspernatur.
+                                    - Magni et quia consectetur voluptatibus voluptas iusto.
+                                    - Sit deleniti sint enim consequatur.
+                                id: Accusantium voluptas vel.
+                                name: Dignissimos quis.
+                                organization_id: Minus laudantium dolore.
+                                project_id: Consequuntur est soluta reprehenderit quia doloribus.
+                                updated_at: Facere sed fuga corrupti.
             security:
                 - gram_session_header_X-Gram-Session: []
 components:
     schemas:
+        Asset:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    description: The content length of the asset
+                    example: 387907201441878175
+                    format: int64
+                content_type:
+                    type: string
+                    description: The content type of the asset
+                    example: Et corporis reiciendis molestias dolorem.
+                created_at:
+                    type: string
+                    description: The creation date of the asset.
+                    example: "1993-04-13T19:02:01Z"
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the asset
+                    example: Quia totam cum excepturi.
+                kind:
+                    type: string
+                    example: openapiv3
+                    enum:
+                        - openapiv3
+                        - unknown
+                sha256:
+                    type: string
+                    description: The SHA256 hash of the asset
+                    example: Quia voluptate mollitia voluptates.
+                updated_at:
+                    type: string
+                    description: The last update date of the asset.
+                    example: "1971-01-06T18:51:36Z"
+                    format: date-time
+                url:
+                    type: string
+                    description: The URL to the uploaded asset
+                    example: Eius et omnis non reprehenderit quo.
+            example:
+                content_length: 5166490435906182893
+                content_type: Error ad blanditiis asperiores.
+                created_at: "1984-02-22T22:19:37Z"
+                id: Non ipsa.
+                kind: unknown
+                sha256: Officia est qui labore ut.
+                updated_at: "1979-11-08T09:19:04Z"
+                url: Vero id.
+            required:
+                - id
+                - url
+                - kind
+                - sha256
+                - content_type
+                - content_length
+                - created_at
+                - updated_at
         CreateDeploymentForm:
             type: object
             properties:
@@ -686,99 +840,80 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                openapi_3p1_tools:
+                    example: Sit aliquid odio est doloribus esse dolores.
+                github_repo:
+                    type: string
+                    description: The github repository in the form of "owner/repo".
+                    example: speakeasyapi/gram
+                github_sha:
+                    type: string
+                    description: The commit hash that triggered the deployment.
+                    example: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+                idempotency_key:
+                    type: string
+                    description: A unique identifier that will mitigate against duplicate deployments.
+                    example: 01jqq0ajmb4qh9eppz48dejr2m
+                openapiv3_asset_ids:
                     type: array
                     items:
-                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
-                    description: The HTTP tools available in the deployment.
+                        type: string
+                        example: Nostrum velit omnis.
+                    description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                    example:
+                        - Molestias numquam error deserunt.
+                        - Possimus voluptatem unde.
             example:
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url: Ipsa qui adipisci odit voluptatem ut.
+                github_repo: speakeasyapi/gram
+                github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+                idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                openapiv3_asset_ids:
+                    - Rerum nam.
+                    - Ipsa distinctio.
+            required:
+                - idempotency_key
+                - manifest
         CreateDeploymentResult:
             type: object
             properties:
-                created_at:
-                    type: string
-                    description: The creation date of the deployment.
-                    example: "1981-01-01T19:34:58Z"
-                    format: date-time
-                external_id:
-                    type: string
-                    description: The external ID to refer to the deployment. This can be a git commit hash for example.
-                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url:
-                    type: string
-                    description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                id:
-                    type: string
-                    description: The ID to of the deployment.
-                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                openapi_3p1_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
-                    description: The HTTP tools available in the deployment.
-                organization_id:
-                    type: string
-                    description: The ID of the organization that the deployment belongs to.
-                    example: Optio et delectus consectetur.
-                project_id:
-                    type: string
-                    description: The ID of the project that the deployment belongs to.
-                    example: Illo enim.
-                user_id:
-                    type: string
-                    description: The ID of the user that created the deployment.
-                    example: Facere quibusdam tenetur aut.
-            example:
-                created_at: "1979-06-26T13:11:33Z"
-                external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                organization_id: Iusto ea provident.
-                project_id: Et quis vero ipsa rem quaerat consectetur.
-                user_id: Explicabo occaecati ea ut temporibus odit ut.
-            required:
-                - id
-                - created_at
-                - organization_id
-                - project_id
-                - user_id
+                deployment:
+                    $ref: '#/components/schemas/Deployment'
+            example: {}
         CreateToolsetForm:
             type: object
             properties:
                 description:
                     type: string
                     description: Description of the toolset
-                    example: Possimus praesentium nam.
+                    example: Sint dolores sit laboriosam et dolores rerum.
                 http_tool_ids:
                     type: array
                     items:
                         type: string
-                        example: Consequatur quia et.
+                        example: At nihil omnis.
                     description: List of HTTP tool IDs to include
                     example:
-                        - Consequatur molestiae dicta quidem est.
-                        - Quibusdam et.
+                        - Rerum nostrum non voluptate.
+                        - Quo vitae.
+                        - Voluptatum illum aut delectus dolorem officiis.
+                        - Voluptatem recusandae ut similique dolor dolorum.
                 name:
                     type: string
                     description: The name of the toolset
-                    example: Molestiae magni voluptatem dolore quidem totam.
+                    example: Placeat aut nam nostrum alias.
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
-                    example: Accusantium eaque aut alias repellendus.
+                    example: Reprehenderit fugiat temporibus reprehenderit.
             example:
-                description: Odio eaque magni vitae odio quo unde.
+                description: Hic tempora.
                 http_tool_ids:
-                    - Aliquam aut vero dolore mollitia perspiciatis totam.
-                    - Placeat aut nam nostrum alias.
-                    - Reprehenderit fugiat temporibus reprehenderit.
-                    - Sint dolores sit laboriosam et dolores rerum.
-                name: Facilis occaecati aut esse recusandae ut et.
-                project_id: Dolorum commodi.
+                    - Architecto dolorem accusamus non et provident.
+                    - Sit aut sapiente ipsam.
+                    - Corrupti voluptatem consectetur et autem non.
+                name: Praesentium nemo in quos quasi.
+                project_id: Asperiores eaque aut minus.
             required:
                 - name
                 - project_id
@@ -788,7 +923,7 @@ components:
                 created_at:
                     type: string
                     description: The creation date of the deployment.
-                    example: "2016-01-05T20:06:44Z"
+                    example: "1994-09-21T08:23:50Z"
                     format: date-time
                 external_id:
                     type: string
@@ -797,51 +932,77 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                    example: Unde similique et eligendi est doloribus ut.
+                github_repo:
+                    type: string
+                    description: The github repository in the form of "owner/repo".
+                    example: speakeasyapi/gram
+                github_sha:
+                    type: string
+                    description: The commit hash that triggered the deployment.
+                    example: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                 id:
                     type: string
                     description: The ID to of the deployment.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                openapi_3p1_tools:
+                idempotency_key:
+                    type: string
+                    description: A unique identifier that will mitigate against duplicate deployments.
+                    example: 01jqq0ajmb4qh9eppz48dejr2m
+                openapiv3_asset_ids:
                     type: array
                     items:
-                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
-                    description: The HTTP tools available in the deployment.
+                        type: string
+                        example: Est itaque ipsam eius.
+                    description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                    example:
+                        - Atque sunt beatae.
+                        - Tempore quisquam modi aut.
+                        - Ut in.
+                        - Dolores qui architecto maiores eius distinctio tempora.
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
-                    example: Asperiores aut natus.
+                    example: Rem porro soluta voluptas ullam perspiciatis eos.
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
-                    example: Quia rerum eum.
+                    example: Qui ratione dolores eos ipsa.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
-                    example: Harum qui non accusantium quas ipsa.
+                    example: Et omnis optio temporibus voluptatem.
             example:
-                created_at: "1987-05-06T22:07:55Z"
+                created_at: "1971-01-31T09:12:29Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url: Officiis delectus soluta eos consectetur nobis dolores.
+                github_repo: speakeasyapi/gram
+                github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                organization_id: Facere necessitatibus aut.
-                project_id: Ut quidem.
-                user_id: Quod eligendi omnis voluptate laboriosam.
+                idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                openapiv3_asset_ids:
+                    - Occaecati sunt quas ut id occaecati.
+                    - Autem voluptatum doloribus et.
+                    - Consequuntur qui.
+                organization_id: Quis culpa deserunt ea minima aspernatur eveniet.
+                project_id: Est cumque.
+                user_id: Ipsa officiis sapiente suscipit iure ea culpa.
             required:
                 - id
                 - created_at
                 - organization_id
                 - project_id
                 - user_id
+                - openapiv3_asset_ids
         GetDeploymentForm:
             type: object
             properties:
                 id:
                     type: string
                     description: The ID of the deployment
-                    example: Ad repudiandae nostrum.
+                    example: Hic maxime unde.
             example:
-                id: Est dolores ipsum fugiat sequi maxime commodi.
+                id: Provident delectus voluptate omnis modi est.
             required:
                 - id
         GetDeploymentResult:
@@ -850,7 +1011,7 @@ components:
                 created_at:
                     type: string
                     description: The creation date of the deployment.
-                    example: "1994-01-08T03:46:15Z"
+                    example: "2005-03-04T02:03:16Z"
                     format: date-time
                 external_id:
                     type: string
@@ -859,121 +1020,146 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                    example: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                    example: Natus aut molestiae aliquam repellat.
+                github_repo:
+                    type: string
+                    description: The github repository in the form of "owner/repo".
+                    example: speakeasyapi/gram
+                github_sha:
+                    type: string
+                    description: The commit hash that triggered the deployment.
+                    example: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                 id:
                     type: string
                     description: The ID to of the deployment.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                openapi_3p1_tools:
+                idempotency_key:
+                    type: string
+                    description: A unique identifier that will mitigate against duplicate deployments.
+                    example: 01jqq0ajmb4qh9eppz48dejr2m
+                openapiv3_asset_ids:
                     type: array
                     items:
-                        $ref: '#/components/schemas/OpenAPI3P1ToolForm'
-                    description: The HTTP tools available in the deployment.
+                        type: string
+                        example: Possimus quis inventore cumque cupiditate enim.
+                    description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                    example:
+                        - Nam odio veniam nisi.
+                        - Harum id.
+                        - Sunt non et dolores qui facere necessitatibus.
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
-                    example: Non dignissimos dicta at.
+                    example: Error molestiae sunt.
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
-                    example: Voluptas et et molestias et.
+                    example: Consequatur assumenda aut.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
-                    example: In non dicta doloribus eius nostrum.
+                    example: Nobis rerum facilis esse ut.
             example:
-                created_at: "1972-05-04T13:48:48Z"
+                created_at: "1974-06-20T10:32:40Z"
                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url: Hic facere quibusdam tenetur aut autem quos.
+                github_repo: speakeasyapi/gram
+                github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                 id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                organization_id: Ipsa quia dolor laudantium magni.
-                project_id: Dolor dolores incidunt non similique.
-                user_id: Qui eaque et.
+                idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                openapiv3_asset_ids:
+                    - Animi ut distinctio dolore eius.
+                    - Fugiat cum culpa esse.
+                    - Qui fugit quos.
+                organization_id: Nam ut.
+                project_id: Et quod eligendi omnis voluptate laboriosam porro.
+                user_id: Saepe soluta at earum blanditiis voluptatibus.
             required:
                 - id
                 - created_at
                 - organization_id
                 - project_id
                 - user_id
+                - openapiv3_asset_ids
         HTTPToolDefinition:
             type: object
             properties:
                 apikey_env_var:
                     type: string
                     description: Environment variable for API key
-                    example: Recusandae officiis voluptatem beatae.
+                    example: Sapiente quaerat autem inventore velit.
                 bearer_env_var:
                     type: string
                     description: Environment variable for bearer token
-                    example: Ut fuga culpa architecto debitis.
+                    example: Error distinctio quia commodi ad quia maiores.
                 body_schema:
                     type: string
                     description: JSON schema for request body
-                    example: Sunt eos.
+                    example: Rem necessitatibus aut dignissimos sit.
                 description:
                     type: string
                     description: Description of the tool
-                    example: Non nam.
+                    example: Eveniet voluptatum harum.
                 headers_schema:
                     type: string
                     description: JSON schema for headers
-                    example: Quo quibusdam.
+                    example: Ratione praesentium dolor officiis nostrum earum non.
                 http_method:
                     type: string
                     description: HTTP method for the request
-                    example: Quam quia molestiae eveniet recusandae sapiente non.
+                    example: Tempora sit repellat qui rem labore ducimus.
                 id:
                     type: string
                     description: The ID of the HTTP tool
-                    example: Et sit ut debitis eum rerum.
+                    example: Quo corrupti molestias velit.
                 name:
                     type: string
                     description: The name of the tool
-                    example: Debitis et voluptatem.
+                    example: Et rerum error aut.
                 password_env_var:
                     type: string
                     description: Environment variable for password
-                    example: Distinctio qui omnis laborum sed sit.
+                    example: Ut dicta aliquam iusto sunt.
                 path:
                     type: string
                     description: Path for the request
-                    example: Hic illum ea repudiandae eius harum libero.
+                    example: Molestiae eveniet aut in non ea reprehenderit.
                 pathparams_schema:
                     type: string
                     description: JSON schema for path parameters
-                    example: Quia ipsa mollitia.
+                    example: Soluta nam sed et qui officia.
                 queries_schema:
                     type: string
                     description: JSON schema for query parameters
-                    example: Ea incidunt possimus voluptatum qui iusto.
+                    example: Consequuntur aut in praesentium voluptates reprehenderit vel.
                 security_type:
                     type: string
                     description: Type of security (http:bearer, http:basic, apikey)
-                    example: Assumenda sed soluta distinctio ut maiores.
+                    example: Totam quos fugit sed consequatur qui.
                 server_env_var:
                     type: string
                     description: Environment variable for the server URL
-                    example: Aut corporis ratione quibusdam.
+                    example: Voluptatem ullam.
                 username_env_var:
                     type: string
                     description: Environment variable for username
-                    example: Quis veniam.
+                    example: Quos provident.
             example:
-                apikey_env_var: Error distinctio quia commodi ad quia maiores.
-                bearer_env_var: Totam quos fugit sed consequatur qui.
-                body_schema: Soluta nam sed et qui officia.
-                description: Et rerum error aut.
-                headers_schema: Molestiae eveniet aut in non ea reprehenderit.
-                http_method: Ut dicta aliquam iusto sunt.
-                id: Explicabo libero magnam aspernatur fuga dolorem voluptas.
-                name: Quo corrupti molestias velit.
-                password_env_var: Quos provident.
-                path: Tempora sit repellat qui rem labore ducimus.
-                pathparams_schema: Consequuntur aut in praesentium voluptates reprehenderit vel.
-                queries_schema: Ratione praesentium dolor officiis nostrum earum non.
-                security_type: Voluptatem ullam.
-                server_env_var: Eveniet voluptatum harum.
-                username_env_var: Sapiente quaerat autem inventore velit.
+                apikey_env_var: Quisquam voluptas.
+                bearer_env_var: Voluptatibus itaque non.
+                body_schema: Qui quis dolore.
+                description: Perferendis accusamus occaecati laborum quaerat labore.
+                headers_schema: Aut aperiam velit.
+                http_method: Repellat et est pariatur eum distinctio.
+                id: Eos error unde tempora.
+                name: Nemo qui ducimus enim tempore debitis quod.
+                password_env_var: Sequi est quos.
+                path: Blanditiis temporibus qui vitae consectetur dolorem reiciendis.
+                pathparams_schema: Ut nam dolor provident corporis accusamus.
+                queries_schema: Nesciunt vitae sint et in nihil.
+                security_type: Aut corrupti eos quasi ad fuga voluptatibus.
+                server_env_var: Accusamus optio voluptatibus et repellat.
+                username_env_var: Quos sint voluptatibus.
             required:
                 - id
                 - name
@@ -988,9 +1174,9 @@ components:
                 status:
                     type: string
                     description: The status of the service.
-                    example: Quidem dolores est officia ducimus doloribus temporibus.
+                    example: Aut vero.
             example:
-                status: Facere velit eius esse.
+                status: Mollitia perspiciatis totam.
             required:
                 - status
         InfoResponseBody:
@@ -998,79 +1184,79 @@ components:
             properties:
                 active_organization_id:
                     type: string
-                    example: Sit ut ut harum error.
+                    example: Consequatur cupiditate architecto.
                 organizations:
                     type: array
                     items:
                         $ref: '#/components/schemas/Organization'
                     example:
-                        - account_type: Consectetur voluptatem deserunt minima quam.
-                          organization_id: Architecto et provident in dolores.
-                          organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                          organization_slug: Quam quas quia vel nesciunt.
+                        - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                          organization_id: Sunt provident velit accusantium.
+                          organization_name: Corporis placeat neque enim omnis.
+                          organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                           projects:
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
-                        - account_type: Consectetur voluptatem deserunt minima quam.
-                          organization_id: Architecto et provident in dolores.
-                          organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                          organization_slug: Quam quas quia vel nesciunt.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                        - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                          organization_id: Sunt provident velit accusantium.
+                          organization_name: Corporis placeat neque enim omnis.
+                          organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                           projects:
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
-                        - account_type: Consectetur voluptatem deserunt minima quam.
-                          organization_id: Architecto et provident in dolores.
-                          organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                          organization_slug: Quam quas quia vel nesciunt.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                        - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                          organization_id: Sunt provident velit accusantium.
+                          organization_name: Corporis placeat neque enim omnis.
+                          organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                           projects:
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
-                        - account_type: Consectetur voluptatem deserunt minima quam.
-                          organization_id: Architecto et provident in dolores.
-                          organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                          organization_slug: Quam quas quia vel nesciunt.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                        - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                          organization_id: Sunt provident velit accusantium.
+                          organization_name: Corporis placeat neque enim omnis.
+                          organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                           projects:
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
-                            - project_id: Minima impedit commodi nihil.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                            - project_id: Optio dolorem nihil iusto consequatur error facilis.
                 user_email:
                     type: string
-                    example: Delectus impedit dicta.
+                    example: Et delectus atque maiores.
                 user_id:
                     type: string
-                    example: Quia omnis odit laboriosam.
+                    example: Perferendis est maxime provident quibusdam nisi quo.
             example:
-                active_organization_id: Rem provident aspernatur beatae voluptatem.
+                active_organization_id: Aperiam adipisci molestias explicabo aut sit nemo.
                 organizations:
-                    - account_type: Consectetur voluptatem deserunt minima quam.
-                      organization_id: Architecto et provident in dolores.
-                      organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                      organization_slug: Quam quas quia vel nesciunt.
+                    - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                      organization_id: Sunt provident velit accusantium.
+                      organization_name: Corporis placeat neque enim omnis.
+                      organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                       projects:
-                        - project_id: Minima impedit commodi nihil.
-                        - project_id: Minima impedit commodi nihil.
-                        - project_id: Minima impedit commodi nihil.
-                    - account_type: Consectetur voluptatem deserunt minima quam.
-                      organization_id: Architecto et provident in dolores.
-                      organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                      organization_slug: Quam quas quia vel nesciunt.
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                    - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                      organization_id: Sunt provident velit accusantium.
+                      organization_name: Corporis placeat neque enim omnis.
+                      organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                       projects:
-                        - project_id: Minima impedit commodi nihil.
-                        - project_id: Minima impedit commodi nihil.
-                        - project_id: Minima impedit commodi nihil.
-                    - account_type: Consectetur voluptatem deserunt minima quam.
-                      organization_id: Architecto et provident in dolores.
-                      organization_name: Corporis eius et blanditiis fugiat animi pariatur.
-                      organization_slug: Quam quas quia vel nesciunt.
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                    - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                      organization_id: Sunt provident velit accusantium.
+                      organization_name: Corporis placeat neque enim omnis.
+                      organization_slug: Perspiciatis ipsum occaecati quasi et amet.
                       projects:
-                        - project_id: Minima impedit commodi nihil.
-                        - project_id: Minima impedit commodi nihil.
-                        - project_id: Minima impedit commodi nihil.
-                user_email: Aut autem dolorum rerum dolorem sit eius.
-                user_id: Aspernatur sequi repellat.
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                    - account_type: Dolor voluptatem magnam doloribus accusantium id nihil.
+                      organization_id: Sunt provident velit accusantium.
+                      organization_name: Corporis placeat neque enim omnis.
+                      organization_slug: Perspiciatis ipsum occaecati quasi et amet.
+                      projects:
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                        - project_id: Optio dolorem nihil iusto consequatur error facilis.
+                user_email: Et aut sed aliquam.
+                user_id: Quia quis ipsum exercitationem eum eveniet et.
             required:
                 - user_id
                 - user_email
@@ -1082,18 +1268,18 @@ components:
                 cursor:
                     type: string
                     description: The cursor to fetch results from
-                    example: Id repellat excepturi vel.
+                    example: Numquam non aliquid quae minus.
                 limit:
                     type: integer
                     description: Results per page
                     default: 10
-                    example: 21
+                    example: 41
                     format: int64
                     minimum: 1
                     maximum: 100
             example:
-                cursor: Vitae numquam beatae aut in.
-                limit: 96
+                cursor: Cum ipsam voluptatem illum.
+                limit: 51
         ListDeploymentResult:
             type: object
             properties:
@@ -1103,47 +1289,87 @@ components:
                         $ref: '#/components/schemas/Deployment'
                     description: A list of deployments
                     example:
-                        - created_at: "1979-10-19T11:21:47Z"
+                        - created_at: "1991-12-05T10:00:32Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                          external_url: Eum sed.
+                          github_repo: speakeasyapi/gram
+                          github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          organization_id: Perspiciatis autem corporis doloribus.
-                          project_id: Ipsum cumque ex.
-                          user_id: Provident nihil sit minima alias ratione commodi.
-                        - created_at: "1979-10-19T11:21:47Z"
+                          idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                          openapiv3_asset_ids:
+                            - Laborum reprehenderit sit.
+                            - Ipsam rerum.
+                            - Nulla explicabo tempore numquam.
+                            - Quis distinctio hic aperiam.
+                          organization_id: Sed veritatis aspernatur natus ipsam aut officia.
+                          project_id: Totam praesentium qui aut.
+                          user_id: Maxime rem.
+                        - created_at: "1991-12-05T10:00:32Z"
                           external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                          external_url: Eum sed.
+                          github_repo: speakeasyapi/gram
+                          github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                           id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          organization_id: Perspiciatis autem corporis doloribus.
-                          project_id: Ipsum cumque ex.
-                          user_id: Provident nihil sit minima alias ratione commodi.
-                        - created_at: "1979-10-19T11:21:47Z"
-                          external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                          organization_id: Perspiciatis autem corporis doloribus.
-                          project_id: Ipsum cumque ex.
-                          user_id: Provident nihil sit minima alias ratione commodi.
+                          idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                          openapiv3_asset_ids:
+                            - Laborum reprehenderit sit.
+                            - Ipsam rerum.
+                            - Nulla explicabo tempore numquam.
+                            - Quis distinctio hic aperiam.
+                          organization_id: Sed veritatis aspernatur natus ipsam aut officia.
+                          project_id: Totam praesentium qui aut.
+                          user_id: Maxime rem.
                 next_cursor:
                     type: string
                     description: The cursor to fetch results from
                     example: 01jp3f054qc02gbcmpp0qmyzed
             example:
                 items:
-                    - created_at: "1979-10-19T11:21:47Z"
+                    - created_at: "1991-12-05T10:00:32Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      external_url: Eum sed.
+                      github_repo: speakeasyapi/gram
+                      github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      organization_id: Perspiciatis autem corporis doloribus.
-                      project_id: Ipsum cumque ex.
-                      user_id: Provident nihil sit minima alias ratione commodi.
-                    - created_at: "1979-10-19T11:21:47Z"
+                      idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                      openapiv3_asset_ids:
+                        - Laborum reprehenderit sit.
+                        - Ipsam rerum.
+                        - Nulla explicabo tempore numquam.
+                        - Quis distinctio hic aperiam.
+                      organization_id: Sed veritatis aspernatur natus ipsam aut officia.
+                      project_id: Totam praesentium qui aut.
+                      user_id: Maxime rem.
+                    - created_at: "1991-12-05T10:00:32Z"
                       external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      external_url: https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      external_url: Eum sed.
+                      github_repo: speakeasyapi/gram
+                      github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-                      organization_id: Perspiciatis autem corporis doloribus.
-                      project_id: Ipsum cumque ex.
-                      user_id: Provident nihil sit minima alias ratione commodi.
+                      idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                      openapiv3_asset_ids:
+                        - Laborum reprehenderit sit.
+                        - Ipsam rerum.
+                        - Nulla explicabo tempore numquam.
+                        - Quis distinctio hic aperiam.
+                      organization_id: Sed veritatis aspernatur natus ipsam aut officia.
+                      project_id: Totam praesentium qui aut.
+                      user_id: Maxime rem.
+                    - created_at: "1991-12-05T10:00:32Z"
+                      external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      external_url: Eum sed.
+                      github_repo: speakeasyapi/gram
+                      github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+                      id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      idempotency_key: 01jqq0ajmb4qh9eppz48dejr2m
+                      openapiv3_asset_ids:
+                        - Laborum reprehenderit sit.
+                        - Ipsam rerum.
+                        - Nulla explicabo tempore numquam.
+                        - Quis distinctio hic aperiam.
+                      organization_id: Sed veritatis aspernatur natus ipsam aut officia.
+                      project_id: Totam praesentium qui aut.
+                      user_id: Maxime rem.
                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
@@ -1156,58 +1382,68 @@ components:
                         $ref: '#/components/schemas/Toolset'
                     description: The list of toolsets
                     example:
-                        - created_at: Totam explicabo porro.
-                          description: Repellendus explicabo.
+                        - created_at: Ut qui esse.
+                          description: Dolorum maiores autem corrupti harum.
                           http_tool_ids:
-                            - Quae fugiat dicta cum nesciunt.
-                            - Et est et eveniet sed.
-                          id: Accusantium in ipsa deserunt non.
-                          name: Maxime rem.
-                          organization_id: Totam praesentium qui aut.
-                          project_id: Sed veritatis aspernatur natus ipsam aut officia.
-                          updated_at: Quasi delectus ab officia.
-                        - created_at: Totam explicabo porro.
-                          description: Repellendus explicabo.
+                            - Sunt eum ut.
+                            - Rerum reiciendis facilis sed incidunt.
+                          id: At optio dignissimos.
+                          name: Explicabo facere nostrum est.
+                          organization_id: Explicabo ratione perferendis praesentium.
+                          project_id: Ratione deserunt dolores.
+                          updated_at: Necessitatibus dolor accusantium amet.
+                        - created_at: Ut qui esse.
+                          description: Dolorum maiores autem corrupti harum.
                           http_tool_ids:
-                            - Quae fugiat dicta cum nesciunt.
-                            - Et est et eveniet sed.
-                          id: Accusantium in ipsa deserunt non.
-                          name: Maxime rem.
-                          organization_id: Totam praesentium qui aut.
-                          project_id: Sed veritatis aspernatur natus ipsam aut officia.
-                          updated_at: Quasi delectus ab officia.
-                        - created_at: Totam explicabo porro.
-                          description: Repellendus explicabo.
-                          http_tool_ids:
-                            - Quae fugiat dicta cum nesciunt.
-                            - Et est et eveniet sed.
-                          id: Accusantium in ipsa deserunt non.
-                          name: Maxime rem.
-                          organization_id: Totam praesentium qui aut.
-                          project_id: Sed veritatis aspernatur natus ipsam aut officia.
-                          updated_at: Quasi delectus ab officia.
+                            - Sunt eum ut.
+                            - Rerum reiciendis facilis sed incidunt.
+                          id: At optio dignissimos.
+                          name: Explicabo facere nostrum est.
+                          organization_id: Explicabo ratione perferendis praesentium.
+                          project_id: Ratione deserunt dolores.
+                          updated_at: Necessitatibus dolor accusantium amet.
             example:
                 toolsets:
-                    - created_at: Totam explicabo porro.
-                      description: Repellendus explicabo.
+                    - created_at: Ut qui esse.
+                      description: Dolorum maiores autem corrupti harum.
                       http_tool_ids:
-                        - Quae fugiat dicta cum nesciunt.
-                        - Et est et eveniet sed.
-                      id: Accusantium in ipsa deserunt non.
-                      name: Maxime rem.
-                      organization_id: Totam praesentium qui aut.
-                      project_id: Sed veritatis aspernatur natus ipsam aut officia.
-                      updated_at: Quasi delectus ab officia.
-                    - created_at: Totam explicabo porro.
-                      description: Repellendus explicabo.
+                        - Sunt eum ut.
+                        - Rerum reiciendis facilis sed incidunt.
+                      id: At optio dignissimos.
+                      name: Explicabo facere nostrum est.
+                      organization_id: Explicabo ratione perferendis praesentium.
+                      project_id: Ratione deserunt dolores.
+                      updated_at: Necessitatibus dolor accusantium amet.
+                    - created_at: Ut qui esse.
+                      description: Dolorum maiores autem corrupti harum.
                       http_tool_ids:
-                        - Quae fugiat dicta cum nesciunt.
-                        - Et est et eveniet sed.
-                      id: Accusantium in ipsa deserunt non.
-                      name: Maxime rem.
-                      organization_id: Totam praesentium qui aut.
-                      project_id: Sed veritatis aspernatur natus ipsam aut officia.
-                      updated_at: Quasi delectus ab officia.
+                        - Sunt eum ut.
+                        - Rerum reiciendis facilis sed incidunt.
+                      id: At optio dignissimos.
+                      name: Explicabo facere nostrum est.
+                      organization_id: Explicabo ratione perferendis praesentium.
+                      project_id: Ratione deserunt dolores.
+                      updated_at: Necessitatibus dolor accusantium amet.
+                    - created_at: Ut qui esse.
+                      description: Dolorum maiores autem corrupti harum.
+                      http_tool_ids:
+                        - Sunt eum ut.
+                        - Rerum reiciendis facilis sed incidunt.
+                      id: At optio dignissimos.
+                      name: Explicabo facere nostrum est.
+                      organization_id: Explicabo ratione perferendis praesentium.
+                      project_id: Ratione deserunt dolores.
+                      updated_at: Necessitatibus dolor accusantium amet.
+                    - created_at: Ut qui esse.
+                      description: Dolorum maiores autem corrupti harum.
+                      http_tool_ids:
+                        - Sunt eum ut.
+                        - Rerum reiciendis facilis sed incidunt.
+                      id: At optio dignissimos.
+                      name: Explicabo facere nostrum est.
+                      organization_id: Explicabo ratione perferendis praesentium.
+                      project_id: Ratione deserunt dolores.
+                      updated_at: Necessitatibus dolor accusantium amet.
             required:
                 - toolsets
         OpenAPI3P1ParameterSchema:
@@ -1225,17 +1461,16 @@ components:
                 description:
                     type: string
                     description: A brief description of the parameter.
-                    example: Dolores eos.
+                    example: Aut dignissimos aliquam enim totam.
                 example:
                     description: An example value for the parameter.
-                    example: Unde similique et eligendi est doloribus ut.
+                    example: Exercitationem in.
                 examples:
                     type: object
                     description: Examples of the parameter.
                     example:
-                        Dolores qui architecto maiores eius distinctio tempora.: Quis culpa deserunt ea minima aspernatur eveniet.
-                        Itaque ipsam.: Dignissimos nemo atque sunt beatae.
-                        Tempore quisquam modi aut.: Ut in.
+                        Doloribus eius.: Rerum doloribus.
+                        Laudantium laboriosam.: Est ratione ratione eligendi officia qui.
                     additionalProperties: true
                 explode:
                     type: boolean
@@ -1244,7 +1479,7 @@ components:
                 in:
                     type: string
                     description: The location of the parameter in an HTTP request.
-                    example: cookie
+                    example: query
                     enum:
                         - query
                         - header
@@ -1253,7 +1488,7 @@ components:
                 name:
                     type: string
                     description: The name of the parameter.
-                    example: Voluptas ullam perspiciatis eos sit qui.
+                    example: Temporibus odit ut molestiae.
                 required:
                     type: boolean
                     description: Whether the parameter is required.
@@ -1275,16 +1510,17 @@ components:
             example:
                 allowReserved: true
                 deprecated: true
-                description: Ipsa officiis sapiente suscipit iure ea culpa.
-                example: Vero quia quia totam.
+                description: Autem ut et voluptatem corrupti sequi.
+                example: Asperiores eveniet.
                 examples:
-                    Repellendus nemo aliquid quia hic saepe quia.: Ducimus amet ut voluptas.
-                explode: false
-                in: cookie
-                name: Est cumque.
-                required: false
-                schema: Blanditiis dolores molestiae.
-                style: deepObject
+                    Est nihil asperiores ut minus qui vel.: Et sit reprehenderit atque.
+                    Inventore aut ipsa.: Dolor laudantium magni aspernatur.
+                explode: true
+                in: header
+                name: Hic est excepturi quasi libero mollitia.
+                required: true
+                schema: Aut provident nihil officiis non.
+                style: simple
             required:
                 - name
                 - in
@@ -1304,33 +1540,44 @@ components:
                     type: object
                     description: A map of header schemas to send with the HTTP request.
                     example:
-                        Repudiandae molestias numquam error deserunt harum.:
+                        Dolores non.:
                             allowReserved: false
-                            deprecated: false
-                            description: Fugiat eum.
-                            example: Officiis delectus soluta eos consectetur nobis dolores.
+                            deprecated: true
+                            description: Pariatur et omnis ut sit eligendi.
+                            example: Est soluta quis dignissimos.
                             examples:
-                                Consequuntur qui.: Sit aliquid odio est doloribus esse dolores.
-                                Occaecati sunt quas ut id occaecati.: Autem voluptatum doloribus et.
+                                Quia dolorem tenetur excepturi consequatur.: Autem et.
                             explode: true
                             in: header
-                            name: Quis et minus dolores vero veniam.
+                            name: Nulla repellendus.
                             required: true
-                            schema: Blanditiis dolores molestiae.
+                            schema: Aut provident nihil officiis non.
                             style: pipeDelimited
-                        Velit omnis.:
+                        Ex facere.:
                             allowReserved: false
-                            deprecated: false
-                            description: Fugiat eum.
-                            example: Officiis delectus soluta eos consectetur nobis dolores.
+                            deprecated: true
+                            description: Pariatur et omnis ut sit eligendi.
+                            example: Est soluta quis dignissimos.
                             examples:
-                                Consequuntur qui.: Sit aliquid odio est doloribus esse dolores.
-                                Occaecati sunt quas ut id occaecati.: Autem voluptatum doloribus et.
+                                Quia dolorem tenetur excepturi consequatur.: Autem et.
                             explode: true
                             in: header
-                            name: Quis et minus dolores vero veniam.
+                            name: Nulla repellendus.
                             required: true
-                            schema: Blanditiis dolores molestiae.
+                            schema: Aut provident nihil officiis non.
+                            style: pipeDelimited
+                        Temporibus veniam eos fugit nisi iusto quasi.:
+                            allowReserved: false
+                            deprecated: true
+                            description: Pariatur et omnis ut sit eligendi.
+                            example: Est soluta quis dignissimos.
+                            examples:
+                                Quia dolorem tenetur excepturi consequatur.: Autem et.
+                            explode: true
+                            in: header
+                            name: Nulla repellendus.
+                            required: true
+                            schema: Aut provident nihil officiis non.
                             style: pipeDelimited
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
@@ -1366,19 +1613,18 @@ components:
                     type: object
                     description: A map of path parameters to interpolate into the path of the HTTP request.
                     example:
-                        Dolores animi fugiat itaque aut.:
+                        Quas laudantium inventore.:
                             allowReserved: false
-                            deprecated: false
-                            description: Fugiat eum.
-                            example: Officiis delectus soluta eos consectetur nobis dolores.
+                            deprecated: true
+                            description: Pariatur et omnis ut sit eligendi.
+                            example: Est soluta quis dignissimos.
                             examples:
-                                Consequuntur qui.: Sit aliquid odio est doloribus esse dolores.
-                                Occaecati sunt quas ut id occaecati.: Autem voluptatum doloribus et.
+                                Quia dolorem tenetur excepturi consequatur.: Autem et.
                             explode: true
                             in: header
-                            name: Quis et minus dolores vero veniam.
+                            name: Nulla repellendus.
                             required: true
-                            schema: Blanditiis dolores molestiae.
+                            schema: Aut provident nihil officiis non.
                             style: pipeDelimited
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
@@ -1386,33 +1632,44 @@ components:
                     type: object
                     description: A map of query parameters to send with the HTTP request.
                     example:
-                        Unde voluptates ipsa qui adipisci odit.:
+                        Consequatur beatae.:
                             allowReserved: false
-                            deprecated: false
-                            description: Fugiat eum.
-                            example: Officiis delectus soluta eos consectetur nobis dolores.
+                            deprecated: true
+                            description: Pariatur et omnis ut sit eligendi.
+                            example: Est soluta quis dignissimos.
                             examples:
-                                Consequuntur qui.: Sit aliquid odio est doloribus esse dolores.
-                                Occaecati sunt quas ut id occaecati.: Autem voluptatum doloribus et.
+                                Quia dolorem tenetur excepturi consequatur.: Autem et.
                             explode: true
                             in: header
-                            name: Quis et minus dolores vero veniam.
+                            name: Nulla repellendus.
                             required: true
-                            schema: Blanditiis dolores molestiae.
+                            schema: Aut provident nihil officiis non.
                             style: pipeDelimited
-                        Ut quas nesciunt.:
+                        Quidem dolores est officia ducimus doloribus temporibus.:
                             allowReserved: false
-                            deprecated: false
-                            description: Fugiat eum.
-                            example: Officiis delectus soluta eos consectetur nobis dolores.
+                            deprecated: true
+                            description: Pariatur et omnis ut sit eligendi.
+                            example: Est soluta quis dignissimos.
                             examples:
-                                Consequuntur qui.: Sit aliquid odio est doloribus esse dolores.
-                                Occaecati sunt quas ut id occaecati.: Autem voluptatum doloribus et.
+                                Quia dolorem tenetur excepturi consequatur.: Autem et.
                             explode: true
                             in: header
-                            name: Quis et minus dolores vero veniam.
+                            name: Nulla repellendus.
                             required: true
-                            schema: Blanditiis dolores molestiae.
+                            schema: Aut provident nihil officiis non.
+                            style: pipeDelimited
+                        Reprehenderit cum est.:
+                            allowReserved: false
+                            deprecated: true
+                            description: Pariatur et omnis ut sit eligendi.
+                            example: Est soluta quis dignissimos.
+                            examples:
+                                Quia dolorem tenetur excepturi consequatur.: Autem et.
+                            explode: true
+                            in: header
+                            name: Nulla repellendus.
+                            required: true
+                            schema: Aut provident nihil officiis non.
                             style: pipeDelimited
                     additionalProperties:
                         $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
@@ -1420,7 +1677,7 @@ components:
                     type: array
                     items:
                         type: string
-                        example: hw9m
+                        example: i0rl
                         pattern: ^[a-z](?:[a-z0-9_-]*[a-z0-9])?$
                     description: The tags that are associated with the tool.
                     default: []
@@ -1444,35 +1701,33 @@ components:
             properties:
                 account_type:
                     type: string
-                    example: Optio officia animi sapiente.
+                    example: Et qui in illum dolor quia.
                 organization_id:
                     type: string
-                    example: Laboriosam doloribus vitae et voluptatem.
+                    example: Et tempora occaecati vel.
                 organization_name:
                     type: string
-                    example: Ut eaque quia qui quo fugit.
+                    example: Delectus ipsam aperiam beatae eos.
                 organization_slug:
                     type: string
-                    example: Sunt ut architecto mollitia.
+                    example: Et accusantium soluta incidunt veniam sunt.
                 projects:
                     type: array
                     items:
                         $ref: '#/components/schemas/Project'
                     example:
-                        - project_id: Minus ipsam exercitationem maxime.
-                        - project_id: Minus ipsam exercitationem maxime.
-                        - project_id: Minus ipsam exercitationem maxime.
-                        - project_id: Minus ipsam exercitationem maxime.
+                        - project_id: Quo quas culpa eos.
+                        - project_id: Quo quas culpa eos.
+                        - project_id: Quo quas culpa eos.
+                        - project_id: Quo quas culpa eos.
             example:
-                account_type: Magni et itaque.
-                organization_id: Ipsam nostrum porro similique sit.
-                organization_name: Aperiam veniam dolorem vel.
-                organization_slug: Dolorum reprehenderit aliquid quasi sit porro et.
+                account_type: Incidunt qui est repellendus consectetur velit.
+                organization_id: Neque expedita.
+                organization_name: Est quasi consequatur voluptatem aut nemo.
+                organization_slug: Officia ut exercitationem aut inventore vero vero.
                 projects:
-                    - project_id: Minus ipsam exercitationem maxime.
-                    - project_id: Minus ipsam exercitationem maxime.
-                    - project_id: Minus ipsam exercitationem maxime.
-                    - project_id: Minus ipsam exercitationem maxime.
+                    - project_id: Quo quas culpa eos.
+                    - project_id: Quo quas culpa eos.
             required:
                 - organization_id
                 - organization_name
@@ -1484,9 +1739,9 @@ components:
             properties:
                 project_id:
                     type: string
-                    example: Eveniet quo.
+                    example: Nostrum ut est dolores ipsum fugiat sequi.
             example:
-                project_id: Qui rerum incidunt nisi.
+                project_id: Commodi ipsum eveniet voluptatibus.
             required:
                 - project_id
         SessionPayload:
@@ -1494,60 +1749,63 @@ components:
             properties:
                 gram_session_token:
                     type: string
-                    example: Iure ab voluptas reiciendis nihil aliquid.
+                    example: Est perspiciatis eius.
             example:
-                gram_session_token: Distinctio amet.
+                gram_session_token: Quo sunt voluptas.
         Toolset:
             type: object
             properties:
                 created_at:
                     type: string
                     description: When the toolset was created
-                    example: Sit aut sapiente ipsam.
+                    example: Velit sed aut.
                 description:
                     type: string
                     description: Description of the toolset
-                    example: Voluptatem recusandae ut similique dolor dolorum.
+                    example: Ad suscipit voluptates nihil soluta nulla.
                 http_tool_ids:
                     type: array
                     items:
                         type: string
-                        example: Praesentium nemo in quos quasi.
+                        example: Illo doloremque accusantium voluptas.
                     description: List of HTTP tool IDs included in this toolset
                     example:
-                        - Eaque aut minus earum hic tempora.
-                        - Veniam architecto dolorem accusamus non et provident.
+                        - Quae iste aut dolor ipsum rem deleniti.
+                        - Pariatur perferendis quia architecto et quis.
+                        - Similique id vel.
+                        - Amet error incidunt.
                 id:
                     type: string
                     description: The ID of the toolset
-                    example: At nihil omnis.
+                    example: Amet id veritatis dolores.
                 name:
                     type: string
                     description: The name of the toolset
-                    example: Voluptatum illum aut delectus dolorem officiis.
+                    example: Nihil repellat ut sed expedita qui voluptatem.
                 organization_id:
                     type: string
                     description: The organization ID this toolset belongs to
-                    example: Voluptate voluptas quo vitae.
+                    example: Et aut ut.
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
-                    example: Dignissimos rerum nostrum.
+                    example: Quasi aut quo quam officiis ducimus et.
                 updated_at:
                     type: string
                     description: When the toolset was last updated
-                    example: Corrupti voluptatem consectetur et autem non.
+                    example: Quae beatae.
             example:
-                created_at: Rem deleniti et pariatur perferendis.
-                description: Ad suscipit voluptates nihil soluta nulla.
+                created_at: Cupiditate consequatur quaerat doloremque et enim.
+                description: Beatae aut magni optio earum.
                 http_tool_ids:
-                    - Doloremque accusantium voluptas.
-                    - Quasi quae iste aut dolor.
-                id: Amet id veritatis dolores.
-                name: Nihil repellat ut sed expedita qui voluptatem.
-                organization_id: Et aut ut.
-                project_id: Quasi aut quo quam officiis ducimus et.
-                updated_at: Architecto et.
+                    - Est laudantium enim enim cumque voluptatem enim.
+                    - Delectus facere ab quia.
+                    - Assumenda dolorem adipisci.
+                id: Consequuntur et consequatur aut.
+                name: Sed sunt nisi.
+                organization_id: Ea ratione vitae iusto.
+                project_id: Accusamus et beatae.
+                updated_at: Quasi ipsa officia voluptate omnis et occaecati.
             required:
                 - id
                 - project_id
@@ -1561,166 +1819,121 @@ components:
                 created_at:
                     type: string
                     description: When the toolset was created
-                    example: Corrupti eos quasi ad fuga voluptatibus modi.
+                    example: Provident aspernatur.
                 description:
                     type: string
                     description: Description of the toolset
-                    example: Accusamus optio voluptatibus et repellat.
+                    example: Aut autem dolorum rerum dolorem sit eius.
                 http_tools:
                     type: array
                     items:
                         $ref: '#/components/schemas/HTTPToolDefinition'
                     description: The HTTP tools in this toolset
                     example:
-                        - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                          bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                          body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                          description: Rerum reiciendis facilis sed incidunt.
-                          headers_schema: Et vero aliquam.
-                          http_method: Exercitationem dolores iusto.
-                          id: Facere nostrum est et dolorum maiores autem.
-                          name: Harum eligendi ut sunt eum ut.
-                          password_env_var: Minima esse vitae.
-                          path: Harum dolores ipsum vitae et dolore.
-                          pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                          queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                          security_type: Necessitatibus dolor accusantium amet.
-                          server_env_var: Ut qui esse.
-                          username_env_var: Atque nam doloremque ut possimus sapiente aut.
-                        - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                          bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                          body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                          description: Rerum reiciendis facilis sed incidunt.
-                          headers_schema: Et vero aliquam.
-                          http_method: Exercitationem dolores iusto.
-                          id: Facere nostrum est et dolorum maiores autem.
-                          name: Harum eligendi ut sunt eum ut.
-                          password_env_var: Minima esse vitae.
-                          path: Harum dolores ipsum vitae et dolore.
-                          pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                          queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                          security_type: Necessitatibus dolor accusantium amet.
-                          server_env_var: Ut qui esse.
-                          username_env_var: Atque nam doloremque ut possimus sapiente aut.
-                        - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                          bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                          body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                          description: Rerum reiciendis facilis sed incidunt.
-                          headers_schema: Et vero aliquam.
-                          http_method: Exercitationem dolores iusto.
-                          id: Facere nostrum est et dolorum maiores autem.
-                          name: Harum eligendi ut sunt eum ut.
-                          password_env_var: Minima esse vitae.
-                          path: Harum dolores ipsum vitae et dolore.
-                          pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                          queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                          security_type: Necessitatibus dolor accusantium amet.
-                          server_env_var: Ut qui esse.
-                          username_env_var: Atque nam doloremque ut possimus sapiente aut.
-                        - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                          bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                          body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                          description: Rerum reiciendis facilis sed incidunt.
-                          headers_schema: Et vero aliquam.
-                          http_method: Exercitationem dolores iusto.
-                          id: Facere nostrum est et dolorum maiores autem.
-                          name: Harum eligendi ut sunt eum ut.
-                          password_env_var: Minima esse vitae.
-                          path: Harum dolores ipsum vitae et dolore.
-                          pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                          queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                          security_type: Necessitatibus dolor accusantium amet.
-                          server_env_var: Ut qui esse.
-                          username_env_var: Atque nam doloremque ut possimus sapiente aut.
+                        - apikey_env_var: Asperiores minima.
+                          bearer_env_var: Quae officia occaecati.
+                          body_schema: Consectetur voluptatem deserunt minima quam.
+                          description: Suscipit consectetur vel hic accusamus quibusdam.
+                          headers_schema: Architecto et provident in dolores.
+                          http_method: Et est et.
+                          id: Odio ipsam voluptatum.
+                          name: Consectetur quo eveniet veniam vel.
+                          password_env_var: Nesciunt minima voluptas corrupti debitis est ut.
+                          path: Dignissimos beatae eum.
+                          pathparams_schema: Quam quas quia vel nesciunt.
+                          queries_schema: Corporis eius et blanditiis fugiat animi pariatur.
+                          security_type: Voluptatum error.
+                          server_env_var: Ex corrupti odit voluptate deserunt id.
+                          username_env_var: Aut voluptatem quis enim atque consequatur.
+                        - apikey_env_var: Asperiores minima.
+                          bearer_env_var: Quae officia occaecati.
+                          body_schema: Consectetur voluptatem deserunt minima quam.
+                          description: Suscipit consectetur vel hic accusamus quibusdam.
+                          headers_schema: Architecto et provident in dolores.
+                          http_method: Et est et.
+                          id: Odio ipsam voluptatum.
+                          name: Consectetur quo eveniet veniam vel.
+                          password_env_var: Nesciunt minima voluptas corrupti debitis est ut.
+                          path: Dignissimos beatae eum.
+                          pathparams_schema: Quam quas quia vel nesciunt.
+                          queries_schema: Corporis eius et blanditiis fugiat animi pariatur.
+                          security_type: Voluptatum error.
+                          server_env_var: Ex corrupti odit voluptate deserunt id.
+                          username_env_var: Aut voluptatem quis enim atque consequatur.
+                        - apikey_env_var: Asperiores minima.
+                          bearer_env_var: Quae officia occaecati.
+                          body_schema: Consectetur voluptatem deserunt minima quam.
+                          description: Suscipit consectetur vel hic accusamus quibusdam.
+                          headers_schema: Architecto et provident in dolores.
+                          http_method: Et est et.
+                          id: Odio ipsam voluptatum.
+                          name: Consectetur quo eveniet veniam vel.
+                          password_env_var: Nesciunt minima voluptas corrupti debitis est ut.
+                          path: Dignissimos beatae eum.
+                          pathparams_schema: Quam quas quia vel nesciunt.
+                          queries_schema: Corporis eius et blanditiis fugiat animi pariatur.
+                          security_type: Voluptatum error.
+                          server_env_var: Ex corrupti odit voluptate deserunt id.
+                          username_env_var: Aut voluptatem quis enim atque consequatur.
                 id:
                     type: string
                     description: The ID of the toolset
-                    example: Rem necessitatibus aut dignissimos sit.
+                    example: Quia omnis odit laboriosam.
                 name:
                     type: string
                     description: The name of the toolset
-                    example: Perferendis accusamus occaecati laborum quaerat labore.
+                    example: Ex aspernatur sequi repellat.
                 organization_id:
                     type: string
                     description: The organization ID this toolset belongs to
-                    example: Nemo qui ducimus enim tempore debitis quod.
+                    example: Sit ut ut harum error.
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
-                    example: Eos error unde tempora.
+                    example: Delectus impedit dicta.
                 updated_at:
                     type: string
                     description: When the toolset was last updated
-                    example: Itaque non nam quisquam voluptas eveniet.
+                    example: Voluptatem repellat qui.
             example:
-                created_at: Ut nam dolor provident corporis accusamus.
-                description: Velit consequatur nesciunt vitae sint et in.
+                created_at: Voluptas voluptatem nostrum.
+                description: Eius eum ut.
                 http_tools:
-                    - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                      bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                      body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                      description: Rerum reiciendis facilis sed incidunt.
-                      headers_schema: Et vero aliquam.
-                      http_method: Exercitationem dolores iusto.
-                      id: Facere nostrum est et dolorum maiores autem.
-                      name: Harum eligendi ut sunt eum ut.
-                      password_env_var: Minima esse vitae.
-                      path: Harum dolores ipsum vitae et dolore.
-                      pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                      queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                      security_type: Necessitatibus dolor accusantium amet.
-                      server_env_var: Ut qui esse.
-                      username_env_var: Atque nam doloremque ut possimus sapiente aut.
-                    - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                      bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                      body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                      description: Rerum reiciendis facilis sed incidunt.
-                      headers_schema: Et vero aliquam.
-                      http_method: Exercitationem dolores iusto.
-                      id: Facere nostrum est et dolorum maiores autem.
-                      name: Harum eligendi ut sunt eum ut.
-                      password_env_var: Minima esse vitae.
-                      path: Harum dolores ipsum vitae et dolore.
-                      pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                      queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                      security_type: Necessitatibus dolor accusantium amet.
-                      server_env_var: Ut qui esse.
-                      username_env_var: Atque nam doloremque ut possimus sapiente aut.
-                    - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                      bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                      body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                      description: Rerum reiciendis facilis sed incidunt.
-                      headers_schema: Et vero aliquam.
-                      http_method: Exercitationem dolores iusto.
-                      id: Facere nostrum est et dolorum maiores autem.
-                      name: Harum eligendi ut sunt eum ut.
-                      password_env_var: Minima esse vitae.
-                      path: Harum dolores ipsum vitae et dolore.
-                      pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                      queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                      security_type: Necessitatibus dolor accusantium amet.
-                      server_env_var: Ut qui esse.
-                      username_env_var: Atque nam doloremque ut possimus sapiente aut.
-                    - apikey_env_var: Beatae praesentium cupiditate atque iusto.
-                      bearer_env_var: Doloribus sapiente ut necessitatibus numquam.
-                      body_schema: Consequatur mollitia iure libero voluptas sit quis.
-                      description: Rerum reiciendis facilis sed incidunt.
-                      headers_schema: Et vero aliquam.
-                      http_method: Exercitationem dolores iusto.
-                      id: Facere nostrum est et dolorum maiores autem.
-                      name: Harum eligendi ut sunt eum ut.
-                      password_env_var: Minima esse vitae.
-                      path: Harum dolores ipsum vitae et dolore.
-                      pathparams_schema: Magnam praesentium dolores veniam quasi possimus.
-                      queries_schema: Sapiente aliquam dolores qui id pariatur autem.
-                      security_type: Necessitatibus dolor accusantium amet.
-                      server_env_var: Ut qui esse.
-                      username_env_var: Atque nam doloremque ut possimus sapiente aut.
-                id: Sint voluptatibus ut sequi est quos qui.
-                name: Libero aut.
-                organization_id: Debitis blanditiis temporibus qui vitae consectetur dolorem.
-                project_id: Et est pariatur eum.
-                updated_at: Qui quis dolore.
+                    - apikey_env_var: Asperiores minima.
+                      bearer_env_var: Quae officia occaecati.
+                      body_schema: Consectetur voluptatem deserunt minima quam.
+                      description: Suscipit consectetur vel hic accusamus quibusdam.
+                      headers_schema: Architecto et provident in dolores.
+                      http_method: Et est et.
+                      id: Odio ipsam voluptatum.
+                      name: Consectetur quo eveniet veniam vel.
+                      password_env_var: Nesciunt minima voluptas corrupti debitis est ut.
+                      path: Dignissimos beatae eum.
+                      pathparams_schema: Quam quas quia vel nesciunt.
+                      queries_schema: Corporis eius et blanditiis fugiat animi pariatur.
+                      security_type: Voluptatum error.
+                      server_env_var: Ex corrupti odit voluptate deserunt id.
+                      username_env_var: Aut voluptatem quis enim atque consequatur.
+                    - apikey_env_var: Asperiores minima.
+                      bearer_env_var: Quae officia occaecati.
+                      body_schema: Consectetur voluptatem deserunt minima quam.
+                      description: Suscipit consectetur vel hic accusamus quibusdam.
+                      headers_schema: Architecto et provident in dolores.
+                      http_method: Et est et.
+                      id: Odio ipsam voluptatum.
+                      name: Consectetur quo eveniet veniam vel.
+                      password_env_var: Nesciunt minima voluptas corrupti debitis est ut.
+                      path: Dignissimos beatae eum.
+                      pathparams_schema: Quam quas quia vel nesciunt.
+                      queries_schema: Corporis eius et blanditiis fugiat animi pariatur.
+                      security_type: Voluptatum error.
+                      server_env_var: Ex corrupti odit voluptate deserunt id.
+                      username_env_var: Aut voluptatem quis enim atque consequatur.
+                id: Quia officiis officiis similique.
+                name: Ad itaque eos unde veniam.
+                organization_id: Suscipit deleniti voluptatem.
+                project_id: Porro odit eligendi atque.
+                updated_at: Maiores et fugiat omnis aut.
             required:
                 - id
                 - project_id
@@ -1735,47 +1948,49 @@ components:
                 description:
                     type: string
                     description: The new description of the toolset
-                    example: Velit sed aut.
+                    example: Et molestias qui expedita quidem.
                 http_tool_ids_to_add:
                     type: array
                     items:
                         type: string
-                        example: Quae beatae.
+                        example: Tempora iure sed reiciendis corporis voluptatem distinctio.
                     description: HTTP tool IDs to add to the toolset
                     example:
-                        - Et consequatur aut voluptatibus accusamus et.
-                        - Qui ea ratione vitae iusto mollitia.
-                        - Sunt nisi rerum beatae aut magni optio.
-                        - Ea at.
+                        - Temporibus eos.
+                        - Dicta expedita in officia ipsa.
+                        - Placeat maiores et eos.
                 http_tool_ids_to_remove:
                     type: array
                     items:
                         type: string
-                        example: Laudantium enim enim cumque voluptatem.
+                        example: Et sit ut debitis eum rerum.
                     description: HTTP tool IDs to remove from the toolset
                     example:
-                        - Delectus facere ab quia.
-                        - Assumenda dolorem adipisci.
+                        - Et voluptatem dolores non.
+                        - Omnis aut.
+                        - Ratione quibusdam.
+                        - Assumenda sed soluta distinctio ut maiores.
                 id:
                     type: string
                     description: The ID of the toolset to update
-                    example: Id vel.
+                    example: Vel illum velit veniam voluptatem a.
                 name:
                     type: string
                     description: The new name of the toolset
-                    example: Amet error incidunt.
+                    example: Tenetur facilis quis.
             example:
-                description: Amet fugit vel illum velit veniam voluptatem.
+                description: Quis veniam.
                 http_tool_ids_to_add:
-                    - Tenetur facilis quis.
-                    - Et molestias qui expedita quidem.
-                    - Tempora iure sed reiciendis corporis voluptatem distinctio.
+                    - Qui omnis laborum sed sit distinctio quam.
+                    - Molestiae eveniet recusandae sapiente non.
+                    - Hic illum ea repudiandae eius harum libero.
+                    - Quo quibusdam.
                 http_tool_ids_to_remove:
-                    - Temporibus eos.
-                    - Dicta expedita in officia ipsa.
-                    - Placeat maiores et eos.
-                id: Cupiditate consequatur quaerat doloremque et enim.
-                name: Quasi ipsa officia voluptate omnis et occaecati.
+                    - Incidunt possimus voluptatum qui iusto et.
+                    - Ipsa mollitia aspernatur sunt eos.
+                    - Explicabo libero magnam aspernatur fuga dolorem voluptas.
+                id: Ut fuga culpa architecto debitis.
+                name: Recusandae officiis voluptatem beatae.
             required:
                 - id
         UpdateToolsetRequestBody:
@@ -1784,41 +1999,80 @@ components:
                 description:
                     type: string
                     description: The new description of the toolset
-                    example: Similique voluptatem porro.
+                    example: Saepe non sed.
                 http_tool_ids_to_add:
                     type: array
                     items:
                         type: string
-                        example: Eligendi atque veniam suscipit deleniti voluptatem eius.
+                        example: Voluptate est doloribus vitae at et.
                     description: HTTP tool IDs to add to the toolset
                     example:
-                        - Eos unde veniam sit.
-                        - Eum ut.
+                        - Nisi tempora quasi.
+                        - Consectetur laudantium eos deleniti et iste ex.
                 http_tool_ids_to_remove:
                     type: array
                     items:
                         type: string
-                        example: Cupiditate voluptas voluptatem nostrum culpa.
+                        example: Et deleniti qui quasi deserunt.
                     description: HTTP tool IDs to remove from the toolset
                     example:
-                        - Fugiat omnis aut assumenda perferendis est maxime.
-                        - Quibusdam nisi quo sequi et.
-                        - Atque maiores facilis consequatur cupiditate.
-                        - Quia sed.
+                        - Aut nemo perspiciatis pariatur.
+                        - Eos consequatur et natus quia.
                 name:
                     type: string
                     description: The new name of the toolset
-                    example: Aut quia officiis.
+                    example: Modi officiis accusantium eius in.
             example:
-                description: Eveniet et eum et aut sed aliquam.
+                description: Doloribus mollitia saepe iure aut quis tempora.
                 http_tool_ids_to_add:
-                    - Adipisci molestias explicabo aut sit nemo quas.
-                    - Modi officiis accusantium eius in.
+                    - Amet et molestiae unde ut sit temporibus.
+                    - Expedita necessitatibus.
                 http_tool_ids_to_remove:
-                    - Non sed.
-                    - Voluptate est doloribus vitae at et.
-                    - Ipsa nisi tempora quasi.
-                name: Quis ipsum exercitationem.
+                    - Natus saepe sint magni id ab assumenda.
+                    - Ipsa voluptatibus autem.
+                    - Id quos.
+                    - Commodi qui ut dolor ut.
+                name: Architecto ipsam.
+        UploadOpenAPIv3Form:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    example: 5554994044086209757
+                    format: int64
+                content_type:
+                    type: string
+                    example: Cupiditate unde magni dolorem.
+                project_id:
+                    type: string
+                    description: The project ID the OpenAPI document belongs to
+                    example: Quisquam rerum odit distinctio accusantium consequatur ut.
+            example:
+                content_length: 3317453073663463301
+                content_type: Qui ea dolorum error minima eaque autem.
+                project_id: Ad ab quod voluptas ut.
+            required:
+                - content_type
+                - content_length
+                - project_id
+                - idempotency_key
+        UploadOpenAPIv3Result:
+            type: object
+            properties:
+                asset:
+                    $ref: '#/components/schemas/Asset'
+            example:
+                asset:
+                    content_length: 7122307605056218059
+                    content_type: Amet et ut occaecati vel et porro.
+                    created_at: "1976-05-28T09:59:18Z"
+                    id: Dolorem sit ipsa sequi dolore quos.
+                    kind: openapiv3
+                    sha256: Facilis velit occaecati perspiciatis minus dolorum.
+                    updated_at: "1976-05-04T08:39:47Z"
+                    url: Omnis nihil commodi temporibus.
+            required:
+                - asset
     securitySchemes:
         gram_session_header_X-Gram-Session:
             type: apiKey
@@ -1826,6 +2080,8 @@ components:
             name: X-Gram-Session
             in: header
 tags:
+    - name: assets
+      description: Manages assets used by Gram projects.
     - name: auth
       description: Managed auth for gram producers and dashboard.
     - name: deployments

@@ -48,38 +48,29 @@ var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployment
 // CreateDeploymentPayload is the payload type of the deployments service
 // createDeployment method.
 type CreateDeploymentPayload struct {
+	// A unique identifier that will mitigate against duplicate deployments.
+	IdempotencyKey string
+	// The github repository in the form of "owner/repo".
+	GithubRepo *string
+	// The commit hash that triggered the deployment.
+	GithubSha *string
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools  []*OpenAPI3P1ToolForm
-	GramSessionToken *string
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	Openapiv3AssetIds []string
+	GramSessionToken  *string
 }
 
 // CreateDeploymentResult is the result type of the deployments service
 // createDeployment method.
 type CreateDeploymentResult struct {
-	// The ID to of the deployment.
-	ID string
-	// The ID of the organization that the deployment belongs to.
-	OrganizationID string
-	// The ID of the project that the deployment belongs to.
-	ProjectID string
-	// The ID of the user that created the deployment.
-	UserID string
-	// The creation date of the deployment.
-	CreatedAt string
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
+	// A deployment that was successfully created.
+	Deployment *Deployment
 }
 
 type Deployment struct {
@@ -93,14 +84,21 @@ type Deployment struct {
 	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
+	// A unique identifier that will mitigate against duplicate deployments.
+	IdempotencyKey *string
+	// The github repository in the form of "owner/repo".
+	GithubRepo *string
+	// The commit hash that triggered the deployment.
+	GithubSha *string
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	Openapiv3AssetIds []string
 }
 
 // GetDeploymentPayload is the payload type of the deployments service
@@ -124,17 +122,22 @@ type GetDeploymentResult struct {
 	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
+	// A unique identifier that will mitigate against duplicate deployments.
+	IdempotencyKey *string
+	// The github repository in the form of "owner/repo".
+	GithubRepo *string
+	// The commit hash that triggered the deployment.
+	GithubSha *string
 	// The external ID to refer to the deployment. This can be a git commit hash
 	// for example.
 	ExternalID *string
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string
-	// The HTTP tools available in the deployment.
-	Openapi3p1Tools []*OpenAPI3P1ToolForm
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	Openapiv3AssetIds []string
 }
-
-type JSONSchema string
 
 // ListDeploymentResult is the result type of the deployments service
 // listDeployments method.
@@ -153,51 +156,4 @@ type ListDeploymentsPayload struct {
 	// Results per page
 	Limit            int
 	GramSessionToken *string
-}
-
-type OpenAPI3P1ParameterSchema struct {
-	// The name of the parameter.
-	Name string
-	// A brief description of the parameter.
-	Description *string
-	// The location of the parameter in an HTTP request.
-	In string
-	// Whether the parameter is required.
-	Required bool
-	// The style of the parameter.
-	Style *string
-	// Whether the parameter is exploded.
-	Explode *bool
-	// Whether the parameter is allowed to be reserved.
-	AllowReserved *bool
-	// The JSON Schema describing the parameter.
-	Schema *JSONSchema
-	// A brief description of the parameter.
-	Deprecated bool
-	// An example value for the parameter.
-	Example any
-	// Examples of the parameter.
-	Examples map[string]any
-}
-
-type OpenAPI3P1ToolForm struct {
-	Kind string
-	// The name of the tool.
-	Name string
-	// The description that is provided with the tool.
-	Description string
-	// The tags that are associated with the tool.
-	Tags []string
-	// The path of the HTTP endpoint.
-	Path string
-	// The method to use for the HTTP request.
-	Method string
-	// A map of path parameters to interpolate into the path of the HTTP request.
-	PathParameters map[string]*OpenAPI3P1ParameterSchema
-	// A map of header schemas to send with the HTTP request.
-	HeaderParameters map[string]*OpenAPI3P1ParameterSchema
-	// A map of query parameters to send with the HTTP request.
-	QueryParameters map[string]*OpenAPI3P1ParameterSchema
-	// The JSON Schema describing the body of the HTTP request.
-	Body JSONSchema
 }

@@ -53,14 +53,14 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}
 
 	return &gen.GetDeploymentResult{
-		ID:              deployment.ID.String(),
-		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  deployment.OrganizationID.String(),
-		ProjectID:       deployment.ProjectID.String(),
-		UserID:          deployment.UserID.String,
-		ExternalID:      conv.FromPGText(deployment.ExternalID),
-		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
-		Openapi3p1Tools: []*gen.OpenAPI3P1ToolForm{},
+		ID:                deployment.ID.String(),
+		CreatedAt:         deployment.CreatedAt.Time.Format(time.RFC3339),
+		OrganizationID:    deployment.OrganizationID.String(),
+		ProjectID:         deployment.ProjectID.String(),
+		UserID:            deployment.UserID.String,
+		ExternalID:        conv.FromPGText(deployment.ExternalID),
+		ExternalURL:       conv.FromPGText(deployment.ExternalUrl),
+		Openapiv3AssetIds: []string{},
 	}, nil
 }
 
@@ -86,14 +86,16 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	}
 
 	return &gen.CreateDeploymentResult{
-		ID:              deployment.ID.String(),
-		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  deployment.OrganizationID.String(),
-		ProjectID:       deployment.ProjectID.String(),
-		UserID:          deployment.UserID.String,
-		ExternalID:      conv.FromPGText(deployment.ExternalID),
-		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
-		Openapi3p1Tools: []*gen.OpenAPI3P1ToolForm{},
+		Deployment: &gen.Deployment{
+			ID:                deployment.ID.String(),
+			CreatedAt:         deployment.CreatedAt.Time.Format(time.RFC3339),
+			OrganizationID:    deployment.OrganizationID.String(),
+			ProjectID:         deployment.ProjectID.String(),
+			UserID:            deployment.UserID.String,
+			ExternalID:        conv.FromPGText(deployment.ExternalID),
+			ExternalURL:       conv.FromPGText(deployment.ExternalUrl),
+			Openapiv3AssetIds: []string{},
+		},
 	}, nil
 }
 

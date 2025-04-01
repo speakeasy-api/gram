@@ -44,7 +44,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Laudantium quia animi praesentium quas vitae esse.\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"idempotency_key\": \"01jqq0ajmb4qh9eppz48dejr2m\",\n      \"openapiv3_asset_ids\": [\n         \"Laudantium consequatur placeat.\",\n         \"Ipsum saepe quis.\",\n         \"Nobis enim illum molestiae ut.\",\n         \"Excepturi ad excepturi consectetur enim cum.\"\n      ]\n   }'")
 		}
 	}
 	var gramSessionToken *string
@@ -54,13 +54,16 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 		}
 	}
 	v := &deployments.CreateDeploymentPayload{
-		ExternalID:  body.ExternalID,
-		ExternalURL: body.ExternalURL,
+		IdempotencyKey: body.IdempotencyKey,
+		GithubRepo:     body.GithubRepo,
+		GithubSha:      body.GithubSha,
+		ExternalID:     body.ExternalID,
+		ExternalURL:    body.ExternalURL,
 	}
-	if body.Openapi3p1Tools != nil {
-		v.Openapi3p1Tools = make([]*deployments.OpenAPI3P1ToolForm, len(body.Openapi3p1Tools))
-		for i, val := range body.Openapi3p1Tools {
-			v.Openapi3p1Tools[i] = marshalOpenAPI3P1ToolFormRequestBodyToDeploymentsOpenAPI3P1ToolForm(val)
+	if body.Openapiv3AssetIds != nil {
+		v.Openapiv3AssetIds = make([]string, len(body.Openapiv3AssetIds))
+		for i, val := range body.Openapiv3AssetIds {
+			v.Openapiv3AssetIds[i] = val
 		}
 	}
 	v.GramSessionToken = gramSessionToken

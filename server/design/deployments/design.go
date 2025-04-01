@@ -66,7 +66,7 @@ var _ = Service("deployments", func() {
 })
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at", "organization_id", "project_id", "user_id")
+	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_asset_ids")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -85,37 +85,64 @@ var Deployment = Type("Deployment", func() {
 		Description("The creation date of the deployment.")
 		Format(FormatDateTime)
 	})
+	Attribute("idempotency_key", String, func() {
+		Description("A unique identifier that will mitigate against duplicate deployments.")
+		Example("01jqq0ajmb4qh9eppz48dejr2m")
+	})
+	Attribute("github_repo", String, func() {
+		Description("The github repository in the form of \"owner/repo\".")
+		Example("speakeasyapi/gram")
+	})
+	Attribute("github_sha", String, func() {
+		Description("The commit hash that triggered the deployment.")
+		Example("f33e693e9e12552043bc0ec5c37f1b8a9e076161")
+	})
 	Attribute("external_id", String, func() {
 		Description("The external ID to refer to the deployment. This can be a git commit hash for example.")
 		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
 	})
 	Attribute("external_url", String, func() {
 		Description("The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.")
-		Example("https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
 	})
-	Attribute("openapi_3p1_tools", ArrayOf(OpenAPI3P1ToolForm), func() {
-		Description("The HTTP tools available in the deployment.")
-		Meta("openapi:example", "false")
+
+	Attribute("openapiv3_asset_ids", ArrayOf(String), func() {
+		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")
 	})
 })
 
 var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
+	Required("idempotency_key", "manifest")
+
+	Attribute("idempotency_key", String, func() {
+		Description("A unique identifier that will mitigate against duplicate deployments.")
+		Example("01jqq0ajmb4qh9eppz48dejr2m")
+	})
+	Attribute("github_repo", String, func() {
+		Description("The github repository in the form of \"owner/repo\".")
+		Example("speakeasyapi/gram")
+	})
+	Attribute("github_sha", String, func() {
+		Description("The commit hash that triggered the deployment.")
+		Example("f33e693e9e12552043bc0ec5c37f1b8a9e076161")
+	})
 	Attribute("external_id", String, func() {
 		Description("The external ID to refer to the deployment. This can be a git commit hash for example.")
 		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
 	})
 	Attribute("external_url", String, func() {
 		Description("The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.")
-		Example("https://github.com/golang/go/commit/bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
 	})
-	Attribute("openapi_3p1_tools", ArrayOf(OpenAPI3P1ToolForm), func() {
-		Description("The HTTP tools available in the deployment.")
-		Meta("openapi:example", "false")
+
+	Attribute("openapiv3_asset_ids", ArrayOf(String), func() {
+		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")
 	})
 })
 
 var CreateDeploymentResult = Type("CreateDeploymentResult", func() {
-	Extend(Deployment)
+	Attribute("deployment", Deployment, func() {
+		Description("A deployment that was successfully created.")
+		Meta("openapi:example", "false")
+	})
 })
 
 var ListDeploymentForm = Type("ListDeploymentForm", func() {

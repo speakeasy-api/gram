@@ -4,3 +4,6 @@ node_modules
 bin
 junit-report.xml
 .mise-tasks/local
+.assets
+.vscode/*
+!.vscode/extensions.json

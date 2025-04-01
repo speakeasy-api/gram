@@ -9,6 +9,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Asset struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	Name          string
+	Url           string
+	Kind          string
+	ContentType   string
+	ContentLength int64
+	Sha256        string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
 type Deployment struct {
 	ID              uuid.UUID
 	UserID          pgtype.Text

@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Aliquam consequatur itaque enim modi.\",\n      \"http_tool_ids\": [\n         \"Provident incidunt suscipit et minus ea est.\",\n         \"Consequatur deserunt sequi maxime.\",\n         \"Assumenda quas dolor mollitia laboriosam voluptatem.\"\n      ],\n      \"name\": \"Rerum animi expedita.\",\n      \"project_id\": \"Officia voluptas aspernatur quibusdam.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Voluptatem mollitia dolor explicabo doloribus.\",\n      \"http_tool_ids\": [\n         \"Assumenda commodi pariatur reprehenderit.\",\n         \"Ipsa molestiae voluptas nemo.\",\n         \"Iusto voluptas culpa sed.\"\n      ],\n      \"name\": \"Labore consectetur doloribus distinctio officiis.\",\n      \"project_id\": \"Eos dolorem excepturi voluptatibus quisquam.\"\n   }'")
 		}
 	}
 	var gramSessionToken *string
@@ -75,7 +75,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Quaerat ut voluptates molestias corrupti.\",\n      \"http_tool_ids_to_add\": [\n         \"Dolor nisi nesciunt et dolores.\",\n         \"Aut ipsam voluptate non iusto et ut.\",\n         \"Et voluptatum.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Quasi vel consequatur quasi enim doloribus omnis.\",\n         \"Culpa non consectetur.\"\n      ],\n      \"name\": \"Voluptatem iste id suscipit corrupti ea.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Laboriosam voluptatem ullam doloribus ut quaerat.\",\n      \"http_tool_ids_to_add\": [\n         \"Fuga id ea et esse.\",\n         \"Error et enim nostrum doloremque.\",\n         \"Maxime error voluptatum dolore debitis.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Magnam nostrum aut sunt itaque.\",\n         \"Assumenda ut.\"\n      ],\n      \"name\": \"Nemo assumenda quas dolor.\"\n   }'")
 		}
 	}
 	var id string

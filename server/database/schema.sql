@@ -52,18 +52,9 @@ CREATE TABLE IF NOT EXISTS deployments (
   manifest_url text NOT NULL,
 
   github_repo text,
-  github_pr text CHECK (
-    github_pr != ''
-    AND length(github_pr) <= 10
-  ),
-  external_id text CHECK (
-    external_id != ''
-    AND length(external_id) <= 80
-  ),
-  external_url text CHECK (
-    external_url != ''
-    AND length(external_url) <= 150
-  ),
+  github_pr text,
+  external_id text,
+  external_url text,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -139,7 +130,8 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
-  CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
+  CONSTRAINT http_tool_definitions_project_id_name_key UNIQUE (project_id, name),
+  CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS toolsets (
@@ -159,4 +151,24 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
   CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_project_id_name_key UNIQUE (project_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS assets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name text NOT NULL,
+  url text NOT NULL,
+  kind text NOT NULL,
+  content_type text NOT NULL,
+  content_length bigint NOT NULL,
+  sha256 text NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assets_pkey PRIMARY KEY (id),
+  CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
 );

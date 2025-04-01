@@ -1,5 +1,9 @@
-h1:tj5AsTz7aydGX24y4Xnp2oqM1Nk4WMdBTjmdGGeShIY=
+h1:i1DDTkAxTvUtOwU1gJ1iAc/SzNC1uV1heAQA1igTQng=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
 20250331232555_toolsets-data-model.sql h1:5QWbWsC6MbEcBAN6WdtkN9KFwJps7e4boLJNXZ934cE=
+20250401043758_deployments_remove_checks.sql h1:42sLwtPKBa1525juhziUtiOvcZJnFtRIkxP7xgMcuZg=
+20250401043835_http_tool_definitions_project_id_name_key.sql h1:NNDIxLzRwVye2Vu8+sTK2D+NRO3nZr2WITE7yFtM3yE=
+20250401043927_http_tool_definitions_project_id_fkey_cascade.sql h1:AxeUjPTqesRbzqy38unY0xbAGFBlsx9puaMeNumj9yQ=
+20250401044137_create_table_assets.sql h1:UDJHMf4dw5fmTnF92bWG6U2i1PL9SEDtrE2ueLpesAE=
