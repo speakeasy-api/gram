@@ -108,11 +108,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
-		return nil, errors.New("session not found in context")
-	}
-
 	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
 	if err != nil {
 		return nil, err
@@ -150,10 +145,6 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 
 func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.Toolset, error) {
 	toolsetID := must.Value(uuid.Parse(payload.ID))
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
-		return nil, errors.New("session not found in context")
-	}
 
 	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
 	if err != nil {
@@ -167,10 +158,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	if existingToolset.OrganizationID != session.ActiveOrganizationID {
-		return nil, errors.New("toolset does not belong to active organization")
 	}
 
 	// Convert update params
@@ -256,11 +243,6 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 
 func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolsetDetailsPayload) (*gen.ToolsetDetails, error) {
 	toolsetID := must.Value(uuid.Parse(payload.ID))
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
-		return nil, errors.New("session not found in context")
-	}
-
 	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
 	if err != nil {
 		return nil, err
@@ -272,10 +254,6 @@ func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolset
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	if toolset.OrganizationID != session.ActiveOrganizationID {
-		return nil, errors.New("toolset does not belong to active organization")
 	}
 
 	var httpTools []*gen.HTTPToolDefinition
