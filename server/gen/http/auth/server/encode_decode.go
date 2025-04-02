@@ -23,7 +23,7 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*auth.CallbackResult)
 		w.Header().Set("Location", res.Location)
-		w.Header().Set("X-Gram-Session", res.GramSessionToken)
+		w.Header().Set("Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
@@ -63,7 +63,7 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 func EncodeSwitchScopesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*auth.SwitchScopesResult)
-		w.Header().Set("X-Gram-Session", res.GramSessionToken)
+		w.Header().Set("Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
@@ -95,7 +95,7 @@ func DecodeSwitchScopesRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if projectIDRaw != "" {
 			projectID = &projectIDRaw
 		}
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
@@ -137,7 +137,7 @@ func DecodeLogoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		var (
 			gramSessionToken *string
 		)
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
@@ -161,7 +161,7 @@ func EncodeInfoResponse(encoder func(context.Context, http.ResponseWriter) goaht
 		res, _ := v.(*auth.InfoResult)
 		enc := encoder(ctx, w)
 		body := NewInfoResponseBody(res)
-		w.Header().Set("X-Gram-Session", res.GramSessionToken)
+		w.Header().Set("Gram-Session", res.GramSessionToken)
 		gramSessionCookie := res.GramSessionCookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
@@ -182,7 +182,7 @@ func DecodeInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		var (
 			gramSessionToken *string
 		)
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}

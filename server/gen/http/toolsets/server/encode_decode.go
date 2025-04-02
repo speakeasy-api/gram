@@ -59,7 +59,7 @@ func DecodeCreateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			gramSessionToken *string
 			projectSlug      string
 		)
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
@@ -104,7 +104,7 @@ func DecodeListToolsetsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			projectSlug      string
 			err              error
 		)
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
@@ -168,7 +168,7 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			params = mux.Vars(r)
 		)
 		id = params["id"]
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
@@ -217,7 +217,7 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			params = mux.Vars(r)
 		)
 		id = params["id"]
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}

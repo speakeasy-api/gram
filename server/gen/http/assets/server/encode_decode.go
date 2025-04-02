@@ -60,7 +60,7 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		if projectSlug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
 		}
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}

@@ -58,7 +58,7 @@ paths:
                     description: project header
                     example: Sapiente voluptatibus nostrum esse quibusdam atque.
                   example: Aut voluptatem sint delectus.
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -85,7 +85,7 @@ paths:
                                     updated_at: "1978-06-25T02:17:58Z"
                                     url: Facere explicabo.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/auth.callback:
         get:
             tags:
@@ -108,6 +108,13 @@ paths:
                 "307":
                     description: Temporary Redirect response.
                     headers:
+                        Gram-Session:
+                            description: Session header
+                            schema:
+                                type: string
+                                description: Session header
+                                example: Qui ipsum aut est et quia.
+                            example: Hic consequatur.
                         Location:
                             description: The URL to redirect to after authentication
                             schema:
@@ -122,13 +129,6 @@ paths:
                                 description: The authentication session
                                 example: Assumenda odit temporibus.
                             example: Laboriosam illo aut aut exercitationem corrupti.
-                        X-Gram-Session:
-                            description: Session header
-                            schema:
-                                type: string
-                                description: Session header
-                                example: Qui ipsum aut est et quia.
-                            example: Hic consequatur.
     /rpc/auth.info:
         get:
             tags:
@@ -137,7 +137,7 @@ paths:
             description: Provides information about the current authentication status.
             operationId: auth#info
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -150,6 +150,13 @@ paths:
                 "200":
                     description: OK response.
                     headers:
+                        Gram-Session:
+                            description: Session header
+                            schema:
+                                type: string
+                                description: Session header
+                                example: Provident est repellat qui.
+                            example: Nesciunt ratione ad omnis.
                         Set-Cookie:
                             description: The authentication session
                             schema:
@@ -157,13 +164,6 @@ paths:
                                 description: The authentication session
                                 example: Repudiandae est et accusamus.
                             example: Omnis odio ea dolores ut.
-                        X-Gram-Session:
-                            description: Session header
-                            schema:
-                                type: string
-                                description: Session header
-                                example: Provident est repellat qui.
-                            example: Nesciunt ratione ad omnis.
                     content:
                         application/json:
                             schema:
@@ -230,7 +230,7 @@ paths:
                                 user_email: Incidunt velit.
                                 user_id: Dolor voluptas molestias id autem.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/auth.logout:
         get:
             tags:
@@ -239,7 +239,7 @@ paths:
             description: Logs out the current user by clearing their session.
             operationId: auth#logout
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -260,7 +260,7 @@ paths:
                                 example: Perspiciatis amet.
                             example: Quaerat quo.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/auth.switchScopes:
         post:
             tags:
@@ -287,7 +287,7 @@ paths:
                     description: The project id to switch scopes too
                     example: Est qui sed eum consequatur rem maxime.
                   example: Qui odio.
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -300,6 +300,13 @@ paths:
                 "200":
                     description: OK response.
                     headers:
+                        Gram-Session:
+                            description: Session header
+                            schema:
+                                type: string
+                                description: Session header
+                                example: Fugiat dolorem cupiditate officiis fuga.
+                            example: Quam odio et accusantium odio.
                         Set-Cookie:
                             description: The authentication session
                             schema:
@@ -307,15 +314,8 @@ paths:
                                 description: The authentication session
                                 example: Eligendi inventore vero.
                             example: Aut a.
-                        X-Gram-Session:
-                            description: Session header
-                            schema:
-                                type: string
-                                description: Session header
-                                example: Fugiat dolorem cupiditate officiis fuga.
-                            example: Quam odio et accusantium odio.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/deployments.create:
         post:
             tags:
@@ -324,7 +324,7 @@ paths:
             description: Create a deployment to load tool definitions.
             operationId: deployments#createDeployment
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -359,7 +359,7 @@ paths:
                                 $ref: '#/components/schemas/CreateDeploymentResult'
                             example: {}
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/deployments.get:
         post:
             tags:
@@ -378,7 +378,7 @@ paths:
                     description: The ID of the deployment
                     example: Quisquam quis quo alias.
                   example: Facere autem placeat dolore consequatur magnam numquam.
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -409,7 +409,7 @@ paths:
                                 project_id: Ipsum saepe quis.
                                 user_id: Nobis enim illum molestiae ut.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/deployments.list:
         post:
             tags:
@@ -440,7 +440,7 @@ paths:
                     minimum: 1
                     maximum: 100
                   example: 62
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -502,7 +502,7 @@ paths:
                                       user_id: Occaecati quam.
                                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.create:
         post:
             tags:
@@ -511,7 +511,7 @@ paths:
             description: Create a new toolset with associated tools
             operationId: toolsets#createToolset
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -564,7 +564,7 @@ paths:
                                 slug: Officia voluptas aspernatur quibusdam.
                                 updated_at: Fuga id ea et esse.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.get/{id}:
         get:
             tags:
@@ -582,7 +582,7 @@ paths:
                     description: The ID of the toolset
                     example: Omnis ducimus voluptas aut consequuntur.
                   example: Deserunt est tenetur debitis quo.
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -649,7 +649,7 @@ paths:
                                 slug: Sapiente aliquam sit aperiam.
                                 updated_at: Perferendis illo.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.list:
         get:
             tags:
@@ -658,7 +658,7 @@ paths:
             description: List all toolsets for a project
             operationId: toolsets#listToolsets
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -711,7 +711,7 @@ paths:
                                       slug: Accusantium voluptas vel.
                                       updated_at: Magni et quia consectetur voluptatibus voluptas iusto.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.update/{id}:
         post:
             tags:
@@ -729,7 +729,7 @@ paths:
                     description: The ID of the toolset to update
                     example: Et eum eos repudiandae tenetur odit ut.
                   example: Aut dolorem.
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   allowEmptyValue: true
@@ -785,7 +785,7 @@ paths:
                                 slug: Omnis eos.
                                 updated_at: Reiciendis nisi et totam.
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
 components:
     schemas:
         Asset:
@@ -2199,10 +2199,10 @@ components:
             required:
                 - asset
     securitySchemes:
-        gram_session_header_X-Gram-Session:
+        gram_session_header_Gram-Session:
             type: apiKey
             description: Gram Session based auth. By cookie or header.
-            name: X-Gram-Session
+            name: Gram-Session
             in: header
 tags:
     - name: assets

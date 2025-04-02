@@ -44,7 +44,7 @@ func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
-			req.Header.Set("X-Gram-Session", head)
+			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
@@ -118,7 +118,7 @@ func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) 
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
-			req.Header.Set("X-Gram-Session", head)
+			req.Header.Set("Gram-Session", head)
 		}
 		body := NewCreateDeploymentRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -193,7 +193,7 @@ func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
-			req.Header.Set("X-Gram-Session", head)
+			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
 		if p.Cursor != nil {

@@ -45,7 +45,7 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
@@ -104,7 +104,7 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		var (
 			gramSessionToken *string
 		)
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}
@@ -166,7 +166,7 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if limit > 100 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
 		}
-		gramSessionTokenRaw := r.Header.Get("X-Gram-Session")
+		gramSessionTokenRaw := r.Header.Get("Gram-Session")
 		if gramSessionTokenRaw != "" {
 			gramSessionToken = &gramSessionTokenRaw
 		}

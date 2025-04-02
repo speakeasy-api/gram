@@ -51,7 +51,7 @@ paths:
                   description: project header
                   required: true
                   type: string
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -66,7 +66,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/auth.callback:
         get:
             tags:
@@ -84,11 +84,11 @@ paths:
                 "307":
                     description: Temporary Redirect response.
                     headers:
+                        Gram-Session:
+                            description: Session header
+                            type: string
                         Location:
                             description: The URL to redirect to after authentication
-                            type: string
-                        X-Gram-Session:
-                            description: Session header
                             type: string
             schemes:
                 - http
@@ -100,7 +100,7 @@ paths:
             description: Provides information about the current authentication status.
             operationId: auth#info
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -116,13 +116,13 @@ paths:
                             - active_organization_id
                             - organizations
                     headers:
-                        X-Gram-Session:
+                        Gram-Session:
                             description: Session header
                             type: string
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/auth.logout:
         get:
             tags:
@@ -131,7 +131,7 @@ paths:
             description: Logs out the current user by clearing their session.
             operationId: auth#logout
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -142,7 +142,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/auth.switchScopes:
         post:
             tags:
@@ -161,7 +161,7 @@ paths:
                   description: The project id to switch scopes too
                   required: false
                   type: string
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -170,13 +170,13 @@ paths:
                 "200":
                     description: OK response.
                     headers:
-                        X-Gram-Session:
+                        Gram-Session:
                             description: Session header
                             type: string
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/deployments.create:
         post:
             tags:
@@ -185,7 +185,7 @@ paths:
             description: Create a deployment to load tool definitions.
             operationId: deployments#createDeployment
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -206,7 +206,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/deployments.get:
         post:
             tags:
@@ -220,7 +220,7 @@ paths:
                   description: The ID of the deployment
                   required: true
                   type: string
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -240,7 +240,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/deployments.list:
         post:
             tags:
@@ -262,7 +262,7 @@ paths:
                   default: 10
                   maximum: 100
                   minimum: 1
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -277,7 +277,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.create:
         post:
             tags:
@@ -286,7 +286,7 @@ paths:
             description: Create a new toolset with associated tools
             operationId: toolsets#createToolset
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -319,7 +319,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.get/{id}:
         get:
             tags:
@@ -333,7 +333,7 @@ paths:
                   description: The ID of the toolset
                   required: true
                   type: string
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -360,7 +360,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.list:
         get:
             tags:
@@ -369,7 +369,7 @@ paths:
             description: List all toolsets for a project
             operationId: toolsets#listToolsets
             parameters:
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -389,7 +389,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
     /rpc/toolsets.update/{id}:
         post:
             tags:
@@ -403,7 +403,7 @@ paths:
                   description: The ID of the toolset to update
                   required: true
                   type: string
-                - name: X-Gram-Session
+                - name: Gram-Session
                   in: header
                   description: Session header
                   required: false
@@ -434,7 +434,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_X-Gram-Session: []
+                - gram_session_header_Gram-Session: []
 definitions:
     Asset:
         title: Asset
@@ -1516,8 +1516,8 @@ definitions:
         required:
             - asset
 securityDefinitions:
-    gram_session_header_X-Gram-Session:
+    gram_session_header_Gram-Session:
         type: apiKey
         description: Gram Session based auth. By cookie or header.
-        name: X-Gram-Session
+        name: Gram-Session
         in: header

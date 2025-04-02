@@ -31,5 +31,5 @@ var DeleteSessionCookie = func() {
 }
 
 var SessionHeader = func() {
-	Header("gram_session_token:X-Gram-Session", String, "Session header")
+	Header("gram_session_token:Gram-Session", String, "Session header")
 }

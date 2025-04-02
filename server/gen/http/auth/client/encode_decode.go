@@ -78,7 +78,7 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
 			}
 			location = locationRaw
-			gramSessionTokenRaw := resp.Header.Get("X-Gram-Session")
+			gramSessionTokenRaw := resp.Header.Get("Gram-Session")
 			if gramSessionTokenRaw == "" {
 				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_token", "header"))
 			}
@@ -136,7 +136,7 @@ func EncodeSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) func
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
-			req.Header.Set("X-Gram-Session", head)
+			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
 		if p.OrganizationID != nil {
@@ -173,7 +173,7 @@ func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, re
 				gramSessionToken string
 				err              error
 			)
-			gramSessionTokenRaw := resp.Header.Get("X-Gram-Session")
+			gramSessionTokenRaw := resp.Header.Get("Gram-Session")
 			if gramSessionTokenRaw == "" {
 				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_token", "header"))
 			}
@@ -231,7 +231,7 @@ func EncodeLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
-			req.Header.Set("X-Gram-Session", head)
+			req.Header.Set("Gram-Session", head)
 		}
 		return nil
 	}
@@ -310,7 +310,7 @@ func EncodeInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		}
 		if p.GramSessionToken != nil {
 			head := *p.GramSessionToken
-			req.Header.Set("X-Gram-Session", head)
+			req.Header.Set("Gram-Session", head)
 		}
 		return nil
 	}
@@ -350,7 +350,7 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			var (
 				gramSessionToken string
 			)
-			gramSessionTokenRaw := resp.Header.Get("X-Gram-Session")
+			gramSessionTokenRaw := resp.Header.Get("Gram-Session")
 			if gramSessionTokenRaw == "" {
 				err = goa.MergeErrors(err, goa.MissingFieldError("gram_session_token", "header"))
 			}
