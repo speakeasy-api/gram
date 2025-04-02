@@ -14,4 +14,5 @@ import (
 var _ = API("gram", func() {
 	Title("Gram API Description")
 	Description("Gram is the tools platform for AI agents")
+	Meta("openapi:example", "false")
 })
