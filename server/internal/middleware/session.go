@@ -1,11 +1,12 @@
 package middleware
 
 import (
-	"github.com/speakeasy-api/gram/internal/sessions"
 	"net/http"
+
+	"github.com/speakeasy-api/gram/internal/sessions"
 )
 
-func GramSessionMiddleware(next http.Handler) http.Handler {
+func SessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("gram_session")
 		if err == nil {

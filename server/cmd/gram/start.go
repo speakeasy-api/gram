@@ -121,7 +121,7 @@ func newStartCommand() *cli.Command {
 
 			mux := goahttp.NewMuxer()
 			mux.Use(middleware.RequestLoggingMiddleware)
-			mux.Use(middleware.GramSessionMiddleware)
+			mux.Use(middleware.SessionMiddleware)
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, assetStorage))
 			system.Attach(mux, system.NewService())
