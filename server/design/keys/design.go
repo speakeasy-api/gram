@@ -1,0 +1,95 @@
+package keys
+
+import (
+	"github.com/speakeasy-api/gram/design/sessions"
+	. "goa.design/goa/v3/dsl"
+)
+
+var _ = Service("keys", func() {
+	Description("Managing keys for gram AI consumers.")
+	Security(sessions.GramSession)
+
+	Method("createKey", func() {
+		Description("Create a new gram key")
+
+		Payload(func() {
+			Extend(CreateKeyForm)
+			sessions.SessionPayload()
+		})
+
+		Result(GramKey)
+
+		HTTP(func() {
+			POST("/rpc/keys.create")
+			sessions.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("listKeys", func() {
+		Description("List all gram keys for an organization")
+
+		Payload(func() {
+			sessions.SessionPayload()
+		})
+
+		Result(ListKeysResult)
+
+		HTTP(func() {
+			GET("/rpc/keys.list")
+			sessions.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("revokeKey", func() {
+		Description("Revoke a gram key")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the key to revoke")
+			Required("id")
+			sessions.SessionPayload()
+		})
+
+		Result(GramKey)
+
+		HTTP(func() {
+			Param("id")
+			POST("/rpc/keys.revoke/{id}")
+			sessions.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+})
+
+var CreateKeyForm = Type("CreateKeyForm", func() {
+	Required("name", "project_id")
+
+	Attribute("name", String, "The name of the key")
+	Required("name")
+})
+
+var ListKeysResult = Type("ListKeysResult", func() {
+	Required("keys")
+	Attribute("keys", ArrayOf(GramKey))
+})
+
+var GramKey = Type("GramKey", func() {
+	Required("id", "organization_id", "created_by_user_id", "name", "token", "scopes", "created_at", "updated_at")
+
+	Attribute("id", String, "The ID of the key")
+	Attribute("organization_id", String, "The organization ID this key belongs to")
+	Attribute("project_id", String, "The optional project ID this key is scoped to")
+	Attribute("created_by_user_id", String, "The ID of the user who created this key")
+	Attribute("name", String, "The name of the key")
+	Attribute("token", String, "The API token value")
+	Attribute("scopes", ArrayOf(String), "List of permission scopes for this key")
+	Attribute("created_at", String, func() {
+		Description("The creation date of the key.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the key was last updated.")
+		Format(FormatDateTime)
+	})
+})

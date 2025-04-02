@@ -1,4 +1,4 @@
-h1:l/RJF8qV3T0EcVEoMPjSfP23qXzp2KE/wC+CLI1QaQ0=
+h1:Kz0cyqgrdkB5C3bHJ3TCJSrHys+Mespc1eiwBMnZUeY=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
@@ -10,3 +10,4 @@ h1:l/RJF8qV3T0EcVEoMPjSfP23qXzp2KE/wC+CLI1QaQ0=
 20250401231638_add-slugs-to-projects.sql h1:/IqPyr/L/kZ2FDsJQqT6pUpu+uwA3OzNN/paUc9N4Zo=
 20250401232029_shift-organization-id-type.sql h1:OxcXTBoxUO6zFTXi/j4bQeqYWhGCpI3C3vHUZkRLQrc=
 20250402032708_add-key-model.sql h1:93aeRGvS1+vvABLKwVDqEXbutz/10Kaa4buUunvX1oI=
+20250402035038_key-model-default-scope-change.sql h1:92RxWXaJND8kv6xPPBAhajemT3cuosfxULrozDOv+VE=

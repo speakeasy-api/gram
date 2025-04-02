@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -133,8 +134,8 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 			Slug:           toolset.Slug,
 			Description:    conv.FromPGText(toolset.Description),
 			HTTPToolIds:    httpToolIds,
-			CreatedAt:      toolset.CreatedAt.Time.String(),
-			UpdatedAt:      toolset.UpdatedAt.Time.String(),
+			CreatedAt:      toolset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:      toolset.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 
@@ -225,8 +226,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		Slug:           updatedToolset.Slug,
 		Description:    conv.FromPGText(updatedToolset.Description),
 		HTTPToolIds:    httpToolIds,
-		CreatedAt:      updatedToolset.CreatedAt.Time.String(),
-		UpdatedAt:      updatedToolset.UpdatedAt.Time.String(),
+		CreatedAt:      updatedToolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      updatedToolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -291,8 +292,8 @@ func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolset
 		Slug:           toolset.Slug,
 		Description:    conv.FromPGText(toolset.Description),
 		HTTPTools:      httpTools,
-		CreatedAt:      toolset.CreatedAt.Time.String(),
-		UpdatedAt:      toolset.UpdatedAt.Time.String(),
+		CreatedAt:      toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      toolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 

@@ -102,8 +102,14 @@ var Toolset = Type("Toolset", func() {
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs included in this toolset")
-	Attribute("created_at", String, "When the toolset was created")
-	Attribute("updated_at", String, "When the toolset was last updated")
+	Attribute("created_at", String, func() {
+		Description("When the toolset was created.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the toolset was last updated.")
+		Format(FormatDateTime)
+	})
 	Required("id", "project_id", "organization_id", "name", "slug", "created_at", "updated_at")
 })
 
@@ -149,7 +155,13 @@ var ToolsetDetails = Type("ToolsetDetails", func() {
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tools", ArrayOf(HTTPToolDefinition), "The HTTP tools in this toolset")
-	Attribute("created_at", String, "When the toolset was created")
-	Attribute("updated_at", String, "When the toolset was last updated")
+	Attribute("created_at", String, func() {
+		Description("When the toolset was created.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the toolset was last updated.")
+		Format(FormatDateTime)
+	})
 	Required("id", "project_id", "organization_id", "name", "slug", "http_tools", "created_at", "updated_at")
 })

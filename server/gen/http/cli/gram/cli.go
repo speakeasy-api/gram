@@ -16,6 +16,7 @@ import (
 	assetsc "github.com/speakeasy-api/gram/gen/http/assets/client"
 	authc "github.com/speakeasy-api/gram/gen/http/auth/client"
 	deploymentsc "github.com/speakeasy-api/gram/gen/http/deployments/client"
+	keysc "github.com/speakeasy-api/gram/gen/http/keys/client"
 	systemc "github.com/speakeasy-api/gram/gen/http/system/client"
 	toolsetsc "github.com/speakeasy-api/gram/gen/http/toolsets/client"
 	goahttp "goa.design/goa/v3/http"
@@ -29,6 +30,7 @@ func UsageCommands() string {
 	return `assets upload-open-ap-iv3
 auth (callback|switch-scopes|logout|info)
 deployments (get-deployment|create-deployment|list-deployments)
+keys (create-key|list-keys|revoke-key)
 system health-check
 toolsets (create-toolset|list-toolsets|update-toolset|get-toolset-details)
 `
@@ -36,19 +38,13 @@ toolsets (create-toolset|list-toolsets|update-toolset|get-toolset-details)
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Saepe ut aliquam ipsa molestiae." --content-length 2396935383531909119 --project-slug "Assumenda inventore placeat et." --gram-session-token "Et perspiciatis perferendis asperiores est officiis natus." --stream "goa.png"` + "\n" +
-		os.Args[0] + ` auth callback --shared-token "Quasi et."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Magnam dolor id totam inventore officiis quia." --gram-session-token "Laudantium quia animi praesentium quas vitae esse."` + "\n" +
+	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Sequi in alias itaque perferendis molestias veritatis." --content-length 5777774205506993134 --project-slug "Qui accusantium commodi ducimus." --gram-session-token "Provident tenetur excepturi architecto est." --stream "goa.png"` + "\n" +
+		os.Args[0] + ` auth callback --shared-token "Unde laboriosam laborum."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Sunt tenetur sit accusantium." --gram-session-token "Vel sit consequuntur est."` + "\n" +
+		os.Args[0] + ` keys create-key --body '{
+      "name": "At expedita magni perferendis amet unde."
+   }' --gram-session-token "Enim error labore vero ut quibusdam iure."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
-		os.Args[0] + ` toolsets create-toolset --body '{
-      "description": "Qui ea aut.",
-      "http_tool_ids": [
-         "Similique nostrum.",
-         "Explicabo omnis aspernatur.",
-         "Deleniti ea tenetur a ut."
-      ],
-      "name": "Voluptas unde laboriosam laborum sint quasi itaque."
-   }' --gram-session-token "Deleniti enim sit quia et aut autem." --project-slug "Eaque eum repellat aliquid magnam."` + "\n" +
 		""
 }
 
@@ -102,6 +98,19 @@ func ParseEndpoint(
 		deploymentsListDeploymentsLimitFlag            = deploymentsListDeploymentsFlags.String("limit", "10", "")
 		deploymentsListDeploymentsGramSessionTokenFlag = deploymentsListDeploymentsFlags.String("gram-session-token", "", "")
 
+		keysFlags = flag.NewFlagSet("keys", flag.ContinueOnError)
+
+		keysCreateKeyFlags                = flag.NewFlagSet("create-key", flag.ExitOnError)
+		keysCreateKeyBodyFlag             = keysCreateKeyFlags.String("body", "REQUIRED", "")
+		keysCreateKeyGramSessionTokenFlag = keysCreateKeyFlags.String("gram-session-token", "", "")
+
+		keysListKeysFlags                = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		keysListKeysGramSessionTokenFlag = keysListKeysFlags.String("gram-session-token", "", "")
+
+		keysRevokeKeyFlags                = flag.NewFlagSet("revoke-key", flag.ExitOnError)
+		keysRevokeKeyIDFlag               = keysRevokeKeyFlags.String("id", "REQUIRED", "The ID of the key to revoke")
+		keysRevokeKeyGramSessionTokenFlag = keysRevokeKeyFlags.String("gram-session-token", "", "")
+
 		systemFlags = flag.NewFlagSet("system", flag.ContinueOnError)
 
 		systemHealthCheckFlags = flag.NewFlagSet("health-check", flag.ExitOnError)
@@ -142,6 +151,11 @@ func ParseEndpoint(
 	deploymentsCreateDeploymentFlags.Usage = deploymentsCreateDeploymentUsage
 	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
 
+	keysFlags.Usage = keysUsage
+	keysCreateKeyFlags.Usage = keysCreateKeyUsage
+	keysListKeysFlags.Usage = keysListKeysUsage
+	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
+
 	systemFlags.Usage = systemUsage
 	systemHealthCheckFlags.Usage = systemHealthCheckUsage
 
@@ -172,6 +186,8 @@ func ParseEndpoint(
 			svcf = authFlags
 		case "deployments":
 			svcf = deploymentsFlags
+		case "keys":
+			svcf = keysFlags
 		case "system":
 			svcf = systemFlags
 		case "toolsets":
@@ -224,6 +240,19 @@ func ParseEndpoint(
 
 			case "list-deployments":
 				epf = deploymentsListDeploymentsFlags
+
+			}
+
+		case "keys":
+			switch epn {
+			case "create-key":
+				epf = keysCreateKeyFlags
+
+			case "list-keys":
+				epf = keysListKeysFlags
+
+			case "revoke-key":
+				epf = keysRevokeKeyFlags
 
 			}
 
@@ -309,6 +338,19 @@ func ParseEndpoint(
 				endpoint = c.ListDeployments()
 				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsLimitFlag, *deploymentsListDeploymentsGramSessionTokenFlag)
 			}
+		case "keys":
+			c := keysc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-key":
+				endpoint = c.CreateKey()
+				data, err = keysc.BuildCreateKeyPayload(*keysCreateKeyBodyFlag, *keysCreateKeyGramSessionTokenFlag)
+			case "list-keys":
+				endpoint = c.ListKeys()
+				data, err = keysc.BuildListKeysPayload(*keysListKeysGramSessionTokenFlag)
+			case "revoke-key":
+				endpoint = c.RevokeKey()
+				data, err = keysc.BuildRevokeKeyPayload(*keysRevokeKeyIDFlag, *keysRevokeKeyGramSessionTokenFlag)
+			}
 		case "system":
 			c := systemc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -364,7 +406,7 @@ Upload an OpenAPI v3 document to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Saepe ut aliquam ipsa molestiae." --content-length 2396935383531909119 --project-slug "Assumenda inventore placeat et." --gram-session-token "Et perspiciatis perferendis asperiores est officiis natus." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Sequi in alias itaque perferendis molestias veritatis." --content-length 5777774205506993134 --project-slug "Qui accusantium commodi ducimus." --gram-session-token "Provident tenetur excepturi architecto est." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -391,7 +433,7 @@ Handles the authentication callback.
     -shared-token STRING: 
 
 Example:
-    %[1]s auth callback --shared-token "Quasi et."
+    %[1]s auth callback --shared-token "Unde laboriosam laborum."
 `, os.Args[0])
 }
 
@@ -404,7 +446,7 @@ Switches the authentication scope to a different organization.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Velit nisi vero inventore ab ut." --project-id "Amet temporibus autem eaque qui." --gram-session-token "Aliquam ut minima omnis rem perferendis beatae."
+    %[1]s auth switch-scopes --organization-id "Omnis aspernatur nihil deleniti." --project-id "Tenetur a ut." --gram-session-token "Deleniti enim sit quia et aut autem."
 `, os.Args[0])
 }
 
@@ -415,7 +457,7 @@ Logs out the current user by clearing their session.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth logout --gram-session-token "Quos deserunt doloribus velit non laboriosam ut."
+    %[1]s auth logout --gram-session-token "Odit ut libero saepe."
 `, os.Args[0])
 }
 
@@ -426,7 +468,7 @@ Provides information about the current authentication status.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s auth info --gram-session-token "Voluptas quis alias."
+    %[1]s auth info --gram-session-token "Rerum animi expedita."
 `, os.Args[0])
 }
 
@@ -454,7 +496,7 @@ Create a deployment to load tool definitions.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Magnam dolor id totam inventore officiis quia." --gram-session-token "Laudantium quia animi praesentium quas vitae esse."
+    %[1]s deployments get-deployment --id "Sunt tenetur sit accusantium." --gram-session-token "Vel sit consequuntur est."
 `, os.Args[0])
 }
 
@@ -468,17 +510,17 @@ Create a deployment to load tool definitions.
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Alias itaque perferendis molestias veritatis debitis et.",
+      "external_url": "Corrupti voluptas corporis dolor nisi.",
       "github_repo": "speakeasyapi/gram",
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m",
       "openapiv3_asset_ids": [
-         "Commodi ducimus.",
-         "Provident tenetur excepturi architecto est.",
-         "Ut voluptatibus soluta velit.",
-         "Beatae aut veniam voluptas at."
+         "Dolores deleniti aut ipsam voluptate non.",
+         "Et ut accusantium et voluptatum.",
+         "Autem quasi vel.",
+         "Quasi enim."
       ]
-   }' --gram-session-token "Ut laborum quam architecto facere accusamus."
+   }' --gram-session-token "Omnis eos."
 `, os.Args[0])
 }
 
@@ -491,7 +533,59 @@ List all deployments in descending order of creation.
     -gram-session-token STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Qui dolorem natus porro aut." --limit 7 --gram-session-token "Repellat voluptatem aliquid."
+    %[1]s deployments list-deployments --cursor "Eos dignissimos suscipit architecto culpa praesentium." --limit 62 --gram-session-token "Quod occaecati consectetur voluptatem animi aut ad."
+`, os.Args[0])
+}
+
+// keysUsage displays the usage of the keys command and its subcommands.
+func keysUsage() {
+	fmt.Fprintf(os.Stderr, `Managing keys for gram AI consumers.
+Usage:
+    %[1]s [globalflags] keys COMMAND [flags]
+
+COMMAND:
+    create-key: Create a new gram key
+    list-keys: List all gram keys for an organization
+    revoke-key: Revoke a gram key
+
+Additional help:
+    %[1]s keys COMMAND --help
+`, os.Args[0])
+}
+func keysCreateKeyUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys create-key -body JSON -gram-session-token STRING
+
+Create a new gram key
+    -body JSON: 
+    -gram-session-token STRING: 
+
+Example:
+    %[1]s keys create-key --body '{
+      "name": "At expedita magni perferendis amet unde."
+   }' --gram-session-token "Enim error labore vero ut quibusdam iure."
+`, os.Args[0])
+}
+
+func keysListKeysUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys list-keys -gram-session-token STRING
+
+List all gram keys for an organization
+    -gram-session-token STRING: 
+
+Example:
+    %[1]s keys list-keys --gram-session-token "Aut adipisci."
+`, os.Args[0])
+}
+
+func keysRevokeKeyUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys revoke-key -id STRING -gram-session-token STRING
+
+Revoke a gram key
+    -id STRING: The ID of the key to revoke
+    -gram-session-token STRING: 
+
+Example:
+    %[1]s keys revoke-key --id "Ex consequuntur." --gram-session-token "Sit dolores non debitis ipsum."
 `, os.Args[0])
 }
 
@@ -544,14 +638,14 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "description": "Qui ea aut.",
+      "description": "Eveniet sequi doloribus aperiam.",
       "http_tool_ids": [
-         "Similique nostrum.",
-         "Explicabo omnis aspernatur.",
-         "Deleniti ea tenetur a ut."
+         "Perferendis velit est.",
+         "Minima molestiae et tenetur sed.",
+         "Magnam qui aut enim."
       ],
-      "name": "Voluptas unde laboriosam laborum sint quasi itaque."
-   }' --gram-session-token "Deleniti enim sit quia et aut autem." --project-slug "Eaque eum repellat aliquid magnam."
+      "name": "Voluptas reiciendis."
+   }' --gram-session-token "Error qui distinctio." --project-slug "Qui expedita molestiae debitis maiores qui vel."
 `, os.Args[0])
 }
 
@@ -563,7 +657,7 @@ List all toolsets for a project
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --gram-session-token "Error et enim nostrum doloremque." --project-slug "Maxime error voluptatum dolore debitis."
+    %[1]s toolsets list-toolsets --gram-session-token "Nihil cupiditate." --project-slug "Ducimus soluta fuga omnis iste optio ullam."
 `, os.Args[0])
 }
 
@@ -578,19 +672,18 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "description": "Perspiciatis sed facere sed.",
+      "description": "Ut tempora.",
       "http_tool_ids_to_add": [
-         "Harum voluptates autem.",
-         "Consequatur consequatur minima ut odio sunt officiis.",
-         "Et quos quis fugit ut.",
-         "Illo qui et est aut dolores."
+         "Culpa quod mollitia facere vero laboriosam.",
+         "Et aut voluptatem saepe hic.",
+         "Architecto doloribus architecto nihil."
       ],
       "http_tool_ids_to_remove": [
-         "Perspiciatis illum et dignissimos veniam vel.",
-         "Iste id suscipit corrupti ea et quaerat."
+         "Vel aut laboriosam et.",
+         "Repudiandae est."
       ],
-      "name": "Consequatur dolorum autem ut totam sint."
-   }' --id "Voluptates molestias corrupti." --gram-session-token "Corporis dolor." --project-slug "Nesciunt et dolores deleniti aut ipsam."
+      "name": "Est aliquid sed sed qui."
+   }' --id "Eum sit." --gram-session-token "Ut et voluptatem voluptatum." --project-slug "Itaque esse."
 `, os.Args[0])
 }
 
@@ -603,6 +696,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --id "Rem voluptatem ea corrupti." --gram-session-token "Ipsa architecto et accusantium cumque quo." --project-slug "Sit iste itaque itaque."
+    %[1]s toolsets get-toolset-details --id "Aperiam explicabo et distinctio." --gram-session-token "Facere quos dolore." --project-slug "Quod aspernatur reiciendis."
 `, os.Args[0])
 }

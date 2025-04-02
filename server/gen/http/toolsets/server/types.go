@@ -53,9 +53,9 @@ type CreateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
 	HTTPToolIds []string `form:"http_tool_ids,omitempty" json:"http_tool_ids,omitempty" xml:"http_tool_ids,omitempty"`
-	// When the toolset was created
+	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the toolset was last updated
+	// When the toolset was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
@@ -83,9 +83,9 @@ type UpdateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
 	HTTPToolIds []string `form:"http_tool_ids,omitempty" json:"http_tool_ids,omitempty" xml:"http_tool_ids,omitempty"`
-	// When the toolset was created
+	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the toolset was last updated
+	// When the toolset was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
@@ -106,9 +106,9 @@ type GetToolsetDetailsResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
-	// When the toolset was created
+	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the toolset was last updated
+	// When the toolset was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
@@ -128,9 +128,9 @@ type ToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool IDs included in this toolset
 	HTTPToolIds []string `form:"http_tool_ids,omitempty" json:"http_tool_ids,omitempty" xml:"http_tool_ids,omitempty"`
-	// When the toolset was created
+	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the toolset was last updated
+	// When the toolset was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 

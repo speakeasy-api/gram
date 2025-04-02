@@ -179,12 +179,12 @@ CREATE TABLE IF NOT EXISTS gram_keys (
 
   organization_id TEXT NOT NULL,
   project_id uuid,
-  created_by_user_id TEXT,
+  created_by_user_id TEXT NOT NULL,
 
   name TEXT NOT NULL,
   token TEXT NOT NULL,
 -- organization_id is the root scope boundary
-  scopes TEXT[] NOT NULL DEFAULT ARRAY['write:organization'],
+  scopes TEXT[] NOT NULL DEFAULT ARRAY['consumer:organization'],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

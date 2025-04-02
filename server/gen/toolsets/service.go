@@ -135,9 +135,9 @@ type Toolset struct {
 	Description *string
 	// List of HTTP tool IDs included in this toolset
 	HTTPToolIds []string
-	// When the toolset was created
+	// When the toolset was created.
 	CreatedAt string
-	// When the toolset was last updated
+	// When the toolset was last updated.
 	UpdatedAt string
 }
 
@@ -158,9 +158,9 @@ type ToolsetDetails struct {
 	Description *string
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinition
-	// When the toolset was created
+	// When the toolset was created.
 	CreatedAt string
-	// When the toolset was last updated
+	// When the toolset was last updated.
 	UpdatedAt string
 }
 

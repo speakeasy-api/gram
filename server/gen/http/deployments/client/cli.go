@@ -44,7 +44,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Alias itaque perferendis molestias veritatis debitis et.\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"idempotency_key\": \"01jqq0ajmb4qh9eppz48dejr2m\",\n      \"openapiv3_asset_ids\": [\n         \"Commodi ducimus.\",\n         \"Provident tenetur excepturi architecto est.\",\n         \"Ut voluptatibus soluta velit.\",\n         \"Beatae aut veniam voluptas at.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Corrupti voluptas corporis dolor nisi.\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"idempotency_key\": \"01jqq0ajmb4qh9eppz48dejr2m\",\n      \"openapiv3_asset_ids\": [\n         \"Dolores deleniti aut ipsam voluptate non.\",\n         \"Et ut accusantium et voluptatum.\",\n         \"Autem quasi vel.\",\n         \"Quasi enim.\"\n      ]\n   }'")
 		}
 	}
 	var gramSessionToken *string
