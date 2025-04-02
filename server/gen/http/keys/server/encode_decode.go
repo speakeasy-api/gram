@@ -23,7 +23,7 @@ import (
 // keys createKey endpoint.
 func EncodeCreateKeyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*keys.GramKey)
+		res, _ := v.(*keys.Key)
 		enc := encoder(ctx, w)
 		body := NewCreateKeyResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -115,7 +115,7 @@ func DecodeListKeysRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 // keys revokeKey endpoint.
 func EncodeRevokeKeyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*keys.GramKey)
+		res, _ := v.(*keys.Key)
 		enc := encoder(ctx, w)
 		body := NewRevokeKeyResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -151,10 +151,10 @@ func DecodeRevokeKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	}
 }
 
-// marshalKeysGramKeyToGramKeyResponseBody builds a value of type
-// *GramKeyResponseBody from a value of type *keys.GramKey.
-func marshalKeysGramKeyToGramKeyResponseBody(v *keys.GramKey) *GramKeyResponseBody {
-	res := &GramKeyResponseBody{
+// marshalKeysKeyToKeyResponseBody builds a value of type *KeyResponseBody from
+// a value of type *keys.Key.
+func marshalKeysKeyToKeyResponseBody(v *keys.Key) *KeyResponseBody {
+	res := &KeyResponseBody{
 		ID:              v.ID,
 		OrganizationID:  v.OrganizationID,
 		ProjectID:       v.ProjectID,

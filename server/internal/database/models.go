@@ -9,6 +9,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiKey struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	CreatedByUserID string
+	Name            string
+	Token           string
+	Scopes          []string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type Asset struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -59,20 +73,6 @@ type DeploymentStatus struct {
 	Status       string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
-}
-
-type GramKey struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.NullUUID
-	CreatedByUserID pgtype.Text
-	Name            string
-	Token           string
-	Scopes          []string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
 }
 
 type HttpToolDefinition struct {

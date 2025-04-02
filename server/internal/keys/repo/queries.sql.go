@@ -9,11 +9,10 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createGramKey = `-- name: CreateGramKey :one
-INSERT INTO gram_keys (
+const createAPIKey = `-- name: CreateAPIKey :one
+INSERT INTO api_keys (
     organization_id
   , project_id
   , created_by_user_id
@@ -42,17 +41,17 @@ RETURNING
   , deleted
 `
 
-type CreateGramKeyParams struct {
+type CreateAPIKeyParams struct {
 	OrganizationID  string
 	ProjectID       uuid.NullUUID
-	CreatedByUserID pgtype.Text
+	CreatedByUserID string
 	Name            string
 	Token           string
 	Scopes          []string
 }
 
-func (q *Queries) CreateGramKey(ctx context.Context, arg CreateGramKeyParams) (GramKey, error) {
-	row := q.db.QueryRow(ctx, createGramKey,
+func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createAPIKey,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.CreatedByUserID,
@@ -60,7 +59,7 @@ func (q *Queries) CreateGramKey(ctx context.Context, arg CreateGramKeyParams) (G
 		arg.Token,
 		arg.Scopes,
 	)
-	var i GramKey
+	var i ApiKey
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -77,7 +76,7 @@ func (q *Queries) CreateGramKey(ctx context.Context, arg CreateGramKeyParams) (G
 	return i, err
 }
 
-const getGramKeyByToken = `-- name: GetGramKeyByToken :one
+const getAPIKeyByToken = `-- name: GetAPIKeyByToken :one
 SELECT 
     id
   , organization_id
@@ -90,14 +89,14 @@ SELECT
   , updated_at
   , deleted_at
   , deleted
-FROM gram_keys
+FROM api_keys
 WHERE token = $1
   AND deleted_at IS NULL
 `
 
-func (q *Queries) GetGramKeyByToken(ctx context.Context, token string) (GramKey, error) {
-	row := q.db.QueryRow(ctx, getGramKeyByToken, token)
-	var i GramKey
+func (q *Queries) GetAPIKeyByToken(ctx context.Context, token string) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByToken, token)
+	var i ApiKey
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -114,7 +113,7 @@ func (q *Queries) GetGramKeyByToken(ctx context.Context, token string) (GramKey,
 	return i, err
 }
 
-const listGramKeysByOrganization = `-- name: ListGramKeysByOrganization :many
+const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
 SELECT 
     id
   , organization_id
@@ -127,21 +126,21 @@ SELECT
   , updated_at
   , deleted_at
   , deleted
-FROM gram_keys
+FROM api_keys
 WHERE organization_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListGramKeysByOrganization(ctx context.Context, organizationID string) ([]GramKey, error) {
-	rows, err := q.db.Query(ctx, listGramKeysByOrganization, organizationID)
+func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID string) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysByOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GramKey
+	var items []ApiKey
 	for rows.Next() {
-		var i GramKey
+		var i ApiKey
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,

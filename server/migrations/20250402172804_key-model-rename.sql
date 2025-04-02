@@ -1,0 +1,4 @@
+-- Create "api_keys" table
+CREATE TABLE "api_keys" ("id" uuid NOT NULL DEFAULT generate_uuidv7(), "organization_id" text NOT NULL, "project_id" uuid NULL, "created_by_user_id" text NOT NULL, "name" text NOT NULL, "token" text NOT NULL, "scopes" text[] NOT NULL DEFAULT ARRAY['consumer:organization'::text], "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "deleted_at" timestamptz NULL, "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED, PRIMARY KEY ("id"), CONSTRAINT "api_keys_organization_id_name_key" UNIQUE ("organization_id", "name"), CONSTRAINT "api_keys_token_key" UNIQUE ("token"), CONSTRAINT "api_keys_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE SET NULL);
+-- Drop "gram_keys" table
+DROP TABLE "gram_keys";

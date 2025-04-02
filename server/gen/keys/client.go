@@ -30,13 +30,13 @@ func NewClient(createKey, listKeys, revokeKey goa.Endpoint) *Client {
 }
 
 // CreateKey calls the "createKey" endpoint of the "keys" service.
-func (c *Client) CreateKey(ctx context.Context, p *CreateKeyPayload) (res *GramKey, err error) {
+func (c *Client) CreateKey(ctx context.Context, p *CreateKeyPayload) (res *Key, err error) {
 	var ires any
 	ires, err = c.CreateKeyEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*GramKey), nil
+	return ires.(*Key), nil
 }
 
 // ListKeys calls the "listKeys" endpoint of the "keys" service.
@@ -50,11 +50,11 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKey
 }
 
 // RevokeKey calls the "revokeKey" endpoint of the "keys" service.
-func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (res *GramKey, err error) {
+func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (res *Key, err error) {
 	var ires any
 	ires, err = c.RevokeKeyEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*GramKey), nil
+	return ires.(*Key), nil
 }

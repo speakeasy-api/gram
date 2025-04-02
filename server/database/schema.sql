@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS assets (
   CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
 );
 
-CREATE TABLE IF NOT EXISTS gram_keys (
+CREATE TABLE IF NOT EXISTS api_keys (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
   organization_id TEXT NOT NULL,
@@ -191,8 +191,8 @@ CREATE TABLE IF NOT EXISTS gram_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT gram_keys_pkey PRIMARY KEY (id),
-  CONSTRAINT gram_keys_token_key UNIQUE (token),
-  CONSTRAINT gram_keys_organization_id_name_key UNIQUE (organization_id, name),
-  CONSTRAINT gram_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+  CONSTRAINT api_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT api_keys_token_key UNIQUE (token),
+  CONSTRAINT api_keys_organization_id_name_key UNIQUE (organization_id, name),
+  CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );

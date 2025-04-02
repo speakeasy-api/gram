@@ -45,7 +45,7 @@ type CreateKeyResponseBody struct {
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
 // HTTP response body.
 type ListKeysResponseBody struct {
-	Keys []*GramKeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
+	Keys []*KeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
 }
 
 // RevokeKeyResponseBody is the type of the "keys" service "revokeKey" endpoint
@@ -71,8 +71,8 @@ type RevokeKeyResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// GramKeyResponseBody is used to define fields on response body types.
-type GramKeyResponseBody struct {
+// KeyResponseBody is used to define fields on response body types.
+type KeyResponseBody struct {
 	// The ID of the key
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The organization ID this key belongs to
@@ -102,10 +102,10 @@ func NewCreateKeyRequestBody(p *keys.CreateKeyPayload) *CreateKeyRequestBody {
 	return body
 }
 
-// NewCreateKeyGramKeyOK builds a "keys" service "createKey" endpoint result
-// from a HTTP "OK" response.
-func NewCreateKeyGramKeyOK(body *CreateKeyResponseBody) *keys.GramKey {
-	v := &keys.GramKey{
+// NewCreateKeyKeyOK builds a "keys" service "createKey" endpoint result from a
+// HTTP "OK" response.
+func NewCreateKeyKeyOK(body *CreateKeyResponseBody) *keys.Key {
+	v := &keys.Key{
 		ID:              *body.ID,
 		OrganizationID:  *body.OrganizationID,
 		ProjectID:       body.ProjectID,
@@ -127,18 +127,18 @@ func NewCreateKeyGramKeyOK(body *CreateKeyResponseBody) *keys.GramKey {
 // a HTTP "OK" response.
 func NewListKeysResultOK(body *ListKeysResponseBody) *keys.ListKeysResult {
 	v := &keys.ListKeysResult{}
-	v.Keys = make([]*keys.GramKey, len(body.Keys))
+	v.Keys = make([]*keys.Key, len(body.Keys))
 	for i, val := range body.Keys {
-		v.Keys[i] = unmarshalGramKeyResponseBodyToKeysGramKey(val)
+		v.Keys[i] = unmarshalKeyResponseBodyToKeysKey(val)
 	}
 
 	return v
 }
 
-// NewRevokeKeyGramKeyOK builds a "keys" service "revokeKey" endpoint result
-// from a HTTP "OK" response.
-func NewRevokeKeyGramKeyOK(body *RevokeKeyResponseBody) *keys.GramKey {
-	v := &keys.GramKey{
+// NewRevokeKeyKeyOK builds a "keys" service "revokeKey" endpoint result from a
+// HTTP "OK" response.
+func NewRevokeKeyKeyOK(body *RevokeKeyResponseBody) *keys.Key {
+	v := &keys.Key{
 		ID:              *body.ID,
 		OrganizationID:  *body.OrganizationID,
 		ProjectID:       body.ProjectID,
@@ -200,7 +200,7 @@ func ValidateListKeysResponseBody(body *ListKeysResponseBody) (err error) {
 	}
 	for _, e := range body.Keys {
 		if e != nil {
-			if err2 := ValidateGramKeyResponseBody(e); err2 != nil {
+			if err2 := ValidateKeyResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -244,9 +244,8 @@ func ValidateRevokeKeyResponseBody(body *RevokeKeyResponseBody) (err error) {
 	return
 }
 
-// ValidateGramKeyResponseBody runs the validations defined on
-// GramKeyResponseBody
-func ValidateGramKeyResponseBody(body *GramKeyResponseBody) (err error) {
+// ValidateKeyResponseBody runs the validations defined on KeyResponseBody
+func ValidateKeyResponseBody(body *KeyResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

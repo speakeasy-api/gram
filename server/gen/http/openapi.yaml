@@ -283,7 +283,7 @@ paths:
             tags:
                 - keys
             summary: createKey keys
-            description: Create a new gram key
+            description: Create a new api key
             operationId: keys#createKey
             parameters:
                 - name: Gram-Session
@@ -303,7 +303,7 @@ paths:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/GramKey'
+                        $ref: '#/definitions/Key'
                         required:
                             - id
                             - organization_id
@@ -322,7 +322,7 @@ paths:
             tags:
                 - keys
             summary: listKeys keys
-            description: List all gram keys for an organization
+            description: List all api keys for an organization
             operationId: keys#listKeys
             parameters:
                 - name: Gram-Session
@@ -346,7 +346,7 @@ paths:
             tags:
                 - keys
             summary: revokeKey keys
-            description: Revoke a gram key
+            description: Revoke a api key
             operationId: keys#revokeKey
             parameters:
                 - name: id
@@ -363,7 +363,7 @@ paths:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/GramKey'
+                        $ref: '#/definitions/Key'
                         required:
                             - id
                             - organization_id
@@ -916,76 +916,6 @@ definitions:
             - project_id
             - user_id
             - openapiv3_asset_ids
-    GramKey:
-        title: GramKey
-        type: object
-        properties:
-            created_at:
-                type: string
-                description: The creation date of the key.
-                example: "1994-01-08T03:46:15Z"
-                format: date-time
-            created_by_user_id:
-                type: string
-                description: The ID of the user who created this key
-                example: Inventore eum similique voluptas praesentium rerum.
-            id:
-                type: string
-                description: The ID of the key
-                example: Reprehenderit et voluptates voluptas nihil id.
-            name:
-                type: string
-                description: The name of the key
-                example: Corrupti voluptatem esse.
-            organization_id:
-                type: string
-                description: The organization ID this key belongs to
-                example: Aut aspernatur.
-            project_id:
-                type: string
-                description: The optional project ID this key is scoped to
-                example: Quas magni vitae corporis.
-            scopes:
-                type: array
-                items:
-                    type: string
-                    example: Nostrum adipisci doloremque.
-                description: List of permission scopes for this key
-                example:
-                    - Corporis aut sit dolorum perspiciatis.
-                    - Odio porro dignissimos non dignissimos dicta at.
-                    - Voluptas et et molestias et.
-                    - In non dicta doloribus eius nostrum.
-            token:
-                type: string
-                description: The API token value
-                example: Et deleniti ipsa architecto a occaecati.
-            updated_at:
-                type: string
-                description: When the key was last updated.
-                example: "2015-01-18T16:13:21Z"
-                format: date-time
-        example:
-            created_at: "1970-10-09T05:19:07Z"
-            created_by_user_id: Quidem dolores est officia ducimus doloribus temporibus.
-            id: Eos fugit nisi iusto quasi ut.
-            name: Facere velit eius esse.
-            organization_id: Consequatur beatae.
-            project_id: Reprehenderit cum est.
-            scopes:
-                - Eaque aut.
-                - Repellendus eos.
-            token: Molestiae magni voluptatem dolore quidem totam.
-            updated_at: "1973-11-02T19:44:12Z"
-        required:
-            - id
-            - organization_id
-            - created_by_user_id
-            - name
-            - token
-            - scopes
-            - created_at
-            - updated_at
     HTTPToolDefinition:
         title: HTTPToolDefinition
         type: object
@@ -1086,6 +1016,76 @@ definitions:
             status: Quam officiis.
         required:
             - status
+    Key:
+        title: Key
+        type: object
+        properties:
+            created_at:
+                type: string
+                description: The creation date of the key.
+                example: "1994-01-08T03:46:15Z"
+                format: date-time
+            created_by_user_id:
+                type: string
+                description: The ID of the user who created this key
+                example: Inventore eum similique voluptas praesentium rerum.
+            id:
+                type: string
+                description: The ID of the key
+                example: Reprehenderit et voluptates voluptas nihil id.
+            name:
+                type: string
+                description: The name of the key
+                example: Corrupti voluptatem esse.
+            organization_id:
+                type: string
+                description: The organization ID this key belongs to
+                example: Aut aspernatur.
+            project_id:
+                type: string
+                description: The optional project ID this key is scoped to
+                example: Quas magni vitae corporis.
+            scopes:
+                type: array
+                items:
+                    type: string
+                    example: Nostrum adipisci doloremque.
+                description: List of permission scopes for this key
+                example:
+                    - Corporis aut sit dolorum perspiciatis.
+                    - Odio porro dignissimos non dignissimos dicta at.
+                    - Voluptas et et molestias et.
+                    - In non dicta doloribus eius nostrum.
+            token:
+                type: string
+                description: The API token value
+                example: Et deleniti ipsa architecto a occaecati.
+            updated_at:
+                type: string
+                description: When the key was last updated.
+                example: "2015-01-18T16:13:21Z"
+                format: date-time
+        example:
+            created_at: "1970-10-09T05:19:07Z"
+            created_by_user_id: Quidem dolores est officia ducimus doloribus temporibus.
+            id: Eos fugit nisi iusto quasi ut.
+            name: Facere velit eius esse.
+            organization_id: Consequatur beatae.
+            project_id: Reprehenderit cum est.
+            scopes:
+                - Eaque aut.
+                - Repellendus eos.
+            token: Molestiae magni voluptatem dolore quidem totam.
+            updated_at: "1973-11-02T19:44:12Z"
+        required:
+            - id
+            - organization_id
+            - created_by_user_id
+            - name
+            - token
+            - scopes
+            - created_at
+            - updated_at
     KeysCreateKeyRequestBody:
         title: KeysCreateKeyRequestBody
         type: object
@@ -1215,7 +1215,7 @@ definitions:
             keys:
                 type: array
                 items:
-                    $ref: '#/definitions/GramKey'
+                    $ref: '#/definitions/Key'
                 example:
                     - created_at: "1982-03-13T21:26:33Z"
                       created_by_user_id: Mollitia reiciendis magnam.

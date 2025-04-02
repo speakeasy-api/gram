@@ -9,11 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type GramKey struct {
+type ApiKey struct {
 	ID              uuid.UUID
 	OrganizationID  string
 	ProjectID       uuid.NullUUID
-	CreatedByUserID pgtype.Text
+	CreatedByUserID string
 	Name            string
 	Token           string
 	Scopes          []string

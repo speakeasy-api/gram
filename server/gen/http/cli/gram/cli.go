@@ -539,14 +539,14 @@ Example:
 
 // keysUsage displays the usage of the keys command and its subcommands.
 func keysUsage() {
-	fmt.Fprintf(os.Stderr, `Managing keys for gram AI consumers.
+	fmt.Fprintf(os.Stderr, `Managing system api keys.
 Usage:
     %[1]s [globalflags] keys COMMAND [flags]
 
 COMMAND:
-    create-key: Create a new gram key
-    list-keys: List all gram keys for an organization
-    revoke-key: Revoke a gram key
+    create-key: Create a new api key
+    list-keys: List all api keys for an organization
+    revoke-key: Revoke a api key
 
 Additional help:
     %[1]s keys COMMAND --help
@@ -555,7 +555,7 @@ Additional help:
 func keysCreateKeyUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys create-key -body JSON -gram-session-token STRING
 
-Create a new gram key
+Create a new api key
     -body JSON: 
     -gram-session-token STRING: 
 
@@ -569,7 +569,7 @@ Example:
 func keysListKeysUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys list-keys -gram-session-token STRING
 
-List all gram keys for an organization
+List all api keys for an organization
     -gram-session-token STRING: 
 
 Example:
@@ -580,7 +580,7 @@ Example:
 func keysRevokeKeyUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys revoke-key -id STRING -gram-session-token STRING
 
-Revoke a gram key
+Revoke a api key
     -id STRING: The ID of the key to revoke
     -gram-session-token STRING: 
 

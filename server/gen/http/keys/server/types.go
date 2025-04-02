@@ -45,7 +45,7 @@ type CreateKeyResponseBody struct {
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
 // HTTP response body.
 type ListKeysResponseBody struct {
-	Keys []*GramKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 }
 
 // RevokeKeyResponseBody is the type of the "keys" service "revokeKey" endpoint
@@ -71,8 +71,8 @@ type RevokeKeyResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// GramKeyResponseBody is used to define fields on response body types.
-type GramKeyResponseBody struct {
+// KeyResponseBody is used to define fields on response body types.
+type KeyResponseBody struct {
 	// The ID of the key
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization ID this key belongs to
@@ -95,7 +95,7 @@ type GramKeyResponseBody struct {
 
 // NewCreateKeyResponseBody builds the HTTP response body from the result of
 // the "createKey" endpoint of the "keys" service.
-func NewCreateKeyResponseBody(res *keys.GramKey) *CreateKeyResponseBody {
+func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
 	body := &CreateKeyResponseBody{
 		ID:              res.ID,
 		OrganizationID:  res.OrganizationID,
@@ -122,19 +122,19 @@ func NewCreateKeyResponseBody(res *keys.GramKey) *CreateKeyResponseBody {
 func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
 	body := &ListKeysResponseBody{}
 	if res.Keys != nil {
-		body.Keys = make([]*GramKeyResponseBody, len(res.Keys))
+		body.Keys = make([]*KeyResponseBody, len(res.Keys))
 		for i, val := range res.Keys {
-			body.Keys[i] = marshalKeysGramKeyToGramKeyResponseBody(val)
+			body.Keys[i] = marshalKeysKeyToKeyResponseBody(val)
 		}
 	} else {
-		body.Keys = []*GramKeyResponseBody{}
+		body.Keys = []*KeyResponseBody{}
 	}
 	return body
 }
 
 // NewRevokeKeyResponseBody builds the HTTP response body from the result of
 // the "revokeKey" endpoint of the "keys" service.
-func NewRevokeKeyResponseBody(res *keys.GramKey) *RevokeKeyResponseBody {
+func NewRevokeKeyResponseBody(res *keys.Key) *RevokeKeyResponseBody {
 	body := &RevokeKeyResponseBody{
 		ID:              res.ID,
 		OrganizationID:  res.OrganizationID,

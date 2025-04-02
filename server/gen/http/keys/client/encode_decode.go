@@ -84,7 +84,7 @@ func DecodeCreateKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			if err != nil {
 				return nil, goahttp.ErrValidationError("keys", "createKey", err)
 			}
-			res := NewCreateKeyGramKeyOK(&body)
+			res := NewCreateKeyKeyOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -236,7 +236,7 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			if err != nil {
 				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
 			}
-			res := NewRevokeKeyGramKeyOK(&body)
+			res := NewRevokeKeyKeyOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
@@ -245,10 +245,10 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
-// unmarshalGramKeyResponseBodyToKeysGramKey builds a value of type
-// *keys.GramKey from a value of type *GramKeyResponseBody.
-func unmarshalGramKeyResponseBodyToKeysGramKey(v *GramKeyResponseBody) *keys.GramKey {
-	res := &keys.GramKey{
+// unmarshalKeyResponseBodyToKeysKey builds a value of type *keys.Key from a
+// value of type *KeyResponseBody.
+func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
+	res := &keys.Key{
 		ID:              *v.ID,
 		OrganizationID:  *v.OrganizationID,
 		ProjectID:       v.ProjectID,

@@ -1,4 +1,4 @@
-h1:Kz0cyqgrdkB5C3bHJ3TCJSrHys+Mespc1eiwBMnZUeY=
+h1:zCK2BjfDGeU32xQxfI0l1FvlVqd65VgOhGO6402dCSs=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
@@ -11,3 +11,4 @@ h1:Kz0cyqgrdkB5C3bHJ3TCJSrHys+Mespc1eiwBMnZUeY=
 20250401232029_shift-organization-id-type.sql h1:OxcXTBoxUO6zFTXi/j4bQeqYWhGCpI3C3vHUZkRLQrc=
 20250402032708_add-key-model.sql h1:93aeRGvS1+vvABLKwVDqEXbutz/10Kaa4buUunvX1oI=
 20250402035038_key-model-default-scope-change.sql h1:92RxWXaJND8kv6xPPBAhajemT3cuosfxULrozDOv+VE=
+20250402172804_key-model-rename.sql h1:OvMOWRskgvaLv53JdFBzdxkOuc9JKxGlywy5Dzit+GQ=

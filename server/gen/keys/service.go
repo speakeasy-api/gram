@@ -13,14 +13,14 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Managing keys for gram AI consumers.
+// Managing system api keys.
 type Service interface {
-	// Create a new gram key
-	CreateKey(context.Context, *CreateKeyPayload) (res *GramKey, err error)
-	// List all gram keys for an organization
+	// Create a new api key
+	CreateKey(context.Context, *CreateKeyPayload) (res *Key, err error)
+	// List all api keys for an organization
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
-	// Revoke a gram key
-	RevokeKey(context.Context, *RevokeKeyPayload) (res *GramKey, err error)
+	// Revoke a api key
+	RevokeKey(context.Context, *RevokeKeyPayload) (res *Key, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -52,8 +52,8 @@ type CreateKeyPayload struct {
 	Name string
 }
 
-// GramKey is the result type of the keys service createKey method.
-type GramKey struct {
+// Key is the result type of the keys service createKey method.
+type Key struct {
 	// The ID of the key
 	ID string
 	// The organization ID this key belongs to
@@ -81,7 +81,7 @@ type ListKeysPayload struct {
 
 // ListKeysResult is the result type of the keys service listKeys method.
 type ListKeysResult struct {
-	Keys []*GramKey
+	Keys []*Key
 }
 
 // RevokeKeyPayload is the payload type of the keys service revokeKey method.

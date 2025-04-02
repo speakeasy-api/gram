@@ -6,18 +6,18 @@ import (
 )
 
 var _ = Service("keys", func() {
-	Description("Managing keys for gram AI consumers.")
+	Description("Managing system api keys.")
 	Security(sessions.GramSession)
 
 	Method("createKey", func() {
-		Description("Create a new gram key")
+		Description("Create a new api key")
 
 		Payload(func() {
 			Extend(CreateKeyForm)
 			sessions.SessionPayload()
 		})
 
-		Result(GramKey)
+		Result(KeyModel)
 
 		HTTP(func() {
 			POST("/rpc/keys.create")
@@ -27,7 +27,7 @@ var _ = Service("keys", func() {
 	})
 
 	Method("listKeys", func() {
-		Description("List all gram keys for an organization")
+		Description("List all api keys for an organization")
 
 		Payload(func() {
 			sessions.SessionPayload()
@@ -43,7 +43,7 @@ var _ = Service("keys", func() {
 	})
 
 	Method("revokeKey", func() {
-		Description("Revoke a gram key")
+		Description("Revoke a api key")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to revoke")
@@ -51,7 +51,7 @@ var _ = Service("keys", func() {
 			sessions.SessionPayload()
 		})
 
-		Result(GramKey)
+		Result(KeyModel)
 
 		HTTP(func() {
 			Param("id")
@@ -71,10 +71,10 @@ var CreateKeyForm = Type("CreateKeyForm", func() {
 
 var ListKeysResult = Type("ListKeysResult", func() {
 	Required("keys")
-	Attribute("keys", ArrayOf(GramKey))
+	Attribute("keys", ArrayOf(KeyModel))
 })
 
-var GramKey = Type("GramKey", func() {
+var KeyModel = Type("Key", func() {
 	Required("id", "organization_id", "created_by_user_id", "name", "token", "scopes", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the key")

@@ -1,5 +1,5 @@
--- name: CreateGramKey :one
-INSERT INTO gram_keys (
+-- name: CreateAPIKey :one
+INSERT INTO api_keys (
     organization_id
   , project_id
   , created_by_user_id
@@ -27,7 +27,7 @@ RETURNING
   , deleted_at
   , deleted;
 
--- name: GetGramKeyByToken :one
+-- name: GetAPIKeyByToken :one
 SELECT 
     id
   , organization_id
@@ -40,11 +40,11 @@ SELECT
   , updated_at
   , deleted_at
   , deleted
-FROM gram_keys
+FROM api_keys
 WHERE token = @token
   AND deleted_at IS NULL;
 
--- name: ListGramKeysByOrganization :many
+-- name: ListAPIKeysByOrganization :many
 SELECT 
     id
   , organization_id
@@ -57,7 +57,7 @@ SELECT
   , updated_at
   , deleted_at
   , deleted
-FROM gram_keys
+FROM api_keys
 WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY created_at DESC;
