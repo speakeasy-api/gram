@@ -75,6 +75,28 @@ type DeploymentStatus struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type Environment struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type EnvironmentEntry struct {
+	Name          string
+	Value         string
+	EnvironmentID uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
 type HttpToolDefinition struct {
 	ID               uuid.UUID
 	OrganizationID   string

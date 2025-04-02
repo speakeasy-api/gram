@@ -87,3 +87,13 @@ sql:
         out: "../internal/keys/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/environments/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/environments/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true

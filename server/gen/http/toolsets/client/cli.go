@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Blanditiis qui mollitia molestias iste mollitia consequatur.\",\n      \"http_tool_ids\": [\n         \"Ipsa minus quo nihil.\",\n         \"Et veritatis totam.\"\n      ],\n      \"name\": \"Optio est.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Eaque veniam ducimus ipsa recusandae.\",\n      \"http_tool_ids\": [\n         \"Non ipsa.\",\n         \"Vero id.\",\n         \"Est officia.\"\n      ],\n      \"name\": \"Pariatur similique nulla.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -79,7 +79,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Iste optio ullam.\",\n      \"http_tool_ids_to_add\": [\n         \"Animi tenetur nesciunt et est et.\",\n         \"Nam quis.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Animi sequi.\",\n         \"Amet sapiente.\"\n      ],\n      \"name\": \"Soluta fuga.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Dolores vero veniam et.\",\n      \"http_tool_ids_to_add\": [\n         \"Blanditiis eum quis a.\",\n         \"Doloribus dolor officiis delectus.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Consectetur nobis dolores quos nisi occaecati.\",\n         \"Quas ut id occaecati aut autem.\"\n      ],\n      \"name\": \"Itaque aut sit quis et.\"\n   }'")
 		}
 	}
 	var id string

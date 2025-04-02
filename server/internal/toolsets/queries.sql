@@ -85,7 +85,8 @@ RETURNING
 -- name: DeleteToolset :exec
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
-WHERE id = @id;
+WHERE id = @id
+  AND project_id = @project_id;
 
 -- name: GetHTTPToolDefinitions :many
 SELECT 

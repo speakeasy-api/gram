@@ -81,10 +81,16 @@ const deleteToolset = `-- name: DeleteToolset :exec
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
 WHERE id = $1
+  AND project_id = $2
 `
 
-func (q *Queries) DeleteToolset(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteToolset, id)
+type DeleteToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) error {
+	_, err := q.db.Exec(ctx, deleteToolset, arg.ID, arg.ProjectID)
 	return err
 }
 

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/environments"
+	"github.com/speakeasy-api/gram/internal/keys"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 	"github.com/urfave/cli/v2"
 	goahttp "goa.design/goa/v3/http"
@@ -110,6 +112,8 @@ func newStartCommand() *cli.Command {
 			system.Attach(mux, system.NewService())
 			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db))
 			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db))
+			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db))
+			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),

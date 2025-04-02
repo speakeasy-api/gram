@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/must"
-	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/sessions"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 	goahttp "goa.design/goa/v3/http"
@@ -27,13 +26,12 @@ type Service struct {
 	db       *pgxpool.Pool
 	repo     *repo.Queries
 	sessions *sessions.Sessions
-	projects *projects.Service
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New(), projects: projects.NewService(logger, db)}
+	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New()}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {

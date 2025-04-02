@@ -1,0 +1,164 @@
+package environments
+
+import (
+	"github.com/speakeasy-api/gram/design/sessions"
+	. "goa.design/goa/v3/dsl"
+)
+
+var _ = Service("environments", func() {
+	Description("Managing toolset environments.")
+	Security(sessions.Session)
+
+	Method("createEnvironment", func() {
+		Description("Create a new environment")
+
+		Payload(func() {
+			Extend(CreateEnvironmentForm)
+			sessions.SessionPayload()
+			sessions.ProjectPayload()
+		})
+
+		Result(Environment)
+
+		HTTP(func() {
+			POST("/rpc/environments.create")
+			sessions.SessionHeader()
+			sessions.ProjectHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("listEnvironments", func() {
+		Description("List all environments for an organization")
+
+		Payload(func() {
+			sessions.SessionPayload()
+			sessions.ProjectPayload()
+		})
+
+		Result(ListEnvironmentsResult)
+
+		HTTP(func() {
+			GET("/rpc/environments.list")
+			sessions.SessionHeader()
+			sessions.ProjectHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("updateEnvironment", func() {
+		Description("Update an environment")
+
+		Payload(func() {
+			Extend(UpdateEnvironmentForm)
+			Attribute("id", String, "The ID of the environment to update")
+			Required("id")
+			sessions.SessionPayload()
+			sessions.ProjectPayload()
+		})
+
+		Result(Environment)
+
+		HTTP(func() {
+			POST("/rpc/environments.update/{id}")
+			Param("id")
+			sessions.SessionHeader()
+			sessions.ProjectHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("deleteEnvironment", func() {
+		Description("Delete an environment")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the environment to delete")
+			Required("id")
+			sessions.SessionPayload()
+			sessions.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/environments.delete/{id}")
+			Param("id")
+			sessions.SessionHeader()
+			sessions.ProjectHeader()
+			Response(StatusOK)
+		})
+	})
+})
+
+var Environment = Type("Environment", func() {
+	Description("Model representing an environment")
+
+	Attribute("id", String, "The ID of the environment")
+	Attribute("organization_id", String, "The organization ID this environment belongs to")
+	Attribute("project_id", String, "The project ID this environment belongs to")
+	Attribute("name", String, "The name of the environment")
+	Attribute("slug", String, "The slug identifier for the environment")
+	Attribute("entries", ArrayOf(EnvironmentEntry), "List of environment entries")
+	Attribute("created_at", String, func() {
+		Description("The creation date of the environment")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the environment was last updated")
+		Format(FormatDateTime)
+	})
+
+	Required("id", "organization_id", "project_id", "name", "slug", "entries", "created_at", "updated_at")
+})
+
+var EnvironmentEntry = Type("EnvironmentEntry", func() {
+	Description("A single environment entry")
+
+	Attribute("name", String, "The name of the environment variable")
+	Attribute("value", String, "The value of the environment variable")
+	Attribute("created_at", String, func() {
+		Description("The creation date of the environment entry")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the environment entry was last updated")
+		Format(FormatDateTime)
+	})
+
+	Required("name", "value", "created_at", "updated_at")
+})
+
+var EnvironmentEntryInput = Type("EnvironmentEntryInput", func() {
+	Description("A single environment entry")
+
+	Attribute("name", String, "The name of the environment variable")
+	Attribute("value", String, "The value of the environment variable")
+
+	Required("name", "value")
+})
+
+var CreateEnvironmentForm = Type("CreateEnvironmentForm", func() {
+	Description("Form for creating a new environment")
+
+	Attribute("organization_id", String, "The organization ID this environment belongs to")
+	Attribute("name", String, "The name of the environment")
+	Attribute("description", String, "Optional description of the environment")
+	Attribute("entries", ArrayOf(EnvironmentEntryInput), "List of environment variable entries")
+
+	Required("organization_id", "name", "entries")
+})
+
+var UpdateEnvironmentForm = Type("UpdateEnvironmentForm", func() {
+	Description("Form for updating an environment")
+
+	Attribute("environment_id", String, "The ID of the environment to update")
+	Attribute("entries_to_update", ArrayOf(EnvironmentEntryInput), "List of environment entries to update or create")
+	Attribute("entries_to_remove", ArrayOf(String), "List of environment entry names to remove")
+
+	Required("environment_id", "entries_to_update", "entries_to_remove")
+})
+
+var ListEnvironmentsResult = Type("ListEnvironmentsResult", func() {
+	Description("Result type for listing environments")
+
+	Attribute("environments", ArrayOf(Environment))
+	Required("environments")
+})

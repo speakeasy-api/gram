@@ -195,3 +195,34 @@ CREATE TABLE IF NOT EXISTS api_keys (
   CONSTRAINT api_keys_organization_id_name_key UNIQUE (organization_id, name),
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS environments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  name text NOT NULL,
+  slug text NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT environments_pkey PRIMARY KEY (id),
+  CONSTRAINT environments_project_id_slug_key UNIQUE (project_id, slug),
+  CONSTRAINT environments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS environment_entries (
+  name text NOT NULL,
+  value text NOT NULL,
+  environment_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT environments_entries_pkey PRIMARY KEY (environment_id, name),
+  CONSTRAINT environments_entries_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE
+
+)

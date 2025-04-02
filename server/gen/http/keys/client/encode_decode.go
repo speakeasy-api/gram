@@ -178,7 +178,7 @@ func (c *Client) BuildRevokeKeyRequest(ctx context.Context, v any) (*http.Reques
 		id = p.ID
 	}
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeKeyKeysPath(id)}
-	req, err := http.NewRequest("POST", u.String(), nil)
+	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("keys", "revokeKey", u.String(), err)
 	}

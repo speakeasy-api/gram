@@ -57,7 +57,7 @@ var _ = Service("keys", func() {
 
 		HTTP(func() {
 			Param("id")
-			POST("/rpc/keys.revoke/{id}")
+			DELETE("/rpc/keys.revoke/{id}")
 			sessions.SessionHeader()
 			Response(StatusOK)
 		})

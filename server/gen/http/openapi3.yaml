@@ -327,6 +327,156 @@ paths:
                                 $ref: '#/components/schemas/ListDeploymentResult'
             security:
                 - session_header_Gram-Session: []
+    /rpc/environments.create:
+        post:
+            tags:
+                - environments
+            summary: createEnvironment environments
+            description: Create a new environment
+            operationId: environments#createEnvironment
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateEnvironmentForm'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Environment'
+            security:
+                - session_header_Gram-Session: []
+    /rpc/environments.delete/{id}:
+        delete:
+            tags:
+                - environments
+            summary: deleteEnvironment environments
+            description: Delete an environment
+            operationId: environments#deleteEnvironment
+            parameters:
+                - name: id
+                  in: path
+                  description: The ID of the environment to delete
+                  required: true
+                  schema:
+                    type: string
+                    description: The ID of the environment to delete
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: project header
+            responses:
+                "200":
+                    description: OK response.
+            security:
+                - session_header_Gram-Session: []
+    /rpc/environments.list:
+        get:
+            tags:
+                - environments
+            summary: listEnvironments environments
+            description: List all environments for an organization
+            operationId: environments#listEnvironments
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: project header
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListEnvironmentsResult'
+            security:
+                - session_header_Gram-Session: []
+    /rpc/environments.update/{id}:
+        post:
+            tags:
+                - environments
+            summary: updateEnvironment environments
+            description: Update an environment
+            operationId: environments#updateEnvironment
+            parameters:
+                - name: id
+                  in: path
+                  description: The ID of the environment to update
+                  required: true
+                  schema:
+                    type: string
+                    description: The ID of the environment to update
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateEnvironmentForm'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Environment'
+            security:
+                - session_header_Gram-Session: []
     /rpc/keys.create:
         post:
             description: Create a new api key
@@ -386,7 +536,7 @@ paths:
             x-speakeasy-react-hook:
                 name: ListAPIKeys
     /rpc/keys.revoke/{id}:
-        post:
+        delete:
             description: Revoke a api key
             operationId: keys#revokeKey
             parameters:
@@ -654,6 +804,28 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        CreateEnvironmentForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Optional description of the environment
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EnvironmentEntryInput'
+                    description: List of environment variable entries
+                name:
+                    type: string
+                    description: The name of the environment
+                organization_id:
+                    type: string
+                    description: The organization ID this environment belongs to
+            description: Form for creating a new environment
+            required:
+                - organization_id
+                - name
+                - entries
         CreateKeyForm:
             type: object
             properties:
@@ -750,6 +922,83 @@ components:
                 - project_id
                 - user_id
                 - openapiv3_asset_ids
+        Environment:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the environment
+                    format: date-time
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EnvironmentEntry'
+                    description: List of environment entries
+                id:
+                    type: string
+                    description: The ID of the environment
+                name:
+                    type: string
+                    description: The name of the environment
+                organization_id:
+                    type: string
+                    description: The organization ID this environment belongs to
+                project_id:
+                    type: string
+                    description: The project ID this environment belongs to
+                slug:
+                    type: string
+                    description: The slug identifier for the environment
+                updated_at:
+                    type: string
+                    description: When the environment was last updated
+                    format: date-time
+            description: Model representing an environment
+            required:
+                - id
+                - organization_id
+                - project_id
+                - name
+                - slug
+                - entries
+                - created_at
+                - updated_at
+        EnvironmentEntry:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the environment entry
+                    format: date-time
+                name:
+                    type: string
+                    description: The name of the environment variable
+                updated_at:
+                    type: string
+                    description: When the environment entry was last updated
+                    format: date-time
+                value:
+                    type: string
+                    description: The value of the environment variable
+            description: A single environment entry
+            required:
+                - name
+                - value
+                - created_at
+                - updated_at
+        EnvironmentEntryInput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The name of the environment variable
+                value:
+                    type: string
+                    description: The value of the environment variable
+            description: A single environment entry
+            required:
+                - name
+                - value
         GetDeploymentForm:
             type: object
             properties:
@@ -961,6 +1210,16 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
+        ListEnvironmentsResult:
+            type: object
+            properties:
+                environments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Environment'
+            description: Result type for listing environments
+            required:
+                - environments
         ListKeysResult:
             type: object
             properties:
@@ -1225,6 +1484,27 @@ components:
                 - http_tools
                 - created_at
                 - updated_at
+        UpdateEnvironmentForm:
+            type: object
+            properties:
+                entries_to_remove:
+                    type: array
+                    items:
+                        type: string
+                    description: List of environment entry names to remove
+                entries_to_update:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EnvironmentEntryInput'
+                    description: List of environment entries to update or create
+                environment_id:
+                    type: string
+                    description: The ID of the environment to update
+            description: Form for updating an environment
+            required:
+                - environment_id
+                - entries_to_update
+                - entries_to_remove
         UpdateToolsetForm:
             type: object
             properties:
@@ -1309,6 +1589,8 @@ tags:
       description: Managed auth for gram producers and dashboard.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
+    - name: environments
+      description: Managing toolset environments.
     - name: keys
       description: Managing system api keys.
     - name: system

@@ -53,7 +53,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateKey", "POST", "/rpc/keys.create"},
 			{"ListKeys", "GET", "/rpc/keys.list"},
-			{"RevokeKey", "POST", "/rpc/keys.revoke/{id}"},
+			{"RevokeKey", "DELETE", "/rpc/keys.revoke/{id}"},
 		},
 		CreateKey: NewCreateKeyHandler(e.CreateKey, mux, decoder, encoder, errhandler, formatter),
 		ListKeys:  NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
@@ -197,7 +197,7 @@ func MountRevokeKeyHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/keys.revoke/{id}", f)
+	mux.Handle("DELETE", "/rpc/keys.revoke/{id}", f)
 }
 
 // NewRevokeKeyHandler creates a HTTP handler which loads the HTTP request and
