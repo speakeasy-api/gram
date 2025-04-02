@@ -140,8 +140,18 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 }
 
 func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvironmentPayload) (*gen.Environment, error) {
-	if _, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug); err != nil {
+	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
+	if err != nil {
 		return nil, err
+	}
+
+	environment, err := s.repo.GetEnvironment(ctx, uuid.MustParse(payload.EnvironmentID))
+	if err != nil {
+		return nil, err
+	}
+
+	if environment.ProjectID.String() != access.ProjectID.String() {
+		return nil, errors.New("environment not found")
 	}
 
 	for _, updatedEntry := range payload.EntriesToUpdate {
@@ -160,11 +170,6 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}); err != nil {
 			return nil, err
 		}
-	}
-
-	environment, err := s.repo.GetEnvironment(ctx, uuid.MustParse(payload.EnvironmentID))
-	if err != nil {
-		return nil, err
 	}
 
 	entries, err := s.repo.ListEnvironmentEntries(ctx, uuid.MustParse(payload.EnvironmentID))

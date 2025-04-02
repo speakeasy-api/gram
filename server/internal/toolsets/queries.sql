@@ -74,7 +74,7 @@ SET
   , http_tool_ids = COALESCE(NULLIF(@http_tool_ids::uuid[], '{}'::uuid[]), http_tool_ids)
   , default_environment_id = COALESCE(@default_environment_id, default_environment_id)
   , updated_at = clock_timestamp()
-WHERE id = @id
+WHERE id = @id AND project_id = @project_id
 RETURNING 
     id
   , organization_id

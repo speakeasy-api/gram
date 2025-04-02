@@ -179,6 +179,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		Description:          existingToolset.Description,
 		Name:                 existingToolset.Name,
 		DefaultEnvironmentID: existingToolset.DefaultEnvironmentID,
+		ProjectID:            access.ProjectID,
 	}
 	if payload.Name != nil {
 		updateParams.Name = *payload.Name

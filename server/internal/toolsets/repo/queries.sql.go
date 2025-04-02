@@ -319,7 +319,7 @@ SET
   , http_tool_ids = COALESCE(NULLIF($3::uuid[], '{}'::uuid[]), http_tool_ids)
   , default_environment_id = COALESCE($4, default_environment_id)
   , updated_at = clock_timestamp()
-WHERE id = $5
+WHERE id = $5 AND project_id = $6
 RETURNING 
     id
   , organization_id
@@ -341,6 +341,7 @@ type UpdateToolsetParams struct {
 	HttpToolIds          []uuid.UUID
 	DefaultEnvironmentID uuid.NullUUID
 	ID                   uuid.UUID
+	ProjectID            uuid.UUID
 }
 
 type UpdateToolsetRow struct {
@@ -365,6 +366,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (U
 		arg.HttpToolIds,
 		arg.DefaultEnvironmentID,
 		arg.ID,
+		arg.ProjectID,
 	)
 	var i UpdateToolsetRow
 	err := row.Scan(
