@@ -99,8 +99,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		Slug:           createdToolset.Slug,
 		Description:    conv.FromPGText(createdToolset.Description),
 		HTTPToolIds:    httpToolIds,
-		CreatedAt:      createdToolset.CreatedAt.Time.String(),
-		UpdatedAt:      createdToolset.UpdatedAt.Time.String(),
+		CreatedAt:      createdToolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      createdToolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
