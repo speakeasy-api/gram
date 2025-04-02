@@ -26,7 +26,7 @@ func BuildCallbackPayload(authCallbackSharedToken string) (*auth.CallbackPayload
 
 // BuildSwitchScopesPayload builds the payload for the auth switchScopes
 // endpoint from CLI flags.
-func BuildSwitchScopesPayload(authSwitchScopesOrganizationID string, authSwitchScopesProjectID string, authSwitchScopesGramSessionToken string) (*auth.SwitchScopesPayload, error) {
+func BuildSwitchScopesPayload(authSwitchScopesOrganizationID string, authSwitchScopesProjectID string, authSwitchScopesSessionToken string) (*auth.SwitchScopesPayload, error) {
 	var organizationID *string
 	{
 		if authSwitchScopesOrganizationID != "" {
@@ -39,46 +39,46 @@ func BuildSwitchScopesPayload(authSwitchScopesOrganizationID string, authSwitchS
 			projectID = &authSwitchScopesProjectID
 		}
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if authSwitchScopesGramSessionToken != "" {
-			gramSessionToken = &authSwitchScopesGramSessionToken
+		if authSwitchScopesSessionToken != "" {
+			sessionToken = &authSwitchScopesSessionToken
 		}
 	}
 	v := &auth.SwitchScopesPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
 // BuildLogoutPayload builds the payload for the auth logout endpoint from CLI
 // flags.
-func BuildLogoutPayload(authLogoutGramSessionToken string) (*auth.LogoutPayload, error) {
-	var gramSessionToken *string
+func BuildLogoutPayload(authLogoutSessionToken string) (*auth.LogoutPayload, error) {
+	var sessionToken *string
 	{
-		if authLogoutGramSessionToken != "" {
-			gramSessionToken = &authLogoutGramSessionToken
+		if authLogoutSessionToken != "" {
+			sessionToken = &authLogoutSessionToken
 		}
 	}
 	v := &auth.LogoutPayload{}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
 // BuildInfoPayload builds the payload for the auth info endpoint from CLI
 // flags.
-func BuildInfoPayload(authInfoGramSessionToken string) (*auth.InfoPayload, error) {
-	var gramSessionToken *string
+func BuildInfoPayload(authInfoSessionToken string) (*auth.InfoPayload, error) {
+	var sessionToken *string
 	{
-		if authInfoGramSessionToken != "" {
-			gramSessionToken = &authInfoGramSessionToken
+		if authInfoSessionToken != "" {
+			sessionToken = &authInfoSessionToken
 		}
 	}
 	v := &auth.InfoPayload{}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

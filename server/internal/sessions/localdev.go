@@ -91,13 +91,13 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 		return "", fmt.Errorf("failed to unmarshal local env file: %w", err)
 	}
 
-	var gramSession *GramSession
+	var gramSession *Session
 
 	for userID, userInfo := range data {
 		if err := s.InvalidateUserInfoCache(ctx, userID); err != nil {
 			log.From(ctx).Warn("failed to invalidate user info cache", zap.Error(err))
 		}
-		gramSession = &GramSession{
+		gramSession = &Session{
 			ID:                   uuid.NewString(),
 			UserID:               userID,
 			UserEmail:            userInfo.UserEmail,

@@ -162,17 +162,17 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 
 // NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
-func NewGetDeploymentPayload(id string, gramSessionToken *string) *deployments.GetDeploymentPayload {
+func NewGetDeploymentPayload(id string, sessionToken *string) *deployments.GetDeploymentPayload {
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewCreateDeploymentPayload builds a deployments service createDeployment
 // endpoint payload.
-func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, gramSessionToken *string) *deployments.CreateDeploymentPayload {
+func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string) *deployments.CreateDeploymentPayload {
 	v := &deployments.CreateDeploymentPayload{
 		IdempotencyKey: *body.IdempotencyKey,
 		GithubRepo:     body.GithubRepo,
@@ -186,18 +186,18 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, gramSessionTo
 			v.Openapiv3AssetIds[i] = val
 		}
 	}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
-func NewListDeploymentsPayload(cursor *string, limit int, gramSessionToken *string) *deployments.ListDeploymentsPayload {
+func NewListDeploymentsPayload(cursor *string, limit int, sessionToken *string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v
 }

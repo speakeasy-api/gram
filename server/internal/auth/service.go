@@ -73,8 +73,8 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}
 
 	return &gen.SwitchScopesResult{
-		GramSessionToken:  session.ID,
-		GramSessionCookie: session.ID,
+		SessionToken:  session.ID,
+		SessionCookie: session.ID,
 	}, nil
 }
 
@@ -87,7 +87,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	if err := s.sessions.ClearSession(ctx, *session); err != nil {
 		return nil, err
 	}
-	return &gen.LogoutResult{GramSessionCookie: ""}, nil
+	return &gen.LogoutResult{SessionCookie: ""}, nil
 }
 func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.InfoResult, err error) {
 	session, ok := sessions.GetSessionValueFromContext(ctx)
@@ -126,8 +126,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}
 
 	return &gen.InfoResult{
-		GramSessionToken:     session.ID,
-		GramSessionCookie:    session.ID,
+		SessionToken:         session.ID,
+		SessionCookie:        session.ID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,

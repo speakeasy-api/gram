@@ -254,7 +254,7 @@ func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetD
 
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
-func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *string, projectSlug string) *toolsets.CreateToolsetPayload {
+func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, projectSlug string) *toolsets.CreateToolsetPayload {
 	v := &toolsets.CreateToolsetPayload{
 		Name:        *body.Name,
 		Description: body.Description,
@@ -265,7 +265,7 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *s
 			v.HTTPToolIds[i] = val
 		}
 	}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v
@@ -273,9 +273,9 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, gramSessionToken *s
 
 // NewListToolsetsPayload builds a toolsets service listToolsets endpoint
 // payload.
-func NewListToolsetsPayload(gramSessionToken *string, projectSlug string) *toolsets.ListToolsetsPayload {
+func NewListToolsetsPayload(sessionToken *string, projectSlug string) *toolsets.ListToolsetsPayload {
 	v := &toolsets.ListToolsetsPayload{}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v
@@ -283,7 +283,7 @@ func NewListToolsetsPayload(gramSessionToken *string, projectSlug string) *tools
 
 // NewUpdateToolsetPayload builds a toolsets service updateToolset endpoint
 // payload.
-func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, id string, gramSessionToken *string, projectSlug string) *toolsets.UpdateToolsetPayload {
+func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, id string, sessionToken *string, projectSlug string) *toolsets.UpdateToolsetPayload {
 	v := &toolsets.UpdateToolsetPayload{
 		Name:        body.Name,
 		Description: body.Description,
@@ -301,7 +301,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, id string, gramSess
 		}
 	}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v
@@ -309,10 +309,10 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, id string, gramSess
 
 // NewGetToolsetDetailsPayload builds a toolsets service getToolsetDetails
 // endpoint payload.
-func NewGetToolsetDetailsPayload(id string, gramSessionToken *string, projectSlug string) *toolsets.GetToolsetDetailsPayload {
+func NewGetToolsetDetailsPayload(id string, sessionToken *string, projectSlug string) *toolsets.GetToolsetDetailsPayload {
 	v := &toolsets.GetToolsetDetailsPayload{}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v

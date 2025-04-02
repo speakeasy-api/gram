@@ -37,27 +37,27 @@ func EncodeGetDeploymentResponse(encoder func(context.Context, http.ResponseWrit
 func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id               string
-			gramSessionToken *string
-			err              error
+			id           string
+			sessionToken *string
+			err          error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
-		gramSessionTokenRaw := r.Header.Get("Gram-Session")
-		if gramSessionTokenRaw != "" {
-			gramSessionToken = &gramSessionTokenRaw
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetDeploymentPayload(id, gramSessionToken)
-		if payload.GramSessionToken != nil {
-			if strings.Contains(*payload.GramSessionToken, " ") {
+		payload := NewGetDeploymentPayload(id, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
-				payload.GramSessionToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 
@@ -102,18 +102,18 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		}
 
 		var (
-			gramSessionToken *string
+			sessionToken *string
 		)
-		gramSessionTokenRaw := r.Header.Get("Gram-Session")
-		if gramSessionTokenRaw != "" {
-			gramSessionToken = &gramSessionTokenRaw
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
-		payload := NewCreateDeploymentPayload(&body, gramSessionToken)
-		if payload.GramSessionToken != nil {
-			if strings.Contains(*payload.GramSessionToken, " ") {
+		payload := NewCreateDeploymentPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
-				payload.GramSessionToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 
@@ -138,10 +138,10 @@ func EncodeListDeploymentsResponse(encoder func(context.Context, http.ResponseWr
 func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			cursor           *string
-			limit            int
-			gramSessionToken *string
-			err              error
+			cursor       *string
+			limit        int
+			sessionToken *string
+			err          error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
@@ -166,19 +166,19 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if limit > 100 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
 		}
-		gramSessionTokenRaw := r.Header.Get("Gram-Session")
-		if gramSessionTokenRaw != "" {
-			gramSessionToken = &gramSessionTokenRaw
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListDeploymentsPayload(cursor, limit, gramSessionToken)
-		if payload.GramSessionToken != nil {
-			if strings.Contains(*payload.GramSessionToken, " ") {
+		payload := NewListDeploymentsPayload(cursor, limit, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
-				payload.GramSessionToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 

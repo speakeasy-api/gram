@@ -41,8 +41,8 @@ func EncodeCreateKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if !ok {
 			return goahttp.ErrInvalidType("keys", "createKey", "*keys.CreateKeyPayload", v)
 		}
-		if p.GramSessionToken != nil {
-			head := *p.GramSessionToken
+		if p.SessionToken != nil {
+			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
 		body := NewCreateKeyRequestBody(p)
@@ -116,8 +116,8 @@ func EncodeListKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if !ok {
 			return goahttp.ErrInvalidType("keys", "listKeys", "*keys.ListKeysPayload", v)
 		}
-		if p.GramSessionToken != nil {
-			head := *p.GramSessionToken
+		if p.SessionToken != nil {
+			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
 		return nil
@@ -197,8 +197,8 @@ func EncodeRevokeKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if !ok {
 			return goahttp.ErrInvalidType("keys", "revokeKey", "*keys.RevokeKeyPayload", v)
 		}
-		if p.GramSessionToken != nil {
-			head := *p.GramSessionToken
+		if p.SessionToken != nil {
+			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
 		return nil

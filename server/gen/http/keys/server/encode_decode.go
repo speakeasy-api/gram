@@ -56,18 +56,18 @@ func DecodeCreateKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		}
 
 		var (
-			gramSessionToken *string
+			sessionToken *string
 		)
-		gramSessionTokenRaw := r.Header.Get("Gram-Session")
-		if gramSessionTokenRaw != "" {
-			gramSessionToken = &gramSessionTokenRaw
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
-		payload := NewCreateKeyPayload(&body, gramSessionToken)
-		if payload.GramSessionToken != nil {
-			if strings.Contains(*payload.GramSessionToken, " ") {
+		payload := NewCreateKeyPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
-				payload.GramSessionToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 
@@ -92,18 +92,18 @@ func EncodeListKeysResponse(encoder func(context.Context, http.ResponseWriter) g
 func DecodeListKeysRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			gramSessionToken *string
+			sessionToken *string
 		)
-		gramSessionTokenRaw := r.Header.Get("Gram-Session")
-		if gramSessionTokenRaw != "" {
-			gramSessionToken = &gramSessionTokenRaw
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
-		payload := NewListKeysPayload(gramSessionToken)
-		if payload.GramSessionToken != nil {
-			if strings.Contains(*payload.GramSessionToken, " ") {
+		payload := NewListKeysPayload(sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
-				payload.GramSessionToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 
@@ -128,22 +128,22 @@ func EncodeRevokeKeyResponse(encoder func(context.Context, http.ResponseWriter) 
 func DecodeRevokeKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id               string
-			gramSessionToken *string
+			id           string
+			sessionToken *string
 
 			params = mux.Vars(r)
 		)
 		id = params["id"]
-		gramSessionTokenRaw := r.Header.Get("Gram-Session")
-		if gramSessionTokenRaw != "" {
-			gramSessionToken = &gramSessionTokenRaw
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
-		payload := NewRevokeKeyPayload(id, gramSessionToken)
-		if payload.GramSessionToken != nil {
-			if strings.Contains(*payload.GramSessionToken, " ") {
+		payload := NewRevokeKeyPayload(id, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
-				payload.GramSessionToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 

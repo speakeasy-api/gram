@@ -50,13 +50,13 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		ep := req.(*UploadOpenAPIv3RequestData)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if ep.Payload.GramSessionToken != nil {
-			key = *ep.Payload.GramSessionToken
+		if ep.Payload.SessionToken != nil {
+			key = *ep.Payload.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {

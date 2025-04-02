@@ -41,8 +41,8 @@ func EncodeCreateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if !ok {
 			return goahttp.ErrInvalidType("toolsets", "createToolset", "*toolsets.CreateToolsetPayload", v)
 		}
-		if p.GramSessionToken != nil {
-			head := *p.GramSessionToken
+		if p.SessionToken != nil {
+			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
 		{
@@ -120,8 +120,8 @@ func EncodeListToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if !ok {
 			return goahttp.ErrInvalidType("toolsets", "listToolsets", "*toolsets.ListToolsetsPayload", v)
 		}
-		if p.GramSessionToken != nil {
-			head := *p.GramSessionToken
+		if p.SessionToken != nil {
+			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
 		{
@@ -205,8 +205,8 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if !ok {
 			return goahttp.ErrInvalidType("toolsets", "updateToolset", "*toolsets.UpdateToolsetPayload", v)
 		}
-		if p.GramSessionToken != nil {
-			head := *p.GramSessionToken
+		if p.SessionToken != nil {
+			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
 		{
@@ -294,8 +294,8 @@ func EncodeGetToolsetDetailsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if !ok {
 			return goahttp.ErrInvalidType("toolsets", "getToolsetDetails", "*toolsets.GetToolsetDetailsPayload", v)
 		}
-		if p.GramSessionToken != nil {
-			head := *p.GramSessionToken
+		if p.SessionToken != nil {
+			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
 		{

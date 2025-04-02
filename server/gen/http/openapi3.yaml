@@ -85,7 +85,7 @@ paths:
                                     updated_at: "1982-06-10T21:47:30Z"
                                     url: Beatae aut veniam voluptas at.
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/auth.callback:
         get:
             tags:
@@ -230,7 +230,7 @@ paths:
                                 user_email: Assumenda ut.
                                 user_id: Doloribus magnam nostrum aut sunt itaque.
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/auth.logout:
         get:
             tags:
@@ -260,7 +260,7 @@ paths:
                                 example: Nam dolorem ipsum.
                             example: Alias totam non aliquam maxime.
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/auth.switchScopes:
         post:
             tags:
@@ -315,7 +315,7 @@ paths:
                                 example: Quidem sint illum ut blanditiis.
                             example: Vitae exercitationem non aut.
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/deployments.create:
         post:
             tags:
@@ -359,7 +359,7 @@ paths:
                                 $ref: '#/components/schemas/CreateDeploymentResult'
                             example: {}
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/deployments.get:
         post:
             tags:
@@ -409,7 +409,7 @@ paths:
                                 project_id: Cum dignissimos quis modi velit maiores.
                                 user_id: Ab dolorum repellendus aspernatur voluptatem aspernatur.
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/deployments.list:
         post:
             tags:
@@ -520,7 +520,7 @@ paths:
                                       user_id: Praesentium voluptas dolor magnam voluptates est.
                                 next_cursor: 01jp3f054qc02gbcmpp0qmyzed
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/keys.create:
         post:
             tags:
@@ -566,7 +566,7 @@ paths:
                                 token: Nobis enim quas dolorem et inventore.
                                 updated_at: "1975-03-28T11:40:59Z"
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/keys.list:
         get:
             tags:
@@ -618,7 +618,7 @@ paths:
                                       token: Sint ut.
                                       updated_at: "1985-09-29T14:38:35Z"
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/keys.revoke/{id}:
         post:
             tags:
@@ -666,7 +666,7 @@ paths:
                                 token: Dolor quo.
                                 updated_at: "1995-08-28T09:47:32Z"
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.create:
         post:
             tags:
@@ -727,7 +727,7 @@ paths:
                                 slug: Laborum at.
                                 updated_at: "1984-03-09T23:11:10Z"
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.get/{id}:
         get:
             tags:
@@ -812,7 +812,7 @@ paths:
                                 slug: Error dolores occaecati.
                                 updated_at: "2000-09-25T17:33:54Z"
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.list:
         get:
             tags:
@@ -874,7 +874,7 @@ paths:
                                       slug: Et sunt voluptas.
                                       updated_at: "1997-08-14T00:37:37Z"
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.update/{id}:
         post:
             tags:
@@ -949,7 +949,7 @@ paths:
                                 slug: Est culpa enim corporis error.
                                 updated_at: "2001-02-08T16:52:42Z"
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
 components:
     schemas:
         Asset:
@@ -2532,18 +2532,18 @@ components:
                 content_type:
                     type: string
                     example: Ipsum aut est et quia quae.
-                gram_session_token:
-                    type: string
-                    example: Totam accusamus.
                 project_slug:
                     type: string
                     description: The project the action belongs too
                     example: Commodi vel.
+                session_token:
+                    type: string
+                    example: Totam accusamus.
             example:
                 content_length: 571591474727273472
                 content_type: Assumenda odit temporibus.
-                gram_session_token: Fugiat ex eos eum reiciendis.
                 project_slug: Hic consequatur.
+                session_token: Fugiat ex eos eum reiciendis.
             required:
                 - content_type
                 - content_length
@@ -2566,9 +2566,9 @@ components:
             required:
                 - asset
     securitySchemes:
-        gram_session_header_Gram-Session:
+        session_header_Gram-Session:
             type: apiKey
-            description: Gram Session based auth. By cookie or header.
+            description: Session based auth. By cookie or header.
             name: Gram-Session
             in: header
 tags:

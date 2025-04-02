@@ -63,7 +63,7 @@ type Asset struct {
 // UploadOpenAPIv3Payload is the payload type of the assets service
 // uploadOpenAPIv3 method.
 type UploadOpenAPIv3Payload struct {
-	GramSessionToken *string
+	SessionToken *string
 	// The project the action belongs too
 	ProjectSlug   string
 	ContentType   string

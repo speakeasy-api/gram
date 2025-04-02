@@ -16,7 +16,7 @@ import (
 
 // BuildUploadOpenAPIv3Payload builds the payload for the assets
 // uploadOpenAPIv3 endpoint from CLI flags.
-func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assetsUploadOpenAPIv3ContentLength string, assetsUploadOpenAPIv3ProjectSlug string, assetsUploadOpenAPIv3GramSessionToken string) (*assets.UploadOpenAPIv3Payload, error) {
+func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assetsUploadOpenAPIv3ContentLength string, assetsUploadOpenAPIv3ProjectSlug string, assetsUploadOpenAPIv3SessionToken string) (*assets.UploadOpenAPIv3Payload, error) {
 	var err error
 	var contentType string
 	{
@@ -33,17 +33,17 @@ func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assets
 	{
 		projectSlug = assetsUploadOpenAPIv3ProjectSlug
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if assetsUploadOpenAPIv3GramSessionToken != "" {
-			gramSessionToken = &assetsUploadOpenAPIv3GramSessionToken
+		if assetsUploadOpenAPIv3SessionToken != "" {
+			sessionToken = &assetsUploadOpenAPIv3SessionToken
 		}
 	}
 	v := &assets.UploadOpenAPIv3Payload{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.ProjectSlug = projectSlug
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

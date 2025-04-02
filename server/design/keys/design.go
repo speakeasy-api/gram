@@ -7,7 +7,7 @@ import (
 
 var _ = Service("keys", func() {
 	Description("Managing system api keys.")
-	Security(sessions.GramSession)
+	Security(sessions.Session)
 
 	Method("createKey", func() {
 		Description("Create a new api key")

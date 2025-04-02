@@ -16,7 +16,7 @@ import (
 
 // BuildCreateKeyPayload builds the payload for the keys createKey endpoint
 // from CLI flags.
-func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeyGramSessionToken string) (*keys.CreateKeyPayload, error) {
+func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken string) (*keys.CreateKeyPayload, error) {
 	var err error
 	var body CreateKeyRequestBody
 	{
@@ -25,51 +25,51 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeyGramSessionTok
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"At expedita magni perferendis amet unde.\"\n   }'")
 		}
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if keysCreateKeyGramSessionToken != "" {
-			gramSessionToken = &keysCreateKeyGramSessionToken
+		if keysCreateKeySessionToken != "" {
+			sessionToken = &keysCreateKeySessionToken
 		}
 	}
 	v := &keys.CreateKeyPayload{
 		Name: body.Name,
 	}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
 // BuildListKeysPayload builds the payload for the keys listKeys endpoint from
 // CLI flags.
-func BuildListKeysPayload(keysListKeysGramSessionToken string) (*keys.ListKeysPayload, error) {
-	var gramSessionToken *string
+func BuildListKeysPayload(keysListKeysSessionToken string) (*keys.ListKeysPayload, error) {
+	var sessionToken *string
 	{
-		if keysListKeysGramSessionToken != "" {
-			gramSessionToken = &keysListKeysGramSessionToken
+		if keysListKeysSessionToken != "" {
+			sessionToken = &keysListKeysSessionToken
 		}
 	}
 	v := &keys.ListKeysPayload{}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
 // BuildRevokeKeyPayload builds the payload for the keys revokeKey endpoint
 // from CLI flags.
-func BuildRevokeKeyPayload(keysRevokeKeyID string, keysRevokeKeyGramSessionToken string) (*keys.RevokeKeyPayload, error) {
+func BuildRevokeKeyPayload(keysRevokeKeyID string, keysRevokeKeySessionToken string) (*keys.RevokeKeyPayload, error) {
 	var id string
 	{
 		id = keysRevokeKeyID
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if keysRevokeKeyGramSessionToken != "" {
-			gramSessionToken = &keysRevokeKeyGramSessionToken
+		if keysRevokeKeySessionToken != "" {
+			sessionToken = &keysRevokeKeySessionToken
 		}
 	}
 	v := &keys.RevokeKeyPayload{}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

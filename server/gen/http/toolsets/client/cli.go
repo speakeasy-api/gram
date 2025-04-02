@@ -16,7 +16,7 @@ import (
 
 // BuildCreateToolsetPayload builds the payload for the toolsets createToolset
 // endpoint from CLI flags.
-func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetGramSessionToken string, toolsetsCreateToolsetProjectSlug string) (*toolsets.CreateToolsetPayload, error) {
+func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetSessionToken string, toolsetsCreateToolsetProjectSlug string) (*toolsets.CreateToolsetPayload, error) {
 	var err error
 	var body CreateToolsetRequestBody
 	{
@@ -25,10 +25,10 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Eveniet sequi doloribus aperiam.\",\n      \"http_tool_ids\": [\n         \"Perferendis velit est.\",\n         \"Minima molestiae et tenetur sed.\",\n         \"Magnam qui aut enim.\"\n      ],\n      \"name\": \"Voluptas reiciendis.\"\n   }'")
 		}
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if toolsetsCreateToolsetGramSessionToken != "" {
-			gramSessionToken = &toolsetsCreateToolsetGramSessionToken
+		if toolsetsCreateToolsetSessionToken != "" {
+			sessionToken = &toolsetsCreateToolsetSessionToken
 		}
 	}
 	var projectSlug string
@@ -45,7 +45,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 			v.HTTPToolIds[i] = val
 		}
 	}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v, nil
@@ -53,11 +53,11 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 
 // BuildListToolsetsPayload builds the payload for the toolsets listToolsets
 // endpoint from CLI flags.
-func BuildListToolsetsPayload(toolsetsListToolsetsGramSessionToken string, toolsetsListToolsetsProjectSlug string) (*toolsets.ListToolsetsPayload, error) {
-	var gramSessionToken *string
+func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsListToolsetsProjectSlug string) (*toolsets.ListToolsetsPayload, error) {
+	var sessionToken *string
 	{
-		if toolsetsListToolsetsGramSessionToken != "" {
-			gramSessionToken = &toolsetsListToolsetsGramSessionToken
+		if toolsetsListToolsetsSessionToken != "" {
+			sessionToken = &toolsetsListToolsetsSessionToken
 		}
 	}
 	var projectSlug string
@@ -65,7 +65,7 @@ func BuildListToolsetsPayload(toolsetsListToolsetsGramSessionToken string, tools
 		projectSlug = toolsetsListToolsetsProjectSlug
 	}
 	v := &toolsets.ListToolsetsPayload{}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v, nil
@@ -73,7 +73,7 @@ func BuildListToolsetsPayload(toolsetsListToolsetsGramSessionToken string, tools
 
 // BuildUpdateToolsetPayload builds the payload for the toolsets updateToolset
 // endpoint from CLI flags.
-func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetID string, toolsetsUpdateToolsetGramSessionToken string, toolsetsUpdateToolsetProjectSlug string) (*toolsets.UpdateToolsetPayload, error) {
+func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetID string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetProjectSlug string) (*toolsets.UpdateToolsetPayload, error) {
 	var err error
 	var body UpdateToolsetRequestBody
 	{
@@ -86,10 +86,10 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		id = toolsetsUpdateToolsetID
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if toolsetsUpdateToolsetGramSessionToken != "" {
-			gramSessionToken = &toolsetsUpdateToolsetGramSessionToken
+		if toolsetsUpdateToolsetSessionToken != "" {
+			sessionToken = &toolsetsUpdateToolsetSessionToken
 		}
 	}
 	var projectSlug string
@@ -113,7 +113,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		}
 	}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v, nil
@@ -121,15 +121,15 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 
 // BuildGetToolsetDetailsPayload builds the payload for the toolsets
 // getToolsetDetails endpoint from CLI flags.
-func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsGetToolsetDetailsGramSessionToken string, toolsetsGetToolsetDetailsProjectSlug string) (*toolsets.GetToolsetDetailsPayload, error) {
+func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsGetToolsetDetailsSessionToken string, toolsetsGetToolsetDetailsProjectSlug string) (*toolsets.GetToolsetDetailsPayload, error) {
 	var id string
 	{
 		id = toolsetsGetToolsetDetailsID
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if toolsetsGetToolsetDetailsGramSessionToken != "" {
-			gramSessionToken = &toolsetsGetToolsetDetailsGramSessionToken
+		if toolsetsGetToolsetDetailsSessionToken != "" {
+			sessionToken = &toolsetsGetToolsetDetailsSessionToken
 		}
 	}
 	var projectSlug string
@@ -138,7 +138,7 @@ func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsG
 	}
 	v := &toolsets.GetToolsetDetailsPayload{}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
 	return v, nil

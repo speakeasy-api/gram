@@ -18,11 +18,11 @@ func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	return value, ok
 }
 
-func SetSessionValueInContext(ctx context.Context, value *GramSession) context.Context {
+func SetSessionValueInContext(ctx context.Context, value *Session) context.Context {
 	return context.WithValue(ctx, SessionValueContextKey, value)
 }
 
-func GetSessionValueFromContext(ctx context.Context) (*GramSession, bool) {
-	value, ok := ctx.Value(SessionValueContextKey).(*GramSession)
+func GetSessionValueFromContext(ctx context.Context) (*Session, bool) {
+	value, ok := ctx.Value(SessionValueContextKey).(*Session)
 	return value, ok
 }

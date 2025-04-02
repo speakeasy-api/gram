@@ -35,11 +35,11 @@ func EncodeUploadOpenAPIv3Response(encoder func(context.Context, http.ResponseWr
 func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			contentType      string
-			contentLength    int64
-			projectSlug      string
-			gramSessionToken *string
-			err              error
+			contentType   string
+			contentLength int64
+			projectSlug   string
+			sessionToken  *string
+			err           error
 		)
 		contentType = r.Header.Get("Content-Type")
 		if contentType == "" {
@@ -60,19 +60,19 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		if projectSlug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
 		}
-		gramSessionTokenRaw := r.Header.Get("Gram-Session")
-		if gramSessionTokenRaw != "" {
-			gramSessionToken = &gramSessionTokenRaw
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewUploadOpenAPIv3Payload(contentType, contentLength, projectSlug, gramSessionToken)
-		if payload.GramSessionToken != nil {
-			if strings.Contains(*payload.GramSessionToken, " ") {
+		payload := NewUploadOpenAPIv3Payload(contentType, contentLength, projectSlug, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.GramSessionToken, " ", 2)[1]
-				payload.GramSessionToken = &cred
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 

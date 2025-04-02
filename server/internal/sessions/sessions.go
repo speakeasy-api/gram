@@ -9,13 +9,13 @@ import (
 )
 
 type Sessions struct {
-	sessionCache  cache.Cache[GramSession]
+	sessionCache  cache.Cache[Session]
 	userInfoCache cache.Cache[CachedUserInfo]
 }
 
 func New() *Sessions {
 	return &Sessions{
-		sessionCache:  cache.New[GramSession](sessionCacheExpiry),
+		sessionCache:  cache.New[Session](sessionCacheExpiry),
 		userInfoCache: cache.New[CachedUserInfo](userInfoCacheExpiry),
 	}
 }
@@ -39,7 +39,7 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 		}
 	}
 
-	session, err := s.sessionCache.Get(ctx, GramSessionCacheKey(key))
+	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
 	if err != nil {
 		return ctx, errors.New("session token is invalid")
 	}
@@ -53,10 +53,10 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 	return ctx, nil
 }
 
-func (s *Sessions) UpdateSession(ctx context.Context, session GramSession) error {
+func (s *Sessions) UpdateSession(ctx context.Context, session Session) error {
 	return s.sessionCache.Update(ctx, session)
 }
 
-func (s *Sessions) ClearSession(ctx context.Context, session GramSession) error {
+func (s *Sessions) ClearSession(ctx context.Context, session Session) error {
 	return s.sessionCache.Delete(ctx, session)
 }

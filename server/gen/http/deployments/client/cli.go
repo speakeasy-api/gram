@@ -18,27 +18,27 @@ import (
 
 // BuildGetDeploymentPayload builds the payload for the deployments
 // getDeployment endpoint from CLI flags.
-func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentGramSessionToken string) (*deployments.GetDeploymentPayload, error) {
+func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentSessionToken string) (*deployments.GetDeploymentPayload, error) {
 	var id string
 	{
 		id = deploymentsGetDeploymentID
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if deploymentsGetDeploymentGramSessionToken != "" {
-			gramSessionToken = &deploymentsGetDeploymentGramSessionToken
+		if deploymentsGetDeploymentSessionToken != "" {
+			sessionToken = &deploymentsGetDeploymentSessionToken
 		}
 	}
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
 // BuildCreateDeploymentPayload builds the payload for the deployments
 // createDeployment endpoint from CLI flags.
-func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentGramSessionToken string) (*deployments.CreateDeploymentPayload, error) {
+func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentSessionToken string) (*deployments.CreateDeploymentPayload, error) {
 	var err error
 	var body CreateDeploymentRequestBody
 	{
@@ -47,10 +47,10 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Corrupti voluptas corporis dolor nisi.\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"idempotency_key\": \"01jqq0ajmb4qh9eppz48dejr2m\",\n      \"openapiv3_asset_ids\": [\n         \"Dolores deleniti aut ipsam voluptate non.\",\n         \"Et ut accusantium et voluptatum.\",\n         \"Autem quasi vel.\",\n         \"Quasi enim.\"\n      ]\n   }'")
 		}
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if deploymentsCreateDeploymentGramSessionToken != "" {
-			gramSessionToken = &deploymentsCreateDeploymentGramSessionToken
+		if deploymentsCreateDeploymentSessionToken != "" {
+			sessionToken = &deploymentsCreateDeploymentSessionToken
 		}
 	}
 	v := &deployments.CreateDeploymentPayload{
@@ -66,14 +66,14 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			v.Openapiv3AssetIds[i] = val
 		}
 	}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
 // BuildListDeploymentsPayload builds the payload for the deployments
 // listDeployments endpoint from CLI flags.
-func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsLimit string, deploymentsListDeploymentsGramSessionToken string) (*deployments.ListDeploymentsPayload, error) {
+func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsLimit string, deploymentsListDeploymentsSessionToken string) (*deployments.ListDeploymentsPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -101,16 +101,16 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 			}
 		}
 	}
-	var gramSessionToken *string
+	var sessionToken *string
 	{
-		if deploymentsListDeploymentsGramSessionToken != "" {
-			gramSessionToken = &deploymentsListDeploymentsGramSessionToken
+		if deploymentsListDeploymentsSessionToken != "" {
+			sessionToken = &deploymentsListDeploymentsSessionToken
 		}
 	}
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

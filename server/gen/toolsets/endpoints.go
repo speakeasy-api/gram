@@ -49,13 +49,13 @@ func NewCreateToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		p := req.(*CreateToolsetPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSessionToken != nil {
-			key = *p.GramSessionToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -72,13 +72,13 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		p := req.(*ListToolsetsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSessionToken != nil {
-			key = *p.GramSessionToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -95,13 +95,13 @@ func NewUpdateToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		p := req.(*UpdateToolsetPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSessionToken != nil {
-			key = *p.GramSessionToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -118,13 +118,13 @@ func NewGetToolsetDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		p := req.(*GetToolsetDetailsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSessionToken != nil {
-			key = *p.GramSessionToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {

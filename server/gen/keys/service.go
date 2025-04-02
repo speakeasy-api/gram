@@ -47,7 +47,7 @@ var MethodNames = [3]string{"createKey", "listKeys", "revokeKey"}
 
 // CreateKeyPayload is the payload type of the keys service createKey method.
 type CreateKeyPayload struct {
-	GramSessionToken *string
+	SessionToken *string
 	// The name of the key
 	Name string
 }
@@ -76,7 +76,7 @@ type Key struct {
 
 // ListKeysPayload is the payload type of the keys service listKeys method.
 type ListKeysPayload struct {
-	GramSessionToken *string
+	SessionToken *string
 }
 
 // ListKeysResult is the result type of the keys service listKeys method.
@@ -87,6 +87,6 @@ type ListKeysResult struct {
 // RevokeKeyPayload is the payload type of the keys service revokeKey method.
 type RevokeKeyPayload struct {
 	// The ID of the key to revoke
-	ID               string
-	GramSessionToken *string
+	ID           string
+	SessionToken *string
 }

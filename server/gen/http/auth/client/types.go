@@ -39,37 +39,37 @@ type ProjectResponseBody struct {
 
 // NewCallbackResultTemporaryRedirect builds a "auth" service "callback"
 // endpoint result from a HTTP "TemporaryRedirect" response.
-func NewCallbackResultTemporaryRedirect(location string, gramSessionToken string, gramSessionCookie string) *auth.CallbackResult {
+func NewCallbackResultTemporaryRedirect(location string, sessionToken string, sessionCookie string) *auth.CallbackResult {
 	v := &auth.CallbackResult{}
 	v.Location = location
-	v.GramSessionToken = gramSessionToken
-	v.GramSessionCookie = gramSessionCookie
+	v.SessionToken = sessionToken
+	v.SessionCookie = sessionCookie
 
 	return v
 }
 
 // NewSwitchScopesResultOK builds a "auth" service "switchScopes" endpoint
 // result from a HTTP "OK" response.
-func NewSwitchScopesResultOK(gramSessionToken string, gramSessionCookie string) *auth.SwitchScopesResult {
+func NewSwitchScopesResultOK(sessionToken string, sessionCookie string) *auth.SwitchScopesResult {
 	v := &auth.SwitchScopesResult{}
-	v.GramSessionToken = gramSessionToken
-	v.GramSessionCookie = gramSessionCookie
+	v.SessionToken = sessionToken
+	v.SessionCookie = sessionCookie
 
 	return v
 }
 
 // NewLogoutResultOK builds a "auth" service "logout" endpoint result from a
 // HTTP "OK" response.
-func NewLogoutResultOK(gramSessionCookie string) *auth.LogoutResult {
+func NewLogoutResultOK(sessionCookie string) *auth.LogoutResult {
 	v := &auth.LogoutResult{}
-	v.GramSessionCookie = gramSessionCookie
+	v.SessionCookie = sessionCookie
 
 	return v
 }
 
 // NewInfoResultOK builds a "auth" service "info" endpoint result from a HTTP
 // "OK" response.
-func NewInfoResultOK(body *InfoResponseBody, gramSessionToken string, gramSessionCookie string) *auth.InfoResult {
+func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie string) *auth.InfoResult {
 	v := &auth.InfoResult{
 		UserID:               *body.UserID,
 		UserEmail:            *body.UserEmail,
@@ -79,8 +79,8 @@ func NewInfoResultOK(body *InfoResponseBody, gramSessionToken string, gramSessio
 	for i, val := range body.Organizations {
 		v.Organizations[i] = unmarshalOrganizationResponseBodyToAuthOrganization(val)
 	}
-	v.GramSessionToken = gramSessionToken
-	v.GramSessionCookie = gramSessionCookie
+	v.SessionToken = sessionToken
+	v.SessionCookie = sessionCookie
 
 	return v
 }

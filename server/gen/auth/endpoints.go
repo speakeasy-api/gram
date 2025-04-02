@@ -58,13 +58,13 @@ func NewSwitchScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		p := req.(*SwitchScopesPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSessionToken != nil {
-			key = *p.GramSessionToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -81,13 +81,13 @@ func NewLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		p := req.(*LogoutPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSessionToken != nil {
-			key = *p.GramSessionToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
@@ -104,13 +104,13 @@ func NewInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 		p := req.(*InfoPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "gram_session",
+			Name:           "session",
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.GramSessionToken != nil {
-			key = *p.GramSessionToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {

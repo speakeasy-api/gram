@@ -11,22 +11,22 @@ const (
 	userInfoCacheExpiry = 15 * time.Minute
 )
 
-type GramSession struct {
+type Session struct {
 	ID                   string
 	ActiveOrganizationID string
 	UserID               string
 	UserEmail            string
 }
 
-func GramSessionCacheKey(ID string) string {
-	return "gramSession:" + ID
+func SessionCacheKey(ID string) string {
+	return "sessions:" + ID
 }
 
-func (s GramSession) CacheKey() string {
-	return GramSessionCacheKey(s.ID)
+func (s Session) CacheKey() string {
+	return SessionCacheKey(s.ID)
 }
 
-func (s GramSession) AdditionalCacheKeys() []string {
+func (s Session) AdditionalCacheKeys() []string {
 	return []string{}
 }
 

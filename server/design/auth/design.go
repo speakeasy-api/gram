@@ -7,7 +7,7 @@ import (
 
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
-	Security(sessions.GramSession)
+	Security(sessions.Session)
 
 	Method("callback", func() {
 		Description("Handles the authentication callback.")
@@ -21,9 +21,9 @@ var _ = Service("auth", func() {
 
 		Result(func() {
 			Attribute("location", String, "The URL to redirect to after authentication")
-			Attribute("gram_session_token", String, "The authentication session")
-			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("location", "gram_session_token", "gram_session_cookie")
+			Attribute("session_token", String, "The authentication session")
+			Attribute("session_cookie", String, "The authentication session")
+			Required("location", "session_token", "session_cookie")
 		})
 
 		HTTP(func() {
@@ -49,9 +49,9 @@ var _ = Service("auth", func() {
 		})
 
 		Result(func() {
-			Attribute("gram_session_token", String, "The authentication session")
-			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("gram_session_token", "gram_session_cookie")
+			Attribute("session_token", String, "The authentication session")
+			Attribute("session_cookie", String, "The authentication session")
+			Required("session_token", "session_cookie")
 		})
 
 		HTTP(func() {
@@ -74,8 +74,8 @@ var _ = Service("auth", func() {
 		})
 
 		Result(func() {
-			Attribute("gram_session_cookie", String, "Empty string to clear the session")
-			Required("gram_session_cookie")
+			Attribute("session_cookie", String, "Empty string to clear the session")
+			Required("session_cookie")
 		})
 
 		HTTP(func() {
@@ -101,9 +101,9 @@ var _ = Service("auth", func() {
 			Attribute("user_email", String)
 			Attribute("active_organization_id", String)
 			Attribute("organizations", ArrayOf("Organization")) // <-- here too
-			Attribute("gram_session_token", String, "The authentication session")
-			Attribute("gram_session_cookie", String, "The authentication session")
-			Required("user_id", "user_email", "active_organization_id", "organizations", "gram_session_token", "gram_session_cookie")
+			Attribute("session_token", String, "The authentication session")
+			Attribute("session_cookie", String, "The authentication session")
+			Required("user_id", "user_email", "active_organization_id", "organizations", "session_token", "session_cookie")
 		})
 
 		HTTP(func() {

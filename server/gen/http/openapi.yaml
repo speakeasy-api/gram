@@ -66,7 +66,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/auth.callback:
         get:
             tags:
@@ -122,7 +122,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/auth.logout:
         get:
             tags:
@@ -142,7 +142,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/auth.switchScopes:
         post:
             tags:
@@ -176,7 +176,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/deployments.create:
         post:
             tags:
@@ -206,7 +206,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/deployments.get:
         post:
             tags:
@@ -240,7 +240,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/deployments.list:
         post:
             tags:
@@ -277,7 +277,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/keys.create:
         post:
             tags:
@@ -316,7 +316,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/keys.list:
         get:
             tags:
@@ -340,7 +340,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/keys.revoke/{id}:
         post:
             tags:
@@ -376,7 +376,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.create:
         post:
             tags:
@@ -418,7 +418,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.get/{id}:
         get:
             tags:
@@ -459,7 +459,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.list:
         get:
             tags:
@@ -488,7 +488,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
     /rpc/toolsets.update/{id}:
         post:
             tags:
@@ -533,7 +533,7 @@ paths:
             schemes:
                 - http
             security:
-                - gram_session_header_Gram-Session: []
+                - session_header_Gram-Session: []
 definitions:
     Asset:
         title: Asset
@@ -1811,8 +1811,8 @@ definitions:
         required:
             - asset
 securityDefinitions:
-    gram_session_header_Gram-Session:
+    session_header_Gram-Session:
         type: apiKey
-        description: Gram Session based auth. By cookie or header.
+        description: Session based auth. By cookie or header.
         name: Gram-Session
         in: header

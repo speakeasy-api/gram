@@ -58,14 +58,14 @@ type CallbackResult struct {
 	// The URL to redirect to after authentication
 	Location string
 	// The authentication session
-	GramSessionToken string
+	SessionToken string
 	// The authentication session
-	GramSessionCookie string
+	SessionCookie string
 }
 
 // InfoPayload is the payload type of the auth service info method.
 type InfoPayload struct {
-	GramSessionToken *string
+	SessionToken *string
 }
 
 // InfoResult is the result type of the auth service info method.
@@ -75,20 +75,20 @@ type InfoResult struct {
 	ActiveOrganizationID string
 	Organizations        []*Organization
 	// The authentication session
-	GramSessionToken string
+	SessionToken string
 	// The authentication session
-	GramSessionCookie string
+	SessionCookie string
 }
 
 // LogoutPayload is the payload type of the auth service logout method.
 type LogoutPayload struct {
-	GramSessionToken *string
+	SessionToken *string
 }
 
 // LogoutResult is the result type of the auth service logout method.
 type LogoutResult struct {
 	// Empty string to clear the session
-	GramSessionCookie string
+	SessionCookie string
 }
 
 type Organization struct {
@@ -111,15 +111,15 @@ type SwitchScopesPayload struct {
 	// The organization slug to switch scopes
 	OrganizationID *string
 	// The project id to switch scopes too
-	ProjectID        *string
-	GramSessionToken *string
+	ProjectID    *string
+	SessionToken *string
 }
 
 // SwitchScopesResult is the result type of the auth service switchScopes
 // method.
 type SwitchScopesResult struct {
 	// The authentication session
-	GramSessionToken string
+	SessionToken string
 	// The authentication session
-	GramSessionCookie string
+	SessionCookie string
 }

@@ -157,28 +157,28 @@ func NewRevokeKeyResponseBody(res *keys.Key) *RevokeKeyResponseBody {
 }
 
 // NewCreateKeyPayload builds a keys service createKey endpoint payload.
-func NewCreateKeyPayload(body *CreateKeyRequestBody, gramSessionToken *string) *keys.CreateKeyPayload {
+func NewCreateKeyPayload(body *CreateKeyRequestBody, sessionToken *string) *keys.CreateKeyPayload {
 	v := &keys.CreateKeyPayload{
 		Name: *body.Name,
 	}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewListKeysPayload builds a keys service listKeys endpoint payload.
-func NewListKeysPayload(gramSessionToken *string) *keys.ListKeysPayload {
+func NewListKeysPayload(sessionToken *string) *keys.ListKeysPayload {
 	v := &keys.ListKeysPayload{}
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v
 }
 
 // NewRevokeKeyPayload builds a keys service revokeKey endpoint payload.
-func NewRevokeKeyPayload(id string, gramSessionToken *string) *keys.RevokeKeyPayload {
+func NewRevokeKeyPayload(id string, sessionToken *string) *keys.RevokeKeyPayload {
 	v := &keys.RevokeKeyPayload{}
 	v.ID = id
-	v.GramSessionToken = gramSessionToken
+	v.SessionToken = sessionToken
 
 	return v
 }

@@ -38,12 +38,12 @@ toolsets (create-toolset|list-toolsets|update-toolset|get-toolset-details)
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Sequi in alias itaque perferendis molestias veritatis." --content-length 5777774205506993134 --project-slug "Qui accusantium commodi ducimus." --gram-session-token "Provident tenetur excepturi architecto est." --stream "goa.png"` + "\n" +
+	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Sequi in alias itaque perferendis molestias veritatis." --content-length 5777774205506993134 --project-slug "Qui accusantium commodi ducimus." --session-token "Provident tenetur excepturi architecto est." --stream "goa.png"` + "\n" +
 		os.Args[0] + ` auth callback --shared-token "Unde laboriosam laborum."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Sunt tenetur sit accusantium." --gram-session-token "Vel sit consequuntur est."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Sunt tenetur sit accusantium." --session-token "Vel sit consequuntur est."` + "\n" +
 		os.Args[0] + ` keys create-key --body '{
       "name": "At expedita magni perferendis amet unde."
-   }' --gram-session-token "Enim error labore vero ut quibusdam iure."` + "\n" +
+   }' --session-token "Enim error labore vero ut quibusdam iure."` + "\n" +
 		os.Args[0] + ` system health-check` + "\n" +
 		""
 }
@@ -60,56 +60,56 @@ func ParseEndpoint(
 	var (
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
-		assetsUploadOpenAPIv3Flags                = flag.NewFlagSet("upload-open-ap-iv3", flag.ExitOnError)
-		assetsUploadOpenAPIv3ContentTypeFlag      = assetsUploadOpenAPIv3Flags.String("content-type", "REQUIRED", "")
-		assetsUploadOpenAPIv3ContentLengthFlag    = assetsUploadOpenAPIv3Flags.String("content-length", "REQUIRED", "")
-		assetsUploadOpenAPIv3ProjectSlugFlag      = assetsUploadOpenAPIv3Flags.String("project-slug", "REQUIRED", "")
-		assetsUploadOpenAPIv3GramSessionTokenFlag = assetsUploadOpenAPIv3Flags.String("gram-session-token", "", "")
-		assetsUploadOpenAPIv3StreamFlag           = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+		assetsUploadOpenAPIv3Flags             = flag.NewFlagSet("upload-open-ap-iv3", flag.ExitOnError)
+		assetsUploadOpenAPIv3ContentTypeFlag   = assetsUploadOpenAPIv3Flags.String("content-type", "REQUIRED", "")
+		assetsUploadOpenAPIv3ContentLengthFlag = assetsUploadOpenAPIv3Flags.String("content-length", "REQUIRED", "")
+		assetsUploadOpenAPIv3ProjectSlugFlag   = assetsUploadOpenAPIv3Flags.String("project-slug", "REQUIRED", "")
+		assetsUploadOpenAPIv3SessionTokenFlag  = assetsUploadOpenAPIv3Flags.String("session-token", "", "")
+		assetsUploadOpenAPIv3StreamFlag        = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
 		authCallbackFlags           = flag.NewFlagSet("callback", flag.ExitOnError)
 		authCallbackSharedTokenFlag = authCallbackFlags.String("shared-token", "REQUIRED", "")
 
-		authSwitchScopesFlags                = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
-		authSwitchScopesOrganizationIDFlag   = authSwitchScopesFlags.String("organization-id", "", "")
-		authSwitchScopesProjectIDFlag        = authSwitchScopesFlags.String("project-id", "", "")
-		authSwitchScopesGramSessionTokenFlag = authSwitchScopesFlags.String("gram-session-token", "", "")
+		authSwitchScopesFlags              = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
+		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
+		authSwitchScopesProjectIDFlag      = authSwitchScopesFlags.String("project-id", "", "")
+		authSwitchScopesSessionTokenFlag   = authSwitchScopesFlags.String("session-token", "", "")
 
-		authLogoutFlags                = flag.NewFlagSet("logout", flag.ExitOnError)
-		authLogoutGramSessionTokenFlag = authLogoutFlags.String("gram-session-token", "", "")
+		authLogoutFlags            = flag.NewFlagSet("logout", flag.ExitOnError)
+		authLogoutSessionTokenFlag = authLogoutFlags.String("session-token", "", "")
 
-		authInfoFlags                = flag.NewFlagSet("info", flag.ExitOnError)
-		authInfoGramSessionTokenFlag = authInfoFlags.String("gram-session-token", "", "")
+		authInfoFlags            = flag.NewFlagSet("info", flag.ExitOnError)
+		authInfoSessionTokenFlag = authInfoFlags.String("session-token", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
-		deploymentsGetDeploymentFlags                = flag.NewFlagSet("get-deployment", flag.ExitOnError)
-		deploymentsGetDeploymentIDFlag               = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
-		deploymentsGetDeploymentGramSessionTokenFlag = deploymentsGetDeploymentFlags.String("gram-session-token", "", "")
+		deploymentsGetDeploymentFlags            = flag.NewFlagSet("get-deployment", flag.ExitOnError)
+		deploymentsGetDeploymentIDFlag           = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
+		deploymentsGetDeploymentSessionTokenFlag = deploymentsGetDeploymentFlags.String("session-token", "", "")
 
-		deploymentsCreateDeploymentFlags                = flag.NewFlagSet("create-deployment", flag.ExitOnError)
-		deploymentsCreateDeploymentBodyFlag             = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
-		deploymentsCreateDeploymentGramSessionTokenFlag = deploymentsCreateDeploymentFlags.String("gram-session-token", "", "")
+		deploymentsCreateDeploymentFlags            = flag.NewFlagSet("create-deployment", flag.ExitOnError)
+		deploymentsCreateDeploymentBodyFlag         = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
+		deploymentsCreateDeploymentSessionTokenFlag = deploymentsCreateDeploymentFlags.String("session-token", "", "")
 
-		deploymentsListDeploymentsFlags                = flag.NewFlagSet("list-deployments", flag.ExitOnError)
-		deploymentsListDeploymentsCursorFlag           = deploymentsListDeploymentsFlags.String("cursor", "", "")
-		deploymentsListDeploymentsLimitFlag            = deploymentsListDeploymentsFlags.String("limit", "10", "")
-		deploymentsListDeploymentsGramSessionTokenFlag = deploymentsListDeploymentsFlags.String("gram-session-token", "", "")
+		deploymentsListDeploymentsFlags            = flag.NewFlagSet("list-deployments", flag.ExitOnError)
+		deploymentsListDeploymentsCursorFlag       = deploymentsListDeploymentsFlags.String("cursor", "", "")
+		deploymentsListDeploymentsLimitFlag        = deploymentsListDeploymentsFlags.String("limit", "10", "")
+		deploymentsListDeploymentsSessionTokenFlag = deploymentsListDeploymentsFlags.String("session-token", "", "")
 
 		keysFlags = flag.NewFlagSet("keys", flag.ContinueOnError)
 
-		keysCreateKeyFlags                = flag.NewFlagSet("create-key", flag.ExitOnError)
-		keysCreateKeyBodyFlag             = keysCreateKeyFlags.String("body", "REQUIRED", "")
-		keysCreateKeyGramSessionTokenFlag = keysCreateKeyFlags.String("gram-session-token", "", "")
+		keysCreateKeyFlags            = flag.NewFlagSet("create-key", flag.ExitOnError)
+		keysCreateKeyBodyFlag         = keysCreateKeyFlags.String("body", "REQUIRED", "")
+		keysCreateKeySessionTokenFlag = keysCreateKeyFlags.String("session-token", "", "")
 
-		keysListKeysFlags                = flag.NewFlagSet("list-keys", flag.ExitOnError)
-		keysListKeysGramSessionTokenFlag = keysListKeysFlags.String("gram-session-token", "", "")
+		keysListKeysFlags            = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		keysListKeysSessionTokenFlag = keysListKeysFlags.String("session-token", "", "")
 
-		keysRevokeKeyFlags                = flag.NewFlagSet("revoke-key", flag.ExitOnError)
-		keysRevokeKeyIDFlag               = keysRevokeKeyFlags.String("id", "REQUIRED", "The ID of the key to revoke")
-		keysRevokeKeyGramSessionTokenFlag = keysRevokeKeyFlags.String("gram-session-token", "", "")
+		keysRevokeKeyFlags            = flag.NewFlagSet("revoke-key", flag.ExitOnError)
+		keysRevokeKeyIDFlag           = keysRevokeKeyFlags.String("id", "REQUIRED", "The ID of the key to revoke")
+		keysRevokeKeySessionTokenFlag = keysRevokeKeyFlags.String("session-token", "", "")
 
 		systemFlags = flag.NewFlagSet("system", flag.ContinueOnError)
 
@@ -117,25 +117,25 @@ func ParseEndpoint(
 
 		toolsetsFlags = flag.NewFlagSet("toolsets", flag.ContinueOnError)
 
-		toolsetsCreateToolsetFlags                = flag.NewFlagSet("create-toolset", flag.ExitOnError)
-		toolsetsCreateToolsetBodyFlag             = toolsetsCreateToolsetFlags.String("body", "REQUIRED", "")
-		toolsetsCreateToolsetGramSessionTokenFlag = toolsetsCreateToolsetFlags.String("gram-session-token", "", "")
-		toolsetsCreateToolsetProjectSlugFlag      = toolsetsCreateToolsetFlags.String("project-slug", "REQUIRED", "")
+		toolsetsCreateToolsetFlags            = flag.NewFlagSet("create-toolset", flag.ExitOnError)
+		toolsetsCreateToolsetBodyFlag         = toolsetsCreateToolsetFlags.String("body", "REQUIRED", "")
+		toolsetsCreateToolsetSessionTokenFlag = toolsetsCreateToolsetFlags.String("session-token", "", "")
+		toolsetsCreateToolsetProjectSlugFlag  = toolsetsCreateToolsetFlags.String("project-slug", "REQUIRED", "")
 
-		toolsetsListToolsetsFlags                = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
-		toolsetsListToolsetsGramSessionTokenFlag = toolsetsListToolsetsFlags.String("gram-session-token", "", "")
-		toolsetsListToolsetsProjectSlugFlag      = toolsetsListToolsetsFlags.String("project-slug", "REQUIRED", "")
+		toolsetsListToolsetsFlags            = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
+		toolsetsListToolsetsSessionTokenFlag = toolsetsListToolsetsFlags.String("session-token", "", "")
+		toolsetsListToolsetsProjectSlugFlag  = toolsetsListToolsetsFlags.String("project-slug", "REQUIRED", "")
 
-		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
-		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
-		toolsetsUpdateToolsetIDFlag               = toolsetsUpdateToolsetFlags.String("id", "REQUIRED", "The ID of the toolset to update")
-		toolsetsUpdateToolsetGramSessionTokenFlag = toolsetsUpdateToolsetFlags.String("gram-session-token", "", "")
-		toolsetsUpdateToolsetProjectSlugFlag      = toolsetsUpdateToolsetFlags.String("project-slug", "REQUIRED", "")
+		toolsetsUpdateToolsetFlags            = flag.NewFlagSet("update-toolset", flag.ExitOnError)
+		toolsetsUpdateToolsetBodyFlag         = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
+		toolsetsUpdateToolsetIDFlag           = toolsetsUpdateToolsetFlags.String("id", "REQUIRED", "The ID of the toolset to update")
+		toolsetsUpdateToolsetSessionTokenFlag = toolsetsUpdateToolsetFlags.String("session-token", "", "")
+		toolsetsUpdateToolsetProjectSlugFlag  = toolsetsUpdateToolsetFlags.String("project-slug", "REQUIRED", "")
 
-		toolsetsGetToolsetDetailsFlags                = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
-		toolsetsGetToolsetDetailsIDFlag               = toolsetsGetToolsetDetailsFlags.String("id", "REQUIRED", "The ID of the toolset")
-		toolsetsGetToolsetDetailsGramSessionTokenFlag = toolsetsGetToolsetDetailsFlags.String("gram-session-token", "", "")
-		toolsetsGetToolsetDetailsProjectSlugFlag      = toolsetsGetToolsetDetailsFlags.String("project-slug", "REQUIRED", "")
+		toolsetsGetToolsetDetailsFlags            = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
+		toolsetsGetToolsetDetailsIDFlag           = toolsetsGetToolsetDetailsFlags.String("id", "REQUIRED", "The ID of the toolset")
+		toolsetsGetToolsetDetailsSessionTokenFlag = toolsetsGetToolsetDetailsFlags.String("session-token", "", "")
+		toolsetsGetToolsetDetailsProjectSlugFlag  = toolsetsGetToolsetDetailsFlags.String("project-slug", "REQUIRED", "")
 	)
 	assetsFlags.Usage = assetsUsage
 	assetsUploadOpenAPIv3Flags.Usage = assetsUploadOpenAPIv3Usage
@@ -304,7 +304,7 @@ func ParseEndpoint(
 			switch epn {
 			case "upload-open-ap-iv3":
 				endpoint = c.UploadOpenAPIv3()
-				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ProjectSlugFlag, *assetsUploadOpenAPIv3GramSessionTokenFlag)
+				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ProjectSlugFlag, *assetsUploadOpenAPIv3SessionTokenFlag)
 				if err == nil {
 					data, err = assetsc.BuildUploadOpenAPIv3StreamPayload(data, *assetsUploadOpenAPIv3StreamFlag)
 				}
@@ -317,39 +317,39 @@ func ParseEndpoint(
 				data, err = authc.BuildCallbackPayload(*authCallbackSharedTokenFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
-				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesGramSessionTokenFlag)
+				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
 			case "logout":
 				endpoint = c.Logout()
-				data, err = authc.BuildLogoutPayload(*authLogoutGramSessionTokenFlag)
+				data, err = authc.BuildLogoutPayload(*authLogoutSessionTokenFlag)
 			case "info":
 				endpoint = c.Info()
-				data, err = authc.BuildInfoPayload(*authInfoGramSessionTokenFlag)
+				data, err = authc.BuildInfoPayload(*authInfoSessionTokenFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "get-deployment":
 				endpoint = c.GetDeployment()
-				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentGramSessionTokenFlag)
+				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentSessionTokenFlag)
 			case "create-deployment":
 				endpoint = c.CreateDeployment()
-				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentGramSessionTokenFlag)
+				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentSessionTokenFlag)
 			case "list-deployments":
 				endpoint = c.ListDeployments()
-				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsLimitFlag, *deploymentsListDeploymentsGramSessionTokenFlag)
+				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsLimitFlag, *deploymentsListDeploymentsSessionTokenFlag)
 			}
 		case "keys":
 			c := keysc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "create-key":
 				endpoint = c.CreateKey()
-				data, err = keysc.BuildCreateKeyPayload(*keysCreateKeyBodyFlag, *keysCreateKeyGramSessionTokenFlag)
+				data, err = keysc.BuildCreateKeyPayload(*keysCreateKeyBodyFlag, *keysCreateKeySessionTokenFlag)
 			case "list-keys":
 				endpoint = c.ListKeys()
-				data, err = keysc.BuildListKeysPayload(*keysListKeysGramSessionTokenFlag)
+				data, err = keysc.BuildListKeysPayload(*keysListKeysSessionTokenFlag)
 			case "revoke-key":
 				endpoint = c.RevokeKey()
-				data, err = keysc.BuildRevokeKeyPayload(*keysRevokeKeyIDFlag, *keysRevokeKeyGramSessionTokenFlag)
+				data, err = keysc.BuildRevokeKeyPayload(*keysRevokeKeyIDFlag, *keysRevokeKeySessionTokenFlag)
 			}
 		case "system":
 			c := systemc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -362,16 +362,16 @@ func ParseEndpoint(
 			switch epn {
 			case "create-toolset":
 				endpoint = c.CreateToolset()
-				data, err = toolsetsc.BuildCreateToolsetPayload(*toolsetsCreateToolsetBodyFlag, *toolsetsCreateToolsetGramSessionTokenFlag, *toolsetsCreateToolsetProjectSlugFlag)
+				data, err = toolsetsc.BuildCreateToolsetPayload(*toolsetsCreateToolsetBodyFlag, *toolsetsCreateToolsetSessionTokenFlag, *toolsetsCreateToolsetProjectSlugFlag)
 			case "list-toolsets":
 				endpoint = c.ListToolsets()
-				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsGramSessionTokenFlag, *toolsetsListToolsetsProjectSlugFlag)
+				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsSessionTokenFlag, *toolsetsListToolsetsProjectSlugFlag)
 			case "update-toolset":
 				endpoint = c.UpdateToolset()
-				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetIDFlag, *toolsetsUpdateToolsetGramSessionTokenFlag, *toolsetsUpdateToolsetProjectSlugFlag)
+				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetIDFlag, *toolsetsUpdateToolsetSessionTokenFlag, *toolsetsUpdateToolsetProjectSlugFlag)
 			case "get-toolset-details":
 				endpoint = c.GetToolsetDetails()
-				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsIDFlag, *toolsetsGetToolsetDetailsGramSessionTokenFlag, *toolsetsGetToolsetDetailsProjectSlugFlag)
+				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsIDFlag, *toolsetsGetToolsetDetailsSessionTokenFlag, *toolsetsGetToolsetDetailsProjectSlugFlag)
 			}
 		}
 	}
@@ -396,17 +396,17 @@ Additional help:
 `, os.Args[0])
 }
 func assetsUploadOpenAPIv3Usage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -project-slug STRING -gram-session-token STRING -stream STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -project-slug STRING -session-token STRING -stream STRING
 
 Upload an OpenAPI v3 document to Gram.
     -content-type STRING: 
     -content-length INT64: 
     -project-slug STRING: 
-    -gram-session-token STRING: 
+    -session-token STRING: 
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Sequi in alias itaque perferendis molestias veritatis." --content-length 5777774205506993134 --project-slug "Qui accusantium commodi ducimus." --gram-session-token "Provident tenetur excepturi architecto est." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Sequi in alias itaque perferendis molestias veritatis." --content-length 5777774205506993134 --project-slug "Qui accusantium commodi ducimus." --session-token "Provident tenetur excepturi architecto est." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -438,37 +438,37 @@ Example:
 }
 
 func authSwitchScopesUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth switch-scopes -organization-id STRING -project-id STRING -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth switch-scopes -organization-id STRING -project-id STRING -session-token STRING
 
 Switches the authentication scope to a different organization.
     -organization-id STRING: 
     -project-id STRING: 
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Omnis aspernatur nihil deleniti." --project-id "Tenetur a ut." --gram-session-token "Deleniti enim sit quia et aut autem."
+    %[1]s auth switch-scopes --organization-id "Omnis aspernatur nihil deleniti." --project-id "Tenetur a ut." --session-token "Deleniti enim sit quia et aut autem."
 `, os.Args[0])
 }
 
 func authLogoutUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth logout -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth logout -session-token STRING
 
 Logs out the current user by clearing their session.
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s auth logout --gram-session-token "Odit ut libero saepe."
+    %[1]s auth logout --session-token "Odit ut libero saepe."
 `, os.Args[0])
 }
 
 func authInfoUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth info -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth info -session-token STRING
 
 Provides information about the current authentication status.
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s auth info --gram-session-token "Rerum animi expedita."
+    %[1]s auth info --session-token "Rerum animi expedita."
 `, os.Args[0])
 }
 
@@ -489,23 +489,23 @@ Additional help:
 `, os.Args[0])
 }
 func deploymentsGetDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -session-token STRING
 
 Create a deployment to load tool definitions.
     -id STRING: 
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Sunt tenetur sit accusantium." --gram-session-token "Vel sit consequuntur est."
+    %[1]s deployments get-deployment --id "Sunt tenetur sit accusantium." --session-token "Vel sit consequuntur est."
 `, os.Args[0])
 }
 
 func deploymentsCreateDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -session-token STRING
 
 Create a deployment to load tool definitions.
     -body JSON: 
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
     %[1]s deployments create-deployment --body '{
@@ -520,20 +520,20 @@ Example:
          "Autem quasi vel.",
          "Quasi enim."
       ]
-   }' --gram-session-token "Omnis eos."
+   }' --session-token "Omnis eos."
 `, os.Args[0])
 }
 
 func deploymentsListDeploymentsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -limit INT -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -limit INT -session-token STRING
 
 List all deployments in descending order of creation.
     -cursor STRING: 
     -limit INT: 
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Eos dignissimos suscipit architecto culpa praesentium." --limit 62 --gram-session-token "Quod occaecati consectetur voluptatem animi aut ad."
+    %[1]s deployments list-deployments --cursor "Eos dignissimos suscipit architecto culpa praesentium." --limit 62 --session-token "Quod occaecati consectetur voluptatem animi aut ad."
 `, os.Args[0])
 }
 
@@ -553,39 +553,39 @@ Additional help:
 `, os.Args[0])
 }
 func keysCreateKeyUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys create-key -body JSON -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys create-key -body JSON -session-token STRING
 
 Create a new api key
     -body JSON: 
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
     %[1]s keys create-key --body '{
       "name": "At expedita magni perferendis amet unde."
-   }' --gram-session-token "Enim error labore vero ut quibusdam iure."
+   }' --session-token "Enim error labore vero ut quibusdam iure."
 `, os.Args[0])
 }
 
 func keysListKeysUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys list-keys -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys list-keys -session-token STRING
 
 List all api keys for an organization
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s keys list-keys --gram-session-token "Aut adipisci."
+    %[1]s keys list-keys --session-token "Aut adipisci."
 `, os.Args[0])
 }
 
 func keysRevokeKeyUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys revoke-key -id STRING -gram-session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys revoke-key -id STRING -session-token STRING
 
 Revoke a api key
     -id STRING: The ID of the key to revoke
-    -gram-session-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s keys revoke-key --id "Ex consequuntur." --gram-session-token "Sit dolores non debitis ipsum."
+    %[1]s keys revoke-key --id "Ex consequuntur." --session-token "Sit dolores non debitis ipsum."
 `, os.Args[0])
 }
 
@@ -629,11 +629,11 @@ Additional help:
 `, os.Args[0])
 }
 func toolsetsCreateToolsetUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets create-toolset -body JSON -gram-session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets create-toolset -body JSON -session-token STRING -project-slug STRING
 
 Create a new toolset with associated tools
     -body JSON: 
-    -gram-session-token STRING: 
+    -session-token STRING: 
     -project-slug STRING: 
 
 Example:
@@ -645,29 +645,29 @@ Example:
          "Magnam qui aut enim."
       ],
       "name": "Voluptas reiciendis."
-   }' --gram-session-token "Error qui distinctio." --project-slug "Qui expedita molestiae debitis maiores qui vel."
+   }' --session-token "Error qui distinctio." --project-slug "Qui expedita molestiae debitis maiores qui vel."
 `, os.Args[0])
 }
 
 func toolsetsListToolsetsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets list-toolsets -gram-session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets list-toolsets -session-token STRING -project-slug STRING
 
 List all toolsets for a project
-    -gram-session-token STRING: 
+    -session-token STRING: 
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --gram-session-token "Nihil cupiditate." --project-slug "Ducimus soluta fuga omnis iste optio ullam."
+    %[1]s toolsets list-toolsets --session-token "Nihil cupiditate." --project-slug "Ducimus soluta fuga omnis iste optio ullam."
 `, os.Args[0])
 }
 
 func toolsetsUpdateToolsetUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets update-toolset -body JSON -id STRING -gram-session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets update-toolset -body JSON -id STRING -session-token STRING -project-slug STRING
 
 Update a toolset's properties including name, description, and HTTP tools
     -body JSON: 
     -id STRING: The ID of the toolset to update
-    -gram-session-token STRING: 
+    -session-token STRING: 
     -project-slug STRING: 
 
 Example:
@@ -683,19 +683,19 @@ Example:
          "Repudiandae est."
       ],
       "name": "Est aliquid sed sed qui."
-   }' --id "Eum sit." --gram-session-token "Ut et voluptatem voluptatum." --project-slug "Itaque esse."
+   }' --id "Eum sit." --session-token "Ut et voluptatem voluptatum." --project-slug "Itaque esse."
 `, os.Args[0])
 }
 
 func toolsetsGetToolsetDetailsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -id STRING -gram-session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -id STRING -session-token STRING -project-slug STRING
 
 Get detailed information about a toolset including full HTTP tool definitions
     -id STRING: The ID of the toolset
-    -gram-session-token STRING: 
+    -session-token STRING: 
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --id "Aperiam explicabo et distinctio." --gram-session-token "Facere quos dolore." --project-slug "Quod aspernatur reiciendis."
+    %[1]s toolsets get-toolset-details --id "Aperiam explicabo et distinctio." --session-token "Facere quos dolore." --project-slug "Quod aspernatur reiciendis."
 `, os.Args[0])
 }
