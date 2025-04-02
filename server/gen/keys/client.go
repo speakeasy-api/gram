@@ -50,11 +50,7 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKey
 }
 
 // RevokeKey calls the "revokeKey" endpoint of the "keys" service.
-func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (res *Key, err error) {
-	var ires any
-	ires, err = c.RevokeKeyEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*Key), nil
+func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error) {
+	_, err = c.RevokeKeyEndpoint(ctx, p)
+	return
 }

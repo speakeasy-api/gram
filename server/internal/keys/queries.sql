@@ -61,3 +61,10 @@ FROM api_keys
 WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY created_at DESC;
+
+-- name: DeleteAPIKey :exec
+UPDATE api_keys
+SET deleted_at = NOW()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted_at IS NULL;

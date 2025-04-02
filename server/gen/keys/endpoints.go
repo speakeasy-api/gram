@@ -104,6 +104,6 @@ func NewRevokeKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		if err != nil {
 			return nil, err
 		}
-		return s.RevokeKey(ctx, p)
+		return nil, s.RevokeKey(ctx, p)
 	}
 }

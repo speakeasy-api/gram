@@ -48,29 +48,6 @@ type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 }
 
-// RevokeKeyResponseBody is the type of the "keys" service "revokeKey" endpoint
-// HTTP response body.
-type RevokeKeyResponseBody struct {
-	// The ID of the key
-	ID string `form:"id" json:"id" xml:"id"`
-	// The organization ID this key belongs to
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The optional project ID this key is scoped to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The ID of the user who created this key
-	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
-	// The name of the key
-	Name string `form:"name" json:"name" xml:"name"`
-	// The API token value
-	Token string `form:"token" json:"token" xml:"token"`
-	// List of permission scopes for this key
-	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
-	// The creation date of the key.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the key was last updated.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
 // KeyResponseBody is used to define fields on response body types.
 type KeyResponseBody struct {
 	// The ID of the key
@@ -128,30 +105,6 @@ func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
 		}
 	} else {
 		body.Keys = []*KeyResponseBody{}
-	}
-	return body
-}
-
-// NewRevokeKeyResponseBody builds the HTTP response body from the result of
-// the "revokeKey" endpoint of the "keys" service.
-func NewRevokeKeyResponseBody(res *keys.Key) *RevokeKeyResponseBody {
-	body := &RevokeKeyResponseBody{
-		ID:              res.ID,
-		OrganizationID:  res.OrganizationID,
-		ProjectID:       res.ProjectID,
-		CreatedByUserID: res.CreatedByUserID,
-		Name:            res.Name,
-		Token:           res.Token,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
-	}
-	if res.Scopes != nil {
-		body.Scopes = make([]string, len(res.Scopes))
-		for i, val := range res.Scopes {
-			body.Scopes[i] = val
-		}
-	} else {
-		body.Scopes = []string{}
 	}
 	return body
 }

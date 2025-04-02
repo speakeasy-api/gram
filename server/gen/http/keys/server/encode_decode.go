@@ -115,11 +115,8 @@ func DecodeListKeysRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 // keys revokeKey endpoint.
 func EncodeRevokeKeyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*keys.Key)
-		enc := encoder(ctx, w)
-		body := NewRevokeKeyResponseBody(res)
 		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
+		return nil
 	}
 }
 

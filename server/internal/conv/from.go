@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -16,6 +17,15 @@ func FromPGText(t pgtype.Text) *string {
 		return nil
 	}
 	return &t.String
+}
+
+func FromNullableUUID(u uuid.NullUUID) *string {
+	if !u.Valid {
+		return nil
+	}
+
+	val := u.UUID.String()
+	return &val
 }
 
 func FromBytes(b []byte) *string {

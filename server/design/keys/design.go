@@ -51,8 +51,6 @@ var _ = Service("keys", func() {
 			sessions.SessionPayload()
 		})
 
-		Result(KeyModel)
-
 		HTTP(func() {
 			Param("id")
 			POST("/rpc/keys.revoke/{id}")
@@ -70,8 +68,8 @@ var CreateKeyForm = Type("CreateKeyForm", func() {
 })
 
 var ListKeysResult = Type("ListKeysResult", func() {
-	Required("keys")
 	Attribute("keys", ArrayOf(KeyModel))
+	Required("keys")
 })
 
 var KeyModel = Type("Key", func() {

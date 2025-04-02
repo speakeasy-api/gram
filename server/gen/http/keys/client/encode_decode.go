@@ -224,20 +224,7 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 		}
 		switch resp.StatusCode {
 		case http.StatusOK:
-			var (
-				body RevokeKeyResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
-			}
-			err = ValidateRevokeKeyResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
-			}
-			res := NewRevokeKeyKeyOK(&body)
-			return res, nil
+			return nil, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("keys", "revokeKey", resp.StatusCode, string(body))

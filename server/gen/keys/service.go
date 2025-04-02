@@ -20,7 +20,7 @@ type Service interface {
 	// List all api keys for an organization
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
-	RevokeKey(context.Context, *RevokeKeyPayload) (res *Key, err error)
+	RevokeKey(context.Context, *RevokeKeyPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.

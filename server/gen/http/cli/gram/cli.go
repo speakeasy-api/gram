@@ -638,14 +638,13 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "description": "Eveniet sequi doloribus aperiam.",
+      "description": "Blanditiis qui mollitia molestias iste mollitia consequatur.",
       "http_tool_ids": [
-         "Perferendis velit est.",
-         "Minima molestiae et tenetur sed.",
-         "Magnam qui aut enim."
+         "Ipsa minus quo nihil.",
+         "Et veritatis totam."
       ],
-      "name": "Voluptas reiciendis."
-   }' --session-token "Error qui distinctio." --project-slug "Qui expedita molestiae debitis maiores qui vel."
+      "name": "Optio est."
+   }' --session-token "Dolor quo." --project-slug "Fugit dolore nulla in."
 `, os.Args[0])
 }
 
@@ -657,7 +656,7 @@ List all toolsets for a project
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Nihil cupiditate." --project-slug "Ducimus soluta fuga omnis iste optio ullam."
+    %[1]s toolsets list-toolsets --session-token "Expedita molestiae debitis." --project-slug "Qui vel quis sequi magni id et."
 `, os.Args[0])
 }
 
@@ -672,18 +671,17 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "description": "Ut tempora.",
+      "description": "Iste optio ullam.",
       "http_tool_ids_to_add": [
-         "Culpa quod mollitia facere vero laboriosam.",
-         "Et aut voluptatem saepe hic.",
-         "Architecto doloribus architecto nihil."
+         "Animi tenetur nesciunt et est et.",
+         "Nam quis."
       ],
       "http_tool_ids_to_remove": [
-         "Vel aut laboriosam et.",
-         "Repudiandae est."
+         "Animi sequi.",
+         "Amet sapiente."
       ],
-      "name": "Est aliquid sed sed qui."
-   }' --id "Eum sit." --session-token "Ut et voluptatem voluptatum." --project-slug "Itaque esse."
+      "name": "Soluta fuga."
+   }' --id "Rerum id unde dolores delectus illum nisi." --session-token "Et sunt voluptas." --project-slug "Ut explicabo quis."
 `, os.Args[0])
 }
 
@@ -696,6 +694,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --id "Aperiam explicabo et distinctio." --session-token "Facere quos dolore." --project-slug "Quod aspernatur reiciendis."
+    %[1]s toolsets get-toolset-details --id "Est ratione eum sit." --session-token "Ut et voluptatem voluptatum." --project-slug "Itaque esse."
 `, os.Args[0])
 }

@@ -48,29 +48,6 @@ type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
 }
 
-// RevokeKeyResponseBody is the type of the "keys" service "revokeKey" endpoint
-// HTTP response body.
-type RevokeKeyResponseBody struct {
-	// The ID of the key
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The organization ID this key belongs to
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The optional project ID this key is scoped to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The ID of the user who created this key
-	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// The name of the key
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The API token value
-	Token *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
-	// List of permission scopes for this key
-	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
-	// The creation date of the key.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the key was last updated.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
 // KeyResponseBody is used to define fields on response body types.
 type KeyResponseBody struct {
 	// The ID of the key
@@ -135,27 +112,6 @@ func NewListKeysResultOK(body *ListKeysResponseBody) *keys.ListKeysResult {
 	return v
 }
 
-// NewRevokeKeyKeyOK builds a "keys" service "revokeKey" endpoint result from a
-// HTTP "OK" response.
-func NewRevokeKeyKeyOK(body *RevokeKeyResponseBody) *keys.Key {
-	v := &keys.Key{
-		ID:              *body.ID,
-		OrganizationID:  *body.OrganizationID,
-		ProjectID:       body.ProjectID,
-		CreatedByUserID: *body.CreatedByUserID,
-		Name:            *body.Name,
-		Token:           *body.Token,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
-	}
-	v.Scopes = make([]string, len(body.Scopes))
-	for i, val := range body.Scopes {
-		v.Scopes[i] = val
-	}
-
-	return v
-}
-
 // ValidateCreateKeyResponseBody runs the validations defined on
 // CreateKeyResponseBody
 func ValidateCreateKeyResponseBody(body *CreateKeyResponseBody) (err error) {
@@ -204,42 +160,6 @@ func ValidateListKeysResponseBody(body *ListKeysResponseBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	return
-}
-
-// ValidateRevokeKeyResponseBody runs the validations defined on
-// RevokeKeyResponseBody
-func ValidateRevokeKeyResponseBody(body *RevokeKeyResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.CreatedByUserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_by_user_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Token == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
-	}
-	if body.Scopes == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
