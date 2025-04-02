@@ -10,13 +10,13 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ToolsetsNumberListToolsetsRequest = {
   /**
-   * The project ID this toolset belongs to
-   */
-  projectId: string;
-  /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject: string;
 };
 
 /** @internal */
@@ -25,19 +25,19 @@ export const ToolsetsNumberListToolsetsRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  project_id: z.string(),
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string(),
 }).transform((v) => {
   return remap$(v, {
-    "project_id": "projectId",
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
   });
 });
 
 /** @internal */
 export type ToolsetsNumberListToolsetsRequest$Outbound = {
-  project_id: string;
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
+  "Gram-Project": string;
 };
 
 /** @internal */
@@ -46,12 +46,12 @@ export const ToolsetsNumberListToolsetsRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ToolsetsNumberListToolsetsRequest
 > = z.object({
-  projectId: z.string(),
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
+  gramProject: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    projectId: "project_id",
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
+    gramProject: "Gram-Project",
   });
 });
 

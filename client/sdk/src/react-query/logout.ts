@@ -25,9 +25,7 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type AuthAuthNumberLogoutQueryData =
-  | operations.AuthNumberLogoutResponse
-  | undefined;
+export type LogoutQueryData = operations.AuthNumberLogoutResponse | undefined;
 
 /**
  * logout auth
@@ -35,13 +33,13 @@ export type AuthAuthNumberLogoutQueryData =
  * @remarks
  * Logs out the current user by clearing their session.
  */
-export function useAuthAuthNumberLogout(
+export function useLogout(
   request?: operations.AuthNumberLogoutRequest | undefined,
-  options?: QueryHookOptions<AuthAuthNumberLogoutQueryData>,
-): UseQueryResult<AuthAuthNumberLogoutQueryData, Error> {
+  options?: QueryHookOptions<LogoutQueryData>,
+): UseQueryResult<LogoutQueryData, Error> {
   const client = useGramContext();
   return useQuery({
-    ...buildAuthAuthNumberLogoutQuery(
+    ...buildLogoutQuery(
       client,
       request,
       options,
@@ -56,13 +54,13 @@ export function useAuthAuthNumberLogout(
  * @remarks
  * Logs out the current user by clearing their session.
  */
-export function useAuthAuthNumberLogoutSuspense(
+export function useLogoutSuspense(
   request?: operations.AuthNumberLogoutRequest | undefined,
-  options?: SuspenseQueryHookOptions<AuthAuthNumberLogoutQueryData>,
-): UseSuspenseQueryResult<AuthAuthNumberLogoutQueryData, Error> {
+  options?: SuspenseQueryHookOptions<LogoutQueryData>,
+): UseSuspenseQueryResult<LogoutQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAuthAuthNumberLogoutQuery(
+    ...buildLogoutQuery(
       client,
       request,
       options,
@@ -71,33 +69,33 @@ export function useAuthAuthNumberLogoutSuspense(
   });
 }
 
-export function prefetchAuthAuthNumberLogout(
+export function prefetchLogout(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.AuthNumberLogoutRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAuthAuthNumberLogoutQuery(
+    ...buildLogoutQuery(
       client$,
       request,
     ),
   });
 }
 
-export function setAuthAuthNumberLogoutData(
+export function setLogoutData(
   client: QueryClient,
-  queryKeyBase: [parameters: { xGramSession?: string | undefined }],
-  data: AuthAuthNumberLogoutQueryData,
-): AuthAuthNumberLogoutQueryData | undefined {
-  const key = queryKeyAuthAuthNumberLogout(...queryKeyBase);
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  data: LogoutQueryData,
+): LogoutQueryData | undefined {
+  const key = queryKeyLogout(...queryKeyBase);
 
-  return client.setQueryData<AuthAuthNumberLogoutQueryData>(key, data);
+  return client.setQueryData<LogoutQueryData>(key, data);
 }
 
-export function invalidateAuthAuthNumberLogout(
+export function invalidateLogout(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { xGramSession?: string | undefined }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -107,7 +105,7 @@ export function invalidateAuthAuthNumberLogout(
   });
 }
 
-export function invalidateAllAuthAuthNumberLogout(
+export function invalidateAllLogout(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -117,23 +115,17 @@ export function invalidateAllAuthAuthNumberLogout(
   });
 }
 
-export function buildAuthAuthNumberLogoutQuery(
+export function buildLogoutQuery(
   client$: GramCore,
   request?: operations.AuthNumberLogoutRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<AuthAuthNumberLogoutQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<LogoutQueryData>;
 } {
   return {
-    queryKey: queryKeyAuthAuthNumberLogout({
-      xGramSession: request?.xGramSession,
-    }),
-    queryFn: async function authAuthNumberLogoutQueryFn(
-      ctx,
-    ): Promise<AuthAuthNumberLogoutQueryData> {
+    queryKey: queryKeyLogout({ gramSession: request?.gramSession }),
+    queryFn: async function logoutQueryFn(ctx): Promise<LogoutQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
       const mergedOptions = {
         ...options,
@@ -149,8 +141,8 @@ export function buildAuthAuthNumberLogoutQuery(
   };
 }
 
-export function queryKeyAuthAuthNumberLogout(
-  parameters: { xGramSession?: string | undefined },
+export function queryKeyLogout(
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/sdk", "auth", "authNumberLogout", parameters];
 }

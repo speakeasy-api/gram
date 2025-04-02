@@ -49,9 +49,9 @@ export const startCommand = buildCommand({
           },
         }
         : {}),
-      "gram-session-header-x-gram-session": {
+      "session-header-gram-session": {
         kind: "parsed",
-        brief: "Sets the gramSessionHeaderXGramSession auth field for the API",
+        brief: "Sets the sessionHeaderGramSession auth field for the API",
         optional: true,
         parse: (value) => {
           return z.string().parse(value);

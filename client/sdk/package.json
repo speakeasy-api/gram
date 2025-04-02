@@ -1,6 +1,6 @@
 {
   "name": "@gram/sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "Speakeasy",
   "type": "module",
   "bin": {
@@ -33,11 +33,6 @@
       "source": "./src/models/operations/index.ts",
       "types": "./esm/models/operations/index.d.ts",
       "default": "./esm/models/operations/index.js"
-    },
-    "./react-query": {
-      "source": "./src/react-query/index.ts",
-      "types": "./esm/react-query/index.d.ts",
-      "default": "./esm/react-query/index.js"
     },
     "./*.js": {
       "source": "./src/*.ts",

@@ -16,6 +16,8 @@ var _ = Service("system", func() {
 			GET("/health")
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 })
 

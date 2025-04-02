@@ -93,24 +93,22 @@ async function $do(
       payload["Content-Length"],
       { explode: false, charEncoding: "none" },
     ),
-    "Gram-Project-ID": encodeSimple(
-      "Gram-Project-ID",
-      payload["Gram-Project-ID"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "X-Gram-Session": encodeSimple(
-      "X-Gram-Session",
-      payload["X-Gram-Session"],
-      { explode: false, charEncoding: "none" },
-    ),
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+      explode: false,
+      charEncoding: "none",
+    }),
   }));
 
   const secConfig = await extractSecurity(
-    client._options.gramSessionHeaderXGramSession,
+    client._options.sessionHeaderGramSession,
   );
   const securityInput = secConfig == null
     ? {}
-    : { gramSessionHeaderXGramSession: secConfig };
+    : { sessionHeaderGramSession: secConfig };
   const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
@@ -120,7 +118,7 @@ async function $do(
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.gramSessionHeaderXGramSession,
+    securitySource: client._options.sessionHeaderGramSession,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },

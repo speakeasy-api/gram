@@ -8,7 +8,7 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type CreateToolsetForm = {
+export type CreateToolsetRequestBody = {
   /**
    * Description of the toolset
    */
@@ -21,51 +21,42 @@ export type CreateToolsetForm = {
    * The name of the toolset
    */
   name: string;
-  /**
-   * The project ID this toolset belongs to
-   */
-  projectId: string;
 };
 
 /** @internal */
-export const CreateToolsetForm$inboundSchema: z.ZodType<
-  CreateToolsetForm,
+export const CreateToolsetRequestBody$inboundSchema: z.ZodType<
+  CreateToolsetRequestBody,
   z.ZodTypeDef,
   unknown
 > = z.object({
   description: z.string().optional(),
   http_tool_ids: z.array(z.string()).optional(),
   name: z.string(),
-  project_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "http_tool_ids": "httpToolIds",
-    "project_id": "projectId",
   });
 });
 
 /** @internal */
-export type CreateToolsetForm$Outbound = {
+export type CreateToolsetRequestBody$Outbound = {
   description?: string | undefined;
   http_tool_ids?: Array<string> | undefined;
   name: string;
-  project_id: string;
 };
 
 /** @internal */
-export const CreateToolsetForm$outboundSchema: z.ZodType<
-  CreateToolsetForm$Outbound,
+export const CreateToolsetRequestBody$outboundSchema: z.ZodType<
+  CreateToolsetRequestBody$Outbound,
   z.ZodTypeDef,
-  CreateToolsetForm
+  CreateToolsetRequestBody
 > = z.object({
   description: z.string().optional(),
   httpToolIds: z.array(z.string()).optional(),
   name: z.string(),
-  projectId: z.string(),
 }).transform((v) => {
   return remap$(v, {
     httpToolIds: "http_tool_ids",
-    projectId: "project_id",
   });
 });
 
@@ -73,29 +64,29 @@ export const CreateToolsetForm$outboundSchema: z.ZodType<
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace CreateToolsetForm$ {
-  /** @deprecated use `CreateToolsetForm$inboundSchema` instead. */
-  export const inboundSchema = CreateToolsetForm$inboundSchema;
-  /** @deprecated use `CreateToolsetForm$outboundSchema` instead. */
-  export const outboundSchema = CreateToolsetForm$outboundSchema;
-  /** @deprecated use `CreateToolsetForm$Outbound` instead. */
-  export type Outbound = CreateToolsetForm$Outbound;
+export namespace CreateToolsetRequestBody$ {
+  /** @deprecated use `CreateToolsetRequestBody$inboundSchema` instead. */
+  export const inboundSchema = CreateToolsetRequestBody$inboundSchema;
+  /** @deprecated use `CreateToolsetRequestBody$outboundSchema` instead. */
+  export const outboundSchema = CreateToolsetRequestBody$outboundSchema;
+  /** @deprecated use `CreateToolsetRequestBody$Outbound` instead. */
+  export type Outbound = CreateToolsetRequestBody$Outbound;
 }
 
-export function createToolsetFormToJSON(
-  createToolsetForm: CreateToolsetForm,
+export function createToolsetRequestBodyToJSON(
+  createToolsetRequestBody: CreateToolsetRequestBody,
 ): string {
   return JSON.stringify(
-    CreateToolsetForm$outboundSchema.parse(createToolsetForm),
+    CreateToolsetRequestBody$outboundSchema.parse(createToolsetRequestBody),
   );
 }
 
-export function createToolsetFormFromJSON(
+export function createToolsetRequestBodyFromJSON(
   jsonString: string,
-): SafeParseResult<CreateToolsetForm, SDKValidationError> {
+): SafeParseResult<CreateToolsetRequestBody, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => CreateToolsetForm$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CreateToolsetForm' from JSON`,
+    (x) => CreateToolsetRequestBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreateToolsetRequestBody' from JSON`,
   );
 }

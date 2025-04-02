@@ -12,7 +12,7 @@ export type AuthNumberLogoutRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
 };
 
 export type AuthNumberLogoutResponse = {
@@ -25,16 +25,16 @@ export const AuthNumberLogoutRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
   });
 });
 
 /** @internal */
 export type AuthNumberLogoutRequest$Outbound = {
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -43,10 +43,10 @@ export const AuthNumberLogoutRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   AuthNumberLogoutRequest
 > = z.object({
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
   });
 });
 

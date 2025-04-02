@@ -27,6 +27,8 @@ var _ = Service("assets", func() {
 			sessions.SessionHeader()
 			SkipRequestBodyEncodeDecode()
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenAPIv3"}`)
 	})
 })
 

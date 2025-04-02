@@ -25,6 +25,8 @@ var _ = Service("toolsets", func() {
 			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateToolset"}`)
 	})
 
 	Method("listToolsets", func() {
@@ -43,6 +45,8 @@ var _ = Service("toolsets", func() {
 			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
 	})
 
 	Method("updateToolset", func() {
@@ -62,6 +66,8 @@ var _ = Service("toolsets", func() {
 			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateToolset"}`)
 	})
 
 	Method("getToolsetDetails", func() {
@@ -83,6 +89,8 @@ var _ = Service("toolsets", func() {
 			GET("/rpc/toolsets.get/{id}")
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Toolset"}`)
 	})
 })
 

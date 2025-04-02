@@ -19,7 +19,7 @@ interface StartCommandFlags {
   readonly port: number;
   readonly tool?: string[];
   readonly scope?: MCPScope[];
-  readonly "gram-session-header-x-gram-session"?: string | undefined;
+  readonly "session-header-gram-session"?: string | undefined;
   readonly "server-url"?: string;
   readonly "server-index"?: SDKOptions["serverIdx"];
   readonly "log-level": ConsoleLoggerLevel;
@@ -50,10 +50,7 @@ async function startStdio(flags: StartCommandFlags) {
     logger,
     allowedTools: flags.tool,
     scopes: flags.scope,
-    ...{
-      gramSessionHeaderXGramSession:
-        flags["gram-session-header-x-gram-session"],
-    },
+    ...{ sessionHeaderGramSession: flags["session-header-gram-session"] },
     serverURL: flags["server-url"],
     serverIdx: flags["server-index"],
   });
@@ -74,10 +71,7 @@ async function startSSE(flags: StartCommandFlags) {
     logger,
     allowedTools: flags.tool,
     scopes: flags.scope,
-    ...{
-      gramSessionHeaderXGramSession:
-        flags["gram-session-header-x-gram-session"],
-    },
+    ...{ sessionHeaderGramSession: flags["session-header-gram-session"] },
     serverURL: flags["server-url"],
     serverIdx: flags["server-index"],
   });

@@ -22,12 +22,12 @@ Handles the authentication callback.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.auth.authNumberCallback({
-    sharedToken: "Mollitia labore et id nihil id.",
+    sharedToken: "Occaecati autem est itaque in veniam.",
   });
 
   // Handle the result
@@ -48,12 +48,12 @@ import { authAuthNumberCallback } from "@gram/sdk/funcs/authAuthNumberCallback.j
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await authAuthNumberCallback(gram, {
-    sharedToken: "Mollitia labore et id nihil id.",
+    sharedToken: "Occaecati autem est itaque in veniam.",
   });
 
   if (!res.ok) {
@@ -67,34 +67,6 @@ async function run() {
 }
 
 run();
-```
-
-### React hooks and utilities
-
-This method can be used in React components through the following hooks and
-associated utilities.
-
-> Check out [this guide][hook-guide] for information about each of the utilities
-> below and how to get started using React hooks.
-
-[hook-guide]: ../../../REACT_QUERY.md
-
-```tsx
-import {
-  // Query hooks for fetching data.
-  useAuthAuthNumberCallback,
-  useAuthAuthNumberCallbackSuspense,
-
-  // Utility for prefetching data during server-side rendering and in React
-  // Server Components that will be immediately available to client components
-  // using the hooks.
-  prefetchAuthAuthNumberCallback,
-  
-  // Utilities to invalidate the query cache for this query in response to
-  // mutations and other user actions.
-  invalidateAuthAuthNumberCallback,
-  invalidateAllAuthAuthNumberCallback,
-} from "@gram/sdk/react-query/authAuthNumberCallback.js";
 ```
 
 ### Parameters
@@ -126,12 +98,12 @@ Provides information about the current authentication status.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.auth.authNumberInfo({
-    xGramSession: "Recusandae et soluta ex.",
+    gramSession: "Consequuntur error suscipit optio sunt eum.",
   });
 
   // Handle the result
@@ -152,12 +124,12 @@ import { authAuthNumberInfo } from "@gram/sdk/funcs/authAuthNumberInfo.js";
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await authAuthNumberInfo(gram, {
-    xGramSession: "Recusandae et soluta ex.",
+    gramSession: "Consequuntur error suscipit optio sunt eum.",
   });
 
   if (!res.ok) {
@@ -186,18 +158,18 @@ associated utilities.
 ```tsx
 import {
   // Query hooks for fetching data.
-  useAuthAuthNumberInfo,
-  useAuthAuthNumberInfoSuspense,
+  useSessionInfo,
+  useSessionInfoSuspense,
 
   // Utility for prefetching data during server-side rendering and in React
   // Server Components that will be immediately available to client components
   // using the hooks.
-  prefetchAuthAuthNumberInfo,
+  prefetchSessionInfo,
   
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
-  invalidateAuthAuthNumberInfo,
-  invalidateAllAuthAuthNumberInfo,
+  invalidateSessionInfo,
+  invalidateAllSessionInfo,
 } from "@gram/sdk/react-query/authAuthNumberInfo.js";
 ```
 
@@ -230,12 +202,12 @@ Logs out the current user by clearing their session.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.auth.authNumberLogout({
-    xGramSession: "A atque voluptatum non velit iste possimus.",
+    gramSession: "Quibusdam quia ea consequuntur.",
   });
 
   // Handle the result
@@ -256,12 +228,12 @@ import { authAuthNumberLogout } from "@gram/sdk/funcs/authAuthNumberLogout.js";
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await authAuthNumberLogout(gram, {
-    xGramSession: "A atque voluptatum non velit iste possimus.",
+    gramSession: "Quibusdam quia ea consequuntur.",
   });
 
   if (!res.ok) {
@@ -290,18 +262,18 @@ associated utilities.
 ```tsx
 import {
   // Query hooks for fetching data.
-  useAuthAuthNumberLogout,
-  useAuthAuthNumberLogoutSuspense,
+  useLogout,
+  useLogoutSuspense,
 
   // Utility for prefetching data during server-side rendering and in React
   // Server Components that will be immediately available to client components
   // using the hooks.
-  prefetchAuthAuthNumberLogout,
+  prefetchLogout,
   
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
-  invalidateAuthAuthNumberLogout,
-  invalidateAllAuthAuthNumberLogout,
+  invalidateLogout,
+  invalidateAllLogout,
 } from "@gram/sdk/react-query/authAuthNumberLogout.js";
 ```
 
@@ -334,14 +306,14 @@ Switches the authentication scope to a different organization.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.auth.authNumberSwitchScopes({
-    organizationId: "Quaerat tenetur et rerum non.",
-    projectId: "Vero odio voluptas aut.",
-    xGramSession: "Molestiae mollitia voluptatem.",
+    organizationId: "Beatae in dolor aut illo.",
+    projectId: "Incidunt natus exercitationem est.",
+    gramSession: "Eveniet numquam sint quam.",
   });
 
   // Handle the result
@@ -362,14 +334,14 @@ import { authAuthNumberSwitchScopes } from "@gram/sdk/funcs/authAuthNumberSwitch
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await authAuthNumberSwitchScopes(gram, {
-    organizationId: "Quaerat tenetur et rerum non.",
-    projectId: "Vero odio voluptas aut.",
-    xGramSession: "Molestiae mollitia voluptatem.",
+    organizationId: "Beatae in dolor aut illo.",
+    projectId: "Incidunt natus exercitationem est.",
+    gramSession: "Eveniet numquam sint quam.",
   });
 
   if (!res.ok) {
@@ -398,7 +370,7 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useAuthAuthNumberSwitchScopesMutation
+  useSwitchScopesMutation
 } from "@gram/sdk/react-query/authAuthNumberSwitchScopes.js";
 ```
 

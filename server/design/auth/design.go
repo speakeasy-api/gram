@@ -37,6 +37,8 @@ var _ = Service("auth", func() {
 				sessions.SessionHeader()
 			})
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 
 	Method("switchScopes", func() {
@@ -64,6 +66,8 @@ var _ = Service("auth", func() {
 				sessions.SessionHeader()
 			})
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SwitchScopes"}`)
 	})
 
 	Method("logout", func() {
@@ -86,6 +90,8 @@ var _ = Service("auth", func() {
 				sessions.DeleteSessionCookie()
 			})
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Logout"}`)
 	})
 
 	Method("info", func() {
@@ -115,6 +121,8 @@ var _ = Service("auth", func() {
 				sessions.SessionHeader()
 			})
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionInfo"}`)
 	})
 })
 

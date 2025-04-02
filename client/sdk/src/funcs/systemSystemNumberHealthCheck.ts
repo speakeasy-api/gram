@@ -73,11 +73,11 @@ async function $do(
   }));
 
   const secConfig = await extractSecurity(
-    client._options.gramSessionHeaderXGramSession,
+    client._options.sessionHeaderGramSession,
   );
   const securityInput = secConfig == null
     ? {}
-    : { gramSessionHeaderXGramSession: secConfig };
+    : { sessionHeaderGramSession: secConfig };
   const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
@@ -87,7 +87,7 @@ async function $do(
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.gramSessionHeaderXGramSession,
+    securitySource: client._options.sessionHeaderGramSession,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },

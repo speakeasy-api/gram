@@ -22,21 +22,20 @@ Create a new toolset with associated tools
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.toolsets.toolsetsNumberCreateToolset({
-    xGramSession: "Earum dolorum ipsam enim temporibus aut omnis.",
-    createToolsetForm: {
-      description: "Voluptatem mollitia dolor explicabo doloribus.",
+    gramSession: "Quis numquam exercitationem earum vel eveniet culpa.",
+    gramProject: "Nam dolorem ipsum.",
+    createToolsetRequestBody: {
+      description: "Blanditiis qui mollitia molestias iste mollitia consequatur.",
       httpToolIds: [
-        "Assumenda commodi pariatur reprehenderit.",
-        "Ipsa molestiae voluptas nemo.",
-        "Iusto voluptas culpa sed.",
+        "Ipsa minus quo nihil.",
+        "Et veritatis totam.",
       ],
-      name: "Labore consectetur doloribus distinctio officiis.",
-      projectId: "Eos dolorem excepturi voluptatibus quisquam.",
+      name: "Optio est.",
     },
   });
 
@@ -58,21 +57,20 @@ import { toolsetsToolsetsNumberCreateToolset } from "@gram/sdk/funcs/toolsetsToo
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await toolsetsToolsetsNumberCreateToolset(gram, {
-    xGramSession: "Earum dolorum ipsam enim temporibus aut omnis.",
-    createToolsetForm: {
-      description: "Voluptatem mollitia dolor explicabo doloribus.",
+    gramSession: "Quis numquam exercitationem earum vel eveniet culpa.",
+    gramProject: "Nam dolorem ipsum.",
+    createToolsetRequestBody: {
+      description: "Blanditiis qui mollitia molestias iste mollitia consequatur.",
       httpToolIds: [
-        "Assumenda commodi pariatur reprehenderit.",
-        "Ipsa molestiae voluptas nemo.",
-        "Iusto voluptas culpa sed.",
+        "Ipsa minus quo nihil.",
+        "Et veritatis totam.",
       ],
-      name: "Labore consectetur doloribus distinctio officiis.",
-      projectId: "Eos dolorem excepturi voluptatibus quisquam.",
+      name: "Optio est.",
     },
   });
 
@@ -102,7 +100,7 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useToolsetsToolsetsNumberCreateToolsetMutation
+  useCreateToolsetMutation
 } from "@gram/sdk/react-query/toolsetsToolsetsNumberCreateToolset.js";
 ```
 
@@ -135,13 +133,14 @@ Get detailed information about a toolset including full HTTP tool definitions
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.toolsets.toolsetsNumberGetToolsetDetails({
-    id: "Et consectetur velit asperiores.",
-    xGramSession: "Optio qui quo.",
+    id: "Dolor veniam quae sed labore et.",
+    gramSession: "Rerum rem ducimus.",
+    gramProject: "Est molestiae omnis ducimus ut et delectus.",
   });
 
   // Handle the result
@@ -162,13 +161,14 @@ import { toolsetsToolsetsNumberGetToolsetDetails } from "@gram/sdk/funcs/toolset
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await toolsetsToolsetsNumberGetToolsetDetails(gram, {
-    id: "Et consectetur velit asperiores.",
-    xGramSession: "Optio qui quo.",
+    id: "Dolor veniam quae sed labore et.",
+    gramSession: "Rerum rem ducimus.",
+    gramProject: "Est molestiae omnis ducimus ut et delectus.",
   });
 
   if (!res.ok) {
@@ -197,18 +197,18 @@ associated utilities.
 ```tsx
 import {
   // Query hooks for fetching data.
-  useToolsetsToolsetsNumberGetToolsetDetails,
-  useToolsetsToolsetsNumberGetToolsetDetailsSuspense,
+  useToolset,
+  useToolsetSuspense,
 
   // Utility for prefetching data during server-side rendering and in React
   // Server Components that will be immediately available to client components
   // using the hooks.
-  prefetchToolsetsToolsetsNumberGetToolsetDetails,
+  prefetchToolset,
   
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
-  invalidateToolsetsToolsetsNumberGetToolsetDetails,
-  invalidateAllToolsetsToolsetsNumberGetToolsetDetails,
+  invalidateToolset,
+  invalidateAllToolset,
 } from "@gram/sdk/react-query/toolsetsToolsetsNumberGetToolsetDetails.js";
 ```
 
@@ -241,13 +241,13 @@ List all toolsets for a project
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.toolsets.toolsetsNumberListToolsets({
-    projectId: "Quos neque voluptatum rerum veniam commodi.",
-    xGramSession: "Atque fuga.",
+    gramSession: "Alias totam non aliquam maxime.",
+    gramProject: "Consequatur recusandae non tenetur rem.",
   });
 
   // Handle the result
@@ -268,13 +268,13 @@ import { toolsetsToolsetsNumberListToolsets } from "@gram/sdk/funcs/toolsetsTool
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await toolsetsToolsetsNumberListToolsets(gram, {
-    projectId: "Quos neque voluptatum rerum veniam commodi.",
-    xGramSession: "Atque fuga.",
+    gramSession: "Alias totam non aliquam maxime.",
+    gramProject: "Consequatur recusandae non tenetur rem.",
   });
 
   if (!res.ok) {
@@ -303,18 +303,18 @@ associated utilities.
 ```tsx
 import {
   // Query hooks for fetching data.
-  useToolsetsToolsetsNumberListToolsets,
-  useToolsetsToolsetsNumberListToolsetsSuspense,
+  useListToolsets,
+  useListToolsetsSuspense,
 
   // Utility for prefetching data during server-side rendering and in React
   // Server Components that will be immediately available to client components
   // using the hooks.
-  prefetchToolsetsToolsetsNumberListToolsets,
+  prefetchListToolsets,
   
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
-  invalidateToolsetsToolsetsNumberListToolsets,
-  invalidateAllToolsetsToolsetsNumberListToolsets,
+  invalidateListToolsets,
+  invalidateAllListToolsets,
 } from "@gram/sdk/react-query/toolsetsToolsetsNumberListToolsets.js";
 ```
 
@@ -347,25 +347,25 @@ Update a toolset's properties including name, description, and HTTP tools
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.toolsets.toolsetsNumberUpdateToolset({
-    id: "Eius debitis esse fugiat architecto.",
-    xGramSession: "Aut nam labore quidem.",
+    id: "Voluptatem alias in suscipit voluptates unde similique.",
+    gramSession: "Omnis reprehenderit.",
+    gramProject: "Veritatis quaerat sit et.",
     updateToolsetRequestBody: {
-      description: "Laboriosam voluptatem ullam doloribus ut quaerat.",
+      description: "Iste optio ullam.",
       httpToolIdsToAdd: [
-        "Fuga id ea et esse.",
-        "Error et enim nostrum doloremque.",
-        "Maxime error voluptatum dolore debitis.",
+        "Animi tenetur nesciunt et est et.",
+        "Nam quis.",
       ],
       httpToolIdsToRemove: [
-        "Magnam nostrum aut sunt itaque.",
-        "Assumenda ut.",
+        "Animi sequi.",
+        "Amet sapiente.",
       ],
-      name: "Nemo assumenda quas dolor.",
+      name: "Soluta fuga.",
     },
   });
 
@@ -387,25 +387,25 @@ import { toolsetsToolsetsNumberUpdateToolset } from "@gram/sdk/funcs/toolsetsToo
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await toolsetsToolsetsNumberUpdateToolset(gram, {
-    id: "Eius debitis esse fugiat architecto.",
-    xGramSession: "Aut nam labore quidem.",
+    id: "Voluptatem alias in suscipit voluptates unde similique.",
+    gramSession: "Omnis reprehenderit.",
+    gramProject: "Veritatis quaerat sit et.",
     updateToolsetRequestBody: {
-      description: "Laboriosam voluptatem ullam doloribus ut quaerat.",
+      description: "Iste optio ullam.",
       httpToolIdsToAdd: [
-        "Fuga id ea et esse.",
-        "Error et enim nostrum doloremque.",
-        "Maxime error voluptatum dolore debitis.",
+        "Animi tenetur nesciunt et est et.",
+        "Nam quis.",
       ],
       httpToolIdsToRemove: [
-        "Magnam nostrum aut sunt itaque.",
-        "Assumenda ut.",
+        "Animi sequi.",
+        "Amet sapiente.",
       ],
-      name: "Nemo assumenda quas dolor.",
+      name: "Soluta fuga.",
     },
   });
 
@@ -435,7 +435,7 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useToolsetsToolsetsNumberUpdateToolsetMutation
+  useUpdateToolsetMutation
 } from "@gram/sdk/react-query/toolsetsToolsetsNumberUpdateToolset.js";
 ```
 

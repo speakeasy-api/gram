@@ -9,71 +9,67 @@ servers:
 paths:
     /health:
         get:
-            tags:
-                - system
-            summary: healthCheck system
             description: Check the health of the service.
             operationId: system#healthCheck
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/HealthCheckResult'
                             example:
                                 status: Natus amet.
+                            schema:
+                                $ref: '#/components/schemas/HealthCheckResult'
+                    description: OK response.
+            summary: healthCheck system
+            tags:
+                - system
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/assets.uploadOpenAPIv3:
         post:
-            tags:
-                - assets
-            summary: uploadOpenAPIv3 assets
             description: Upload an OpenAPI v3 document to Gram.
             operationId: assets#uploadOpenAPIv3
             parameters:
-                - name: Content-Type
-                  in: header
-                  allowEmptyValue: true
-                  required: true
-                  schema:
-                    type: string
-                    example: Est dolor ut enim hic dolorem.
+                - allowEmptyValue: true
                   example: Quam temporibus.
-                - name: Content-Length
                   in: header
-                  allowEmptyValue: true
+                  name: Content-Type
                   required: true
                   schema:
-                    type: integer
+                    example: Est dolor ut enim hic dolorem.
+                    type: string
+                - allowEmptyValue: true
+                  example: 7818005087342603004
+                  in: header
+                  name: Content-Length
+                  required: true
+                  schema:
                     example: 4954139186478882122
                     format: int64
-                  example: 7818005087342603004
-                - name: Gram-Project
-                  in: header
+                    type: integer
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  example: Consequuntur non dolor iure dolor iste voluptas.
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
                     example: Esse modi reiciendis harum consequatur voluptate.
-                  example: Consequuntur non dolor iure dolor iste voluptas.
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  example: Qui est quas veritatis rerum et.
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
                     example: Nihil ex eligendi nesciunt sed laudantium.
-                  example: Qui est quas veritatis rerum et.
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/UploadOpenAPIv3Result'
                             example:
                                 asset:
                                     content_length: 975581659921114170
@@ -84,90 +80,79 @@ paths:
                                     sha256: Laborum quam.
                                     updated_at: "1982-06-10T21:47:30Z"
                                     url: Beatae aut veniam voluptas at.
+                            schema:
+                                $ref: '#/components/schemas/UploadOpenAPIv3Result'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
+            summary: uploadOpenAPIv3 assets
+            tags:
+                - assets
+            x-speakeasy-react-hook:
+                name: UploadOpenAPIv3
     /rpc/auth.callback:
         get:
-            tags:
-                - auth
-            summary: callback auth
             description: Handles the authentication callback.
             operationId: auth#callback
             parameters:
-                - name: shared_token
-                  in: query
+                - allowEmptyValue: true
                   description: The shared token for authentication from the speakeasy system
-                  allowEmptyValue: true
+                  example: Occaecati autem est itaque in veniam.
+                  in: query
+                  name: shared_token
                   required: true
                   schema:
-                    type: string
                     description: The shared token for authentication from the speakeasy system
                     example: Sunt distinctio quidem odit officia.
-                  example: Occaecati autem est itaque in veniam.
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
                     headers:
                         Gram-Session:
                             description: Session header
+                            example: Omnis ad cumque qui.
                             schema:
-                                type: string
                                 description: Session header
                                 example: Itaque ad eos.
-                            example: Omnis ad cumque qui.
+                                type: string
                         Location:
                             description: The URL to redirect to after authentication
+                            example: Et nesciunt et minima libero omnis voluptatem.
                             schema:
-                                type: string
                                 description: The URL to redirect to after authentication
                                 example: Et est aut cumque.
-                            example: Et nesciunt et minima libero omnis voluptatem.
+                                type: string
                         Set-Cookie:
                             description: The authentication session
+                            example: Enim necessitatibus ducimus.
                             schema:
-                                type: string
                                 description: The authentication session
                                 example: Vel omnis.
-                            example: Enim necessitatibus ducimus.
-    /rpc/auth.info:
-        get:
+                                type: string
+            summary: callback auth
             tags:
                 - auth
-            summary: info auth
+            x-speakeasy-react-hook:
+                disabled: true
+    /rpc/auth.info:
+        get:
             description: Provides information about the current authentication status.
             operationId: auth#info
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
+                  example: Consequuntur error suscipit optio sunt eum.
+                  in: header
+                  name: Gram-Session
                   schema:
-                    type: string
                     description: Session header
                     example: Accusantium est dolor sit.
-                  example: Consequuntur error suscipit optio sunt eum.
+                    type: string
             responses:
                 "200":
-                    description: OK response.
-                    headers:
-                        Gram-Session:
-                            description: Session header
-                            schema:
-                                type: string
-                                description: Session header
-                                example: Harum sapiente.
-                            example: Molestiae veniam at cumque.
-                        Set-Cookie:
-                            description: The authentication session
-                            schema:
-                                type: string
-                                description: The authentication session
-                                example: Inventore reprehenderit.
-                            example: Nisi quam deleniti.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/InfoResponseBody'
                             example:
                                 active_organization_id: Et ut velit iure.
                                 organizations:
@@ -229,116 +214,137 @@ paths:
                                           project_slug: Maxime error voluptatum dolore debitis.
                                 user_email: Assumenda ut.
                                 user_id: Doloribus magnam nostrum aut sunt itaque.
+                            schema:
+                                $ref: '#/components/schemas/InfoResponseBody'
+                    description: OK response.
+                    headers:
+                        Gram-Session:
+                            description: Session header
+                            example: Molestiae veniam at cumque.
+                            schema:
+                                description: Session header
+                                example: Harum sapiente.
+                                type: string
+                        Set-Cookie:
+                            description: The authentication session
+                            example: Nisi quam deleniti.
+                            schema:
+                                description: The authentication session
+                                example: Inventore reprehenderit.
+                                type: string
             security:
                 - session_header_Gram-Session: []
-    /rpc/auth.logout:
-        get:
+            summary: info auth
             tags:
                 - auth
-            summary: logout auth
+            x-speakeasy-react-hook:
+                name: SessionInfo
+    /rpc/auth.logout:
+        get:
             description: Logs out the current user by clearing their session.
             operationId: auth#logout
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
+                  example: Quibusdam quia ea consequuntur.
+                  in: header
+                  name: Gram-Session
                   schema:
-                    type: string
                     description: Session header
                     example: Minus dolore consequuntur eum necessitatibus est quisquam.
-                  example: Quibusdam quia ea consequuntur.
+                    type: string
             responses:
                 "200":
                     description: OK response.
                     headers:
                         Set-Cookie:
                             description: Empty string to clear the session
+                            example: At repellendus est.
                             schema:
-                                type: string
                                 description: Empty string to clear the session
                                 example: Non quaerat consequuntur quam exercitationem molestiae maiores.
-                            example: At repellendus est.
+                                type: string
             security:
                 - session_header_Gram-Session: []
-    /rpc/auth.switchScopes:
-        post:
+            summary: logout auth
             tags:
                 - auth
-            summary: switchScopes auth
+            x-speakeasy-react-hook:
+                name: Logout
+    /rpc/auth.switchScopes:
+        post:
             description: Switches the authentication scope to a different organization.
             operationId: auth#switchScopes
             parameters:
-                - name: organization_id
-                  in: query
+                - allowEmptyValue: true
                   description: The organization slug to switch scopes
-                  allowEmptyValue: true
+                  example: Beatae in dolor aut illo.
+                  in: query
+                  name: organization_id
                   schema:
-                    type: string
                     description: The organization slug to switch scopes
                     example: Recusandae odio omnis.
-                  example: Beatae in dolor aut illo.
-                - name: project_id
-                  in: query
-                  description: The project id to switch scopes too
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: The project id to switch scopes too
+                  example: Incidunt natus exercitationem est.
+                  in: query
+                  name: project_id
+                  schema:
                     description: The project id to switch scopes too
                     example: Necessitatibus accusamus repudiandae iste non voluptas.
-                  example: Incidunt natus exercitationem est.
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  example: Eveniet numquam sint quam.
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
                     example: Non odit laudantium eligendi quia sed.
-                  example: Eveniet numquam sint quam.
+                    type: string
             responses:
                 "200":
                     description: OK response.
                     headers:
                         Gram-Session:
                             description: Session header
+                            example: Harum dignissimos aspernatur.
                             schema:
-                                type: string
                                 description: Session header
                                 example: Nisi rerum aut distinctio quo sunt.
-                            example: Harum dignissimos aspernatur.
+                                type: string
                         Set-Cookie:
                             description: The authentication session
+                            example: Voluptatem sint enim.
                             schema:
-                                type: string
                                 description: The authentication session
                                 example: Ab soluta aperiam sit quaerat.
-                            example: Voluptatem sint enim.
+                                type: string
             security:
                 - session_header_Gram-Session: []
+            summary: switchScopes auth
+            tags:
+                - auth
+            x-speakeasy-react-hook:
+                name: SwitchScopes
     /rpc/deployments.create:
         post:
-            tags:
-                - deployments
-            summary: createDeployment deployments
             description: Create a deployment to load tool definitions.
             operationId: deployments#createDeployment
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
+                  example: Rerum laborum voluptatum in qui culpa sed.
+                  in: header
+                  name: Gram-Session
                   schema:
-                    type: string
                     description: Session header
                     example: Et assumenda ea quia neque id amet.
-                  example: Rerum laborum voluptatum in qui culpa sed.
+                    type: string
             requestBody:
-                required: true
                 content:
                     application/json:
-                        schema:
-                            $ref: '#/components/schemas/CreateDeploymentForm'
                         example:
                             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                             external_url: Corrupti voluptas corporis dolor nisi.
@@ -350,50 +356,52 @@ paths:
                                 - Et ut accusantium et voluptatum.
                                 - Autem quasi vel.
                                 - Quasi enim.
+                        schema:
+                            $ref: '#/components/schemas/CreateDeploymentForm'
+                required: true
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
+                            example: {}
                             schema:
                                 $ref: '#/components/schemas/CreateDeploymentResult'
-                            example: {}
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/deployments.get:
-        post:
+            summary: createDeployment deployments
             tags:
                 - deployments
-            summary: getDeployment deployments
+            x-speakeasy-react-hook:
+                name: CreateDeployment
+    /rpc/deployments.get:
+        post:
             description: Create a deployment to load tool definitions.
             operationId: deployments#getDeployment
             parameters:
-                - name: id
-                  in: query
+                - allowEmptyValue: true
                   description: The ID of the deployment
-                  allowEmptyValue: true
+                  example: Dolor minima qui enim aliquam quia.
+                  in: query
+                  name: id
                   required: true
                   schema:
-                    type: string
                     description: The ID of the deployment
                     example: Magni autem.
-                  example: Dolor minima qui enim aliquam quia.
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  example: Nihil error quia aut et sit possimus.
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
                     example: Odio ex velit animi.
-                  example: Nihil error quia aut et sit possimus.
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/GetDeploymentResult'
                             example:
                                 created_at: "2010-05-10T05:07:05Z"
                                 external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
@@ -408,8 +416,16 @@ paths:
                                 organization_id: Reprehenderit quia doloribus pariatur minus laudantium.
                                 project_id: Cum dignissimos quis modi velit maiores.
                                 user_id: Ab dolorum repellendus aspernatur voluptatem aspernatur.
+                            schema:
+                                $ref: '#/components/schemas/GetDeploymentResult'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
+            summary: getDeployment deployments
+            tags:
+                - deployments
+            x-speakeasy-react-hook:
+                name: Deployment
     /rpc/deployments.list:
         post:
             tags:
@@ -523,36 +539,30 @@ paths:
                 - session_header_Gram-Session: []
     /rpc/keys.create:
         post:
-            tags:
-                - keys
-            summary: createKey keys
             description: Create a new api key
             operationId: keys#createKey
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
+                  example: Esse est omnis fuga illum expedita corporis.
+                  in: header
+                  name: Gram-Session
                   schema:
-                    type: string
                     description: Session header
                     example: Omnis iure eaque qui qui excepturi.
-                  example: Esse est omnis fuga illum expedita corporis.
+                    type: string
             requestBody:
-                required: true
                 content:
                     application/json:
-                        schema:
-                            $ref: '#/components/schemas/CreateKeyForm'
                         example:
                             name: At expedita magni perferendis amet unde.
+                        schema:
+                            $ref: '#/components/schemas/CreateKeyForm'
+                required: true
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/Key'
                             example:
                                 created_at: "1986-08-19T19:01:15Z"
                                 created_by_user_id: Unde sint nemo rerum recusandae harum.
@@ -565,32 +575,34 @@ paths:
                                     - Perferendis illo.
                                 token: Nobis enim quas dolorem et inventore.
                                 updated_at: "1975-03-28T11:40:59Z"
+                            schema:
+                                $ref: '#/components/schemas/Key'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/keys.list:
-        get:
+            summary: createKey keys
             tags:
                 - keys
-            summary: listKeys keys
+            x-speakeasy-react-hook:
+                name: CreateAPIKey
+    /rpc/keys.list:
+        get:
             description: List all api keys for an organization
             operationId: keys#listKeys
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
+                  example: Vitae sed doloremque et perspiciatis.
+                  in: header
+                  name: Gram-Session
                   schema:
-                    type: string
                     description: Session header
                     example: Velit sunt iusto.
-                  example: Vitae sed doloremque et perspiciatis.
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListKeysResult'
                             example:
                                 keys:
                                     - created_at: "1982-03-13T21:26:33Z"
@@ -617,85 +629,89 @@ paths:
                                         - Omnis quisquam distinctio eos ut neque.
                                       token: Sint ut.
                                       updated_at: "1985-09-29T14:38:35Z"
+                            schema:
+                                $ref: '#/components/schemas/ListKeysResult'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/keys.revoke/{id}:
-        post:
+            summary: listKeys keys
             tags:
                 - keys
-            summary: revokeKey keys
+            x-speakeasy-react-hook:
+                name: ListAPIKeys
+    /rpc/keys.revoke/{id}:
+        post:
             description: Revoke a api key
             operationId: keys#revokeKey
             parameters:
-                - name: id
+                - description: The ID of the key to revoke
+                  example: Enim accusantium nisi est enim.
                   in: path
-                  description: The ID of the key to revoke
+                  name: id
                   required: true
                   schema:
-                    type: string
                     description: The ID of the key to revoke
                     example: Aliquam id.
-                  example: Enim accusantium nisi est enim.
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  example: Itaque facilis.
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
                     example: Quidem sint illum ut blanditiis.
-                  example: Itaque facilis.
+                    type: string
             responses:
                 "200":
                     description: OK response.
             security:
                 - session_header_Gram-Session: []
+            summary: revokeKey keys
+            tags:
+                - keys
+            x-speakeasy-react-hook:
+                name: RevokeAPIKeys
     /rpc/toolsets.create:
         post:
-            tags:
-                - toolsets
-            summary: createToolset toolsets
             description: Create a new toolset with associated tools
             operationId: toolsets#createToolset
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
+                  example: Quis numquam exercitationem earum vel eveniet culpa.
+                  in: header
+                  name: Gram-Session
                   schema:
-                    type: string
                     description: Session header
                     example: Vitae exercitationem non aut.
-                  example: Quis numquam exercitationem earum vel eveniet culpa.
-                - name: Gram-Project
-                  in: header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  example: Nam dolorem ipsum.
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
                     example: Cupiditate sed et.
-                  example: Nam dolorem ipsum.
+                    type: string
             requestBody:
-                required: true
                 content:
                     application/json:
-                        schema:
-                            $ref: '#/components/schemas/CreateToolsetRequestBody'
                         example:
                             description: Blanditiis qui mollitia molestias iste mollitia consequatur.
                             http_tool_ids:
                                 - Ipsa minus quo nihil.
                                 - Et veritatis totam.
                             name: Optio est.
+                        schema:
+                            $ref: '#/components/schemas/CreateToolsetRequestBody'
+                required: true
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/Toolset'
                             example:
                                 created_at: "1977-01-19T08:55:10Z"
                                 description: Perferendis alias alias iure.
@@ -709,51 +725,53 @@ paths:
                                 project_id: Libero accusantium.
                                 slug: Eligendi facilis.
                                 updated_at: "1974-09-20T09:09:47Z"
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/toolsets.get/{id}:
-        get:
+            summary: createToolset toolsets
             tags:
                 - toolsets
-            summary: getToolsetDetails toolsets
+            x-speakeasy-react-hook:
+                name: CreateToolset
+    /rpc/toolsets.get/{id}:
+        get:
             description: Get detailed information about a toolset including full HTTP tool definitions
             operationId: toolsets#getToolsetDetails
             parameters:
-                - name: id
+                - description: The ID of the toolset
+                  example: Dolor veniam quae sed labore et.
                   in: path
-                  description: The ID of the toolset
+                  name: id
                   required: true
                   schema:
-                    type: string
                     description: The ID of the toolset
                     example: Natus deleniti error.
-                  example: Dolor veniam quae sed labore et.
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  example: Rerum rem ducimus.
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
                     example: Commodi reiciendis quis.
-                  example: Rerum rem ducimus.
-                - name: Gram-Project
-                  in: header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  example: Est molestiae omnis ducimus ut et delectus.
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
                     example: Velit illum perferendis omnis saepe.
-                  example: Est molestiae omnis ducimus ut et delectus.
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/ToolsetDetails'
                             example:
                                 created_at: "1996-09-29T12:31:05Z"
                                 description: Aut eligendi minus saepe.
@@ -794,42 +812,44 @@ paths:
                                 project_id: Vero suscipit excepturi.
                                 slug: Eum vitae voluptatum sint animi eos omnis.
                                 updated_at: "1973-09-29T11:33:37Z"
+                            schema:
+                                $ref: '#/components/schemas/ToolsetDetails'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/toolsets.list:
-        get:
+            summary: getToolsetDetails toolsets
             tags:
                 - toolsets
-            summary: listToolsets toolsets
+            x-speakeasy-react-hook:
+                name: Toolset
+    /rpc/toolsets.list:
+        get:
             description: List all toolsets for a project
             operationId: toolsets#listToolsets
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
+                  example: Alias totam non aliquam maxime.
+                  in: header
+                  name: Gram-Session
                   schema:
-                    type: string
                     description: Session header
                     example: Libero eos et voluptas at facilis numquam.
-                  example: Alias totam non aliquam maxime.
-                - name: Gram-Project
-                  in: header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  example: Consequatur recusandae non tenetur rem.
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
                     example: Accusamus quo reiciendis aut qui qui animi.
-                  example: Consequatur recusandae non tenetur rem.
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListToolsetsResult'
                             example:
                                 toolsets:
                                     - created_at: "2002-04-11T00:51:41Z"
@@ -865,50 +885,52 @@ paths:
                                       project_id: Ut officia.
                                       slug: Et a sit voluptas ut.
                                       updated_at: "2009-03-18T16:22:57Z"
+                            schema:
+                                $ref: '#/components/schemas/ListToolsetsResult'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/toolsets.update/{id}:
-        post:
+            summary: listToolsets toolsets
             tags:
                 - toolsets
-            summary: updateToolset toolsets
+            x-speakeasy-react-hook:
+                name: ListToolsets
+    /rpc/toolsets.update/{id}:
+        post:
             description: Update a toolset's properties including name, description, and HTTP tools
             operationId: toolsets#updateToolset
             parameters:
-                - name: id
+                - description: The ID of the toolset to update
+                  example: Voluptatem alias in suscipit voluptates unde similique.
                   in: path
-                  description: The ID of the toolset to update
+                  name: id
                   required: true
                   schema:
-                    type: string
                     description: The ID of the toolset to update
                     example: Dolores debitis laboriosam.
-                  example: Voluptatem alias in suscipit voluptates unde similique.
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  example: Omnis reprehenderit.
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
                     example: Vero totam et nihil quidem ullam.
-                  example: Omnis reprehenderit.
-                - name: Gram-Project
-                  in: header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  example: Veritatis quaerat sit et.
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
                     example: Aperiam rerum.
-                  example: Veritatis quaerat sit et.
+                    type: string
             requestBody:
-                required: true
                 content:
                     application/json:
-                        schema:
-                            $ref: '#/components/schemas/UpdateToolsetRequestBody'
                         example:
                             description: Iste optio ullam.
                             http_tool_ids_to_add:
@@ -918,13 +940,13 @@ paths:
                                 - Animi sequi.
                                 - Amet sapiente.
                             name: Soluta fuga.
+                        schema:
+                            $ref: '#/components/schemas/UpdateToolsetRequestBody'
+                required: true
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
-                            schema:
-                                $ref: '#/components/schemas/Toolset'
                             example:
                                 created_at: "1976-11-13T14:16:41Z"
                                 description: Consequatur nihil nihil dolores.
@@ -939,8 +961,16 @@ paths:
                                 project_id: Sunt suscipit voluptatibus dolores.
                                 slug: Consectetur deserunt blanditiis voluptas minus sit.
                                 updated_at: "1974-02-13T12:54:30Z"
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
+            summary: updateToolset toolsets
+            tags:
+                - toolsets
+            x-speakeasy-react-hook:
+                name: UpdateToolset
 components:
     schemas:
         Asset:

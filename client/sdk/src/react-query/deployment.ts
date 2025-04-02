@@ -8,66 +8,65 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { authAuthNumberSwitchScopes } from "../funcs/authAuthNumberSwitchScopes.js";
+import { deploymentsDeploymentsNumberGetDeployment } from "../funcs/deploymentsDeploymentsNumberGetDeployment.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AuthAuthNumberSwitchScopesMutationVariables = {
-  request?: operations.AuthNumberSwitchScopesRequest | undefined;
+export type DeploymentMutationVariables = {
+  request: operations.DeploymentsNumberGetDeploymentRequest;
   options?: RequestOptions;
 };
 
-export type AuthAuthNumberSwitchScopesMutationData =
-  | operations.AuthNumberSwitchScopesResponse
-  | undefined;
+export type DeploymentMutationData = components.GetDeploymentResult;
 
 /**
- * switchScopes auth
+ * getDeployment deployments
  *
  * @remarks
- * Switches the authentication scope to a different organization.
+ * Create a deployment to load tool definitions.
  */
-export function useAuthAuthNumberSwitchScopesMutation(
+export function useDeploymentMutation(
   options?: MutationHookOptions<
-    AuthAuthNumberSwitchScopesMutationData,
+    DeploymentMutationData,
     Error,
-    AuthAuthNumberSwitchScopesMutationVariables
+    DeploymentMutationVariables
   >,
 ): UseMutationResult<
-  AuthAuthNumberSwitchScopesMutationData,
+  DeploymentMutationData,
   Error,
-  AuthAuthNumberSwitchScopesMutationVariables
+  DeploymentMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAuthAuthNumberSwitchScopesMutation(client, options),
+    ...buildDeploymentMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAuthAuthNumberSwitchScopes(): MutationKey {
-  return ["@gram/sdk", "auth", "authNumberSwitchScopes"];
+export function mutationKeyDeployment(): MutationKey {
+  return ["@gram/sdk", "deployments", "deploymentsNumberGetDeployment"];
 }
 
-export function buildAuthAuthNumberSwitchScopesMutation(
+export function buildDeploymentMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AuthAuthNumberSwitchScopesMutationVariables,
-  ) => Promise<AuthAuthNumberSwitchScopesMutationData>;
+    variables: DeploymentMutationVariables,
+  ) => Promise<DeploymentMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAuthAuthNumberSwitchScopes(),
-    mutationFn: function authAuthNumberSwitchScopesMutationFn({
+    mutationKey: mutationKeyDeployment(),
+    mutationFn: function deploymentMutationFn({
       request,
       options,
-    }): Promise<AuthAuthNumberSwitchScopesMutationData> {
+    }): Promise<DeploymentMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -80,7 +79,7 @@ export function buildAuthAuthNumberSwitchScopesMutation(
           ),
         },
       };
-      return unwrapAsync(authAuthNumberSwitchScopes(
+      return unwrapAsync(deploymentsDeploymentsNumberGetDeployment(
         client$,
         request,
         mergedOptions,

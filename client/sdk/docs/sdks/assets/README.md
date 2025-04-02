@@ -19,14 +19,14 @@ Upload an OpenAPI v3 document to Gram.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const result = await gram.assets.assetsNumberUploadOpenAPIv3({
-    contentLength: 7164378408374255000,
-    gramProjectID: "Et ratione et in.",
-    xGramSession: "Et repellat sed ipsam ipsam saepe.",
+    contentLength: 7818005087342603000,
+    gramProject: "Consequuntur non dolor iure dolor iste voluptas.",
+    gramSession: "Qui est quas veritatis rerum et.",
   });
 
   // Handle the result
@@ -47,14 +47,14 @@ import { assetsAssetsNumberUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsAssetsN
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
   const res = await assetsAssetsNumberUploadOpenAPIv3(gram, {
-    contentLength: 7164378408374255000,
-    gramProjectID: "Et ratione et in.",
-    xGramSession: "Et repellat sed ipsam ipsam saepe.",
+    contentLength: 7818005087342603000,
+    gramProject: "Consequuntur non dolor iure dolor iste voluptas.",
+    gramSession: "Qui est quas veritatis rerum et.",
   });
 
   if (!res.ok) {
@@ -83,7 +83,7 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useAssetsAssetsNumberUploadOpenAPIv3Mutation
+  useUploadOpenAPIv3Mutation
 } from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
 ```
 

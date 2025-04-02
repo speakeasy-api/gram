@@ -25,7 +25,7 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type AuthAuthNumberInfoQueryData = operations.AuthNumberInfoResponse;
+export type SessionInfoQueryData = operations.AuthNumberInfoResponse;
 
 /**
  * info auth
@@ -33,13 +33,13 @@ export type AuthAuthNumberInfoQueryData = operations.AuthNumberInfoResponse;
  * @remarks
  * Provides information about the current authentication status.
  */
-export function useAuthAuthNumberInfo(
+export function useSessionInfo(
   request?: operations.AuthNumberInfoRequest | undefined,
-  options?: QueryHookOptions<AuthAuthNumberInfoQueryData>,
-): UseQueryResult<AuthAuthNumberInfoQueryData, Error> {
+  options?: QueryHookOptions<SessionInfoQueryData>,
+): UseQueryResult<SessionInfoQueryData, Error> {
   const client = useGramContext();
   return useQuery({
-    ...buildAuthAuthNumberInfoQuery(
+    ...buildSessionInfoQuery(
       client,
       request,
       options,
@@ -54,13 +54,13 @@ export function useAuthAuthNumberInfo(
  * @remarks
  * Provides information about the current authentication status.
  */
-export function useAuthAuthNumberInfoSuspense(
+export function useSessionInfoSuspense(
   request?: operations.AuthNumberInfoRequest | undefined,
-  options?: SuspenseQueryHookOptions<AuthAuthNumberInfoQueryData>,
-): UseSuspenseQueryResult<AuthAuthNumberInfoQueryData, Error> {
+  options?: SuspenseQueryHookOptions<SessionInfoQueryData>,
+): UseSuspenseQueryResult<SessionInfoQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAuthAuthNumberInfoQuery(
+    ...buildSessionInfoQuery(
       client,
       request,
       options,
@@ -69,33 +69,33 @@ export function useAuthAuthNumberInfoSuspense(
   });
 }
 
-export function prefetchAuthAuthNumberInfo(
+export function prefetchSessionInfo(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.AuthNumberInfoRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAuthAuthNumberInfoQuery(
+    ...buildSessionInfoQuery(
       client$,
       request,
     ),
   });
 }
 
-export function setAuthAuthNumberInfoData(
+export function setSessionInfoData(
   client: QueryClient,
-  queryKeyBase: [parameters: { xGramSession?: string | undefined }],
-  data: AuthAuthNumberInfoQueryData,
-): AuthAuthNumberInfoQueryData | undefined {
-  const key = queryKeyAuthAuthNumberInfo(...queryKeyBase);
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  data: SessionInfoQueryData,
+): SessionInfoQueryData | undefined {
+  const key = queryKeySessionInfo(...queryKeyBase);
 
-  return client.setQueryData<AuthAuthNumberInfoQueryData>(key, data);
+  return client.setQueryData<SessionInfoQueryData>(key, data);
 }
 
-export function invalidateAuthAuthNumberInfo(
+export function invalidateSessionInfo(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { xGramSession?: string | undefined }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -105,7 +105,7 @@ export function invalidateAuthAuthNumberInfo(
   });
 }
 
-export function invalidateAllAuthAuthNumberInfo(
+export function invalidateAllSessionInfo(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -115,23 +115,19 @@ export function invalidateAllAuthAuthNumberInfo(
   });
 }
 
-export function buildAuthAuthNumberInfoQuery(
+export function buildSessionInfoQuery(
   client$: GramCore,
   request?: operations.AuthNumberInfoRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<AuthAuthNumberInfoQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<SessionInfoQueryData>;
 } {
   return {
-    queryKey: queryKeyAuthAuthNumberInfo({
-      xGramSession: request?.xGramSession,
-    }),
-    queryFn: async function authAuthNumberInfoQueryFn(
+    queryKey: queryKeySessionInfo({ gramSession: request?.gramSession }),
+    queryFn: async function sessionInfoQueryFn(
       ctx,
-    ): Promise<AuthAuthNumberInfoQueryData> {
+    ): Promise<SessionInfoQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
       const mergedOptions = {
         ...options,
@@ -147,8 +143,8 @@ export function buildAuthAuthNumberInfoQuery(
   };
 }
 
-export function queryKeyAuthAuthNumberInfo(
-  parameters: { xGramSession?: string | undefined },
+export function queryKeySessionInfo(
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/sdk", "auth", "authNumberInfo", parameters];
 }

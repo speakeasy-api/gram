@@ -13,7 +13,7 @@ export type DeploymentsNumberCreateDeploymentRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
   createDeploymentForm: components.CreateDeploymentForm;
 };
 
@@ -23,18 +23,18 @@ export const DeploymentsNumberCreateDeploymentRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
   CreateDeploymentForm: components.CreateDeploymentForm$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
     "CreateDeploymentForm": "createDeploymentForm",
   });
 });
 
 /** @internal */
 export type DeploymentsNumberCreateDeploymentRequest$Outbound = {
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
   CreateDeploymentForm: components.CreateDeploymentForm$Outbound;
 };
 
@@ -44,11 +44,11 @@ export const DeploymentsNumberCreateDeploymentRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   DeploymentsNumberCreateDeploymentRequest
 > = z.object({
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
   createDeploymentForm: components.CreateDeploymentForm$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
     createDeploymentForm: "CreateDeploymentForm",
   });
 });

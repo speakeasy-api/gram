@@ -13,8 +13,12 @@ export type ToolsetsNumberCreateToolsetRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
-  createToolsetForm: components.CreateToolsetForm;
+  gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject: string;
+  createToolsetRequestBody: components.CreateToolsetRequestBody;
 };
 
 /** @internal */
@@ -23,19 +27,22 @@ export const ToolsetsNumberCreateToolsetRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "X-Gram-Session": z.string().optional(),
-  CreateToolsetForm: components.CreateToolsetForm$inboundSchema,
+  "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string(),
+  CreateToolsetRequestBody: components.CreateToolsetRequestBody$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
-    "X-Gram-Session": "xGramSession",
-    "CreateToolsetForm": "createToolsetForm",
+    "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
+    "CreateToolsetRequestBody": "createToolsetRequestBody",
   });
 });
 
 /** @internal */
 export type ToolsetsNumberCreateToolsetRequest$Outbound = {
-  "X-Gram-Session"?: string | undefined;
-  CreateToolsetForm: components.CreateToolsetForm$Outbound;
+  "Gram-Session"?: string | undefined;
+  "Gram-Project": string;
+  CreateToolsetRequestBody: components.CreateToolsetRequestBody$Outbound;
 };
 
 /** @internal */
@@ -44,12 +51,14 @@ export const ToolsetsNumberCreateToolsetRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ToolsetsNumberCreateToolsetRequest
 > = z.object({
-  xGramSession: z.string().optional(),
-  createToolsetForm: components.CreateToolsetForm$outboundSchema,
+  gramSession: z.string().optional(),
+  gramProject: z.string(),
+  createToolsetRequestBody: components.CreateToolsetRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
-    xGramSession: "X-Gram-Session",
-    createToolsetForm: "CreateToolsetForm",
+    gramSession: "Gram-Session",
+    gramProject: "Gram-Project",
+    createToolsetRequestBody: "CreateToolsetRequestBody",
   });
 });
 

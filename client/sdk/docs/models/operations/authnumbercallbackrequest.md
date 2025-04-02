@@ -6,7 +6,7 @@
 import { AuthNumberCallbackRequest } from "@gram/sdk/models/operations";
 
 let value: AuthNumberCallbackRequest = {
-  sharedToken: "Autem alias.",
+  sharedToken: "Sunt distinctio quidem odit officia.",
 };
 ```
 
@@ -14,4 +14,4 @@ let value: AuthNumberCallbackRequest = {
 
 | Field                                                         | Type                                                          | Required                                                      | Description                                                   | Example                                                       |
 | ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
-| `sharedToken`                                                 | *string*                                                      | :heavy_check_mark:                                            | The shared token for authentication from the speakeasy system | Autem alias.                                                  |
+| `sharedToken`                                                 | *string*                                                      | :heavy_check_mark:                                            | The shared token for authentication from the speakeasy system | Sunt distinctio quidem odit officia.                          |

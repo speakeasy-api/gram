@@ -17,7 +17,11 @@ export type ToolsetsNumberUpdateToolsetRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject: string;
   updateToolsetRequestBody: components.UpdateToolsetRequestBody;
 };
 
@@ -28,11 +32,13 @@ export const ToolsetsNumberUpdateToolsetRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   id: z.string(),
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string(),
   UpdateToolsetRequestBody: components.UpdateToolsetRequestBody$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
     "UpdateToolsetRequestBody": "updateToolsetRequestBody",
   });
 });
@@ -40,7 +46,8 @@ export const ToolsetsNumberUpdateToolsetRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type ToolsetsNumberUpdateToolsetRequest$Outbound = {
   id: string;
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
+  "Gram-Project": string;
   UpdateToolsetRequestBody: components.UpdateToolsetRequestBody$Outbound;
 };
 
@@ -51,11 +58,13 @@ export const ToolsetsNumberUpdateToolsetRequest$outboundSchema: z.ZodType<
   ToolsetsNumberUpdateToolsetRequest
 > = z.object({
   id: z.string(),
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
+  gramProject: z.string(),
   updateToolsetRequestBody: components.UpdateToolsetRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
+    gramProject: "Gram-Project",
     updateToolsetRequestBody: "UpdateToolsetRequestBody",
   });
 });

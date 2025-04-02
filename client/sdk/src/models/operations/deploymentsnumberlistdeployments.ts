@@ -20,7 +20,7 @@ export type DeploymentsNumberListDeploymentsRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -31,10 +31,10 @@ export const DeploymentsNumberListDeploymentsRequest$inboundSchema: z.ZodType<
 > = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().default(10),
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
   });
 });
 
@@ -42,7 +42,7 @@ export const DeploymentsNumberListDeploymentsRequest$inboundSchema: z.ZodType<
 export type DeploymentsNumberListDeploymentsRequest$Outbound = {
   cursor?: string | undefined;
   limit: number;
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -53,10 +53,10 @@ export const DeploymentsNumberListDeploymentsRequest$outboundSchema: z.ZodType<
 > = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().default(10),
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
   });
 });
 

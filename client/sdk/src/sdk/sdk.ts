@@ -6,6 +6,7 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Assets } from "./assets.js";
 import { Auth } from "./auth.js";
 import { Deployments } from "./deployments.js";
+import { Keys } from "./keys.js";
 import { System } from "./system.js";
 import { Toolsets } from "./toolsets.js";
 
@@ -28,6 +29,11 @@ export class Gram extends ClientSDK {
   private _deployments?: Deployments;
   get deployments(): Deployments {
     return (this._deployments ??= new Deployments(this._options));
+  }
+
+  private _keys?: Keys;
+  get keys(): Keys {
+    return (this._keys ??= new Keys(this._options));
   }
 
   private _toolsets?: Toolsets;

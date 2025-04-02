@@ -18,7 +18,7 @@ export const ServerList = [
 ] as const;
 
 export type SDKOptions = {
-  gramSessionHeaderXGramSession?: string | (() => Promise<string>) | undefined;
+  sessionHeaderGramSession?: string | (() => Promise<string>) | undefined;
 
   httpClient?: HTTPClient;
   /**
@@ -57,7 +57,7 @@ export function serverURLFromOptions(options: SDKOptions): URL | null {
 export const SDK_METADATA = {
   language: "typescript",
   openapiDocVersion: "0.0.1",
-  sdkVersion: "0.2.1",
-  genVersion: "2.564.5",
-  userAgent: "speakeasy-sdk/typescript 0.2.1 2.564.5 0.0.1 @gram/sdk",
+  sdkVersion: "0.2.2",
+  genVersion: "2.556.1",
+  userAgent: "speakeasy-sdk/typescript 0.2.2 2.556.1 0.0.1 @gram/sdk",
 } as const;

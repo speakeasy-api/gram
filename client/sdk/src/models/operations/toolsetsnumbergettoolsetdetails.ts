@@ -16,7 +16,11 @@ export type ToolsetsNumberGetToolsetDetailsRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject: string;
 };
 
 /** @internal */
@@ -26,17 +30,20 @@ export const ToolsetsNumberGetToolsetDetailsRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   id: z.string(),
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string(),
 }).transform((v) => {
   return remap$(v, {
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
   });
 });
 
 /** @internal */
 export type ToolsetsNumberGetToolsetDetailsRequest$Outbound = {
   id: string;
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
+  "Gram-Project": string;
 };
 
 /** @internal */
@@ -46,10 +53,12 @@ export const ToolsetsNumberGetToolsetDetailsRequest$outboundSchema: z.ZodType<
   ToolsetsNumberGetToolsetDetailsRequest
 > = z.object({
   id: z.string(),
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
+  gramProject: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
+    gramProject: "Gram-Project",
   });
 });
 

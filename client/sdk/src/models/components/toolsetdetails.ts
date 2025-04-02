@@ -16,9 +16,9 @@ import {
 
 export type ToolsetDetails = {
   /**
-   * When the toolset was created
+   * When the toolset was created.
    */
-  createdAt: string;
+  createdAt: Date;
   /**
    * Description of the toolset
    */
@@ -44,9 +44,13 @@ export type ToolsetDetails = {
    */
   projectId: string;
   /**
-   * When the toolset was last updated
+   * The slug of the toolset
    */
-  updatedAt: string;
+  slug: string;
+  /**
+   * When the toolset was last updated.
+   */
+  updatedAt: Date;
 };
 
 /** @internal */
@@ -55,14 +59,15 @@ export const ToolsetDetails$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  created_at: z.string(),
+  created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   description: z.string().optional(),
   http_tools: z.array(HTTPToolDefinition$inboundSchema),
   id: z.string(),
   name: z.string(),
   organization_id: z.string(),
   project_id: z.string(),
-  updated_at: z.string(),
+  slug: z.string(),
+  updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
@@ -82,6 +87,7 @@ export type ToolsetDetails$Outbound = {
   name: string;
   organization_id: string;
   project_id: string;
+  slug: string;
   updated_at: string;
 };
 
@@ -91,14 +97,15 @@ export const ToolsetDetails$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ToolsetDetails
 > = z.object({
-  createdAt: z.string(),
+  createdAt: z.date().transform(v => v.toISOString()),
   description: z.string().optional(),
   httpTools: z.array(HTTPToolDefinition$outboundSchema),
   id: z.string(),
   name: z.string(),
   organizationId: z.string(),
   projectId: z.string(),
-  updatedAt: z.string(),
+  slug: z.string(),
+  updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",

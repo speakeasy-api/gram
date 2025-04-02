@@ -111,7 +111,7 @@ Add the following server definition to your `claude_desktop_config.json` file:
         "-y", "--package", "@gram/sdk",
         "--",
         "mcp", "start",
-        "--gram-session-header-x-gram-session", "..."
+        "--session-header-gram-session", "..."
       ]
     }
   }
@@ -134,7 +134,7 @@ Create a `.cursor/mcp.json` file in your project root with the following content
         "-y", "--package", "@gram/sdk",
         "--",
         "mcp", "start",
-        "--gram-session-header-x-gram-session", "..."
+        "--session-header-gram-session", "..."
       ]
     }
   }
@@ -189,8 +189,8 @@ For supported JavaScript runtimes, please consult [RUNTIMES.md](RUNTIMES.md).
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession:
-    process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+    ?? "",
 });
 
 async function run() {
@@ -212,17 +212,17 @@ run();
 
 This SDK supports the following security scheme globally:
 
-| Name                            | Type   | Scheme  | Environment Variable                      |
-| ------------------------------- | ------ | ------- | ----------------------------------------- |
-| `gramSessionHeaderXGramSession` | apiKey | API key | `GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION` |
+| Name                       | Type   | Scheme  | Environment Variable               |
+| -------------------------- | ------ | ------- | ---------------------------------- |
+| `sessionHeaderGramSession` | apiKey | API key | `GRAM_SESSION_HEADER_GRAM_SESSION` |
 
-To authenticate with the API the `gramSessionHeaderXGramSession` parameter must be set when initializing the SDK client instance. For example:
+To authenticate with the API the `sessionHeaderGramSession` parameter must be set when initializing the SDK client instance. For example:
 ```typescript
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession:
-    process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+    ?? "",
 });
 
 async function run() {
@@ -261,6 +261,12 @@ run();
 * [deploymentsNumberListDeployments](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
 
 
+### [keys](docs/sdks/keys/README.md)
+
+* [keysNumberCreateKey](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
+* [keysNumberListKeys](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
+* [keysNumberRevokeKey](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
+
 ### [system](docs/sdks/system/README.md)
 
 * [systemNumberHealthCheck](docs/sdks/system/README.md#systemnumberhealthcheck) - healthCheck system
@@ -298,6 +304,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsDeploymentsNumberCreateDeployment`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
 - [`deploymentsDeploymentsNumberGetDeployment`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 - [`deploymentsDeploymentsNumberListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
+- [`keysKeysNumberCreateKey`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
+- [`keysKeysNumberListKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
+- [`keysKeysNumberRevokeKey`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
 - [`systemSystemNumberHealthCheck`](docs/sdks/system/README.md#systemnumberhealthcheck) - healthCheck system
 - [`toolsetsToolsetsNumberCreateToolset`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
 - [`toolsetsToolsetsNumberGetToolsetDetails`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
@@ -329,19 +338,20 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
-- [`useAssetsAssetsNumberUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#assetsnumberuploadopenapiv3) - uploadOpenAPIv3 assets
-- [`useAuthAuthNumberCallback`](docs/sdks/auth/README.md#authnumbercallback) - callback auth
-- [`useAuthAuthNumberInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
-- [`useAuthAuthNumberLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
-- [`useAuthAuthNumberSwitchScopesMutation`](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
-- [`useDeploymentsDeploymentsNumberCreateDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
-- [`useDeploymentsDeploymentsNumberGetDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
+- [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
+- [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
+- [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
+- [`useDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 - [`useDeploymentsDeploymentsNumberListDeploymentsMutation`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
-- [`useSystemSystemNumberHealthCheck`](docs/sdks/system/README.md#systemnumberhealthcheck) - healthCheck system
-- [`useToolsetsToolsetsNumberCreateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
-- [`useToolsetsToolsetsNumberGetToolsetDetails`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
-- [`useToolsetsToolsetsNumberListToolsets`](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
-- [`useToolsetsToolsetsNumberUpdateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
+- [`useListAPIKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
+- [`useListToolsets`](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
+- [`useLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
+- [`useRevokeAPIKeysMutation`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
+- [`useSessionInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
+- [`useSwitchScopesMutation`](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
+- [`useToolset`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
+- [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
+- [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#assetsnumberuploadopenapiv3) - uploadOpenAPIv3 assets
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->
@@ -356,8 +366,8 @@ To change the default retry strategy for a single API call, simply provide a ret
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession:
-    process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+    ?? "",
 });
 
 async function run() {
@@ -397,8 +407,8 @@ const gram = new Gram({
     },
     retryConnectionErrors: false,
   },
-  gramSessionHeaderXGramSession:
-    process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+    ?? "",
 });
 
 async function run() {
@@ -427,8 +437,8 @@ import { Gram } from "@gram/sdk";
 import { SDKValidationError } from "@gram/sdk/models/errors";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession:
-    process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+    ?? "",
 });
 
 async function run() {
@@ -492,8 +502,8 @@ import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
   serverURL: "http://localhost:80",
-  gramSessionHeaderXGramSession:
-    process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+    ?? "",
 });
 
 async function run() {

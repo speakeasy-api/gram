@@ -19,7 +19,7 @@ Check the health of the service.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
@@ -43,7 +43,7 @@ import { systemSystemNumberHealthCheck } from "@gram/sdk/funcs/systemSystemNumbe
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 async function run() {
@@ -60,33 +60,6 @@ async function run() {
 }
 
 run();
-```
-
-### React hooks and utilities
-
-This method can be used in React components through the following hooks and
-associated utilities.
-
-> Check out [this guide][hook-guide] for information about each of the utilities
-> below and how to get started using React hooks.
-
-[hook-guide]: ../../../REACT_QUERY.md
-
-```tsx
-import {
-  // Query hooks for fetching data.
-  useSystemSystemNumberHealthCheck,
-  useSystemSystemNumberHealthCheckSuspense,
-
-  // Utility for prefetching data during server-side rendering and in React
-  // Server Components that will be immediately available to client components
-  // using the hooks.
-  prefetchSystemSystemNumberHealthCheck,
-  
-  // Utility to invalidate the query cache for this query in response to
-  // mutations and other user actions.
-  invalidateAllSystemSystemNumberHealthCheck,
-} from "@gram/sdk/react-query/systemSystemNumberHealthCheck.js";
 ```
 
 ### Parameters

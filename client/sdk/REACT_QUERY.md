@@ -23,7 +23,7 @@ import { GramProvider } from "@gram/sdk/react-query";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 // Retries are handled by the underlying SDK.
@@ -107,10 +107,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useAssetsAssetsNumberUploadOpenAPIv3Mutation } from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+import { useUploadOpenAPIv3Mutation } from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
 
 export function Example() {
-  const { mutate, status } = useAssetsAssetsNumberUploadOpenAPIv3Mutation();
+  const { mutate, status } = useUploadOpenAPIv3Mutation();
 
   return (
     <form
@@ -120,9 +120,9 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          contentLength: 7164378408374255000,
-          gramProjectID: "Et ratione et in.",
-          xGramSession: "Et repellat sed ipsam ipsam saepe.",
+          contentLength: 7818005087342603000,
+          gramProject: "Consequuntur non dolor iure dolor iste voluptas.",
+          gramSession: "Qui est quas veritatis rerum et.",
         });
       }}
     >
@@ -139,10 +139,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useAssetsAssetsNumberUploadOpenAPIv3Mutation } from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+import { useUploadOpenAPIv3Mutation } from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useAssetsAssetsNumberUploadOpenAPIv3Mutation({
+  const { mutate, status } = useUploadOpenAPIv3Mutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -226,7 +226,7 @@ import { useSystemSystemNumberHealthCheckSuspense } from "@gram/sdk/react-query/
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
-  gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
 });
 
 export function App() {
@@ -282,7 +282,7 @@ import { prefetchSystemSystemNumberHealthCheck } from "@gram/sdk/react-query/sys
 export default async function Page() {
   const queryClient = new QueryClient();
   const gram = new GramCore({
-    gramSessionHeaderXGramSession: process.env["GRAM_GRAM_SESSION_HEADER_X_GRAM_SESSION"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
   await prefetchSystemSystemNumberHealthCheck(gram);

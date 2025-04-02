@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -86,25 +86,24 @@ async function $do(
 
   const path = pathToFunc("/rpc/toolsets.list")();
 
-  const query = encodeFormQuery({
-    "project_id": payload.project_id,
-  });
-
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "X-Gram-Session": encodeSimple(
-      "X-Gram-Session",
-      payload["X-Gram-Session"],
-      { explode: false, charEncoding: "none" },
-    ),
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+      explode: false,
+      charEncoding: "none",
+    }),
   }));
 
   const secConfig = await extractSecurity(
-    client._options.gramSessionHeaderXGramSession,
+    client._options.sessionHeaderGramSession,
   );
   const securityInput = secConfig == null
     ? {}
-    : { gramSessionHeaderXGramSession: secConfig };
+    : { sessionHeaderGramSession: secConfig };
   const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
@@ -114,7 +113,7 @@ async function $do(
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.gramSessionHeaderXGramSession,
+    securitySource: client._options.sessionHeaderGramSession,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -127,7 +126,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);

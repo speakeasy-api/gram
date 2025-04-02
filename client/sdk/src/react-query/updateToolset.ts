@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { assetsAssetsNumberUploadOpenAPIv3 } from "../funcs/assetsAssetsNumberUploadOpenAPIv3.js";
+import { toolsetsToolsetsNumberUpdateToolset } from "../funcs/toolsetsToolsetsNumberUpdateToolset.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -17,57 +17,56 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AssetsAssetsNumberUploadOpenAPIv3MutationVariables = {
-  request: operations.AssetsNumberUploadOpenAPIv3Request;
+export type UpdateToolsetMutationVariables = {
+  request: operations.ToolsetsNumberUpdateToolsetRequest;
   options?: RequestOptions;
 };
 
-export type AssetsAssetsNumberUploadOpenAPIv3MutationData =
-  components.UploadOpenAPIv3Result;
+export type UpdateToolsetMutationData = components.Toolset;
 
 /**
- * uploadOpenAPIv3 assets
+ * updateToolset toolsets
  *
  * @remarks
- * Upload an OpenAPI v3 document to Gram.
+ * Update a toolset's properties including name, description, and HTTP tools
  */
-export function useAssetsAssetsNumberUploadOpenAPIv3Mutation(
+export function useUpdateToolsetMutation(
   options?: MutationHookOptions<
-    AssetsAssetsNumberUploadOpenAPIv3MutationData,
+    UpdateToolsetMutationData,
     Error,
-    AssetsAssetsNumberUploadOpenAPIv3MutationVariables
+    UpdateToolsetMutationVariables
   >,
 ): UseMutationResult<
-  AssetsAssetsNumberUploadOpenAPIv3MutationData,
+  UpdateToolsetMutationData,
   Error,
-  AssetsAssetsNumberUploadOpenAPIv3MutationVariables
+  UpdateToolsetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAssetsAssetsNumberUploadOpenAPIv3Mutation(client, options),
+    ...buildUpdateToolsetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAssetsAssetsNumberUploadOpenAPIv3(): MutationKey {
-  return ["@gram/sdk", "assets", "assetsNumberUploadOpenAPIv3"];
+export function mutationKeyUpdateToolset(): MutationKey {
+  return ["@gram/sdk", "toolsets", "toolsetsNumberUpdateToolset"];
 }
 
-export function buildAssetsAssetsNumberUploadOpenAPIv3Mutation(
+export function buildUpdateToolsetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AssetsAssetsNumberUploadOpenAPIv3MutationVariables,
-  ) => Promise<AssetsAssetsNumberUploadOpenAPIv3MutationData>;
+    variables: UpdateToolsetMutationVariables,
+  ) => Promise<UpdateToolsetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAssetsAssetsNumberUploadOpenAPIv3(),
-    mutationFn: function assetsAssetsNumberUploadOpenAPIv3MutationFn({
+    mutationKey: mutationKeyUpdateToolset(),
+    mutationFn: function updateToolsetMutationFn({
       request,
       options,
-    }): Promise<AssetsAssetsNumberUploadOpenAPIv3MutationData> {
+    }): Promise<UpdateToolsetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -80,7 +79,7 @@ export function buildAssetsAssetsNumberUploadOpenAPIv3Mutation(
           ),
         },
       };
-      return unwrapAsync(assetsAssetsNumberUploadOpenAPIv3(
+      return unwrapAsync(toolsetsToolsetsNumberUpdateToolset(
         client$,
         request,
         mergedOptions,

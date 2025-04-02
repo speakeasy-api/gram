@@ -17,13 +17,12 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type DeploymentsDeploymentsNumberCreateDeploymentMutationVariables = {
+export type CreateDeploymentMutationVariables = {
   request: operations.DeploymentsNumberCreateDeploymentRequest;
   options?: RequestOptions;
 };
 
-export type DeploymentsDeploymentsNumberCreateDeploymentMutationData =
-  components.CreateDeploymentResult;
+export type CreateDeploymentMutationData = components.CreateDeploymentResult;
 
 /**
  * createDeployment deployments
@@ -31,48 +30,43 @@ export type DeploymentsDeploymentsNumberCreateDeploymentMutationData =
  * @remarks
  * Create a deployment to load tool definitions.
  */
-export function useDeploymentsDeploymentsNumberCreateDeploymentMutation(
+export function useCreateDeploymentMutation(
   options?: MutationHookOptions<
-    DeploymentsDeploymentsNumberCreateDeploymentMutationData,
+    CreateDeploymentMutationData,
     Error,
-    DeploymentsDeploymentsNumberCreateDeploymentMutationVariables
+    CreateDeploymentMutationVariables
   >,
 ): UseMutationResult<
-  DeploymentsDeploymentsNumberCreateDeploymentMutationData,
+  CreateDeploymentMutationData,
   Error,
-  DeploymentsDeploymentsNumberCreateDeploymentMutationVariables
+  CreateDeploymentMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildDeploymentsDeploymentsNumberCreateDeploymentMutation(
-      client,
-      options,
-    ),
+    ...buildCreateDeploymentMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyDeploymentsDeploymentsNumberCreateDeployment(): MutationKey {
+export function mutationKeyCreateDeployment(): MutationKey {
   return ["@gram/sdk", "deployments", "deploymentsNumberCreateDeployment"];
 }
 
-export function buildDeploymentsDeploymentsNumberCreateDeploymentMutation(
+export function buildCreateDeploymentMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: DeploymentsDeploymentsNumberCreateDeploymentMutationVariables,
-  ) => Promise<DeploymentsDeploymentsNumberCreateDeploymentMutationData>;
+    variables: CreateDeploymentMutationVariables,
+  ) => Promise<CreateDeploymentMutationData>;
 } {
   return {
-    mutationKey: mutationKeyDeploymentsDeploymentsNumberCreateDeployment(),
-    mutationFn: function deploymentsDeploymentsNumberCreateDeploymentMutationFn(
-      {
-        request,
-        options,
-      },
-    ): Promise<DeploymentsDeploymentsNumberCreateDeploymentMutationData> {
+    mutationKey: mutationKeyCreateDeployment(),
+    mutationFn: function createDeploymentMutationFn({
+      request,
+      options,
+    }): Promise<CreateDeploymentMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,

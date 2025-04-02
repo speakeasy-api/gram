@@ -6,40 +6,40 @@
 import { HTTPToolDefinition } from "@gram/sdk/models/components";
 
 let value: HTTPToolDefinition = {
-  apikeyEnvVar: "Quisquam voluptas.",
-  bearerEnvVar: "Voluptatibus itaque non.",
-  bodySchema: "Qui quis dolore.",
-  description: "Perferendis accusamus occaecati laborum quaerat labore.",
-  headersSchema: "Aut aperiam velit.",
-  httpMethod: "Repellat et est pariatur eum distinctio.",
-  id: "Eos error unde tempora.",
-  name: "Nemo qui ducimus enim tempore debitis quod.",
-  passwordEnvVar: "Sequi est quos.",
-  path: "Blanditiis temporibus qui vitae consectetur dolorem reiciendis.",
-  pathparamsSchema: "Ut nam dolor provident corporis accusamus.",
-  queriesSchema: "Nesciunt vitae sint et in nihil.",
-  securityType: "Aut corrupti eos quasi ad fuga voluptatibus.",
-  serverEnvVar: "Accusamus optio voluptatibus et repellat.",
-  usernameEnvVar: "Quos sint voluptatibus.",
+  apikeyEnvVar: "Dolorem fugiat cupiditate corporis laborum cum.",
+  bearerEnvVar: "Et dignissimos.",
+  bodySchema: "Molestiae architecto qui.",
+  description: "Eos placeat quia illo.",
+  headersSchema: "Autem id minima sit numquam.",
+  httpMethod: "Repudiandae ipsa velit atque et architecto nisi.",
+  id: "Est minima voluptatibus.",
+  name: "Nobis impedit eaque similique aliquid.",
+  passwordEnvVar: "Aliquam harum voluptatum autem.",
+  path: "Quis magni vel autem voluptas officiis.",
+  pathparamsSchema: "Eligendi quibusdam qui animi illum nisi.",
+  queriesSchema: "Fugiat rem et aliquid aut.",
+  securityType: "Rerum ullam velit molestiae odio.",
+  serverEnvVar: "Dignissimos dolor tempore.",
+  usernameEnvVar: "Accusamus et possimus id doloremque.",
 };
 ```
 
 ## Fields
 
-| Field                                                         | Type                                                          | Required                                                      | Description                                                   | Example                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
-| `apikeyEnvVar`                                                | *string*                                                      | :heavy_minus_sign:                                            | Environment variable for API key                              | Sapiente quaerat autem inventore velit.                       |
-| `bearerEnvVar`                                                | *string*                                                      | :heavy_minus_sign:                                            | Environment variable for bearer token                         | Error distinctio quia commodi ad quia maiores.                |
-| `bodySchema`                                                  | *string*                                                      | :heavy_minus_sign:                                            | JSON schema for request body                                  | Rem necessitatibus aut dignissimos sit.                       |
-| `description`                                                 | *string*                                                      | :heavy_check_mark:                                            | Description of the tool                                       | Eveniet voluptatum harum.                                     |
-| `headersSchema`                                               | *string*                                                      | :heavy_minus_sign:                                            | JSON schema for headers                                       | Ratione praesentium dolor officiis nostrum earum non.         |
-| `httpMethod`                                                  | *string*                                                      | :heavy_check_mark:                                            | HTTP method for the request                                   | Tempora sit repellat qui rem labore ducimus.                  |
-| `id`                                                          | *string*                                                      | :heavy_check_mark:                                            | The ID of the HTTP tool                                       | Quo corrupti molestias velit.                                 |
-| `name`                                                        | *string*                                                      | :heavy_check_mark:                                            | The name of the tool                                          | Et rerum error aut.                                           |
-| `passwordEnvVar`                                              | *string*                                                      | :heavy_minus_sign:                                            | Environment variable for password                             | Ut dicta aliquam iusto sunt.                                  |
-| `path`                                                        | *string*                                                      | :heavy_check_mark:                                            | Path for the request                                          | Molestiae eveniet aut in non ea reprehenderit.                |
-| `pathparamsSchema`                                            | *string*                                                      | :heavy_minus_sign:                                            | JSON schema for path parameters                               | Soluta nam sed et qui officia.                                |
-| `queriesSchema`                                               | *string*                                                      | :heavy_minus_sign:                                            | JSON schema for query parameters                              | Consequuntur aut in praesentium voluptates reprehenderit vel. |
-| `securityType`                                                | *string*                                                      | :heavy_check_mark:                                            | Type of security (http:bearer, http:basic, apikey)            | Totam quos fugit sed consequatur qui.                         |
-| `serverEnvVar`                                                | *string*                                                      | :heavy_check_mark:                                            | Environment variable for the server URL                       | Voluptatem ullam.                                             |
-| `usernameEnvVar`                                              | *string*                                                      | :heavy_minus_sign:                                            | Environment variable for username                             | Quos provident.                                               |
+| Field                                              | Type                                               | Required                                           | Description                                        | Example                                            |
+| -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| `apikeyEnvVar`                                     | *string*                                           | :heavy_minus_sign:                                 | Environment variable for API key                   | Earum culpa rem et nulla.                          |
+| `bearerEnvVar`                                     | *string*                                           | :heavy_minus_sign:                                 | Environment variable for bearer token              | Omnis laudantium distinctio qui.                   |
+| `bodySchema`                                       | *string*                                           | :heavy_minus_sign:                                 | JSON schema for request body                       | Quisquam atque qui dicta et a.                     |
+| `description`                                      | *string*                                           | :heavy_check_mark:                                 | Description of the tool                            | Qui est repudiandae sint placeat sed explicabo.    |
+| `headersSchema`                                    | *string*                                           | :heavy_minus_sign:                                 | JSON schema for headers                            | Quia nihil eaque quam praesentium eligendi.        |
+| `httpMethod`                                       | *string*                                           | :heavy_check_mark:                                 | HTTP method for the request                        | Facere minus ratione qui.                          |
+| `id`                                               | *string*                                           | :heavy_check_mark:                                 | The ID of the HTTP tool                            | Non architecto.                                    |
+| `name`                                             | *string*                                           | :heavy_check_mark:                                 | The name of the tool                               | Velit iure et corrupti quia quis.                  |
+| `passwordEnvVar`                                   | *string*                                           | :heavy_minus_sign:                                 | Environment variable for password                  | Inventore accusamus accusamus aut repudiandae.     |
+| `path`                                             | *string*                                           | :heavy_check_mark:                                 | Path for the request                               | Laudantium molestiae ipsum.                        |
+| `pathparamsSchema`                                 | *string*                                           | :heavy_minus_sign:                                 | JSON schema for path parameters                    | Hic sed fugit cum voluptatem laborum eum.          |
+| `queriesSchema`                                    | *string*                                           | :heavy_minus_sign:                                 | JSON schema for query parameters                   | Aliquam sunt non voluptas maxime similique.        |
+| `securityType`                                     | *string*                                           | :heavy_check_mark:                                 | Type of security (http:bearer, http:basic, apikey) | Totam voluptatem tempora consequatur.              |
+| `serverEnvVar`                                     | *string*                                           | :heavy_check_mark:                                 | Environment variable for the server URL            | Esse perspiciatis totam iure.                      |
+| `usernameEnvVar`                                   | *string*                                           | :heavy_minus_sign:                                 | Environment variable for username                  | Autem ut in repellendus cupiditate.                |

@@ -16,7 +16,7 @@ export type DeploymentsNumberGetDeploymentRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -26,17 +26,17 @@ export const DeploymentsNumberGetDeploymentRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   id: z.string(),
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
   });
 });
 
 /** @internal */
 export type DeploymentsNumberGetDeploymentRequest$Outbound = {
   id: string;
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -46,10 +46,10 @@ export const DeploymentsNumberGetDeploymentRequest$outboundSchema: z.ZodType<
   DeploymentsNumberGetDeploymentRequest
 > = z.object({
   id: z.string(),
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
   });
 });
 

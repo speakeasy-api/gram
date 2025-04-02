@@ -11,13 +11,13 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export type AssetsNumberUploadOpenAPIv3Request = {
   contentLength: number;
   /**
-   * The project ID the OpenAPI document belongs to
+   * project header
    */
-  gramProjectID: string;
+  gramProject: string;
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -27,21 +27,21 @@ export const AssetsNumberUploadOpenAPIv3Request$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   "Content-Length": z.number().int(),
-  "Gram-Project-ID": z.string(),
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Project": z.string(),
+  "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "Content-Length": "contentLength",
-    "Gram-Project-ID": "gramProjectID",
-    "X-Gram-Session": "xGramSession",
+    "Gram-Project": "gramProject",
+    "Gram-Session": "gramSession",
   });
 });
 
 /** @internal */
 export type AssetsNumberUploadOpenAPIv3Request$Outbound = {
   "Content-Length": number;
-  "Gram-Project-ID": string;
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Project": string;
+  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -51,13 +51,13 @@ export const AssetsNumberUploadOpenAPIv3Request$outboundSchema: z.ZodType<
   AssetsNumberUploadOpenAPIv3Request
 > = z.object({
   contentLength: z.number().int(),
-  gramProjectID: z.string(),
-  xGramSession: z.string().optional(),
+  gramProject: z.string(),
+  gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     contentLength: "Content-Length",
-    gramProjectID: "Gram-Project-ID",
-    xGramSession: "X-Gram-Session",
+    gramProject: "Gram-Project",
+    gramSession: "Gram-Session",
   });
 });
 

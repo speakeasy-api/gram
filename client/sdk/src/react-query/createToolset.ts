@@ -17,13 +17,12 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type ToolsetsToolsetsNumberCreateToolsetMutationVariables = {
+export type CreateToolsetMutationVariables = {
   request: operations.ToolsetsNumberCreateToolsetRequest;
   options?: RequestOptions;
 };
 
-export type ToolsetsToolsetsNumberCreateToolsetMutationData =
-  components.Toolset;
+export type CreateToolsetMutationData = components.Toolset;
 
 /**
  * createToolset toolsets
@@ -31,43 +30,43 @@ export type ToolsetsToolsetsNumberCreateToolsetMutationData =
  * @remarks
  * Create a new toolset with associated tools
  */
-export function useToolsetsToolsetsNumberCreateToolsetMutation(
+export function useCreateToolsetMutation(
   options?: MutationHookOptions<
-    ToolsetsToolsetsNumberCreateToolsetMutationData,
+    CreateToolsetMutationData,
     Error,
-    ToolsetsToolsetsNumberCreateToolsetMutationVariables
+    CreateToolsetMutationVariables
   >,
 ): UseMutationResult<
-  ToolsetsToolsetsNumberCreateToolsetMutationData,
+  CreateToolsetMutationData,
   Error,
-  ToolsetsToolsetsNumberCreateToolsetMutationVariables
+  CreateToolsetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildToolsetsToolsetsNumberCreateToolsetMutation(client, options),
+    ...buildCreateToolsetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyToolsetsToolsetsNumberCreateToolset(): MutationKey {
+export function mutationKeyCreateToolset(): MutationKey {
   return ["@gram/sdk", "toolsets", "toolsetsNumberCreateToolset"];
 }
 
-export function buildToolsetsToolsetsNumberCreateToolsetMutation(
+export function buildCreateToolsetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: ToolsetsToolsetsNumberCreateToolsetMutationVariables,
-  ) => Promise<ToolsetsToolsetsNumberCreateToolsetMutationData>;
+    variables: CreateToolsetMutationVariables,
+  ) => Promise<CreateToolsetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyToolsetsToolsetsNumberCreateToolset(),
-    mutationFn: function toolsetsToolsetsNumberCreateToolsetMutationFn({
+    mutationKey: mutationKeyCreateToolset(),
+    mutationFn: function createToolsetMutationFn({
       request,
       options,
-    }): Promise<ToolsetsToolsetsNumberCreateToolsetMutationData> {
+    }): Promise<CreateToolsetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,

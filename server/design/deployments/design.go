@@ -26,6 +26,8 @@ var _ = Service("deployments", func() {
 			Param("id")
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Deployment"}`)
 	})
 
 	Method("createDeployment", func() {
@@ -43,6 +45,8 @@ var _ = Service("deployments", func() {
 			sessions.SessionHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateDeployment"}`)
 	})
 
 	Method("listDeployments", func() {
@@ -63,6 +67,8 @@ var _ = Service("deployments", func() {
 			Response(StatusOK)
 		})
 	})
+
+	Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDeployments"}`)
 })
 
 var Deployment = Type("Deployment", func() {

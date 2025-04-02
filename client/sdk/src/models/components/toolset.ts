@@ -10,9 +10,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type Toolset = {
   /**
-   * When the toolset was created
+   * When the toolset was created.
    */
-  createdAt: string;
+  createdAt: Date;
   /**
    * Description of the toolset
    */
@@ -38,22 +38,31 @@ export type Toolset = {
    */
   projectId: string;
   /**
-   * When the toolset was last updated
+   * The slug of the toolset
    */
-  updatedAt: string;
+  slug: string;
+  /**
+   * When the toolset was last updated.
+   */
+  updatedAt: Date;
 };
 
 /** @internal */
 export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
   z.object({
-    created_at: z.string(),
+    created_at: z.string().datetime({ offset: true }).transform(v =>
+      new Date(v)
+    ),
     description: z.string().optional(),
     http_tool_ids: z.array(z.string()).optional(),
     id: z.string(),
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
-    updated_at: z.string(),
+    slug: z.string(),
+    updated_at: z.string().datetime({ offset: true }).transform(v =>
+      new Date(v)
+    ),
   }).transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
@@ -73,6 +82,7 @@ export type Toolset$Outbound = {
   name: string;
   organization_id: string;
   project_id: string;
+  slug: string;
   updated_at: string;
 };
 
@@ -82,14 +92,15 @@ export const Toolset$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   Toolset
 > = z.object({
-  createdAt: z.string(),
+  createdAt: z.date().transform(v => v.toISOString()),
   description: z.string().optional(),
   httpToolIds: z.array(z.string()).optional(),
   id: z.string(),
   name: z.string(),
   organizationId: z.string(),
   projectId: z.string(),
-  updatedAt: z.string(),
+  slug: z.string(),
+  updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",

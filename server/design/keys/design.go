@@ -24,6 +24,8 @@ var _ = Service("keys", func() {
 			sessions.SessionHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAPIKey"}`)
 	})
 
 	Method("listKeys", func() {
@@ -40,6 +42,8 @@ var _ = Service("keys", func() {
 			sessions.SessionHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAPIKeys"}`)
 	})
 
 	Method("revokeKey", func() {
@@ -57,6 +61,8 @@ var _ = Service("keys", func() {
 			sessions.SessionHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAPIKeys"}`)
 	})
 })
 

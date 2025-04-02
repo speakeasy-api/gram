@@ -10,21 +10,29 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type Project = {
   projectId: string;
+  projectName: string;
+  projectSlug: string;
 };
 
 /** @internal */
 export const Project$inboundSchema: z.ZodType<Project, z.ZodTypeDef, unknown> =
   z.object({
     project_id: z.string(),
+    project_name: z.string(),
+    project_slug: z.string(),
   }).transform((v) => {
     return remap$(v, {
       "project_id": "projectId",
+      "project_name": "projectName",
+      "project_slug": "projectSlug",
     });
   });
 
 /** @internal */
 export type Project$Outbound = {
   project_id: string;
+  project_name: string;
+  project_slug: string;
 };
 
 /** @internal */
@@ -34,9 +42,13 @@ export const Project$outboundSchema: z.ZodType<
   Project
 > = z.object({
   projectId: z.string(),
+  projectName: z.string(),
+  projectSlug: z.string(),
 }).transform((v) => {
   return remap$(v, {
     projectId: "project_id",
+    projectName: "project_name",
+    projectSlug: "project_slug",
   });
 });
 

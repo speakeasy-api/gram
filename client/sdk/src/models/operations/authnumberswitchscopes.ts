@@ -20,7 +20,7 @@ export type AuthNumberSwitchScopesRequest = {
   /**
    * Session header
    */
-  xGramSession?: string | undefined;
+  gramSession?: string | undefined;
 };
 
 export type AuthNumberSwitchScopesResponse = {
@@ -35,12 +35,12 @@ export const AuthNumberSwitchScopesRequest$inboundSchema: z.ZodType<
 > = z.object({
   organization_id: z.string().optional(),
   project_id: z.string().optional(),
-  "X-Gram-Session": z.string().optional(),
+  "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "organization_id": "organizationId",
     "project_id": "projectId",
-    "X-Gram-Session": "xGramSession",
+    "Gram-Session": "gramSession",
   });
 });
 
@@ -48,7 +48,7 @@ export const AuthNumberSwitchScopesRequest$inboundSchema: z.ZodType<
 export type AuthNumberSwitchScopesRequest$Outbound = {
   organization_id?: string | undefined;
   project_id?: string | undefined;
-  "X-Gram-Session"?: string | undefined;
+  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -59,12 +59,12 @@ export const AuthNumberSwitchScopesRequest$outboundSchema: z.ZodType<
 > = z.object({
   organizationId: z.string().optional(),
   projectId: z.string().optional(),
-  xGramSession: z.string().optional(),
+  gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     organizationId: "organization_id",
     projectId: "project_id",
-    xGramSession: "X-Gram-Session",
+    gramSession: "Gram-Session",
   });
 });
 

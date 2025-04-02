@@ -21,6 +21,9 @@ import { tool$authAuthNumberSwitchScopes } from "./tools/authAuthNumberSwitchSco
 import { tool$deploymentsDeploymentsNumberCreateDeployment } from "./tools/deploymentsDeploymentsNumberCreateDeployment.js";
 import { tool$deploymentsDeploymentsNumberGetDeployment } from "./tools/deploymentsDeploymentsNumberGetDeployment.js";
 import { tool$deploymentsDeploymentsNumberListDeployments } from "./tools/deploymentsDeploymentsNumberListDeployments.js";
+import { tool$keysKeysNumberCreateKey } from "./tools/keysKeysNumberCreateKey.js";
+import { tool$keysKeysNumberListKeys } from "./tools/keysKeysNumberListKeys.js";
+import { tool$keysKeysNumberRevokeKey } from "./tools/keysKeysNumberRevokeKey.js";
 import { tool$systemSystemNumberHealthCheck } from "./tools/systemSystemNumberHealthCheck.js";
 import { tool$toolsetsToolsetsNumberCreateToolset } from "./tools/toolsetsToolsetsNumberCreateToolset.js";
 import { tool$toolsetsToolsetsNumberGetToolsetDetails } from "./tools/toolsetsToolsetsNumberGetToolsetDetails.js";
@@ -32,18 +35,16 @@ export function createMCPServer(deps: {
   allowedTools?: string[] | undefined;
   scopes?: MCPScope[] | undefined;
   serverURL?: string | undefined;
-  gramSessionHeaderXGramSession?:
-    | SDKOptions["gramSessionHeaderXGramSession"]
-    | undefined;
+  sessionHeaderGramSession?: SDKOptions["sessionHeaderGramSession"] | undefined;
   serverIdx?: SDKOptions["serverIdx"] | undefined;
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.2.1",
+    version: "0.2.2",
   });
 
   const client = new GramCore({
-    gramSessionHeaderXGramSession: deps.gramSessionHeaderXGramSession,
+    sessionHeaderGramSession: deps.sessionHeaderGramSession,
     serverURL: deps.serverURL,
     serverIdx: deps.serverIdx,
   });
@@ -78,6 +79,9 @@ export function createMCPServer(deps: {
   tool(tool$deploymentsDeploymentsNumberCreateDeployment);
   tool(tool$deploymentsDeploymentsNumberGetDeployment);
   tool(tool$deploymentsDeploymentsNumberListDeployments);
+  tool(tool$keysKeysNumberCreateKey);
+  tool(tool$keysKeysNumberListKeys);
+  tool(tool$keysKeysNumberRevokeKey);
   tool(tool$toolsetsToolsetsNumberCreateToolset);
   tool(tool$toolsetsToolsetsNumberGetToolsetDetails);
   tool(tool$toolsetsToolsetsNumberListToolsets);

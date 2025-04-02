@@ -6,12 +6,12 @@
 import { AuthNumberLogoutRequest } from "@gram/sdk/models/operations";
 
 let value: AuthNumberLogoutRequest = {
-  xGramSession: "Alias quas expedita quod vero aperiam.",
+  gramSession: "Minus dolore consequuntur eum necessitatibus est quisquam.",
 };
 ```
 
 ## Fields
 
-| Field                                  | Type                                   | Required                               | Description                            | Example                                |
-| -------------------------------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- |
-| `xGramSession`                         | *string*                               | :heavy_minus_sign:                     | Session header                         | Alias quas expedita quod vero aperiam. |
+| Field                                                      | Type                                                       | Required                                                   | Description                                                | Example                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `gramSession`                                              | *string*                                                   | :heavy_minus_sign:                                         | Session header                                             | Minus dolore consequuntur eum necessitatibus est quisquam. |

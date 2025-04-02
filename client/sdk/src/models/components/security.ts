@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type Security = {
-  gramSessionHeaderXGramSession?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 /** @internal */
@@ -18,16 +18,16 @@ export const Security$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "gram_session_header_X-Gram-Session": z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "gram_session_header_X-Gram-Session": "gramSessionHeaderXGramSession",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
   });
 });
 
 /** @internal */
 export type Security$Outbound = {
-  "gram_session_header_X-Gram-Session"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -36,10 +36,10 @@ export const Security$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   Security
 > = z.object({
-  gramSessionHeaderXGramSession: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    gramSessionHeaderXGramSession: "gram_session_header_X-Gram-Session",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 

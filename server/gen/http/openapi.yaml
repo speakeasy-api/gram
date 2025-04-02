@@ -15,9 +15,6 @@ produces:
 paths:
     /health:
         get:
-            tags:
-                - system
-            summary: healthCheck system
             description: Check the health of the service.
             operationId: system#healthCheck
             responses:
@@ -29,31 +26,33 @@ paths:
                             - status
             schemes:
                 - http
+            summary: healthCheck system
+            tags:
+                - system
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/assets.uploadOpenAPIv3:
         post:
-            tags:
-                - assets
-            summary: uploadOpenAPIv3 assets
             description: Upload an OpenAPI v3 document to Gram.
             operationId: assets#uploadOpenAPIv3
             parameters:
-                - name: Content-Type
-                  in: header
+                - in: header
+                  name: Content-Type
                   required: true
                   type: string
-                - name: Content-Length
+                - format: int64
                   in: header
+                  name: Content-Length
                   required: true
                   type: integer
-                  format: int64
-                - name: Gram-Project
+                - description: project header
                   in: header
-                  description: project header
+                  name: Gram-Project
                   required: true
                   type: string
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
             responses:
@@ -67,17 +66,19 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
+            summary: uploadOpenAPIv3 assets
+            tags:
+                - assets
+            x-speakeasy-react-hook:
+                name: UploadOpenAPIv3
     /rpc/auth.callback:
         get:
-            tags:
-                - auth
-            summary: callback auth
             description: Handles the authentication callback.
             operationId: auth#callback
             parameters:
-                - name: shared_token
+                - description: The shared token for authentication from the speakeasy system
                   in: query
-                  description: The shared token for authentication from the speakeasy system
+                  name: shared_token
                   required: true
                   type: string
             responses:
@@ -92,22 +93,28 @@ paths:
                             type: string
             schemes:
                 - http
-    /rpc/auth.info:
-        get:
+            summary: callback auth
             tags:
                 - auth
-            summary: info auth
+            x-speakeasy-react-hook:
+                disabled: true
+    /rpc/auth.info:
+        get:
             description: Provides information about the current authentication status.
             operationId: auth#info
             parameters:
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
             responses:
                 "200":
                     description: OK response.
+                    headers:
+                        Gram-Session:
+                            description: Session header
+                            type: string
                     schema:
                         $ref: '#/definitions/AuthInfoResponseBody'
                         required:
@@ -115,25 +122,23 @@ paths:
                             - user_email
                             - active_organization_id
                             - organizations
-                    headers:
-                        Gram-Session:
-                            description: Session header
-                            type: string
             schemes:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/auth.logout:
-        get:
+            summary: info auth
             tags:
                 - auth
-            summary: logout auth
+            x-speakeasy-react-hook:
+                name: SessionInfo
+    /rpc/auth.logout:
+        get:
             description: Logs out the current user by clearing their session.
             operationId: auth#logout
             parameters:
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
             responses:
@@ -143,27 +148,29 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/auth.switchScopes:
-        post:
+            summary: logout auth
             tags:
                 - auth
-            summary: switchScopes auth
+            x-speakeasy-react-hook:
+                name: Logout
+    /rpc/auth.switchScopes:
+        post:
             description: Switches the authentication scope to a different organization.
             operationId: auth#switchScopes
             parameters:
-                - name: organization_id
+                - description: The organization slug to switch scopes
                   in: query
-                  description: The organization slug to switch scopes
+                  name: organization_id
                   required: false
                   type: string
-                - name: project_id
+                - description: The project id to switch scopes too
                   in: query
-                  description: The project id to switch scopes too
+                  name: project_id
                   required: false
                   type: string
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
             responses:
@@ -177,21 +184,23 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
+            summary: switchScopes auth
+            tags:
+                - auth
+            x-speakeasy-react-hook:
+                name: SwitchScopes
     /rpc/deployments.create:
         post:
-            tags:
-                - deployments
-            summary: createDeployment deployments
             description: Create a deployment to load tool definitions.
             operationId: deployments#createDeployment
             parameters:
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
-                - name: CreateDeploymentRequestBody
-                  in: body
+                - in: body
+                  name: CreateDeploymentRequestBody
                   required: true
                   schema:
                     $ref: '#/definitions/DeploymentsCreateDeploymentRequestBody'
@@ -207,22 +216,24 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/deployments.get:
-        post:
+            summary: createDeployment deployments
             tags:
                 - deployments
-            summary: getDeployment deployments
+            x-speakeasy-react-hook:
+                name: CreateDeployment
+    /rpc/deployments.get:
+        post:
             description: Create a deployment to load tool definitions.
             operationId: deployments#getDeployment
             parameters:
-                - name: id
+                - description: The ID of the deployment
                   in: query
-                  description: The ID of the deployment
+                  name: id
                   required: true
                   type: string
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
             responses:
@@ -241,6 +252,11 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
+            summary: getDeployment deployments
+            tags:
+                - deployments
+            x-speakeasy-react-hook:
+                name: Deployment
     /rpc/deployments.list:
         post:
             tags:
@@ -280,19 +296,16 @@ paths:
                 - session_header_Gram-Session: []
     /rpc/keys.create:
         post:
-            tags:
-                - keys
-            summary: createKey keys
             description: Create a new api key
             operationId: keys#createKey
             parameters:
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
-                - name: CreateKeyRequestBody
-                  in: body
+                - in: body
+                  name: CreateKeyRequestBody
                   required: true
                   schema:
                     $ref: '#/definitions/KeysCreateKeyRequestBody'
@@ -317,17 +330,19 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/keys.list:
-        get:
+            summary: createKey keys
             tags:
                 - keys
-            summary: listKeys keys
+            x-speakeasy-react-hook:
+                name: CreateAPIKey
+    /rpc/keys.list:
+        get:
             description: List all api keys for an organization
             operationId: keys#listKeys
             parameters:
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
             responses:
@@ -341,22 +356,24 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/keys.revoke/{id}:
-        post:
+            summary: listKeys keys
             tags:
                 - keys
-            summary: revokeKey keys
+            x-speakeasy-react-hook:
+                name: ListAPIKeys
+    /rpc/keys.revoke/{id}:
+        post:
             description: Revoke a api key
             operationId: keys#revokeKey
             parameters:
-                - name: id
+                - description: The ID of the key to revoke
                   in: path
-                  description: The ID of the key to revoke
+                  name: id
                   required: true
                   type: string
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
             responses:
@@ -366,26 +383,28 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
+            summary: revokeKey keys
+            tags:
+                - keys
+            x-speakeasy-react-hook:
+                name: RevokeAPIKeys
     /rpc/toolsets.create:
         post:
-            tags:
-                - toolsets
-            summary: createToolset toolsets
             description: Create a new toolset with associated tools
             operationId: toolsets#createToolset
             parameters:
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
-                - name: Gram-Project
+                - description: project header
                   in: header
-                  description: project header
+                  name: Gram-Project
                   required: true
                   type: string
-                - name: CreateToolsetRequestBody
-                  in: body
+                - in: body
+                  name: CreateToolsetRequestBody
                   required: true
                   schema:
                     $ref: '#/definitions/ToolsetsCreateToolsetRequestBody'
@@ -408,27 +427,29 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/toolsets.get/{id}:
-        get:
+            summary: createToolset toolsets
             tags:
                 - toolsets
-            summary: getToolsetDetails toolsets
+            x-speakeasy-react-hook:
+                name: CreateToolset
+    /rpc/toolsets.get/{id}:
+        get:
             description: Get detailed information about a toolset including full HTTP tool definitions
             operationId: toolsets#getToolsetDetails
             parameters:
-                - name: id
+                - description: The ID of the toolset
                   in: path
-                  description: The ID of the toolset
+                  name: id
                   required: true
                   type: string
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
-                - name: Gram-Project
+                - description: project header
                   in: header
-                  description: project header
+                  name: Gram-Project
                   required: true
                   type: string
             responses:
@@ -449,22 +470,24 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/toolsets.list:
-        get:
+            summary: getToolsetDetails toolsets
             tags:
                 - toolsets
-            summary: listToolsets toolsets
+            x-speakeasy-react-hook:
+                name: Toolset
+    /rpc/toolsets.list:
+        get:
             description: List all toolsets for a project
             operationId: toolsets#listToolsets
             parameters:
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
-                - name: Gram-Project
+                - description: project header
                   in: header
-                  description: project header
+                  name: Gram-Project
                   required: true
                   type: string
             responses:
@@ -478,31 +501,33 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
-    /rpc/toolsets.update/{id}:
-        post:
+            summary: listToolsets toolsets
             tags:
                 - toolsets
-            summary: updateToolset toolsets
+            x-speakeasy-react-hook:
+                name: ListToolsets
+    /rpc/toolsets.update/{id}:
+        post:
             description: Update a toolset's properties including name, description, and HTTP tools
             operationId: toolsets#updateToolset
             parameters:
-                - name: id
+                - description: The ID of the toolset to update
                   in: path
-                  description: The ID of the toolset to update
+                  name: id
                   required: true
                   type: string
-                - name: Gram-Session
+                - description: Session header
                   in: header
-                  description: Session header
+                  name: Gram-Session
                   required: false
                   type: string
-                - name: Gram-Project
+                - description: project header
                   in: header
-                  description: project header
+                  name: Gram-Project
                   required: true
                   type: string
-                - name: UpdateToolsetRequestBody
-                  in: body
+                - in: body
+                  name: UpdateToolsetRequestBody
                   required: true
                   schema:
                     $ref: '#/definitions/ToolsetsUpdateToolsetRequestBody'
@@ -523,6 +548,11 @@ paths:
                 - http
             security:
                 - session_header_Gram-Session: []
+            summary: updateToolset toolsets
+            tags:
+                - toolsets
+            x-speakeasy-react-hook:
+                name: UpdateToolset
 definitions:
     Asset:
         title: Asset
