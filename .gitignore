@@ -8,3 +8,4 @@ junit-report.xml
 .vscode/*
 !.vscode/extensions.json
 .idea
+/server/goa*
