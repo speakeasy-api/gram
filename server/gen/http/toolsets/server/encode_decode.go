@@ -192,6 +192,52 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 	}
 }
 
+// EncodeDeleteToolsetResponse returns an encoder for responses returned by the
+// toolsets deleteToolset endpoint.
+func EncodeDeleteToolsetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeDeleteToolsetRequest returns a decoder for requests sent to the
+// toolsets deleteToolset endpoint.
+func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+	return func(r *http.Request) (any, error) {
+		var (
+			id           string
+			sessionToken *string
+			projectSlug  string
+			err          error
+
+			params = mux.Vars(r)
+		)
+		id = params["id"]
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlug = r.Header.Get("Gram-Project")
+		if projectSlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
+		}
+		if err != nil {
+			return nil, err
+		}
+		payload := NewDeleteToolsetPayload(id, sessionToken, projectSlug)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
 // EncodeGetToolsetDetailsResponse returns an encoder for responses returned by
 // the toolsets getToolsetDetails endpoint.
 func EncodeGetToolsetDetailsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -245,14 +291,15 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 // *ToolsetResponseBody from a value of type *toolsets.Toolset.
 func marshalToolsetsToolsetToToolsetResponseBody(v *toolsets.Toolset) *ToolsetResponseBody {
 	res := &ToolsetResponseBody{
-		ID:             v.ID,
-		ProjectID:      v.ProjectID,
-		OrganizationID: v.OrganizationID,
-		Name:           v.Name,
-		Slug:           v.Slug,
-		Description:    v.Description,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                   v.ID,
+		ProjectID:            v.ProjectID,
+		OrganizationID:       v.OrganizationID,
+		Name:                 v.Name,
+		Slug:                 v.Slug,
+		Description:          v.Description,
+		DefaultEnvironmentID: v.DefaultEnvironmentID,
+		CreatedAt:            v.CreatedAt,
+		UpdatedAt:            v.UpdatedAt,
 	}
 	if v.HTTPToolIds != nil {
 		res.HTTPToolIds = make([]string, len(v.HTTPToolIds))

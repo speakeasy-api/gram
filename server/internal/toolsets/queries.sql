@@ -7,6 +7,7 @@ SELECT
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at
@@ -22,6 +23,7 @@ INSERT INTO toolsets (
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
 ) VALUES (
     @organization_id
   , @project_id
@@ -29,6 +31,7 @@ INSERT INTO toolsets (
   , @slug
   , @description
   , NULLIF(@http_tool_ids::uuid[], '{}'::uuid[])
+  , @default_environment_id
 )
 RETURNING 
     id
@@ -38,6 +41,7 @@ RETURNING
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at
@@ -52,6 +56,7 @@ SELECT
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at
@@ -67,6 +72,7 @@ SET
     name = COALESCE(@name, name)
   , description = COALESCE(@description, description)
   , http_tool_ids = COALESCE(NULLIF(@http_tool_ids::uuid[], '{}'::uuid[]), http_tool_ids)
+  , default_environment_id = COALESCE(@default_environment_id, default_environment_id)
   , updated_at = clock_timestamp()
 WHERE id = @id
 RETURNING 
@@ -77,6 +83,7 @@ RETURNING
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at

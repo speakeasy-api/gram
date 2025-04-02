@@ -20,6 +20,7 @@ INSERT INTO toolsets (
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
 ) VALUES (
     $1
   , $2
@@ -27,6 +28,7 @@ INSERT INTO toolsets (
   , $4
   , $5
   , NULLIF($6::uuid[], '{}'::uuid[])
+  , $7
 )
 RETURNING 
     id
@@ -36,6 +38,7 @@ RETURNING
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at
@@ -43,15 +46,31 @@ RETURNING
 `
 
 type CreateToolsetParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	HttpToolIds    []uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	Name                 string
+	Slug                 string
+	Description          pgtype.Text
+	HttpToolIds          []uuid.UUID
+	DefaultEnvironmentID uuid.NullUUID
 }
 
-func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (Toolset, error) {
+type CreateToolsetRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	Name                 string
+	Slug                 string
+	Description          pgtype.Text
+	HttpToolIds          []uuid.UUID
+	DefaultEnvironmentID uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (CreateToolsetRow, error) {
 	row := q.db.QueryRow(ctx, createToolset,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -59,8 +78,9 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		arg.Slug,
 		arg.Description,
 		arg.HttpToolIds,
+		arg.DefaultEnvironmentID,
 	)
-	var i Toolset
+	var i CreateToolsetRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -69,6 +89,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		&i.Slug,
 		&i.Description,
 		&i.HttpToolIds,
+		&i.DefaultEnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -173,6 +194,7 @@ SELECT
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at
@@ -186,9 +208,24 @@ type GetToolsetParams struct {
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset, error) {
+type GetToolsetRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	Name                 string
+	Slug                 string
+	Description          pgtype.Text
+	HttpToolIds          []uuid.UUID
+	DefaultEnvironmentID uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (GetToolsetRow, error) {
 	row := q.db.QueryRow(ctx, getToolset, arg.ID, arg.ProjectID)
-	var i Toolset
+	var i GetToolsetRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -197,6 +234,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 		&i.Slug,
 		&i.Description,
 		&i.HttpToolIds,
+		&i.DefaultEnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -214,6 +252,7 @@ SELECT
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at
@@ -224,15 +263,30 @@ WHERE project_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID) ([]Toolset, error) {
+type ListToolsetsByProjectRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	Name                 string
+	Slug                 string
+	Description          pgtype.Text
+	HttpToolIds          []uuid.UUID
+	DefaultEnvironmentID uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID) ([]ListToolsetsByProjectRow, error) {
 	rows, err := q.db.Query(ctx, listToolsetsByProject, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Toolset
+	var items []ListToolsetsByProjectRow
 	for rows.Next() {
-		var i Toolset
+		var i ListToolsetsByProjectRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
@@ -241,6 +295,7 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.Slug,
 			&i.Description,
 			&i.HttpToolIds,
+			&i.DefaultEnvironmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -262,8 +317,9 @@ SET
     name = COALESCE($1, name)
   , description = COALESCE($2, description)
   , http_tool_ids = COALESCE(NULLIF($3::uuid[], '{}'::uuid[]), http_tool_ids)
+  , default_environment_id = COALESCE($4, default_environment_id)
   , updated_at = clock_timestamp()
-WHERE id = $4
+WHERE id = $5
 RETURNING 
     id
   , organization_id
@@ -272,6 +328,7 @@ RETURNING
   , slug
   , description
   , http_tool_ids
+  , default_environment_id
   , created_at
   , updated_at
   , deleted_at
@@ -279,20 +336,37 @@ RETURNING
 `
 
 type UpdateToolsetParams struct {
-	Name        string
-	Description pgtype.Text
-	HttpToolIds []uuid.UUID
-	ID          uuid.UUID
+	Name                 string
+	Description          pgtype.Text
+	HttpToolIds          []uuid.UUID
+	DefaultEnvironmentID uuid.NullUUID
+	ID                   uuid.UUID
 }
 
-func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (Toolset, error) {
+type UpdateToolsetRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	Name                 string
+	Slug                 string
+	Description          pgtype.Text
+	HttpToolIds          []uuid.UUID
+	DefaultEnvironmentID uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (UpdateToolsetRow, error) {
 	row := q.db.QueryRow(ctx, updateToolset,
 		arg.Name,
 		arg.Description,
 		arg.HttpToolIds,
+		arg.DefaultEnvironmentID,
 		arg.ID,
 	)
-	var i Toolset
+	var i UpdateToolsetRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -301,6 +375,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		&i.Slug,
 		&i.Description,
 		&i.HttpToolIds,
+		&i.DefaultEnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

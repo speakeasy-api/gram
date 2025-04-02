@@ -261,6 +261,78 @@ func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildDeleteToolsetRequest instantiates a HTTP request object with method and
+// path set to call the "toolsets" service "deleteToolset" endpoint
+func (c *Client) BuildDeleteToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		id string
+	)
+	{
+		p, ok := v.(*toolsets.DeleteToolsetPayload)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("toolsets", "deleteToolset", "*toolsets.DeleteToolsetPayload", v)
+		}
+		id = p.ID
+	}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteToolsetToolsetsPath(id)}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "deleteToolset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteToolsetRequest returns an encoder for requests sent to the
+// toolsets deleteToolset server.
+func EncodeDeleteToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.DeleteToolsetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "deleteToolset", "*toolsets.DeleteToolsetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeDeleteToolsetResponse returns a decoder for responses returned by the
+// toolsets deleteToolset endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "deleteToolset", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetToolsetDetailsRequest instantiates a HTTP request object with method
 // and path set to call the "toolsets" service "getToolsetDetails" endpoint
 func (c *Client) BuildGetToolsetDetailsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -350,14 +422,15 @@ func DecodeGetToolsetDetailsResponse(decoder func(*http.Response) goahttp.Decode
 // *toolsets.Toolset from a value of type *ToolsetResponseBody.
 func unmarshalToolsetResponseBodyToToolsetsToolset(v *ToolsetResponseBody) *toolsets.Toolset {
 	res := &toolsets.Toolset{
-		ID:             *v.ID,
-		ProjectID:      *v.ProjectID,
-		OrganizationID: *v.OrganizationID,
-		Name:           *v.Name,
-		Slug:           *v.Slug,
-		Description:    v.Description,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:                   *v.ID,
+		ProjectID:            *v.ProjectID,
+		OrganizationID:       *v.OrganizationID,
+		Name:                 *v.Name,
+		Slug:                 *v.Slug,
+		Description:          v.Description,
+		DefaultEnvironmentID: v.DefaultEnvironmentID,
+		CreatedAt:            *v.CreatedAt,
+		UpdatedAt:            *v.UpdatedAt,
 	}
 	if v.HTTPToolIds != nil {
 		res.HTTPToolIds = make([]string, len(v.HTTPToolIds))

@@ -70,6 +70,27 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateToolset"}`)
 	})
 
+	Method("deleteToolset", func() {
+		Description("Delete a toolset by its ID")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the toolset")
+			Required("id")
+			sessions.SessionPayload()
+			sessions.ProjectPayload()
+		})
+
+		HTTP(func() {
+			Param("id")
+			sessions.SessionHeader()
+			sessions.ProjectHeader()
+			DELETE("/rpc/toolsets.delete/{id}")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteToolset"}`)
+	})
+
 	Method("getToolsetDetails", func() {
 		Description("Get detailed information about a toolset including full HTTP tool definitions")
 
@@ -98,6 +119,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs to include")
+	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
 	sessions.ProjectPayload()
 	Required("name")
 })
@@ -109,6 +131,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
+	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
 	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs included in this toolset")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
@@ -130,6 +153,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("id", String, "The ID of the toolset to update")
 	Attribute("name", String, "The new name of the toolset")
 	Attribute("description", String, "The new description of the toolset")
+	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
 	Attribute("http_tool_ids_to_add", ArrayOf(String), "HTTP tool IDs to add to the toolset")
 	Attribute("http_tool_ids_to_remove", ArrayOf(String), "HTTP tool IDs to remove from the toolset")
 	sessions.ProjectPayload()
@@ -162,6 +186,7 @@ var ToolsetDetails = Type("ToolsetDetails", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
+	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
 	Attribute("http_tools", ArrayOf(HTTPToolDefinition), "The HTTP tools in this toolset")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")

@@ -44,7 +44,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Illum mollitia non aut qui possimus aspernatur.\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"idempotency_key\": \"01jqq0ajmb4qh9eppz48dejr2m\",\n      \"openapiv3_asset_ids\": [\n         \"Explicabo vitae impedit accusamus voluptas in.\",\n         \"Quasi perspiciatis deserunt.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Debitis voluptatem temporibus et.\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"idempotency_key\": \"01jqq0ajmb4qh9eppz48dejr2m\",\n      \"openapiv3_asset_ids\": [\n         \"Veniam et est rerum libero.\",\n         \"Odio iusto delectus unde sed accusamus.\",\n         \"Aperiam molestiae autem impedit non quod ut.\"\n      ]\n   }'")
 		}
 	}
 	var sessionToken *string

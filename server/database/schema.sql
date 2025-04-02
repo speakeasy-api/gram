@@ -134,26 +134,6 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS toolsets (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  name text NOT NULL,
-  slug text NOT NULL,
-  description text,
-  http_tool_ids uuid[],
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT toolsets_pkey PRIMARY KEY (id),
-  CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_project_id_slug_key UNIQUE (project_id, slug)
-);
-
 CREATE TABLE IF NOT EXISTS assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -224,5 +204,26 @@ CREATE TABLE IF NOT EXISTS environment_entries (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   CONSTRAINT environments_entries_pkey PRIMARY KEY (environment_id, name),
   CONSTRAINT environments_entries_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE
+);
 
-)
+CREATE TABLE IF NOT EXISTS toolsets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  name text NOT NULL,
+  slug text NOT NULL,
+  description text,
+  default_environment_id uuid,
+  http_tool_ids uuid[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT toolsets_pkey PRIMARY KEY (id),
+  CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_project_id_slug_key UNIQUE (project_id, slug),
+  CONSTRAINT toolsets_default_environment_id_fkey FOREIGN key (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
+);

@@ -22,6 +22,7 @@ type Server struct {
 	CreateToolset     http.Handler
 	ListToolsets      http.Handler
 	UpdateToolset     http.Handler
+	DeleteToolset     http.Handler
 	GetToolsetDetails http.Handler
 }
 
@@ -55,11 +56,13 @@ func New(
 			{"CreateToolset", "POST", "/rpc/toolsets.create"},
 			{"ListToolsets", "GET", "/rpc/toolsets.list"},
 			{"UpdateToolset", "POST", "/rpc/toolsets.update/{id}"},
+			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete/{id}"},
 			{"GetToolsetDetails", "GET", "/rpc/toolsets.get/{id}"},
 		},
 		CreateToolset:     NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:      NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
 		UpdateToolset:     NewUpdateToolsetHandler(e.UpdateToolset, mux, decoder, encoder, errhandler, formatter),
+		DeleteToolset:     NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
 		GetToolsetDetails: NewGetToolsetDetailsHandler(e.GetToolsetDetails, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -72,6 +75,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateToolset = m(s.CreateToolset)
 	s.ListToolsets = m(s.ListToolsets)
 	s.UpdateToolset = m(s.UpdateToolset)
+	s.DeleteToolset = m(s.DeleteToolset)
 	s.GetToolsetDetails = m(s.GetToolsetDetails)
 }
 
@@ -83,6 +87,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateToolsetHandler(mux, h.CreateToolset)
 	MountListToolsetsHandler(mux, h.ListToolsets)
 	MountUpdateToolsetHandler(mux, h.UpdateToolset)
+	MountDeleteToolsetHandler(mux, h.DeleteToolset)
 	MountGetToolsetDetailsHandler(mux, h.GetToolsetDetails)
 }
 
@@ -223,6 +228,57 @@ func NewUpdateToolsetHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateToolset")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
+// MountDeleteToolsetHandler configures the mux to serve the "toolsets" service
+// "deleteToolset" endpoint.
+func MountDeleteToolsetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/toolsets.delete/{id}", f)
+}
+
+// NewDeleteToolsetHandler creates a HTTP handler which loads the HTTP request
+// and calls the "toolsets" service "deleteToolset" endpoint.
+func NewDeleteToolsetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteToolsetRequest(mux, decoder)
+		encodeResponse = EncodeDeleteToolsetResponse(encoder)
+		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteToolset")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

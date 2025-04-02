@@ -32,17 +32,3 @@ type HttpToolDefinition struct {
 	DeletedAt        pgtype.Timestamptz
 	Deleted          bool
 }
-
-type Toolset struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	HttpToolIds    []uuid.UUID
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-}

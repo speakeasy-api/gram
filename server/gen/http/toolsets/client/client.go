@@ -29,6 +29,10 @@ type Client struct {
 	// updateToolset endpoint.
 	UpdateToolsetDoer goahttp.Doer
 
+	// DeleteToolset Doer is the HTTP client used to make requests to the
+	// deleteToolset endpoint.
+	DeleteToolsetDoer goahttp.Doer
+
 	// GetToolsetDetails Doer is the HTTP client used to make requests to the
 	// getToolsetDetails endpoint.
 	GetToolsetDetailsDoer goahttp.Doer
@@ -56,6 +60,7 @@ func NewClient(
 		CreateToolsetDoer:     doer,
 		ListToolsetsDoer:      doer,
 		UpdateToolsetDoer:     doer,
+		DeleteToolsetDoer:     doer,
 		GetToolsetDetailsDoer: doer,
 		RestoreResponseBody:   restoreBody,
 		scheme:                scheme,
@@ -132,6 +137,30 @@ func (c *Client) UpdateToolset() goa.Endpoint {
 		resp, err := c.UpdateToolsetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "updateToolset", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteToolset returns an endpoint that makes HTTP requests to the toolsets
+// service deleteToolset server.
+func (c *Client) DeleteToolset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteToolsetRequest(c.encoder)
+		decodeResponse = DecodeDeleteToolsetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteToolsetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteToolsetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "deleteToolset", err)
 		}
 		return decodeResponse(resp)
 	}

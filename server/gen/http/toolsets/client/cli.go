@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Eaque veniam ducimus ipsa recusandae.\",\n      \"http_tool_ids\": [\n         \"Non ipsa.\",\n         \"Vero id.\",\n         \"Est officia.\"\n      ],\n      \"name\": \"Pariatur similique nulla.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Qui labore ut ad error.\",\n      \"description\": \"Eaque veniam ducimus ipsa recusandae.\",\n      \"http_tool_ids\": [\n         \"Non ipsa.\",\n         \"Vero id.\",\n         \"Est officia.\"\n      ],\n      \"name\": \"Pariatur similique nulla.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -36,8 +36,9 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 		projectSlug = toolsetsCreateToolsetProjectSlug
 	}
 	v := &toolsets.CreateToolsetPayload{
-		Name:        body.Name,
-		Description: body.Description,
+		Name:                 body.Name,
+		Description:          body.Description,
+		DefaultEnvironmentID: body.DefaultEnvironmentID,
 	}
 	if body.HTTPToolIds != nil {
 		v.HTTPToolIds = make([]string, len(body.HTTPToolIds))
@@ -79,7 +80,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Dolores vero veniam et.\",\n      \"http_tool_ids_to_add\": [\n         \"Blanditiis eum quis a.\",\n         \"Doloribus dolor officiis delectus.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Consectetur nobis dolores quos nisi occaecati.\",\n         \"Quas ut id occaecati aut autem.\"\n      ],\n      \"name\": \"Itaque aut sit quis et.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Voluptatum doloribus et aliquam.\",\n      \"description\": \"Id occaecati aut.\",\n      \"http_tool_ids_to_add\": [\n         \"Magnam sit aliquid odio est doloribus esse.\",\n         \"Voluptatem nostrum velit omnis temporibus.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Numquam error deserunt harum possimus.\",\n         \"Unde voluptates ipsa qui adipisci odit.\",\n         \"Ut quas nesciunt.\"\n      ],\n      \"name\": \"Sunt quas.\"\n   }'")
 		}
 	}
 	var id string
@@ -97,8 +98,9 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		projectSlug = toolsetsUpdateToolsetProjectSlug
 	}
 	v := &toolsets.UpdateToolsetPayload{
-		Name:        body.Name,
-		Description: body.Description,
+		Name:                 body.Name,
+		Description:          body.Description,
+		DefaultEnvironmentID: body.DefaultEnvironmentID,
 	}
 	if body.HTTPToolIdsToAdd != nil {
 		v.HTTPToolIdsToAdd = make([]string, len(body.HTTPToolIdsToAdd))
@@ -112,6 +114,31 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 			v.HTTPToolIdsToRemove[i] = val
 		}
 	}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlug = projectSlug
+
+	return v, nil
+}
+
+// BuildDeleteToolsetPayload builds the payload for the toolsets deleteToolset
+// endpoint from CLI flags.
+func BuildDeleteToolsetPayload(toolsetsDeleteToolsetID string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetProjectSlug string) (*toolsets.DeleteToolsetPayload, error) {
+	var id string
+	{
+		id = toolsetsDeleteToolsetID
+	}
+	var sessionToken *string
+	{
+		if toolsetsDeleteToolsetSessionToken != "" {
+			sessionToken = &toolsetsDeleteToolsetSessionToken
+		}
+	}
+	var projectSlug string
+	{
+		projectSlug = toolsetsDeleteToolsetProjectSlug
+	}
+	v := &toolsets.DeleteToolsetPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug

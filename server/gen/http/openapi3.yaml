@@ -604,6 +604,43 @@ paths:
                 - toolsets
             x-speakeasy-react-hook:
                 name: CreateToolset
+    /rpc/toolsets.delete/{id}:
+        delete:
+            description: Delete a toolset by its ID
+            operationId: toolsets#deleteToolset
+            parameters:
+                - description: The ID of the toolset
+                  in: path
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the toolset
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  required: true
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteToolset toolsets
+            tags:
+                - toolsets
+            x-speakeasy-react-hook:
+                name: DeleteToolset
     /rpc/toolsets.get/{id}:
         get:
             description: Get detailed information about a toolset including full HTTP tool definitions
@@ -838,6 +875,9 @@ components:
         CreateToolsetForm:
             type: object
             properties:
+                default_environment_id:
+                    type: string
+                    description: The ID of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -858,6 +898,9 @@ components:
         CreateToolsetRequestBody:
             type: object
             properties:
+                default_environment_id:
+                    type: string
+                    description: The ID of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -1406,6 +1449,9 @@ components:
                     type: string
                     description: When the toolset was created.
                     format: date-time
+                default_environment_id:
+                    type: string
+                    description: The ID of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -1448,6 +1494,9 @@ components:
                     type: string
                     description: When the toolset was created.
                     format: date-time
+                default_environment_id:
+                    type: string
+                    description: The ID of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -1508,6 +1557,9 @@ components:
         UpdateToolsetForm:
             type: object
             properties:
+                default_environment_id:
+                    type: string
+                    description: The ID of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: The new description of the toolset
@@ -1536,6 +1588,9 @@ components:
         UpdateToolsetRequestBody:
             type: object
             properties:
+                default_environment_id:
+                    type: string
+                    description: The ID of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: The new description of the toolset

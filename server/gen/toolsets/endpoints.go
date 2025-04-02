@@ -19,6 +19,7 @@ type Endpoints struct {
 	CreateToolset     goa.Endpoint
 	ListToolsets      goa.Endpoint
 	UpdateToolset     goa.Endpoint
+	DeleteToolset     goa.Endpoint
 	GetToolsetDetails goa.Endpoint
 }
 
@@ -30,6 +31,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateToolset:     NewCreateToolsetEndpoint(s, a.APIKeyAuth),
 		ListToolsets:      NewListToolsetsEndpoint(s, a.APIKeyAuth),
 		UpdateToolset:     NewUpdateToolsetEndpoint(s, a.APIKeyAuth),
+		DeleteToolset:     NewDeleteToolsetEndpoint(s, a.APIKeyAuth),
 		GetToolsetDetails: NewGetToolsetDetailsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -39,6 +41,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateToolset = m(e.CreateToolset)
 	e.ListToolsets = m(e.ListToolsets)
 	e.UpdateToolset = m(e.UpdateToolset)
+	e.DeleteToolset = m(e.DeleteToolset)
 	e.GetToolsetDetails = m(e.GetToolsetDetails)
 }
 
@@ -108,6 +111,29 @@ func NewUpdateToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.UpdateToolset(ctx, p)
+	}
+}
+
+// NewDeleteToolsetEndpoint returns an endpoint function that calls the method
+// "deleteToolset" of service "toolsets".
+func NewDeleteToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteToolsetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteToolset(ctx, p)
 	}
 }
 
