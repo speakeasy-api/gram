@@ -62,7 +62,7 @@ var _ = Service("keys", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAPIKeys"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAPIKey"}`)
 	})
 })
 

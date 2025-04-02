@@ -26,6 +26,8 @@ var _ = Service("environments", func() {
 			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateEnvironment"}`)
 	})
 
 	Method("listEnvironments", func() {
@@ -44,6 +46,8 @@ var _ = Service("environments", func() {
 			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListEnvironments"}`)
 	})
 
 	Method("updateEnvironment", func() {
@@ -66,6 +70,8 @@ var _ = Service("environments", func() {
 			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateEnvironment"}`)
 	})
 
 	Method("deleteEnvironment", func() {
@@ -85,6 +91,8 @@ var _ = Service("environments", func() {
 			sessions.ProjectHeader()
 			Response(StatusOK)
 		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteEnvironment"}`)
 	})
 })
 

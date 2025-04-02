@@ -66,9 +66,9 @@ var _ = Service("deployments", func() {
 			Param("limit")
 			Response(StatusOK)
 		})
-	})
 
-	Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDeployments"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDeployments"}`)
+	})
 })
 
 var Deployment = Type("Deployment", func() {

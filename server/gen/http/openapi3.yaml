@@ -287,196 +287,206 @@ paths:
                 name: Deployment
     /rpc/deployments.list:
         post:
-            tags:
-                - deployments
-            summary: listDeployments deployments
             description: List all deployments in descending order of creation.
             operationId: deployments#listDeployments
             parameters:
-                - name: cursor
-                  in: query
+                - allowEmptyValue: true
                   description: The cursor to fetch results from
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: The cursor to fetch results from
-                - name: limit
                   in: query
-                  description: Results per page
-                  allowEmptyValue: true
+                  name: cursor
                   schema:
-                    type: integer
-                    description: Results per page
-                    default: 10
-                    format: int64
-                    minimum: 1
-                    maximum: 100
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
+                    description: The cursor to fetch results from
                     type: string
+                - allowEmptyValue: true
+                  description: Results per page
+                  in: query
+                  name: limit
+                  schema:
+                    default: 10
+                    description: Results per page
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/ListDeploymentResult'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
+            summary: listDeployments deployments
+            tags:
+                - deployments
+            x-speakeasy-react-hook:
+                name: ListDeployments
     /rpc/environments.create:
         post:
-            tags:
-                - environments
-            summary: createEnvironment environments
             description: Create a new environment
             operationId: environments#createEnvironment
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: Session header
-                - name: Gram-Project
                   in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
+                    type: string
             requestBody:
-                required: true
                 content:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/CreateEnvironmentForm'
+                required: true
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Environment'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/environments.delete/{id}:
-        delete:
+            summary: createEnvironment environments
             tags:
                 - environments
-            summary: deleteEnvironment environments
+            x-speakeasy-react-hook:
+                name: CreateEnvironment
+    /rpc/environments.delete/{id}:
+        delete:
             description: Delete an environment
             operationId: environments#deleteEnvironment
             parameters:
-                - name: id
+                - description: The ID of the environment to delete
                   in: path
-                  description: The ID of the environment to delete
+                  name: id
                   required: true
                   schema:
-                    type: string
                     description: The ID of the environment to delete
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
-                    description: Session header
-                - name: Gram-Project
+                - allowEmptyValue: true
+                  description: Session header
                   in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
+                    type: string
             responses:
                 "200":
                     description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/environments.list:
-        get:
+            summary: deleteEnvironment environments
             tags:
                 - environments
-            summary: listEnvironments environments
+            x-speakeasy-react-hook:
+                name: DeleteEnvironment
+    /rpc/environments.list:
+        get:
             description: List all environments for an organization
             operationId: environments#listEnvironments
             parameters:
-                - name: Gram-Session
-                  in: header
+                - allowEmptyValue: true
                   description: Session header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: Session header
-                - name: Gram-Project
                   in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/ListEnvironmentsResult'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
-    /rpc/environments.update/{id}:
-        post:
+            summary: listEnvironments environments
             tags:
                 - environments
-            summary: updateEnvironment environments
+            x-speakeasy-react-hook:
+                name: ListEnvironments
+    /rpc/environments.update/{id}:
+        post:
             description: Update an environment
             operationId: environments#updateEnvironment
             parameters:
-                - name: id
+                - description: The ID of the environment to update
                   in: path
-                  description: The ID of the environment to update
+                  name: id
                   required: true
                   schema:
-                    type: string
                     description: The ID of the environment to update
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
-                    description: Session header
-                - name: Gram-Project
+                - allowEmptyValue: true
+                  description: Session header
                   in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
-                  allowEmptyValue: true
+                  in: header
+                  name: Gram-Project
                   required: true
                   schema:
-                    type: string
                     description: project header
+                    type: string
             requestBody:
-                required: true
                 content:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/UpdateEnvironmentForm'
+                required: true
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Environment'
+                    description: OK response.
             security:
                 - session_header_Gram-Session: []
+            summary: updateEnvironment environments
+            tags:
+                - environments
+            x-speakeasy-react-hook:
+                name: UpdateEnvironment
     /rpc/keys.create:
         post:
             description: Create a new api key
@@ -563,7 +573,7 @@ paths:
             tags:
                 - keys
             x-speakeasy-react-hook:
-                name: RevokeAPIKeys
+                name: RevokeAPIKey
     /rpc/toolsets.create:
         post:
             description: Create a new toolset with associated tools
