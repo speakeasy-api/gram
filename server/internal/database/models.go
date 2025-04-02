@@ -39,18 +39,18 @@ type Asset struct {
 }
 
 type Deployment struct {
-	ID              uuid.UUID
-	UserID          pgtype.Text
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	ManifestVersion string
-	ManifestUrl     string
-	GithubRepo      pgtype.Text
-	GithubPr        pgtype.Text
-	ExternalID      pgtype.Text
-	ExternalUrl     pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	ID             uuid.UUID
+	UserID         string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	IdempotencyKey string
+	GithubRepo     pgtype.Text
+	GithubPr       pgtype.Text
+	GithubSha      pgtype.Text
+	ExternalID     pgtype.Text
+	ExternalUrl    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type DeploymentLog struct {
@@ -73,6 +73,14 @@ type DeploymentStatus struct {
 	Status       string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
+}
+
+type DeploymentsOpenapiv3Asset struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
 }
 
 type Environment struct {
@@ -98,27 +106,41 @@ type EnvironmentEntry struct {
 }
 
 type HttpToolDefinition struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	ProjectID        uuid.UUID
-	Name             string
-	Description      string
-	ServerEnvVar     string
-	SecurityType     string
-	BearerEnvVar     pgtype.Text
-	ApikeyEnvVar     pgtype.Text
-	UsernameEnvVar   pgtype.Text
-	PasswordEnvVar   pgtype.Text
-	HttpMethod       string
-	Path             string
-	HeadersSchema    []byte
-	QueriesSchema    []byte
-	PathparamsSchema []byte
-	BodySchema       []byte
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	ID                  uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Description         string
+	ServerEnvVar        string
+	SecurityType        string
+	BearerEnvVar        pgtype.Text
+	ApikeyEnvVar        pgtype.Text
+	UsernameEnvVar      pgtype.Text
+	PasswordEnvVar      pgtype.Text
+	HttpMethod          string
+	Path                string
+	HeadersSchema       []byte
+	QueriesSchema       []byte
+	PathparamsSchema    []byte
+	BodySchema          []byte
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+type Openapiv3Document struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
 }
 
 type Project struct {

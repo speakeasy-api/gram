@@ -143,15 +143,39 @@ WHERE id = ANY($1::uuid[])
   AND deleted_at IS NULL
 `
 
-func (q *Queries) GetHTTPToolDefinitions(ctx context.Context, ids []uuid.UUID) ([]HttpToolDefinition, error) {
+type GetHTTPToolDefinitionsRow struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	Name             string
+	Description      string
+	ServerEnvVar     string
+	SecurityType     string
+	BearerEnvVar     pgtype.Text
+	ApikeyEnvVar     pgtype.Text
+	UsernameEnvVar   pgtype.Text
+	PasswordEnvVar   pgtype.Text
+	HttpMethod       string
+	Path             string
+	HeadersSchema    []byte
+	QueriesSchema    []byte
+	PathparamsSchema []byte
+	BodySchema       []byte
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
+func (q *Queries) GetHTTPToolDefinitions(ctx context.Context, ids []uuid.UUID) ([]GetHTTPToolDefinitionsRow, error) {
 	rows, err := q.db.Query(ctx, getHTTPToolDefinitions, ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []HttpToolDefinition
+	var items []GetHTTPToolDefinitionsRow
 	for rows.Next() {
-		var i HttpToolDefinition
+		var i GetHTTPToolDefinitionsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,

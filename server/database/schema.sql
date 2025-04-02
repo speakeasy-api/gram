@@ -45,21 +45,23 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  user_id TEXT,
+  user_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
-  manifest_version text NOT NULL,
-  manifest_url text NOT NULL,
+  idempotency_key TEXT NOT NULL,
 
-  github_repo text,
-  github_pr text,
-  external_id text,
-  external_url text,
+  github_repo TEXT,
+  github_pr TEXT,
+  github_sha TEXT,
+  external_id TEXT,
+  external_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT deployments_pkey PRIMARY KEY (id)
+  CONSTRAINT deployments_pkey PRIMARY KEY (id),
+  CONSTRAINT deployments_project_id_idempotency_key UNIQUE (project_id, idempotency_key),
+  CONSTRAINT deployments_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS deployment_statuses (
@@ -97,41 +99,6 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   CONSTRAINT deployment_logs_seq_key UNIQUE (seq),
   CONSTRAINT deployment_logs_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
   CONSTRAINT deployment_logs_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
-  -- CONSTRAINT deployment_logs_collection_id_fkey FOREIGN key (collection_id) REFERENCES collections (id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS http_tool_definitions (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  name text NOT NULL,
-  description text NOT NULL,
-
-  server_env_var text NOT NULL,
-  security_type text NOT NULL CHECK (
-    security_type IN ('http:bearer', 'http:basic', 'apikey')
-  ),
-  bearer_env_var text,
-  apikey_env_var text,
-  username_env_var text,
-  password_env_var text,
-
-  http_method text NOT NULL,
-  path text NOT NULL,
-  headers_schema jsonb,
-  queries_schema jsonb,
-  pathparams_schema jsonb,
-  body_schema jsonb,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
-  CONSTRAINT http_tool_definitions_project_id_name_key UNIQUE (project_id, name),
-  CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -174,6 +141,75 @@ CREATE TABLE IF NOT EXISTS api_keys (
   CONSTRAINT api_keys_token_key UNIQUE (token),
   CONSTRAINT api_keys_organization_id_name_key UNIQUE (organization_id, name),
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  deployment_id uuid NOT NULL,
+  asset_id uuid NOT NULL,
+  name text NOT NULL,
+  slug text NOT NULL,
+
+  CONSTRAINT deployments_openapiv3_documents_pkey PRIMARY KEY (id),
+  CONSTRAINT deployments_openapiv3_documents_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT deployments_openapiv3_documents_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS openapiv3_documents (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  deployment_id uuid,
+  asset_id uuid NOT NULL,
+  name text NOT NULL,
+  slug text NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT openapiv3_documents_pkey PRIMARY KEY (id),
+  CONSTRAINT openapiv3_documents_project_id_slug_key UNIQUE (project_id, slug),
+  CONSTRAINT openapiv3_documents_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
+  CONSTRAINT openapiv3_documents_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS http_tool_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  openapiv3_document_id uuid,
+
+  name text NOT NULL,
+  description text NOT NULL,
+
+  server_env_var text NOT NULL,
+  security_type text NOT NULL CHECK (
+    security_type IN ('http:bearer', 'http:basic', 'apikey')
+  ),
+  bearer_env_var text,
+  apikey_env_var text,
+  username_env_var text,
+  password_env_var text,
+
+  http_method text NOT NULL,
+  path text NOT NULL,
+  headers_schema jsonb,
+  queries_schema jsonb,
+  pathparams_schema jsonb,
+  body_schema jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT http_tool_definitions_project_id_name_key UNIQUE (project_id, name),
+  CONSTRAINT http_tool_definitions_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES openapiv3_documents (id) ON DELETE RESTRICT,
+  CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS environments (

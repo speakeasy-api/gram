@@ -22,7 +22,9 @@ var (
 )
 
 type ProjectAccess struct {
-	ProjectID uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         string
 }
 
 func EnsureProjectAccess(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, projectSlug string) (*ProjectAccess, error) {
@@ -50,5 +52,5 @@ func EnsureProjectAccess(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return nil, fmt.Errorf("project access: %w", ErrAuthAccessDenied)
 	}
 
-	return &ProjectAccess{ProjectID: row.ID}, nil
+	return &ProjectAccess{OrganizationID: session.ActiveOrganizationID, ProjectID: row.ID, UserID: session.UserID}, nil
 }

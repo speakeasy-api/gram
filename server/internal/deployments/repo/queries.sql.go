@@ -9,14 +9,60 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createDeployment = `-- name: CreateDeployment :one
+const addDeploymentOpenAPIv3Asset = `-- name: AddDeploymentOpenAPIv3Asset :one
+INSERT INTO deployments_openapiv3_assets (
+  deployment_id
+  , asset_id
+  , name
+  , slug
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4
+)
+RETURNING id, asset_id, name, slug
+`
+
+type AddDeploymentOpenAPIv3AssetParams struct {
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+}
+
+type AddDeploymentOpenAPIv3AssetRow struct {
+	ID      uuid.UUID
+	AssetID uuid.UUID
+	Name    string
+	Slug    string
+}
+
+func (q *Queries) AddDeploymentOpenAPIv3Asset(ctx context.Context, arg AddDeploymentOpenAPIv3AssetParams) (AddDeploymentOpenAPIv3AssetRow, error) {
+	row := q.db.QueryRow(ctx, addDeploymentOpenAPIv3Asset,
+		arg.DeploymentID,
+		arg.AssetID,
+		arg.Name,
+		arg.Slug,
+	)
+	var i AddDeploymentOpenAPIv3AssetRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssetID,
+		&i.Name,
+		&i.Slug,
+	)
+	return i, err
+}
+
+const createDeployment = `-- name: CreateDeployment :execresult
 INSERT INTO deployments (
-    user_id
-  , manifest_version
-  , manifest_url
+  idempotency_key
+  , user_id
   , organization_id
   , project_id
   , github_repo
@@ -24,7 +70,7 @@ INSERT INTO deployments (
   , external_id
   , external_url
 ) VALUES (
-    $1
+  $1
   , $2
   , $3
   , $4
@@ -32,55 +78,25 @@ INSERT INTO deployments (
   , $6
   , $7
   , $8
-  , $9
 )
-RETURNING 
-    id
-  , user_id
-  , organization_id
-  , project_id
-  , manifest_version
-  , manifest_url
-  , github_repo
-  , github_pr
-  , external_id
-  , external_url
-  , created_at
-  , updated_at
+ON CONFLICT (project_id, idempotency_key) DO NOTHING
 `
 
 type CreateDeploymentParams struct {
-	UserID          pgtype.Text
-	ManifestVersion string
-	ManifestUrl     string
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	GithubRepo      pgtype.Text
-	GithubPr        pgtype.Text
-	ExternalID      pgtype.Text
-	ExternalUrl     pgtype.Text
+	IdempotencyKey string
+	UserID         string
+	OrganizationID string
+	ProjectID      uuid.UUID
+	GithubRepo     pgtype.Text
+	GithubPr       pgtype.Text
+	ExternalID     pgtype.Text
+	ExternalUrl    pgtype.Text
 }
 
-type CreateDeploymentRow struct {
-	ID              uuid.UUID
-	UserID          pgtype.Text
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	ManifestVersion string
-	ManifestUrl     string
-	GithubRepo      pgtype.Text
-	GithubPr        pgtype.Text
-	ExternalID      pgtype.Text
-	ExternalUrl     pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-}
-
-func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (CreateDeploymentRow, error) {
-	row := q.db.QueryRow(ctx, createDeployment,
+func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, createDeployment,
+		arg.IdempotencyKey,
 		arg.UserID,
-		arg.ManifestVersion,
-		arg.ManifestUrl,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.GithubRepo,
@@ -88,73 +104,205 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		arg.ExternalID,
 		arg.ExternalUrl,
 	)
-	var i CreateDeploymentRow
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ManifestVersion,
-		&i.ManifestUrl,
-		&i.GithubRepo,
-		&i.GithubPr,
-		&i.ExternalID,
-		&i.ExternalUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const getDeployment = `-- name: GetDeployment :one
-SELECT 
-    id
-  , user_id
-  , organization_id
-  , project_id
-  , manifest_version
-  , manifest_url
-  , github_repo
-  , github_pr
-  , external_id
-  , external_url
-  , created_at
-  , updated_at
+SELECT id, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
 FROM deployments
 WHERE id = $1
 `
 
-type GetDeploymentRow struct {
-	ID              uuid.UUID
-	UserID          pgtype.Text
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	ManifestVersion string
-	ManifestUrl     string
-	GithubRepo      pgtype.Text
-	GithubPr        pgtype.Text
-	ExternalID      pgtype.Text
-	ExternalUrl     pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-}
-
-func (q *Queries) GetDeployment(ctx context.Context, id uuid.UUID) (GetDeploymentRow, error) {
+func (q *Queries) GetDeployment(ctx context.Context, id uuid.UUID) (Deployment, error) {
 	row := q.db.QueryRow(ctx, getDeployment, id)
-	var i GetDeploymentRow
+	var i Deployment
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.OrganizationID,
 		&i.ProjectID,
-		&i.ManifestVersion,
-		&i.ManifestUrl,
+		&i.OrganizationID,
+		&i.IdempotencyKey,
 		&i.GithubRepo,
 		&i.GithubPr,
+		&i.GithubSha,
 		&i.ExternalID,
 		&i.ExternalUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getDeploymentByIdempotencyKey = `-- name: GetDeploymentByIdempotencyKey :one
+SELECT id, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
+FROM deployments
+WHERE idempotency_key = $1
+ AND project_id = $2
+`
+
+type GetDeploymentByIdempotencyKeyParams struct {
+	IdempotencyKey string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDeploymentByIdempotencyKeyParams) (Deployment, error) {
+	row := q.db.QueryRow(ctx, getDeploymentByIdempotencyKey, arg.IdempotencyKey, arg.ProjectID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.IdempotencyKey,
+		&i.GithubRepo,
+		&i.GithubPr,
+		&i.GithubSha,
+		&i.ExternalID,
+		&i.ExternalUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDeploymentOpenAPIv3 = `-- name: GetDeploymentOpenAPIv3 :many
+SELECT id, deployment_id, asset_id, name, slug
+FROM deployments_openapiv3_assets
+WHERE deployment_id = $1
+`
+
+func (q *Queries) GetDeploymentOpenAPIv3(ctx context.Context, deploymentID uuid.UUID) ([]DeploymentsOpenapiv3Asset, error) {
+	rows, err := q.db.Query(ctx, getDeploymentOpenAPIv3, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentsOpenapiv3Asset
+	for rows.Next() {
+		var i DeploymentsOpenapiv3Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.AssetID,
+			&i.Name,
+			&i.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDeploymentWithAssets = `-- name: GetDeploymentWithAssets :many
+SELECT deployments.id, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug
+FROM deployments
+LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
+WHERE deployments.id = $1 AND deployments.project_id = $2
+`
+
+type GetDeploymentWithAssetsParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetDeploymentWithAssetsRow struct {
+	Deployment                Deployment
+	DeploymentsOpenapiv3Asset DeploymentsOpenapiv3Asset
+}
+
+func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
+	rows, err := q.db.Query(ctx, getDeploymentWithAssets, arg.ID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDeploymentWithAssetsRow
+	for rows.Next() {
+		var i GetDeploymentWithAssetsRow
+		if err := rows.Scan(
+			&i.Deployment.ID,
+			&i.Deployment.UserID,
+			&i.Deployment.ProjectID,
+			&i.Deployment.OrganizationID,
+			&i.Deployment.IdempotencyKey,
+			&i.Deployment.GithubRepo,
+			&i.Deployment.GithubPr,
+			&i.Deployment.GithubSha,
+			&i.Deployment.ExternalID,
+			&i.Deployment.ExternalUrl,
+			&i.Deployment.CreatedAt,
+			&i.Deployment.UpdatedAt,
+			&i.DeploymentsOpenapiv3Asset.ID,
+			&i.DeploymentsOpenapiv3Asset.DeploymentID,
+			&i.DeploymentsOpenapiv3Asset.AssetID,
+			&i.DeploymentsOpenapiv3Asset.Name,
+			&i.DeploymentsOpenapiv3Asset.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeployments = `-- name: ListDeployments :many
+SELECT 
+  d.id,
+  d.user_id,
+  d.created_at,
+  COUNT(doa.id) as asset_count
+FROM deployments d
+LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
+WHERE
+  d.project_id = $1
+  AND d.id <= CASE 
+    WHEN $2::uuid IS NOT NULL THEN $2::uuid
+    ELSE (SELECT id FROM deployments WHERE project_id = $1 ORDER BY id DESC LIMIT 1)
+  END
+GROUP BY d.id
+ORDER BY d.id DESC
+LIMIT 51
+`
+
+type ListDeploymentsParams struct {
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
+}
+
+type ListDeploymentsRow struct {
+	ID         uuid.UUID
+	UserID     string
+	CreatedAt  pgtype.Timestamptz
+	AssetCount int64
+}
+
+func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams) ([]ListDeploymentsRow, error) {
+	rows, err := q.db.Query(ctx, listDeployments, arg.ProjectID, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeploymentsRow
+	for rows.Next() {
+		var i ListDeploymentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.CreatedAt,
+			&i.AssetCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

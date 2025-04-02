@@ -53,7 +53,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetDeployment", "POST", "/rpc/deployments.get"},
 			{"CreateDeployment", "POST", "/rpc/deployments.create"},
-			{"ListDeployments", "POST", "/rpc/deployments.list"},
+			{"ListDeployments", "GET", "/rpc/deployments.list"},
 		},
 		GetDeployment:    NewGetDeploymentHandler(e.GetDeployment, mux, decoder, encoder, errhandler, formatter),
 		CreateDeployment: NewCreateDeploymentHandler(e.CreateDeployment, mux, decoder, encoder, errhandler, formatter),
@@ -197,7 +197,7 @@ func MountListDeploymentsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/deployments.list", f)
+	mux.Handle("GET", "/rpc/deployments.list", f)
 }
 
 // NewListDeploymentsHandler creates a HTTP handler which loads the HTTP

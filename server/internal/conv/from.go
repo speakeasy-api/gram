@@ -12,13 +12,6 @@ func Ptr[T any](v T) *T {
 	return &v
 }
 
-func FromPGText(t pgtype.Text) *string {
-	if !t.Valid {
-		return nil
-	}
-	return &t.String
-}
-
 func FromNullableUUID(u uuid.NullUUID) *string {
 	if !u.Valid {
 		return nil
@@ -26,6 +19,25 @@ func FromNullableUUID(u uuid.NullUUID) *string {
 
 	val := u.UUID.String()
 	return &val
+}
+
+func FromPGText(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+	return &t.String
+}
+
+func ToPGText(t string) pgtype.Text {
+	return pgtype.Text{String: t, Valid: true}
+}
+
+func PtrToPGText(t *string) pgtype.Text {
+	if t == nil {
+		return pgtype.Text{}
+	}
+
+	return pgtype.Text{String: *t, Valid: true}
 }
 
 func FromBytes(b []byte) *string {

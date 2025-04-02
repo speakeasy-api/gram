@@ -10,15 +10,13 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
-	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetDeploymentPayload builds the payload for the deployments
 // getDeployment endpoint from CLI flags.
-func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentSessionToken string) (*deployments.GetDeploymentPayload, error) {
+func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentSessionToken string, deploymentsGetDeploymentProjectSlug string) (*deployments.GetDeploymentPayload, error) {
 	var id string
 	{
 		id = deploymentsGetDeploymentID
@@ -29,22 +27,27 @@ func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGet
 			sessionToken = &deploymentsGetDeploymentSessionToken
 		}
 	}
+	var projectSlug string
+	{
+		projectSlug = deploymentsGetDeploymentProjectSlug
+	}
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
+	v.ProjectSlug = projectSlug
 
 	return v, nil
 }
 
 // BuildCreateDeploymentPayload builds the payload for the deployments
 // createDeployment endpoint from CLI flags.
-func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentSessionToken string) (*deployments.CreateDeploymentPayload, error) {
+func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentSessionToken string, deploymentsCreateDeploymentProjectSlug string, deploymentsCreateDeploymentIdempotencyKey string) (*deployments.CreateDeploymentPayload, error) {
 	var err error
 	var body CreateDeploymentRequestBody
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Debitis voluptatem temporibus et.\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"idempotency_key\": \"01jqq0ajmb4qh9eppz48dejr2m\",\n      \"openapiv3_asset_ids\": [\n         \"Veniam et est rerum libero.\",\n         \"Odio iusto delectus unde sed accusamus.\",\n         \"Aperiam molestiae autem impedit non quod ut.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Vitae impedit accusamus voluptas.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Quasi perspiciatis deserunt.\",\n            \"name\": \"Quibusdam quaerat.\",\n            \"slug\": \"Voluptates blanditiis.\"\n         },\n         {\n            \"asset_id\": \"Quasi perspiciatis deserunt.\",\n            \"name\": \"Quibusdam quaerat.\",\n            \"slug\": \"Voluptates blanditiis.\"\n         }\n      ]\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -53,52 +56,41 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			sessionToken = &deploymentsCreateDeploymentSessionToken
 		}
 	}
-	v := &deployments.CreateDeploymentPayload{
-		IdempotencyKey: body.IdempotencyKey,
-		GithubRepo:     body.GithubRepo,
-		GithubSha:      body.GithubSha,
-		ExternalID:     body.ExternalID,
-		ExternalURL:    body.ExternalURL,
+	var projectSlug string
+	{
+		projectSlug = deploymentsCreateDeploymentProjectSlug
 	}
-	if body.Openapiv3AssetIds != nil {
-		v.Openapiv3AssetIds = make([]string, len(body.Openapiv3AssetIds))
-		for i, val := range body.Openapiv3AssetIds {
-			v.Openapiv3AssetIds[i] = val
+	var idempotencyKey string
+	{
+		idempotencyKey = deploymentsCreateDeploymentIdempotencyKey
+	}
+	v := &deployments.CreateDeploymentPayload{
+		GithubRepo:  body.GithubRepo,
+		GithubPr:    body.GithubPr,
+		GithubSha:   body.GithubSha,
+		ExternalID:  body.ExternalID,
+		ExternalURL: body.ExternalURL,
+	}
+	if body.Openapiv3Assets != nil {
+		v.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAssetForm, len(body.Openapiv3Assets))
+		for i, val := range body.Openapiv3Assets {
+			v.Openapiv3Assets[i] = marshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm(val)
 		}
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlug = projectSlug
+	v.IdempotencyKey = idempotencyKey
 
 	return v, nil
 }
 
 // BuildListDeploymentsPayload builds the payload for the deployments
 // listDeployments endpoint from CLI flags.
-func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsLimit string, deploymentsListDeploymentsSessionToken string) (*deployments.ListDeploymentsPayload, error) {
-	var err error
+func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsSessionToken string, deploymentsListDeploymentsProjectSlug string) (*deployments.ListDeploymentsPayload, error) {
 	var cursor *string
 	{
 		if deploymentsListDeploymentsCursor != "" {
 			cursor = &deploymentsListDeploymentsCursor
-		}
-	}
-	var limit int
-	{
-		if deploymentsListDeploymentsLimit != "" {
-			var v int64
-			v, err = strconv.ParseInt(deploymentsListDeploymentsLimit, 10, strconv.IntSize)
-			limit = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for limit, must be INT")
-			}
-			if limit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-			}
-			if limit > 100 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
-			}
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 	var sessionToken *string
@@ -107,10 +99,14 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 			sessionToken = &deploymentsListDeploymentsSessionToken
 		}
 	}
+	var projectSlug string
+	{
+		projectSlug = deploymentsListDeploymentsProjectSlug
+	}
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
-	v.Limit = limit
 	v.SessionToken = sessionToken
+	v.ProjectSlug = projectSlug
 
 	return v, nil
 }

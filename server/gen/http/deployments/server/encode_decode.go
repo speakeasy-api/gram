@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
@@ -39,6 +38,7 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		var (
 			id           string
 			sessionToken *string
+			projectSlug  string
 			err          error
 		)
 		id = r.URL.Query().Get("id")
@@ -49,10 +49,14 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		projectSlug = r.Header.Get("Gram-Project")
+		if projectSlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetDeploymentPayload(id, sessionToken)
+		payload := NewGetDeploymentPayload(id, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -102,13 +106,26 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		}
 
 		var (
-			sessionToken *string
+			sessionToken   *string
+			projectSlug    string
+			idempotencyKey string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload := NewCreateDeploymentPayload(&body, sessionToken)
+		projectSlug = r.Header.Get("Gram-Project")
+		if projectSlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
+		}
+		idempotencyKey = r.Header.Get("Idempotency-Key")
+		if idempotencyKey == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("idempotency_key", "header"))
+		}
+		if err != nil {
+			return nil, err
+		}
+		payload := NewCreateDeploymentPayload(&body, sessionToken, projectSlug, idempotencyKey)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -139,41 +156,26 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 	return func(r *http.Request) (any, error) {
 		var (
 			cursor       *string
-			limit        int
 			sessionToken *string
+			projectSlug  string
 			err          error
 		)
-		qp := r.URL.Query()
-		cursorRaw := qp.Get("cursor")
+		cursorRaw := r.URL.Query().Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
-		}
-		{
-			limitRaw := qp.Get("limit")
-			if limitRaw == "" {
-				limit = 10
-			} else {
-				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
-				}
-				limit = int(v)
-			}
-		}
-		if limit < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-		}
-		if limit > 100 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		projectSlug = r.Header.Get("Gram-Project")
+		if projectSlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListDeploymentsPayload(cursor, limit, sessionToken)
+		payload := NewListDeploymentsPayload(cursor, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -184,6 +186,36 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 
 		return payload, nil
 	}
+}
+
+// marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody
+// builds a value of type *OpenAPIv3DeploymentAssetResponseBody from a value of
+// type *deployments.OpenAPIv3DeploymentAsset.
+func marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(v *deployments.OpenAPIv3DeploymentAsset) *OpenAPIv3DeploymentAssetResponseBody {
+	res := &OpenAPIv3DeploymentAssetResponseBody{
+		ID:      v.ID,
+		AssetID: v.AssetID,
+		Name:    v.Name,
+		Slug:    v.Slug,
+	}
+
+	return res
+}
+
+// unmarshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm
+// builds a value of type *deployments.OpenAPIv3DeploymentAssetForm from a
+// value of type *OpenAPIv3DeploymentAssetFormRequestBody.
+func unmarshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm(v *OpenAPIv3DeploymentAssetFormRequestBody) *deployments.OpenAPIv3DeploymentAssetForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.OpenAPIv3DeploymentAssetForm{
+		AssetID: *v.AssetID,
+		Name:    *v.Name,
+		Slug:    *v.Slug,
+	}
+
+	return res
 }
 
 // marshalDeploymentsDeploymentToDeploymentResponseBody builds a value of type
@@ -200,17 +232,32 @@ func marshalDeploymentsDeploymentToDeploymentResponseBody(v *deployments.Deploym
 		CreatedAt:      v.CreatedAt,
 		IdempotencyKey: v.IdempotencyKey,
 		GithubRepo:     v.GithubRepo,
+		GithubPr:       v.GithubPr,
 		GithubSha:      v.GithubSha,
 		ExternalID:     v.ExternalID,
 		ExternalURL:    v.ExternalURL,
 	}
-	if v.Openapiv3AssetIds != nil {
-		res.Openapiv3AssetIds = make([]string, len(v.Openapiv3AssetIds))
-		for i, val := range v.Openapiv3AssetIds {
-			res.Openapiv3AssetIds[i] = val
+	if v.Openapiv3Assets != nil {
+		res.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(v.Openapiv3Assets))
+		for i, val := range v.Openapiv3Assets {
+			res.Openapiv3Assets[i] = marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(val)
 		}
 	} else {
-		res.Openapiv3AssetIds = []string{}
+		res.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
+	}
+
+	return res
+}
+
+// marshalDeploymentsDeploymentSummaryToDeploymentSummaryResponseBody builds a
+// value of type *DeploymentSummaryResponseBody from a value of type
+// *deployments.DeploymentSummary.
+func marshalDeploymentsDeploymentSummaryToDeploymentSummaryResponseBody(v *deployments.DeploymentSummary) *DeploymentSummaryResponseBody {
+	res := &DeploymentSummaryResponseBody{
+		ID:         v.ID,
+		UserID:     v.UserID,
+		CreatedAt:  v.CreatedAt,
+		AssetCount: v.AssetCount,
 	}
 
 	return res

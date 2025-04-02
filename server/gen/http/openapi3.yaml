@@ -231,11 +231,29 @@ paths:
                   schema:
                     description: Session header
                     type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  required: true
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: A unique identifier that will mitigate against duplicate deployments.
+                  example: 01jqq0ajmb4qh9eppz48dejr2m
+                  in: header
+                  name: Idempotency-Key
+                  required: true
+                  schema:
+                    description: A unique identifier that will mitigate against duplicate deployments.
+                    example: 01jqq0ajmb4qh9eppz48dejr2m
+                    type: string
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreateDeploymentForm'
+                            $ref: '#/components/schemas/CreateDeploymentRequestBody'
                 required: true
             responses:
                 "200":
@@ -271,6 +289,14 @@ paths:
                   schema:
                     description: Session header
                     type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  required: true
+                  schema:
+                    description: project header
+                    type: string
             responses:
                 "200":
                     content:
@@ -286,7 +312,7 @@ paths:
             x-speakeasy-react-hook:
                 name: Deployment
     /rpc/deployments.list:
-        post:
+        get:
             description: List all deployments in descending order of creation.
             operationId: deployments#listDeployments
             parameters:
@@ -298,22 +324,19 @@ paths:
                     description: The cursor to fetch results from
                     type: string
                 - allowEmptyValue: true
-                  description: Results per page
-                  in: query
-                  name: limit
-                  schema:
-                    default: 10
-                    description: Results per page
-                    format: int64
-                    maximum: 100
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  required: true
+                  schema:
+                    description: project header
                     type: string
             responses:
                 "200":
@@ -826,6 +849,10 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                github_pr:
+                    type: string
+                    description: The github pull request that resulted in the deployment.
+                    example: "1234"
                 github_repo:
                     type: string
                     description: The github repository in the form of "owner/repo".
@@ -838,14 +865,38 @@ components:
                     type: string
                     description: A unique identifier that will mitigate against duplicate deployments.
                     example: 01jqq0ajmb4qh9eppz48dejr2m
-                openapiv3_asset_ids:
+                openapiv3_assets:
                     type: array
                     items:
-                        type: string
-                    description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                        $ref: '#/components/schemas/OpenAPIv3DeploymentAssetForm'
             required:
                 - idempotency_key
-                - manifest
+        CreateDeploymentRequestBody:
+            type: object
+            properties:
+                external_id:
+                    type: string
+                    description: The external ID to refer to the deployment. This can be a git commit hash for example.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                external_url:
+                    type: string
+                    description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                github_pr:
+                    type: string
+                    description: The github pull request that resulted in the deployment.
+                    example: "1234"
+                github_repo:
+                    type: string
+                    description: The github repository in the form of "owner/repo".
+                    example: speakeasyapi/gram
+                github_sha:
+                    type: string
+                    description: The commit hash that triggered the deployment.
+                    example: f33e693e9e12552043bc0ec5c37f1b8a9e076161
+                openapiv3_assets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPIv3DeploymentAssetForm'
         CreateDeploymentResult:
             type: object
             properties:
@@ -938,6 +989,10 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                github_pr:
+                    type: string
+                    description: The github pull request that resulted in the deployment.
+                    example: "1234"
                 github_repo:
                     type: string
                     description: The github repository in the form of "owner/repo".
@@ -954,10 +1009,10 @@ components:
                     type: string
                     description: A unique identifier that will mitigate against duplicate deployments.
                     example: 01jqq0ajmb4qh9eppz48dejr2m
-                openapiv3_asset_ids:
+                openapiv3_assets:
                     type: array
                     items:
-                        type: string
+                        $ref: '#/components/schemas/OpenAPIv3DeploymentAsset'
                     description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
                 organization_id:
                     type: string
@@ -974,7 +1029,30 @@ components:
                 - organization_id
                 - project_id
                 - user_id
-                - openapiv3_asset_ids
+                - openapiv3_assets
+        DeploymentSummary:
+            type: object
+            properties:
+                asset_count:
+                    type: integer
+                    description: The number of upstream assets.
+                    format: int64
+                created_at:
+                    type: string
+                    description: The creation date of the deployment.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID to of the deployment.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                user_id:
+                    type: string
+                    description: The ID of the user that created the deployment.
+            required:
+                - id
+                - created_at
+                - user_id
+                - asset_count
         Environment:
             type: object
             properties:
@@ -1074,6 +1152,10 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                github_pr:
+                    type: string
+                    description: The github pull request that resulted in the deployment.
+                    example: "1234"
                 github_repo:
                     type: string
                     description: The github repository in the form of "owner/repo".
@@ -1090,10 +1172,10 @@ components:
                     type: string
                     description: A unique identifier that will mitigate against duplicate deployments.
                     example: 01jqq0ajmb4qh9eppz48dejr2m
-                openapiv3_asset_ids:
+                openapiv3_assets:
                     type: array
                     items:
-                        type: string
+                        $ref: '#/components/schemas/OpenAPIv3DeploymentAsset'
                     description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
                 organization_id:
                     type: string
@@ -1110,7 +1192,7 @@ components:
                 - organization_id
                 - project_id
                 - user_id
-                - openapiv3_asset_ids
+                - openapiv3_assets
         HTTPToolDefinition:
             type: object
             properties:
@@ -1242,20 +1324,13 @@ components:
                 cursor:
                     type: string
                     description: The cursor to fetch results from
-                limit:
-                    type: integer
-                    description: Results per page
-                    default: 10
-                    format: int64
-                    minimum: 1
-                    maximum: 100
         ListDeploymentResult:
             type: object
             properties:
                 items:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Deployment'
+                        $ref: '#/components/schemas/DeploymentSummary'
                     description: A list of deployments
                 next_cursor:
                     type: string
@@ -1292,132 +1367,42 @@ components:
                     description: The list of toolsets
             required:
                 - toolsets
-        OpenAPI3P1ParameterSchema:
+        OpenAPIv3DeploymentAsset:
             type: object
             properties:
-                allowReserved:
-                    type: boolean
-                    description: Whether the parameter is allowed to be reserved.
-                deprecated:
-                    type: boolean
-                    description: A brief description of the parameter.
-                    default: false
-                description:
+                asset_id:
                     type: string
-                    description: A brief description of the parameter.
-                example:
-                    description: An example value for the parameter.
-                examples:
-                    type: object
-                    description: Examples of the parameter.
-                    additionalProperties: true
-                explode:
-                    type: boolean
-                    description: Whether the parameter is exploded.
-                in:
+                    description: The ID of the uploaded asset.
+                id:
                     type: string
-                    description: The location of the parameter in an HTTP request.
-                    enum:
-                        - query
-                        - header
-                        - path
-                        - cookie
+                    description: The ID of the deployment asset.
                 name:
                     type: string
-                    description: The name of the parameter.
-                required:
-                    type: boolean
-                    description: Whether the parameter is required.
-                schema:
+                    description: The name to give the document as it will be displayed in UIs.
+                slug:
                     type: string
-                    format: json
-                style:
-                    type: string
-                    description: The style of the parameter.
-                    enum:
-                        - form
-                        - simple
-                        - spaceDelimited
-                        - pipeDelimited
-                        - deepObject
+                    description: The slug to give the document as it will be displayed in URLs.
             required:
+                - id
+                - asset_id
                 - name
-                - in
-                - required
-        OpenAPI3P1ToolForm:
+                - slug
+        OpenAPIv3DeploymentAssetForm:
             type: object
             properties:
-                body:
+                asset_id:
                     type: string
-                    format: json
-                description:
-                    type: string
-                    description: The description that is provided with the tool.
-                    example: Looks up the weather in a given location.
-                header_parameters:
-                    type: object
-                    description: A map of header schemas to send with the HTTP request.
-                    additionalProperties:
-                        $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
-                kind:
-                    type: string
-                    enum:
-                        - oas3p1_operation
-                method:
-                    type: string
-                    description: The method to use for the HTTP request.
-                    example: POST
-                    enum:
-                        - GET
-                        - POST
-                        - PUT
-                        - DELETE
-                        - HEAD
-                        - QUERY
-                        - SEARCH
+                    description: The ID of the uploaded asset.
                 name:
                     type: string
-                    description: The name of the tool.
-                    example: lookup_weather
-                    pattern: ^[a-zA-Z](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?$
-                    minLength: 1
-                    maxLength: 50
-                path:
+                    description: The name to give the document as it will be displayed in UIs.
+                slug:
                     type: string
-                    description: The path of the HTTP endpoint.
-                    example: /invoices/{id}
-                path_parameters:
-                    type: object
-                    description: A map of path parameters to interpolate into the path of the HTTP request.
-                    additionalProperties:
-                        $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
-                query_parameters:
-                    type: object
-                    description: A map of query parameters to send with the HTTP request.
-                    additionalProperties:
-                        $ref: '#/components/schemas/OpenAPI3P1ParameterSchema'
-                tags:
-                    type: array
-                    items:
-                        type: string
-                        pattern: ^[a-z](?:[a-z0-9_-]*[a-z0-9])?$
-                    description: The tags that are associated with the tool.
-                    default: []
-                    example:
-                        - weather
-                        - public
-                    maxItems: 10
+                    description: The slug to give the document as it will be displayed in URLs.
             required:
-                - kind
+                - asset_id
                 - name
-                - description
-                - method
-                - path
-                - path_parameters
-                - header_parameters
-                - query_parameters
-                - body
-            additionalProperties: false
+                - slug
         Organization:
             type: object
             properties:

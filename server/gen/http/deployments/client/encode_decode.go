@@ -10,7 +10,6 @@ package client
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -45,6 +44,10 @@ func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
@@ -120,6 +123,14 @@ func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) 
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
+		}
+		{
+			head := p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
 		body := NewCreateDeploymentRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("deployments", "createDeployment", err)
@@ -172,7 +183,7 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 // and path set to call the "deployments" service "listDeployments" endpoint
 func (c *Client) BuildListDeploymentsRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDeploymentsDeploymentsPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("deployments", "listDeployments", u.String(), err)
 	}
@@ -195,11 +206,14 @@ func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		{
+			head := p.ProjectSlug
+			req.Header.Set("Gram-Project", head)
+		}
 		values := req.URL.Query()
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
-		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -245,6 +259,52 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset
+// builds a value of type *deployments.OpenAPIv3DeploymentAsset from a value of
+// type *OpenAPIv3DeploymentAssetResponseBody.
+func unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(v *OpenAPIv3DeploymentAssetResponseBody) *deployments.OpenAPIv3DeploymentAsset {
+	res := &deployments.OpenAPIv3DeploymentAsset{
+		ID:      *v.ID,
+		AssetID: *v.AssetID,
+		Name:    *v.Name,
+		Slug:    *v.Slug,
+	}
+
+	return res
+}
+
+// marshalDeploymentsOpenAPIv3DeploymentAssetFormToOpenAPIv3DeploymentAssetFormRequestBody
+// builds a value of type *OpenAPIv3DeploymentAssetFormRequestBody from a value
+// of type *deployments.OpenAPIv3DeploymentAssetForm.
+func marshalDeploymentsOpenAPIv3DeploymentAssetFormToOpenAPIv3DeploymentAssetFormRequestBody(v *deployments.OpenAPIv3DeploymentAssetForm) *OpenAPIv3DeploymentAssetFormRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &OpenAPIv3DeploymentAssetFormRequestBody{
+		AssetID: v.AssetID,
+		Name:    v.Name,
+		Slug:    v.Slug,
+	}
+
+	return res
+}
+
+// marshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm
+// builds a value of type *deployments.OpenAPIv3DeploymentAssetForm from a
+// value of type *OpenAPIv3DeploymentAssetFormRequestBody.
+func marshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm(v *OpenAPIv3DeploymentAssetFormRequestBody) *deployments.OpenAPIv3DeploymentAssetForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.OpenAPIv3DeploymentAssetForm{
+		AssetID: v.AssetID,
+		Name:    v.Name,
+		Slug:    v.Slug,
+	}
+
+	return res
+}
+
 // unmarshalDeploymentResponseBodyToDeploymentsDeployment builds a value of
 // type *deployments.Deployment from a value of type *DeploymentResponseBody.
 func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentResponseBody) *deployments.Deployment {
@@ -259,13 +319,28 @@ func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentRespons
 		CreatedAt:      *v.CreatedAt,
 		IdempotencyKey: v.IdempotencyKey,
 		GithubRepo:     v.GithubRepo,
+		GithubPr:       v.GithubPr,
 		GithubSha:      v.GithubSha,
 		ExternalID:     v.ExternalID,
 		ExternalURL:    v.ExternalURL,
 	}
-	res.Openapiv3AssetIds = make([]string, len(v.Openapiv3AssetIds))
-	for i, val := range v.Openapiv3AssetIds {
-		res.Openapiv3AssetIds[i] = val
+	res.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
+	for i, val := range v.Openapiv3Assets {
+		res.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(val)
+	}
+
+	return res
+}
+
+// unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary builds
+// a value of type *deployments.DeploymentSummary from a value of type
+// *DeploymentSummaryResponseBody.
+func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *DeploymentSummaryResponseBody) *deployments.DeploymentSummary {
+	res := &deployments.DeploymentSummary{
+		ID:         *v.ID,
+		UserID:     *v.UserID,
+		CreatedAt:  *v.CreatedAt,
+		AssetCount: *v.AssetCount,
 	}
 
 	return res

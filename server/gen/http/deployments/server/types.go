@@ -15,10 +15,10 @@ import (
 // CreateDeploymentRequestBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP request body.
 type CreateDeploymentRequestBody struct {
-	// A unique identifier that will mitigate against duplicate deployments.
-	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string `form:"github_repo,omitempty" json:"github_repo,omitempty" xml:"github_repo,omitempty"`
+	// The github pull request that resulted in the deployment.
+	GithubPr *string `form:"github_pr,omitempty" json:"github_pr,omitempty" xml:"github_pr,omitempty"`
 	// The commit hash that triggered the deployment.
 	GithubSha *string `form:"github_sha,omitempty" json:"github_sha,omitempty" xml:"github_sha,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -26,10 +26,8 @@ type CreateDeploymentRequestBody struct {
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
-	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
-	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
-	// documents whose operations will become tool definitions.
-	Openapiv3AssetIds []string `form:"openapiv3_asset_ids,omitempty" json:"openapiv3_asset_ids,omitempty" xml:"openapiv3_asset_ids,omitempty"`
+	ExternalURL     *string                                    `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	Openapiv3Assets []*OpenAPIv3DeploymentAssetFormRequestBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
 }
 
 // GetDeploymentResponseBody is the type of the "deployments" service
@@ -49,6 +47,8 @@ type GetDeploymentResponseBody struct {
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string `form:"github_repo,omitempty" json:"github_repo,omitempty" xml:"github_repo,omitempty"`
+	// The github pull request that resulted in the deployment.
+	GithubPr *string `form:"github_pr,omitempty" json:"github_pr,omitempty" xml:"github_pr,omitempty"`
 	// The commit hash that triggered the deployment.
 	GithubSha *string `form:"github_sha,omitempty" json:"github_sha,omitempty" xml:"github_sha,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -59,7 +59,7 @@ type GetDeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	Openapiv3AssetIds []string `form:"openapiv3_asset_ids" json:"openapiv3_asset_ids" xml:"openapiv3_asset_ids"`
+	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
 }
 
 // CreateDeploymentResponseBody is the type of the "deployments" service
@@ -75,7 +75,20 @@ type ListDeploymentsResponseBody struct {
 	// The cursor to fetch results from
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// A list of deployments
-	Items []*DeploymentResponseBody `form:"items" json:"items" xml:"items"`
+	Items []*DeploymentSummaryResponseBody `form:"items" json:"items" xml:"items"`
+}
+
+// OpenAPIv3DeploymentAssetResponseBody is used to define fields on response
+// body types.
+type OpenAPIv3DeploymentAssetResponseBody struct {
+	// The ID of the deployment asset.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the uploaded asset.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The name to give the document as it will be displayed in UIs.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug to give the document as it will be displayed in URLs.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
 // DeploymentResponseBody is used to define fields on response body types.
@@ -94,6 +107,8 @@ type DeploymentResponseBody struct {
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string `form:"github_repo,omitempty" json:"github_repo,omitempty" xml:"github_repo,omitempty"`
+	// The github pull request that resulted in the deployment.
+	GithubPr *string `form:"github_pr,omitempty" json:"github_pr,omitempty" xml:"github_pr,omitempty"`
 	// The commit hash that triggered the deployment.
 	GithubSha *string `form:"github_sha,omitempty" json:"github_sha,omitempty" xml:"github_sha,omitempty"`
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -104,7 +119,31 @@ type DeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	Openapiv3AssetIds []string `form:"openapiv3_asset_ids" json:"openapiv3_asset_ids" xml:"openapiv3_asset_ids"`
+	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
+}
+
+// DeploymentSummaryResponseBody is used to define fields on response body
+// types.
+type DeploymentSummaryResponseBody struct {
+	// The ID to of the deployment.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the user that created the deployment.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// The creation date of the deployment.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The number of upstream assets.
+	AssetCount int64 `form:"asset_count" json:"asset_count" xml:"asset_count"`
+}
+
+// OpenAPIv3DeploymentAssetFormRequestBody is used to define fields on request
+// body types.
+type OpenAPIv3DeploymentAssetFormRequestBody struct {
+	// The ID of the uploaded asset.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The name to give the document as it will be displayed in UIs.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug to give the document as it will be displayed in URLs.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
 // NewGetDeploymentResponseBody builds the HTTP response body from the result
@@ -118,17 +157,18 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 		CreatedAt:      res.CreatedAt,
 		IdempotencyKey: res.IdempotencyKey,
 		GithubRepo:     res.GithubRepo,
+		GithubPr:       res.GithubPr,
 		GithubSha:      res.GithubSha,
 		ExternalID:     res.ExternalID,
 		ExternalURL:    res.ExternalURL,
 	}
-	if res.Openapiv3AssetIds != nil {
-		body.Openapiv3AssetIds = make([]string, len(res.Openapiv3AssetIds))
-		for i, val := range res.Openapiv3AssetIds {
-			body.Openapiv3AssetIds[i] = val
+	if res.Openapiv3Assets != nil {
+		body.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(res.Openapiv3Assets))
+		for i, val := range res.Openapiv3Assets {
+			body.Openapiv3Assets[i] = marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(val)
 		}
 	} else {
-		body.Openapiv3AssetIds = []string{}
+		body.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
 	}
 	return body
 }
@@ -150,54 +190,57 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 		NextCursor: res.NextCursor,
 	}
 	if res.Items != nil {
-		body.Items = make([]*DeploymentResponseBody, len(res.Items))
+		body.Items = make([]*DeploymentSummaryResponseBody, len(res.Items))
 		for i, val := range res.Items {
-			body.Items[i] = marshalDeploymentsDeploymentToDeploymentResponseBody(val)
+			body.Items[i] = marshalDeploymentsDeploymentSummaryToDeploymentSummaryResponseBody(val)
 		}
 	} else {
-		body.Items = []*DeploymentResponseBody{}
+		body.Items = []*DeploymentSummaryResponseBody{}
 	}
 	return body
 }
 
 // NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
-func NewGetDeploymentPayload(id string, sessionToken *string) *deployments.GetDeploymentPayload {
+func NewGetDeploymentPayload(id string, sessionToken *string, projectSlug string) *deployments.GetDeploymentPayload {
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
+	v.ProjectSlug = projectSlug
 
 	return v
 }
 
 // NewCreateDeploymentPayload builds a deployments service createDeployment
 // endpoint payload.
-func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string) *deployments.CreateDeploymentPayload {
+func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string, projectSlug string, idempotencyKey string) *deployments.CreateDeploymentPayload {
 	v := &deployments.CreateDeploymentPayload{
-		IdempotencyKey: *body.IdempotencyKey,
-		GithubRepo:     body.GithubRepo,
-		GithubSha:      body.GithubSha,
-		ExternalID:     body.ExternalID,
-		ExternalURL:    body.ExternalURL,
+		GithubRepo:  body.GithubRepo,
+		GithubPr:    body.GithubPr,
+		GithubSha:   body.GithubSha,
+		ExternalID:  body.ExternalID,
+		ExternalURL: body.ExternalURL,
 	}
-	if body.Openapiv3AssetIds != nil {
-		v.Openapiv3AssetIds = make([]string, len(body.Openapiv3AssetIds))
-		for i, val := range body.Openapiv3AssetIds {
-			v.Openapiv3AssetIds[i] = val
+	if body.Openapiv3Assets != nil {
+		v.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAssetForm, len(body.Openapiv3Assets))
+		for i, val := range body.Openapiv3Assets {
+			v.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm(val)
 		}
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlug = projectSlug
+	v.IdempotencyKey = idempotencyKey
 
 	return v
 }
 
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
-func NewListDeploymentsPayload(cursor *string, limit int, sessionToken *string) *deployments.ListDeploymentsPayload {
+func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlug string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
-	v.Limit = limit
 	v.SessionToken = sessionToken
+	v.ProjectSlug = projectSlug
 
 	return v
 }
@@ -205,8 +248,27 @@ func NewListDeploymentsPayload(cursor *string, limit int, sessionToken *string) 
 // ValidateCreateDeploymentRequestBody runs the validations defined on
 // CreateDeploymentRequestBody
 func ValidateCreateDeploymentRequestBody(body *CreateDeploymentRequestBody) (err error) {
-	if body.IdempotencyKey == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("idempotency_key", "body"))
+	for _, e := range body.Openapiv3Assets {
+		if e != nil {
+			if err2 := ValidateOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateOpenAPIv3DeploymentAssetFormRequestBody runs the validations defined
+// on OpenAPIv3DeploymentAssetFormRequestBody
+func ValidateOpenAPIv3DeploymentAssetFormRequestBody(body *OpenAPIv3DeploymentAssetFormRequestBody) (err error) {
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	return
 }

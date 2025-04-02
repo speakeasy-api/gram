@@ -49,10 +49,14 @@ var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployment
 // createDeployment method.
 type CreateDeploymentPayload struct {
 	SessionToken *string
+	// The project the action belongs too
+	ProjectSlug string
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey string
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string
+	// The github pull request that resulted in the deployment.
+	GithubPr *string
 	// The commit hash that triggered the deployment.
 	GithubSha *string
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -60,10 +64,8 @@ type CreateDeploymentPayload struct {
 	ExternalID *string
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
-	ExternalURL *string
-	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
-	// documents whose operations will become tool definitions.
-	Openapiv3AssetIds []string
+	ExternalURL     *string
+	Openapiv3Assets []*OpenAPIv3DeploymentAssetForm
 }
 
 // CreateDeploymentResult is the result type of the deployments service
@@ -88,6 +90,8 @@ type Deployment struct {
 	IdempotencyKey *string
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string
+	// The github pull request that resulted in the deployment.
+	GithubPr *string
 	// The commit hash that triggered the deployment.
 	GithubSha *string
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -98,13 +102,26 @@ type Deployment struct {
 	ExternalURL *string
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	Openapiv3AssetIds []string
+	Openapiv3Assets []*OpenAPIv3DeploymentAsset
+}
+
+type DeploymentSummary struct {
+	// The ID to of the deployment.
+	ID string
+	// The ID of the user that created the deployment.
+	UserID string
+	// The creation date of the deployment.
+	CreatedAt string
+	// The number of upstream assets.
+	AssetCount int64
 }
 
 // GetDeploymentPayload is the payload type of the deployments service
 // getDeployment method.
 type GetDeploymentPayload struct {
 	SessionToken *string
+	// The project the action belongs too
+	ProjectSlug string
 	// The ID of the deployment
 	ID string
 }
@@ -126,6 +143,8 @@ type GetDeploymentResult struct {
 	IdempotencyKey *string
 	// The github repository in the form of "owner/repo".
 	GithubRepo *string
+	// The github pull request that resulted in the deployment.
+	GithubPr *string
 	// The commit hash that triggered the deployment.
 	GithubSha *string
 	// The external ID to refer to the deployment. This can be a git commit hash
@@ -136,7 +155,7 @@ type GetDeploymentResult struct {
 	ExternalURL *string
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	Openapiv3AssetIds []string
+	Openapiv3Assets []*OpenAPIv3DeploymentAsset
 }
 
 // ListDeploymentResult is the result type of the deployments service
@@ -145,15 +164,35 @@ type ListDeploymentResult struct {
 	// The cursor to fetch results from
 	NextCursor *string
 	// A list of deployments
-	Items []*Deployment
+	Items []*DeploymentSummary
 }
 
 // ListDeploymentsPayload is the payload type of the deployments service
 // listDeployments method.
 type ListDeploymentsPayload struct {
 	SessionToken *string
+	// The project the action belongs too
+	ProjectSlug string
 	// The cursor to fetch results from
 	Cursor *string
-	// Results per page
-	Limit int
+}
+
+type OpenAPIv3DeploymentAsset struct {
+	// The ID of the deployment asset.
+	ID string
+	// The ID of the uploaded asset.
+	AssetID string
+	// The name to give the document as it will be displayed in UIs.
+	Name string
+	// The slug to give the document as it will be displayed in URLs.
+	Slug string
+}
+
+type OpenAPIv3DeploymentAssetForm struct {
+	// The ID of the uploaded asset.
+	AssetID string
+	// The name to give the document as it will be displayed in UIs.
+	Name string
+	// The slug to give the document as it will be displayed in URLs.
+	Slug string
 }

@@ -3,3 +3,31 @@
 //   sqlc v1.28.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Deployment struct {
+	ID             uuid.UUID
+	UserID         string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	IdempotencyKey string
+	GithubRepo     pgtype.Text
+	GithubPr       pgtype.Text
+	GithubSha      pgtype.Text
+	ExternalID     pgtype.Text
+	ExternalUrl    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type DeploymentsOpenapiv3Asset struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+}

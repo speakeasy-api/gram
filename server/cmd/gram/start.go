@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
+	"github.com/speakeasy-api/gram/internal/database"
 	"github.com/speakeasy-api/gram/internal/environments"
 	"github.com/speakeasy-api/gram/internal/keys"
+	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 	"github.com/urfave/cli/v2"
 	goahttp "goa.design/goa/v3/http"
@@ -45,6 +48,11 @@ func newStartCommand() *cli.Command {
 				EnvVars:  []string{"GRAM_DATABASE_URL"},
 				Required: true,
 			},
+			&cli.BoolFlag{
+				Name:    "trace-queries",
+				Usage:   "Trace database queries",
+				EnvVars: []string{"GRAM_TRACE_QUERIES"},
+			},
 			&cli.StringFlag{
 				Name:     "assets-backend",
 				Usage:    "The backend to use for managing assets",
@@ -69,7 +77,14 @@ func newStartCommand() *cli.Command {
 			defer cancel()
 			logger := log.From(ctx).With(slog.String("service", "gram"))
 
-			db, err := pgxpool.New(ctx, c.String("database-url"))
+			poolcfg := must.Value(pgxpool.ParseConfig(c.String("database-url")))
+			if c.Bool("trace-queries") {
+				poolcfg.ConnConfig.Tracer = &tracelog.TraceLog{
+					Logger:   database.NewLogger(logger.With("component", "pgx")),
+					LogLevel: tracelog.LogLevelInfo,
+				}
+			}
+			db, err := pgxpool.NewWithConfig(ctx, poolcfg)
 			if err != nil {
 				return err
 			}

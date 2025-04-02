@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Qui labore ut ad error.\",\n      \"description\": \"Eaque veniam ducimus ipsa recusandae.\",\n      \"http_tool_ids\": [\n         \"Non ipsa.\",\n         \"Vero id.\",\n         \"Est officia.\"\n      ],\n      \"name\": \"Pariatur similique nulla.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Aperiam veniam dolorem vel.\",\n      \"description\": \"Laboriosam doloribus vitae et voluptatem.\",\n      \"http_tool_ids\": [\n         \"Eaque quia qui quo fugit.\",\n         \"Sunt ut architecto mollitia.\",\n         \"Optio officia animi sapiente.\",\n         \"Aut ipsam nostrum porro similique sit.\"\n      ],\n      \"name\": \"Qui rerum incidunt nisi.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -80,7 +80,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Voluptatum doloribus et aliquam.\",\n      \"description\": \"Id occaecati aut.\",\n      \"http_tool_ids_to_add\": [\n         \"Magnam sit aliquid odio est doloribus esse.\",\n         \"Voluptatem nostrum velit omnis temporibus.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Numquam error deserunt harum possimus.\",\n         \"Unde voluptates ipsa qui adipisci odit.\",\n         \"Ut quas nesciunt.\"\n      ],\n      \"name\": \"Sunt quas.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Eum saepe.\",\n      \"description\": \"Rerum facilis esse ut.\",\n      \"http_tool_ids_to_add\": [\n         \"Suscipit mollitia voluptatem dolorem perspiciatis deleniti.\",\n         \"Aliquid commodi dolorem asperiores aut.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Quia rerum eum.\",\n         \"Harum qui non accusantium quas ipsa.\",\n         \"Velit in.\",\n         \"Quos rerum aut ut ipsum atque.\"\n      ],\n      \"name\": \"Molestiae sunt qui consequatur assumenda aut quia.\"\n   }'")
 		}
 	}
 	var id string
