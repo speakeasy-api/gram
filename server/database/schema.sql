@@ -183,8 +183,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
   name TEXT NOT NULL,
   token TEXT NOT NULL,
--- organization_id is the root scope boundary
-  scopes TEXT[] NOT NULL DEFAULT ARRAY['consumer:organization'],
+  scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
