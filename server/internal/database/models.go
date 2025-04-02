@@ -61,6 +61,20 @@ type DeploymentStatus struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type GramKey struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	CreatedByUserID pgtype.Text
+	Name            string
+	Token           string
+	Scopes          []string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type HttpToolDefinition struct {
 	ID               uuid.UUID
 	OrganizationID   string
