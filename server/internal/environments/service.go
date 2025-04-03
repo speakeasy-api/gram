@@ -52,6 +52,9 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		Slug:           slug,
 		Name:           payload.Name,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	names := make([]string, len(payload.Entries))
 	values := make([]string, len(payload.Entries))

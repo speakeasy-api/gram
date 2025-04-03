@@ -77,7 +77,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	createdToolset, err := s.repo.CreateToolset(ctx, createToolParams)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique constraint") {
-			return nil, errors.New("project slug already exists")
+			return nil, errors.New("toolset slug already exists")
 		}
 
 		return nil, err
