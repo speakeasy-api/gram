@@ -3,10 +3,10 @@ package sessions
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/speakeasy-api/gram/gen/auth"
-	"github.com/speakeasy-api/gram/internal/log"
 )
 
 func (s *Sessions) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
@@ -37,7 +37,7 @@ func (s *Sessions) GetUserInfo(ctx context.Context, userID string) (*CachedUserI
 	}
 
 	if err = s.userInfoCache.Store(ctx, *userInfo); err != nil {
-		log.From(ctx).Error("failed to store user info in cache", "error", err)
+		s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
 	}
 
 	return userInfo, err

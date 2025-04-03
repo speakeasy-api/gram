@@ -3,20 +3,23 @@ package sessions
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 
 	"github.com/speakeasy-api/gram/internal/cache"
 )
 
 type Sessions struct {
+	logger        *slog.Logger
 	sessionCache  cache.Cache[Session]
 	userInfoCache cache.Cache[CachedUserInfo]
 }
 
-func New() *Sessions {
+func New(logger *slog.Logger) *Sessions {
 	return &Sessions{
-		sessionCache:  cache.New[Session](sessionCacheExpiry),
-		userInfoCache: cache.New[CachedUserInfo](userInfoCacheExpiry),
+		logger:        logger.With("component", "sessions"),
+		sessionCache:  cache.New[Session](logger.With("cache", "session"), sessionCacheExpiry),
+		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), userInfoCacheExpiry),
 	}
 }
 

@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
-	"github.com/speakeasy-api/gram/internal/log"
-	"go.uber.org/zap"
 )
 
 type Cache[T Cacheable[T]] struct {
+	logger    *slog.Logger
 	rdb       *redis.Client
 	cache     *redisCache.Cache
 	keySuffix string
@@ -73,7 +73,7 @@ func (d *Cache[T]) Delete(ctx context.Context, obj T) error {
 	}
 
 	cacheKey := d.fullKey(obj.CacheKey())
-	log.From(ctx).Info("invalidating cache", zap.String("cache key", cacheKey))
+	d.logger.InfoContext(ctx, "invalidating cache", slog.String("key", cacheKey))
 	err := d.cache.Delete(ctx, cacheKey)
 	if err != nil {
 		return err
@@ -173,7 +173,7 @@ func (d *Cache[T]) Update(ctx context.Context, obj T) error {
 	return nil
 }
 
-func New[T Cacheable[T]](ttl time.Duration) Cache[T] {
+func New[T Cacheable[T]](logger *slog.Logger, ttl time.Duration) Cache[T] {
 	// TODO: Stable server versions
 	var serverVersion string
 	var redisAddr string
@@ -194,7 +194,7 @@ func New[T Cacheable[T]](ttl time.Duration) Cache[T] {
 	})
 
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		fmt.Println("Redis connection failed: %v", err)
+		logger.Error("redis connection failed", slog.String("error", err.Error()))
 		panic(err)
 	}
 
@@ -202,5 +202,5 @@ func New[T Cacheable[T]](ttl time.Duration) Cache[T] {
 		Redis: rdb,
 	})
 
-	return Cache[T]{rdb: rdb, cache: cache, ttl: ttl, keySuffix: serverVersion}
+	return Cache[T]{logger: logger, rdb: rdb, cache: cache, ttl: ttl, keySuffix: serverVersion}
 }

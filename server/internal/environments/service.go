@@ -28,7 +28,7 @@ type Service struct {
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New()}
+	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New(logger)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {

@@ -47,15 +47,19 @@ func newApp() *cli.App {
 
 			var logger *slog.Logger
 			if pretty {
-				logger = slog.New(charmlog.NewWithOptions(os.Stderr, charmlog.Options{
-					ReportCaller: true,
-					Level:        log.LogLevels[c.String("log-level")].Charm,
-				}))
+				logger = slog.New(&log.ContextHandler{
+					Handler: charmlog.NewWithOptions(os.Stderr, charmlog.Options{
+						ReportCaller: true,
+						Level:        log.LogLevels[c.String("log-level")].Charm,
+					}),
+				})
 			} else {
-				logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-					AddSource: true,
-					Level:     log.LogLevels[c.String("log-level")].Slog,
-				}))
+				logger = slog.New(&log.ContextHandler{
+					Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+						AddSource: true,
+						Level:     log.LogLevels[c.String("log-level")].Slog,
+					}),
+				})
 			}
 
 			// Sets GOMAXPROCS to match the Linux container CPU quota.
@@ -65,11 +69,11 @@ func newApp() *cli.App {
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
 			memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(logger))
 
-			c.Context = log.With(c.Context, logger)
+			c.Context = PushLogger(c.Context, logger)
 
 			controlServer := control.Server{
 				Address: ":8081",
-				Logger:  logger.With(slog.String("service", "control")),
+				Logger:  logger.With(slog.String("app", "control")),
 			}
 
 			shutdown, err := controlServer.Start(c.Context)

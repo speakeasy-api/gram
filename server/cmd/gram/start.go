@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/deployments"
-	"github.com/speakeasy-api/gram/internal/log"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/system"
 )
@@ -75,7 +74,7 @@ func newStartCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
-			logger := log.From(ctx).With(slog.String("service", "gram"))
+			logger := PullLogger(ctx).With(slog.String("app", "gram"))
 
 			poolcfg := must.Value(pgxpool.ParseConfig(c.String("database-url")))
 			if c.Bool("trace-queries") {
@@ -120,7 +119,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			mux := goahttp.NewMuxer()
-			mux.Use(middleware.RequestLoggingMiddleware)
+			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, assetStorage))

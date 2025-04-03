@@ -45,7 +45,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, storage BlobStore) *Servi
 	return &Service{
 		logger:   logger,
 		db:       db,
-		sessions: sessions.New(),
+		sessions: sessions.New(logger),
 		storage:  storage,
 		projects: projectsRepo.New(db),
 		repo:     repo.New(db),

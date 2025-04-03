@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log/slog"
 	"os"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/gen/auth"
-	"github.com/speakeasy-api/gram/internal/log"
-	"go.uber.org/zap"
 )
 
 type localEnvFile map[string]struct {
@@ -95,7 +94,7 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 
 	for userID, userInfo := range data {
 		if err := s.InvalidateUserInfoCache(ctx, userID); err != nil {
-			log.From(ctx).Warn("failed to invalidate user info cache", zap.Error(err))
+			s.logger.WarnContext(ctx, "failed to invalidate user info cache", slog.String("error", err.Error()))
 		}
 		gramSession = &Session{
 			ID:                   uuid.NewString(),

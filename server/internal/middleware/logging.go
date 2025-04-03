@@ -1,10 +1,10 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
-
-	"github.com/speakeasy-api/gram/internal/log"
 )
 
 type responseWriter struct {
@@ -28,28 +28,66 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
-func RequestLoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		logger := log.From(r.Context())
+func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			start := time.Now()
 
-		logger.Info("Request received",
-			"method", r.Method,
-			"url", r.URL.String(),
-			"headers", r.Header,
-		)
+			reqAttrs := make([]any, 0, 2+len(r.Header))
+			reqAttrs = append(reqAttrs, slog.String("method", r.Method))
+			reqAttrs = append(reqAttrs, slog.String("url", r.URL.String()))
+			for k, v := range r.Header {
+				reqAttrs = append(reqAttrs, slog.String(k, strings.Join(v, ",")))
+			}
 
-		// Capture response status
-		rw := newResponseWriter(w)
-		next.ServeHTTP(rw, r)
+			logger.InfoContext(ctx, "request", reqAttrs...)
 
-		// Log response details
-		logger.Info("Response sent",
-			"method", r.Method,
-			"url", r.URL.String(),
-			"headers", rw.Header(),
-			"status", rw.statusCode,
-			"duration", time.Since(start),
-		)
-	})
+			rw := newResponseWriter(w)
+			next.ServeHTTP(rw, r)
+
+			resAttrs := make([]any, 0, 4+len(r.Header))
+			resAttrs = append(resAttrs, slog.String("method", r.Method))
+			resAttrs = append(resAttrs, slog.String("url", r.URL.String()))
+			resAttrs = append(resAttrs, slog.Int("status", rw.statusCode))
+			resAttrs = append(resAttrs, slog.String("duration", time.Since(start).String()))
+			for k, v := range rw.Header() {
+				resAttrs = append(resAttrs, slog.String(k, strings.Join(v, ",")))
+			}
+
+			logger.InfoContext(ctx, "response", resAttrs...)
+		})
+	}
+}
+
+func NewGoaLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			start := time.Now()
+
+			reqAttrs := make([]any, 0, 2+len(r.Header))
+			reqAttrs = append(reqAttrs, slog.String("method", r.Method))
+			reqAttrs = append(reqAttrs, slog.String("url", r.URL.String()))
+			for k, v := range r.Header {
+				reqAttrs = append(reqAttrs, slog.String(k, strings.Join(v, ",")))
+			}
+
+			logger.InfoContext(ctx, "request", reqAttrs...)
+
+			rw := newResponseWriter(w)
+			next.ServeHTTP(rw, r)
+
+			resAttrs := make([]any, 0, 4+len(r.Header))
+			resAttrs = append(resAttrs, slog.String("method", r.Method))
+			resAttrs = append(resAttrs, slog.String("url", r.URL.String()))
+			resAttrs = append(resAttrs, slog.Int("status", rw.statusCode))
+			resAttrs = append(resAttrs, slog.String("duration", time.Since(start).String()))
+			for k, v := range rw.Header() {
+				resAttrs = append(resAttrs, slog.String(k, strings.Join(v, ",")))
+			}
+
+			logger.InfoContext(ctx, "response", resAttrs...)
+		})
+	}
 }
