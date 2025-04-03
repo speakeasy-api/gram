@@ -161,9 +161,10 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 	if payload.Name != nil || payload.Description != nil {
 		updateInput := repo.UpdateEnvironmentParams{
-			Slug:      payload.Slug,
-			ProjectID: *authCtx.ProjectID,
-			Name:      environment.Name,
+			Slug:        payload.Slug,
+			ProjectID:   *authCtx.ProjectID,
+			Name:        environment.Name,
+			Description: environment.Description,
 		}
 		if payload.Name != nil {
 			updateInput.Name = *payload.Name
