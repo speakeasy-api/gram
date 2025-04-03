@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Aperiam veniam dolorem vel.\",\n      \"description\": \"Laboriosam doloribus vitae et voluptatem.\",\n      \"http_tool_ids\": [\n         \"Eaque quia qui quo fugit.\",\n         \"Sunt ut architecto mollitia.\",\n         \"Optio officia animi sapiente.\",\n         \"Aut ipsam nostrum porro similique sit.\"\n      ],\n      \"name\": \"Qui rerum incidunt nisi.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Hic maxime unde.\",\n      \"description\": \"Ut quas nesciunt.\",\n      \"http_tool_ids\": [\n         \"Aliquid ipsa.\",\n         \"Veritatis numquam non aliquid.\",\n         \"Minus inventore voluptatem cum ipsam voluptatem illum.\",\n         \"Nobis doloremque.\"\n      ],\n      \"name\": \"Unde voluptates ipsa qui adipisci odit.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -84,7 +84,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Eum saepe.\",\n      \"description\": \"Rerum facilis esse ut.\",\n      \"http_tool_ids_to_add\": [\n         \"Suscipit mollitia voluptatem dolorem perspiciatis deleniti.\",\n         \"Aliquid commodi dolorem asperiores aut.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Quia rerum eum.\",\n         \"Harum qui non accusantium quas ipsa.\",\n         \"Velit in.\",\n         \"Quos rerum aut ut ipsum atque.\"\n      ],\n      \"name\": \"Molestiae sunt qui consequatur assumenda aut quia.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Nihil asperiores.\",\n      \"description\": \"Eveniet impedit necessitatibus.\",\n      \"http_tool_ids_to_add\": [\n         \"Qui vel voluptas et.\",\n         \"Reprehenderit atque non inventore aut ipsa.\",\n         \"Dolor laudantium magni aspernatur.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Incidunt non similique veniam qui.\",\n         \"Et quas.\"\n      ],\n      \"name\": \"Provident nihil officiis non quod qui.\"\n   }'")
 		}
 	}
 	var id string

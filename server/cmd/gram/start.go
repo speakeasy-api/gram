@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/system"
+	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
@@ -149,6 +150,7 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db))
 			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db))
 			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db))
+			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),

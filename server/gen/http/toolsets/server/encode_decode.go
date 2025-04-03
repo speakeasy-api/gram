@@ -348,6 +348,8 @@ func marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *toolse
 		QueriesSchema:    v.QueriesSchema,
 		PathparamsSchema: v.PathparamsSchema,
 		BodySchema:       v.BodySchema,
+		CreatedAt:        v.CreatedAt,
+		UpdatedAt:        v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

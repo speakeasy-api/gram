@@ -181,6 +181,10 @@ type HTTPToolDefinitionResponseBody struct {
 	PathparamsSchema *string `form:"pathparams_schema,omitempty" json:"pathparams_schema,omitempty" xml:"pathparams_schema,omitempty"`
 	// JSON schema for request body
 	BodySchema *string `form:"body_schema,omitempty" json:"body_schema,omitempty" xml:"body_schema,omitempty"`
+	// The creation date of the tool.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateToolsetResponseBody builds the HTTP response body from the result

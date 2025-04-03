@@ -115,6 +115,10 @@ type HTTPToolDefinition struct {
 	PathparamsSchema *string
 	// JSON schema for request body
 	BodySchema *string
+	// The creation date of the tool.
+	CreatedAt string
+	// The last update date of the tool.
+	UpdatedAt string
 }
 
 // ListToolsetsPayload is the payload type of the toolsets service listToolsets

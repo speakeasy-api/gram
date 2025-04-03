@@ -277,6 +277,8 @@ func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolset
 				QueriesSchema:    conv.FromBytes(def.QueriesSchema),
 				PathparamsSchema: conv.FromBytes(def.PathparamsSchema),
 				BodySchema:       conv.FromBytes(def.BodySchema),
+				CreatedAt:        def.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:        def.UpdatedAt.Time.Format(time.RFC3339),
 			}
 		}
 	}

@@ -597,6 +597,47 @@ paths:
                 - keys
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
+    /rpc/tools.list:
+        get:
+            description: List all tools for a project
+            operationId: tools#listTools
+            parameters:
+                - allowEmptyValue: true
+                  description: The cursor to fetch results from
+                  in: query
+                  name: cursor
+                  schema:
+                    description: The cursor to fetch results from
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListToolsResult'
+                    description: OK response.
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listTools tools
+            tags:
+                - tools
+            x-speakeasy-react-hook:
+                name: ListTools
     /rpc/toolsets.create:
         post:
             description: Create a new toolset with associated tools
@@ -1203,6 +1244,10 @@ components:
                 body_schema:
                     type: string
                     description: JSON schema for request body
+                created_at:
+                    type: string
+                    description: The creation date of the tool.
+                    format: date-time
                 description:
                     type: string
                     description: Description of the tool
@@ -1241,6 +1286,10 @@ components:
                     items:
                         type: string
                     description: The tags list for this http tool
+                updated_at:
+                    type: string
+                    description: The last update date of the tool.
+                    format: date-time
                 username_env_var:
                     type: string
                     description: Environment variable for username
@@ -1253,6 +1302,8 @@ components:
                 - security_type
                 - http_method
                 - path
+                - created_at
+                - updated_at
         HealthCheckResult:
             type: object
             properties:
@@ -1361,6 +1412,19 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListToolsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: The cursor to fetch results from
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HTTPToolDefinition'
+                    description: The list of tools
+            required:
+                - tools
         ListToolsetsResult:
             type: object
             properties:
@@ -1650,5 +1714,7 @@ tags:
       description: Managing system api keys.
     - name: system
       description: Exposes service health and status information.
+    - name: tools
+      description: Dashboard API for interacting with tools.
     - name: toolsets
       description: Managed toolsets for gram AI consumers.

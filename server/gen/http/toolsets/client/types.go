@@ -181,6 +181,10 @@ type HTTPToolDefinitionResponseBody struct {
 	PathparamsSchema *string `form:"pathparams_schema,omitempty" json:"pathparams_schema,omitempty" xml:"pathparams_schema,omitempty"`
 	// JSON schema for request body
 	BodySchema *string `form:"body_schema,omitempty" json:"body_schema,omitempty" xml:"body_schema,omitempty"`
+	// The creation date of the tool.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the tool.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateToolsetRequestBody builds the HTTP request body from the payload of
@@ -489,6 +493,18 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.Path == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

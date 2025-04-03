@@ -462,6 +462,8 @@ func unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(v *HTTP
 		QueriesSchema:    v.QueriesSchema,
 		PathparamsSchema: v.PathparamsSchema,
 		BodySchema:       v.BodySchema,
+		CreatedAt:        *v.CreatedAt,
+		UpdatedAt:        *v.UpdatedAt,
 	}
 	res.Tags = make([]string, len(v.Tags))
 	for i, val := range v.Tags {
