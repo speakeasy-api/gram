@@ -1043,6 +1043,9 @@ components:
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
+                status:
+                    type: string
+                    description: The status of the deployment.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -1053,6 +1056,7 @@ components:
                 - project_id
                 - user_id
                 - openapiv3_assets
+                - status
         DeploymentSummary:
             type: object
             properties:
@@ -1209,6 +1213,9 @@ components:
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
+                status:
+                    type: string
+                    description: The status of the deployment.
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -1219,6 +1226,7 @@ components:
                 - project_id
                 - user_id
                 - openapiv3_assets
+                - status
         HTTPToolDefinition:
             type: object
             properties:

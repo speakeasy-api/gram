@@ -309,3 +309,36 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 	}
 	return items, nil
 }
+
+const markDeploymentCreated = `-- name: MarkDeploymentCreated :one
+WITH status AS (
+  INSERT INTO deployment_statuses (deployment_id , status)
+  VALUES ($1, 'created')
+  RETURNING id, status
+), 
+log AS (
+  INSERT INTO deployment_logs (deployment_id, project_id, event, message)
+  VALUES ($1, $2, 'deployment:created', 'Deployment created')
+  RETURNING id
+)
+SELECT status.id as status_id, status.status as status, log.id as log_id
+FROM status, log
+`
+
+type MarkDeploymentCreatedParams struct {
+	DeploymentID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+type MarkDeploymentCreatedRow struct {
+	StatusID uuid.UUID
+	Status   string
+	LogID    uuid.UUID
+}
+
+func (q *Queries) MarkDeploymentCreated(ctx context.Context, arg MarkDeploymentCreatedParams) (MarkDeploymentCreatedRow, error) {
+	row := q.db.QueryRow(ctx, markDeploymentCreated, arg.DeploymentID, arg.ProjectID)
+	var i MarkDeploymentCreatedRow
+	err := row.Scan(&i.StatusID, &i.Status, &i.LogID)
+	return i, err
+}

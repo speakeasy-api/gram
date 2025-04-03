@@ -317,6 +317,7 @@ func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentRespons
 		ProjectID:      *v.ProjectID,
 		UserID:         *v.UserID,
 		CreatedAt:      *v.CreatedAt,
+		Status:         *v.Status,
 		IdempotencyKey: v.IdempotencyKey,
 		GithubRepo:     v.GithubRepo,
 		GithubPr:       v.GithubPr,

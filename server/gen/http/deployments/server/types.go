@@ -43,6 +43,8 @@ type GetDeploymentResponseBody struct {
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The status of the deployment.
+	Status string `form:"status" json:"status" xml:"status"`
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// The github repository in the form of "owner/repo".
@@ -103,6 +105,8 @@ type DeploymentResponseBody struct {
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The creation date of the deployment.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The status of the deployment.
+	Status string `form:"status" json:"status" xml:"status"`
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// The github repository in the form of "owner/repo".
@@ -155,6 +159,7 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 		ProjectID:      res.ProjectID,
 		UserID:         res.UserID,
 		CreatedAt:      res.CreatedAt,
+		Status:         res.Status,
 		IdempotencyKey: res.IdempotencyKey,
 		GithubRepo:     res.GithubRepo,
 		GithubPr:       res.GithubPr,

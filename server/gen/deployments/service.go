@@ -85,6 +85,8 @@ type Deployment struct {
 	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
+	// The status of the deployment.
+	Status string
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey *string
 	// The github repository in the form of "owner/repo".
@@ -137,6 +139,8 @@ type GetDeploymentResult struct {
 	UserID string
 	// The creation date of the deployment.
 	CreatedAt string
+	// The status of the deployment.
+	Status string
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey *string
 	// The github repository in the form of "owner/repo".

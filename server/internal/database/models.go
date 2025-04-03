@@ -55,16 +55,14 @@ type Deployment struct {
 }
 
 type DeploymentLog struct {
-	ID               uuid.UUID
-	Seq              int64
-	Event            string
-	DeploymentID     uuid.UUID
-	ProjectID        uuid.UUID
-	TooltemplateID   uuid.NullUUID
-	TooltemplateType pgtype.Text
-	CollectionID     uuid.NullUUID
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID           uuid.UUID
+	Seq          int64
+	Event        string
+	Message      string
+	DeploymentID uuid.UUID
+	ProjectID    uuid.UUID
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 type DeploymentStatus struct {

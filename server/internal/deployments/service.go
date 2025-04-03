@@ -213,28 +213,50 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		})
 	}
 
+	stat, err := tx.MarkDeploymentCreated(ctx, repo.MarkDeploymentCreatedParams{
+		DeploymentID: deployment.ID,
+		ProjectID:    *authCtx.ProjectID,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to mark deployment as created", slog.String("error", err.Error()))
+		return nil, fmt.Errorf("error logging deployment creation")
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		s.logger.ErrorContext(ctx, "failed to commit database transaction", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error saving deployment")
 	}
 
+	dep := &gen.Deployment{
+		ID:              deployment.ID.String(),
+		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
+		OrganizationID:  deployment.OrganizationID,
+		ProjectID:       deployment.ProjectID.String(),
+		UserID:          deployment.UserID,
+		Status:          stat.Status,
+		ExternalID:      conv.FromPGText(deployment.ExternalID),
+		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
+		GithubSha:       conv.FromPGText(deployment.GithubSha),
+		GithubPr:        conv.FromPGText(deployment.GithubPr),
+		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
+		Openapiv3Assets: deploymentAssets,
+	}
+
+	if err := s.processDeployment(ctx, dep); err != nil {
+		s.logger.ErrorContext(ctx, "failed to process deployment", slog.String("error", err.Error()))
+		return nil, fmt.Errorf("error processing deployment")
+	}
+
 	return &gen.CreateDeploymentResult{
-		Deployment: &gen.Deployment{
-			ID:              deployment.ID.String(),
-			CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-			OrganizationID:  deployment.OrganizationID,
-			ProjectID:       deployment.ProjectID.String(),
-			UserID:          deployment.UserID,
-			ExternalID:      conv.FromPGText(deployment.ExternalID),
-			ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
-			GithubSha:       conv.FromPGText(deployment.GithubSha),
-			GithubPr:        conv.FromPGText(deployment.GithubPr),
-			IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
-			Openapiv3Assets: deploymentAssets,
-		},
+		Deployment: dep,
 	}, nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deployment) error {
+	_, _ = ctx, deployment
+	return nil
 }

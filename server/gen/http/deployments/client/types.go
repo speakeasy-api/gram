@@ -43,6 +43,8 @@ type GetDeploymentResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The status of the deployment.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// The github repository in the form of "owner/repo".
@@ -114,6 +116,8 @@ type DeploymentResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The status of the deployment.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// The github repository in the form of "owner/repo".
@@ -174,6 +178,7 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 		ProjectID:      *body.ProjectID,
 		UserID:         *body.UserID,
 		CreatedAt:      *body.CreatedAt,
+		Status:         *body.Status,
 		IdempotencyKey: body.IdempotencyKey,
 		GithubRepo:     body.GithubRepo,
 		GithubPr:       body.GithubPr,
@@ -234,6 +239,9 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	}
 	if body.Openapiv3Assets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_assets", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -313,6 +321,9 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	}
 	if body.Openapiv3Assets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_assets", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

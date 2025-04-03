@@ -78,7 +78,7 @@ var _ = Service("deployments", func() {
 })
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets")
+	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -96,6 +96,9 @@ var Deployment = Type("Deployment", func() {
 	Attribute("created_at", String, func() {
 		Description("The creation date of the deployment.")
 		Format(FormatDateTime)
+	})
+	Attribute("status", String, func() {
+		Description("The status of the deployment.")
 	})
 	Attribute("idempotency_key", String, func() {
 		Description("A unique identifier that will mitigate against duplicate deployments.")

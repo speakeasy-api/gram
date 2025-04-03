@@ -60,6 +60,20 @@ INSERT INTO deployments (
 )
 ON CONFLICT (project_id, idempotency_key) DO NOTHING;
 
+-- name: MarkDeploymentCreated :one
+WITH status AS (
+  INSERT INTO deployment_statuses (deployment_id , status)
+  VALUES (@deployment_id, 'created')
+  RETURNING id, status
+), 
+log AS (
+  INSERT INTO deployment_logs (deployment_id, project_id, event, message)
+  VALUES (@deployment_id, @project_id, 'deployment:created', 'Deployment created')
+  RETURNING id
+)
+SELECT status.id as status_id, status.status as status, log.id as log_id
+FROM status, log;
+
 -- name: AddDeploymentOpenAPIv3Asset :one
 INSERT INTO deployments_openapiv3_assets (
   deployment_id
