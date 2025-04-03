@@ -83,7 +83,7 @@ func ParseEndpoint(
 		assetsUploadOpenAPIv3Flags             = flag.NewFlagSet("upload-open-ap-iv3", flag.ExitOnError)
 		assetsUploadOpenAPIv3ContentTypeFlag   = assetsUploadOpenAPIv3Flags.String("content-type", "REQUIRED", "")
 		assetsUploadOpenAPIv3ContentLengthFlag = assetsUploadOpenAPIv3Flags.String("content-length", "REQUIRED", "")
-		assetsUploadOpenAPIv3ProjectSlugFlag   = assetsUploadOpenAPIv3Flags.String("project-slug", "REQUIRED", "")
+		assetsUploadOpenAPIv3ProjectSlugFlag   = assetsUploadOpenAPIv3Flags.String("project-slug", "", "")
 		assetsUploadOpenAPIv3SessionTokenFlag  = assetsUploadOpenAPIv3Flags.String("session-token", "", "")
 		assetsUploadOpenAPIv3StreamFlag        = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
@@ -108,40 +108,40 @@ func ParseEndpoint(
 		deploymentsGetDeploymentFlags            = flag.NewFlagSet("get-deployment", flag.ExitOnError)
 		deploymentsGetDeploymentIDFlag           = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
 		deploymentsGetDeploymentSessionTokenFlag = deploymentsGetDeploymentFlags.String("session-token", "", "")
-		deploymentsGetDeploymentProjectSlugFlag  = deploymentsGetDeploymentFlags.String("project-slug", "REQUIRED", "")
+		deploymentsGetDeploymentProjectSlugFlag  = deploymentsGetDeploymentFlags.String("project-slug", "", "")
 
 		deploymentsCreateDeploymentFlags              = flag.NewFlagSet("create-deployment", flag.ExitOnError)
 		deploymentsCreateDeploymentBodyFlag           = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
 		deploymentsCreateDeploymentSessionTokenFlag   = deploymentsCreateDeploymentFlags.String("session-token", "", "")
-		deploymentsCreateDeploymentProjectSlugFlag    = deploymentsCreateDeploymentFlags.String("project-slug", "REQUIRED", "")
+		deploymentsCreateDeploymentProjectSlugFlag    = deploymentsCreateDeploymentFlags.String("project-slug", "", "")
 		deploymentsCreateDeploymentIdempotencyKeyFlag = deploymentsCreateDeploymentFlags.String("idempotency-key", "REQUIRED", "")
 
 		deploymentsListDeploymentsFlags            = flag.NewFlagSet("list-deployments", flag.ExitOnError)
 		deploymentsListDeploymentsCursorFlag       = deploymentsListDeploymentsFlags.String("cursor", "", "")
 		deploymentsListDeploymentsSessionTokenFlag = deploymentsListDeploymentsFlags.String("session-token", "", "")
-		deploymentsListDeploymentsProjectSlugFlag  = deploymentsListDeploymentsFlags.String("project-slug", "REQUIRED", "")
+		deploymentsListDeploymentsProjectSlugFlag  = deploymentsListDeploymentsFlags.String("project-slug", "", "")
 
 		environmentsFlags = flag.NewFlagSet("environments", flag.ContinueOnError)
 
 		environmentsCreateEnvironmentFlags            = flag.NewFlagSet("create-environment", flag.ExitOnError)
 		environmentsCreateEnvironmentBodyFlag         = environmentsCreateEnvironmentFlags.String("body", "REQUIRED", "")
 		environmentsCreateEnvironmentSessionTokenFlag = environmentsCreateEnvironmentFlags.String("session-token", "", "")
-		environmentsCreateEnvironmentProjectSlugFlag  = environmentsCreateEnvironmentFlags.String("project-slug", "REQUIRED", "")
+		environmentsCreateEnvironmentProjectSlugFlag  = environmentsCreateEnvironmentFlags.String("project-slug", "", "")
 
 		environmentsListEnvironmentsFlags            = flag.NewFlagSet("list-environments", flag.ExitOnError)
 		environmentsListEnvironmentsSessionTokenFlag = environmentsListEnvironmentsFlags.String("session-token", "", "")
-		environmentsListEnvironmentsProjectSlugFlag  = environmentsListEnvironmentsFlags.String("project-slug", "REQUIRED", "")
+		environmentsListEnvironmentsProjectSlugFlag  = environmentsListEnvironmentsFlags.String("project-slug", "", "")
 
 		environmentsUpdateEnvironmentFlags            = flag.NewFlagSet("update-environment", flag.ExitOnError)
 		environmentsUpdateEnvironmentBodyFlag         = environmentsUpdateEnvironmentFlags.String("body", "REQUIRED", "")
 		environmentsUpdateEnvironmentIDFlag           = environmentsUpdateEnvironmentFlags.String("id", "REQUIRED", "The ID of the environment to update")
 		environmentsUpdateEnvironmentSessionTokenFlag = environmentsUpdateEnvironmentFlags.String("session-token", "", "")
-		environmentsUpdateEnvironmentProjectSlugFlag  = environmentsUpdateEnvironmentFlags.String("project-slug", "REQUIRED", "")
+		environmentsUpdateEnvironmentProjectSlugFlag  = environmentsUpdateEnvironmentFlags.String("project-slug", "", "")
 
 		environmentsDeleteEnvironmentFlags            = flag.NewFlagSet("delete-environment", flag.ExitOnError)
 		environmentsDeleteEnvironmentIDFlag           = environmentsDeleteEnvironmentFlags.String("id", "REQUIRED", "The ID of the environment to delete")
 		environmentsDeleteEnvironmentSessionTokenFlag = environmentsDeleteEnvironmentFlags.String("session-token", "", "")
-		environmentsDeleteEnvironmentProjectSlugFlag  = environmentsDeleteEnvironmentFlags.String("project-slug", "REQUIRED", "")
+		environmentsDeleteEnvironmentProjectSlugFlag  = environmentsDeleteEnvironmentFlags.String("project-slug", "", "")
 
 		keysFlags = flag.NewFlagSet("keys", flag.ContinueOnError)
 
@@ -165,27 +165,27 @@ func ParseEndpoint(
 		toolsetsCreateToolsetFlags            = flag.NewFlagSet("create-toolset", flag.ExitOnError)
 		toolsetsCreateToolsetBodyFlag         = toolsetsCreateToolsetFlags.String("body", "REQUIRED", "")
 		toolsetsCreateToolsetSessionTokenFlag = toolsetsCreateToolsetFlags.String("session-token", "", "")
-		toolsetsCreateToolsetProjectSlugFlag  = toolsetsCreateToolsetFlags.String("project-slug", "REQUIRED", "")
+		toolsetsCreateToolsetProjectSlugFlag  = toolsetsCreateToolsetFlags.String("project-slug", "", "")
 
 		toolsetsListToolsetsFlags            = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
 		toolsetsListToolsetsSessionTokenFlag = toolsetsListToolsetsFlags.String("session-token", "", "")
-		toolsetsListToolsetsProjectSlugFlag  = toolsetsListToolsetsFlags.String("project-slug", "REQUIRED", "")
+		toolsetsListToolsetsProjectSlugFlag  = toolsetsListToolsetsFlags.String("project-slug", "", "")
 
 		toolsetsUpdateToolsetFlags            = flag.NewFlagSet("update-toolset", flag.ExitOnError)
 		toolsetsUpdateToolsetBodyFlag         = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
 		toolsetsUpdateToolsetIDFlag           = toolsetsUpdateToolsetFlags.String("id", "REQUIRED", "The ID of the toolset to update")
 		toolsetsUpdateToolsetSessionTokenFlag = toolsetsUpdateToolsetFlags.String("session-token", "", "")
-		toolsetsUpdateToolsetProjectSlugFlag  = toolsetsUpdateToolsetFlags.String("project-slug", "REQUIRED", "")
+		toolsetsUpdateToolsetProjectSlugFlag  = toolsetsUpdateToolsetFlags.String("project-slug", "", "")
 
 		toolsetsDeleteToolsetFlags            = flag.NewFlagSet("delete-toolset", flag.ExitOnError)
 		toolsetsDeleteToolsetIDFlag           = toolsetsDeleteToolsetFlags.String("id", "REQUIRED", "The ID of the toolset")
 		toolsetsDeleteToolsetSessionTokenFlag = toolsetsDeleteToolsetFlags.String("session-token", "", "")
-		toolsetsDeleteToolsetProjectSlugFlag  = toolsetsDeleteToolsetFlags.String("project-slug", "REQUIRED", "")
+		toolsetsDeleteToolsetProjectSlugFlag  = toolsetsDeleteToolsetFlags.String("project-slug", "", "")
 
 		toolsetsGetToolsetDetailsFlags            = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
 		toolsetsGetToolsetDetailsIDFlag           = toolsetsGetToolsetDetailsFlags.String("id", "REQUIRED", "The ID of the toolset")
 		toolsetsGetToolsetDetailsSessionTokenFlag = toolsetsGetToolsetDetailsFlags.String("session-token", "", "")
-		toolsetsGetToolsetDetailsProjectSlugFlag  = toolsetsGetToolsetDetailsFlags.String("project-slug", "REQUIRED", "")
+		toolsetsGetToolsetDetailsProjectSlugFlag  = toolsetsGetToolsetDetailsFlags.String("project-slug", "", "")
 	)
 	assetsFlags.Usage = assetsUsage
 	assetsUploadOpenAPIv3Flags.Usage = assetsUploadOpenAPIv3Usage

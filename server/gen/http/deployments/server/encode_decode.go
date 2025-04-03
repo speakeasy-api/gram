@@ -38,7 +38,7 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		var (
 			id           string
 			sessionToken *string
-			projectSlug  string
+			projectSlug  *string
 			err          error
 		)
 		id = r.URL.Query().Get("id")
@@ -49,9 +49,9 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		if err != nil {
 			return nil, err
@@ -62,6 +62,13 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -107,16 +114,16 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 
 		var (
 			sessionToken   *string
-			projectSlug    string
+			projectSlug    *string
 			idempotencyKey string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		idempotencyKey = r.Header.Get("Idempotency-Key")
 		if idempotencyKey == "" {
@@ -131,6 +138,13 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -157,8 +171,7 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			cursor       *string
 			sessionToken *string
-			projectSlug  string
-			err          error
+			projectSlug  *string
 		)
 		cursorRaw := r.URL.Query().Get("cursor")
 		if cursorRaw != "" {
@@ -168,12 +181,9 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewListDeploymentsPayload(cursor, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -181,6 +191,13 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 

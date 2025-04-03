@@ -57,18 +57,15 @@ func DecodeCreateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 
 		var (
 			sessionToken *string
-			projectSlug  string
+			projectSlug  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewCreateToolsetPayload(&body, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -76,6 +73,13 @@ func DecodeCreateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -101,19 +105,15 @@ func DecodeListToolsetsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	return func(r *http.Request) (any, error) {
 		var (
 			sessionToken *string
-			projectSlug  string
-			err          error
+			projectSlug  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewListToolsetsPayload(sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -121,6 +121,13 @@ func DecodeListToolsetsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -163,7 +170,7 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		var (
 			id           string
 			sessionToken *string
-			projectSlug  string
+			projectSlug  *string
 
 			params = mux.Vars(r)
 		)
@@ -172,12 +179,9 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewUpdateToolsetPayload(&body, id, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -185,6 +189,13 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -208,8 +219,7 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		var (
 			id           string
 			sessionToken *string
-			projectSlug  string
-			err          error
+			projectSlug  *string
 
 			params = mux.Vars(r)
 		)
@@ -218,12 +228,9 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewDeleteToolsetPayload(id, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -231,6 +238,13 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -257,8 +271,7 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		var (
 			id           string
 			sessionToken *string
-			projectSlug  string
-			err          error
+			projectSlug  *string
 
 			params = mux.Vars(r)
 		)
@@ -267,12 +280,9 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewGetToolsetDetailsPayload(id, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -280,6 +290,13 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 

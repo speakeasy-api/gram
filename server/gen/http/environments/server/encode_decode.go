@@ -57,18 +57,15 @@ func DecodeCreateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 
 		var (
 			sessionToken *string
-			projectSlug  string
+			projectSlug  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewCreateEnvironmentPayload(&body, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -76,6 +73,13 @@ func DecodeCreateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -101,19 +105,15 @@ func DecodeListEnvironmentsRequest(mux goahttp.Muxer, decoder func(*http.Request
 	return func(r *http.Request) (any, error) {
 		var (
 			sessionToken *string
-			projectSlug  string
-			err          error
+			projectSlug  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewListEnvironmentsPayload(sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -121,6 +121,13 @@ func DecodeListEnvironmentsRequest(mux goahttp.Muxer, decoder func(*http.Request
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -167,7 +174,7 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		var (
 			id           string
 			sessionToken *string
-			projectSlug  string
+			projectSlug  *string
 
 			params = mux.Vars(r)
 		)
@@ -176,12 +183,9 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewUpdateEnvironmentPayload(&body, id, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -189,6 +193,13 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 
@@ -212,8 +223,7 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		var (
 			id           string
 			sessionToken *string
-			projectSlug  string
-			err          error
+			projectSlug  *string
 
 			params = mux.Vars(r)
 		)
@@ -222,12 +232,9 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
-		}
-		if err != nil {
-			return nil, err
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		payload := NewDeleteEnvironmentPayload(id, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
@@ -235,6 +242,13 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 

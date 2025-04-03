@@ -45,8 +45,8 @@ func EncodeCreateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		{
-			head := p.ProjectSlug
+		if p.ProjectSlug != nil {
+			head := *p.ProjectSlug
 			req.Header.Set("Gram-Project", head)
 		}
 		body := NewCreateEnvironmentRequestBody(p)
@@ -124,8 +124,8 @@ func EncodeListEnvironmentsRequest(encoder func(*http.Request) goahttp.Encoder) 
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		{
-			head := p.ProjectSlug
+		if p.ProjectSlug != nil {
+			head := *p.ProjectSlug
 			req.Header.Set("Gram-Project", head)
 		}
 		return nil
@@ -209,8 +209,8 @@ func EncodeUpdateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		{
-			head := p.ProjectSlug
+		if p.ProjectSlug != nil {
+			head := *p.ProjectSlug
 			req.Header.Set("Gram-Project", head)
 		}
 		body := NewUpdateEnvironmentRequestBody(p)
@@ -298,8 +298,8 @@ func EncodeDeleteEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		{
-			head := p.ProjectSlug
+		if p.ProjectSlug != nil {
+			head := *p.ProjectSlug
 			req.Header.Set("Gram-Project", head)
 		}
 		return nil

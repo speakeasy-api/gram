@@ -44,18 +44,13 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 
 func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*gen.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, errors.New("session not found in context")
-	}
-
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("project ID not found in context")
 	}
 
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      access.ProjectID,
+		ProjectID:      *authCtx.ProjectID,
 		Name:           payload.Name,
 		Slug:           conv.ToSlug(payload.Name),
 	}
@@ -108,12 +103,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("project ID not found in context")
 	}
 
-	toolsets, err := s.repo.ListToolsetsByProject(ctx, access.ProjectID)
+	toolsets, err := s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,15 +141,15 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.Toolset, error) {
 	toolsetID := must.Value(uuid.Parse(payload.ID))
 
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("project ID not found in context")
 	}
 
 	// First get the existing toolset
 	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
 		ID:        toolsetID,
-		ProjectID: access.ProjectID,
+		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, err
@@ -166,7 +161,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		Description:          existingToolset.Description,
 		Name:                 existingToolset.Name,
 		DefaultEnvironmentID: existingToolset.DefaultEnvironmentID,
-		ProjectID:            access.ProjectID,
+		ProjectID:            *authCtx.ProjectID,
 	}
 	if payload.Name != nil {
 		updateParams.Name = *payload.Name
@@ -230,27 +225,27 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 }
 
 func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetPayload) (err error) {
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return errors.New("project ID not found in context")
 	}
 
 	return s.repo.DeleteToolset(ctx, repo.DeleteToolsetParams{
 		ID:        uuid.MustParse(payload.ID),
-		ProjectID: access.ProjectID,
+		ProjectID: *authCtx.ProjectID,
 	})
 }
 
 func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolsetDetailsPayload) (*gen.ToolsetDetails, error) {
 	toolsetID := must.Value(uuid.Parse(payload.ID))
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("project ID not found in context")
 	}
 
 	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
 		ID:        toolsetID,
-		ProjectID: access.ProjectID,
+		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, err

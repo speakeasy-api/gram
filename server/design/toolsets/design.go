@@ -7,7 +7,7 @@ import (
 
 var _ = Service("toolsets", func() {
 	Description("Managed toolsets for gram AI consumers.")
-	Security(security.Session)
+	Security(security.Session, security.ProjectSlug)
 
 	Method("createToolset", func() {
 		Description("Create a new toolset with associated tools")

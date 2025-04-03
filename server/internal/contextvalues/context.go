@@ -2,14 +2,17 @@ package contextvalues
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type contextKey string
 
 type AuthContext struct {
-	SessionID            *string
 	ActiveOrganizationID string
 	UserID               string
+	SessionID            *string
+	ProjectID            *uuid.UUID
 }
 
 const (

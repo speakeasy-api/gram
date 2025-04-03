@@ -45,7 +45,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -64,7 +63,8 @@ paths:
                                 $ref: '#/components/schemas/UploadOpenAPIv3Result'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: uploadOpenAPIv3 assets
             tags:
                 - assets
@@ -235,7 +235,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -263,7 +262,8 @@ paths:
                                 $ref: '#/components/schemas/CreateDeploymentResult'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: createDeployment deployments
             tags:
                 - deployments
@@ -293,7 +293,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -305,7 +304,8 @@ paths:
                                 $ref: '#/components/schemas/GetDeploymentResult'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: getDeployment deployments
             tags:
                 - deployments
@@ -334,7 +334,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -346,7 +345,8 @@ paths:
                                 $ref: '#/components/schemas/ListDeploymentResult'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: listDeployments deployments
             tags:
                 - deployments
@@ -368,7 +368,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -386,7 +385,8 @@ paths:
                                 $ref: '#/components/schemas/Environment'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: createEnvironment environments
             tags:
                 - environments
@@ -415,7 +415,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -423,7 +422,8 @@ paths:
                 "200":
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: deleteEnvironment environments
             tags:
                 - environments
@@ -445,7 +445,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -457,7 +456,8 @@ paths:
                                 $ref: '#/components/schemas/ListEnvironmentsResult'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: listEnvironments environments
             tags:
                 - environments
@@ -486,7 +486,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -504,7 +503,8 @@ paths:
                                 $ref: '#/components/schemas/Environment'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: updateEnvironment environments
             tags:
                 - environments
@@ -613,7 +613,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -631,7 +630,8 @@ paths:
                                 $ref: '#/components/schemas/Toolset'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: createToolset toolsets
             tags:
                 - toolsets
@@ -660,7 +660,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -668,7 +667,8 @@ paths:
                 "204":
                     description: No Content response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: deleteToolset toolsets
             tags:
                 - toolsets
@@ -697,7 +697,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -709,7 +708,8 @@ paths:
                                 $ref: '#/components/schemas/ToolsetDetails'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: getToolsetDetails toolsets
             tags:
                 - toolsets
@@ -731,7 +731,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -743,7 +742,8 @@ paths:
                                 $ref: '#/components/schemas/ListToolsetsResult'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: listToolsets toolsets
             tags:
                 - toolsets
@@ -772,7 +772,6 @@ paths:
                   description: project header
                   in: header
                   name: Gram-Project
-                  required: true
                   schema:
                     description: project header
                     type: string
@@ -790,7 +789,8 @@ paths:
                                 $ref: '#/components/schemas/Toolset'
                     description: OK response.
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: updateToolset toolsets
             tags:
                 - toolsets
@@ -952,9 +952,7 @@ components:
                     description: The name of the toolset
                 project_slug:
                     type: string
-                    description: The project the action belongs too
             required:
-                - project_slug
                 - name
         CreateToolsetRequestBody:
             type: object
@@ -1576,9 +1574,7 @@ components:
                     description: The new name of the toolset
                 project_slug:
                     type: string
-                    description: The project the action belongs too
             required:
-                - project_slug
                 - id
         UpdateToolsetRequestBody:
             type: object
@@ -1612,13 +1608,11 @@ components:
                     type: string
                 project_slug:
                     type: string
-                    description: The project the action belongs too
                 session_token:
                     type: string
             required:
                 - content_type
                 - content_length
-                - project_slug
         UploadOpenAPIv3Result:
             type: object
             properties:
@@ -1627,6 +1621,11 @@ components:
             required:
                 - asset
     securitySchemes:
+        project_slug_header_Gram-Project:
+            type: apiKey
+            description: project slug header auth.
+            name: Gram-Project
+            in: header
         session_header_Gram-Session:
             type: apiKey
             description: Session based auth. By cookie or header.

@@ -8,7 +8,7 @@ import (
 var _ = Service("assets", func() {
 	Description("Manages assets used by Gram projects.")
 
-	Security(security.Session)
+	Security(security.Session, security.ProjectSlug)
 
 	Method("uploadOpenAPIv3", func() {
 		Description("Upload an OpenAPI v3 document to Gram.")

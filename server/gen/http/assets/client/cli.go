@@ -29,9 +29,11 @@ func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assets
 			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = assetsUploadOpenAPIv3ProjectSlug
+		if assetsUploadOpenAPIv3ProjectSlug != "" {
+			projectSlug = &assetsUploadOpenAPIv3ProjectSlug
+		}
 	}
 	var sessionToken *string
 	{

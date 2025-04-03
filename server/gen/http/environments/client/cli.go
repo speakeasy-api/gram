@@ -38,9 +38,11 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 			sessionToken = &environmentsCreateEnvironmentSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = environmentsCreateEnvironmentProjectSlug
+		if environmentsCreateEnvironmentProjectSlug != "" {
+			projectSlug = &environmentsCreateEnvironmentProjectSlug
+		}
 	}
 	v := &environments.CreateEnvironmentPayload{
 		OrganizationID: body.OrganizationID,
@@ -70,9 +72,11 @@ func BuildListEnvironmentsPayload(environmentsListEnvironmentsSessionToken strin
 			sessionToken = &environmentsListEnvironmentsSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = environmentsListEnvironmentsProjectSlug
+		if environmentsListEnvironmentsProjectSlug != "" {
+			projectSlug = &environmentsListEnvironmentsProjectSlug
+		}
 	}
 	v := &environments.ListEnvironmentsPayload{}
 	v.SessionToken = sessionToken
@@ -111,9 +115,11 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 			sessionToken = &environmentsUpdateEnvironmentSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = environmentsUpdateEnvironmentProjectSlug
+		if environmentsUpdateEnvironmentProjectSlug != "" {
+			projectSlug = &environmentsUpdateEnvironmentProjectSlug
+		}
 	}
 	v := &environments.UpdateEnvironmentPayload{
 		EnvironmentID: body.EnvironmentID,
@@ -154,9 +160,11 @@ func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentID string, envir
 			sessionToken = &environmentsDeleteEnvironmentSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = environmentsDeleteEnvironmentProjectSlug
+		if environmentsDeleteEnvironmentProjectSlug != "" {
+			projectSlug = &environmentsDeleteEnvironmentProjectSlug
+		}
 	}
 	v := &environments.DeleteEnvironmentPayload{}
 	v.ID = id

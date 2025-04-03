@@ -188,7 +188,7 @@ func NewUpdateEnvironmentResponseBody(res *environments.Environment) *UpdateEnvi
 
 // NewCreateEnvironmentPayload builds a environments service createEnvironment
 // endpoint payload.
-func NewCreateEnvironmentPayload(body *CreateEnvironmentRequestBody, sessionToken *string, projectSlug string) *environments.CreateEnvironmentPayload {
+func NewCreateEnvironmentPayload(body *CreateEnvironmentRequestBody, sessionToken *string, projectSlug *string) *environments.CreateEnvironmentPayload {
 	v := &environments.CreateEnvironmentPayload{
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
@@ -206,7 +206,7 @@ func NewCreateEnvironmentPayload(body *CreateEnvironmentRequestBody, sessionToke
 
 // NewListEnvironmentsPayload builds a environments service listEnvironments
 // endpoint payload.
-func NewListEnvironmentsPayload(sessionToken *string, projectSlug string) *environments.ListEnvironmentsPayload {
+func NewListEnvironmentsPayload(sessionToken *string, projectSlug *string) *environments.ListEnvironmentsPayload {
 	v := &environments.ListEnvironmentsPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
@@ -216,7 +216,7 @@ func NewListEnvironmentsPayload(sessionToken *string, projectSlug string) *envir
 
 // NewUpdateEnvironmentPayload builds a environments service updateEnvironment
 // endpoint payload.
-func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, id string, sessionToken *string, projectSlug string) *environments.UpdateEnvironmentPayload {
+func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, id string, sessionToken *string, projectSlug *string) *environments.UpdateEnvironmentPayload {
 	v := &environments.UpdateEnvironmentPayload{
 		EnvironmentID: *body.EnvironmentID,
 	}
@@ -237,7 +237,7 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, id string, 
 
 // NewDeleteEnvironmentPayload builds a environments service deleteEnvironment
 // endpoint payload.
-func NewDeleteEnvironmentPayload(id string, sessionToken *string, projectSlug string) *environments.DeleteEnvironmentPayload {
+func NewDeleteEnvironmentPayload(id string, sessionToken *string, projectSlug *string) *environments.DeleteEnvironmentPayload {
 	v := &environments.DeleteEnvironmentPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken

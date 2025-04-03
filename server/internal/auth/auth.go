@@ -12,12 +12,16 @@ import (
 )
 
 type Auth struct {
+	logger   *slog.Logger
+	db       *pgxpool.Pool
 	sessions *sessions.Sessions
 	keys     *ByKey
 }
 
 func New(logger *slog.Logger, db *pgxpool.Pool) *Auth {
 	return &Auth{
+		logger:   logger,
+		db:       db,
 		keys:     NewKeyAuth(db),
 		sessions: sessions.NewSessionAuth(logger),
 	}
@@ -33,6 +37,8 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 		return s.keys.KeyBasedAuth(ctx, key, schema.Scopes)
 	case dsecurity.SessionSecurityScheme:
 		return s.sessions.SessionAuth(ctx, key)
+	case dsecurity.ProjectSlugSecuritySchema:
+		return checkProjectAccess(ctx, s.logger, s.db, key)
 	default:
 		return ctx, errors.New("unsupported security scheme")
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -42,9 +43,9 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 }
 
 func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayload) (res *gen.GetDeploymentResult, err error) {
-	projectAccess, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, form.ProjectSlug)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check project access", slog.String("error", err.Error()))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.ErrorContext(ctx, "failed to check project access")
 		return nil, errors.New("authorization check failed")
 	}
 
@@ -55,7 +56,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 
 	rows, err := s.repo.GetDeploymentWithAssets(ctx, repo.GetDeploymentWithAssetsParams{
 		ID:        id,
-		ProjectID: projectAccess.ProjectID,
+		ProjectID: *authCtx.ProjectID,
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -92,9 +93,9 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 }
 
 func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeploymentsPayload) (res *gen.ListDeploymentResult, err error) {
-	projectAccess, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, form.ProjectSlug)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check project access", slog.String("error", err.Error()))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.ErrorContext(ctx, "failed to check project access")
 		return nil, errors.New("authorization check failed")
 	}
 
@@ -110,7 +111,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	}
 
 	rows, err := s.repo.ListDeployments(ctx, repo.ListDeploymentsParams{
-		ProjectID: projectAccess.ProjectID,
+		ProjectID: *authCtx.ProjectID,
 		Cursor:    cursor,
 	})
 	if err != nil {
@@ -141,9 +142,9 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 }
 
 func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeploymentPayload) (*gen.CreateDeploymentResult, error) {
-	projectAccess, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, form.ProjectSlug)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check project access", slog.String("error", err.Error()))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.ErrorContext(ctx, "failed to check auth access")
 		return nil, errors.New("authorization check failed")
 	}
 
@@ -161,9 +162,9 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	tx := s.repo.WithTx(dbtx)
 
 	_, err = tx.CreateDeployment(ctx, repo.CreateDeploymentParams{
-		OrganizationID: projectAccess.OrganizationID,
-		ProjectID:      projectAccess.ProjectID,
-		UserID:         projectAccess.UserID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		UserID:         authCtx.UserID,
 		ExternalID:     conv.PtrToPGText(form.ExternalID),
 		ExternalUrl:    conv.PtrToPGText(form.ExternalURL),
 		GithubRepo:     conv.PtrToPGText(form.GithubRepo),
@@ -177,7 +178,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	deployment, err := tx.GetDeploymentByIdempotencyKey(ctx, repo.GetDeploymentByIdempotencyKeyParams{
 		IdempotencyKey: form.IdempotencyKey,
-		ProjectID:      projectAccess.ProjectID,
+		ProjectID:      *authCtx.ProjectID,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to read deployment", slog.String("error", err.Error()))

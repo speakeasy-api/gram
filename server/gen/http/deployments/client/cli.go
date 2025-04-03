@@ -27,9 +27,11 @@ func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGet
 			sessionToken = &deploymentsGetDeploymentSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = deploymentsGetDeploymentProjectSlug
+		if deploymentsGetDeploymentProjectSlug != "" {
+			projectSlug = &deploymentsGetDeploymentProjectSlug
+		}
 	}
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
@@ -56,9 +58,11 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			sessionToken = &deploymentsCreateDeploymentSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = deploymentsCreateDeploymentProjectSlug
+		if deploymentsCreateDeploymentProjectSlug != "" {
+			projectSlug = &deploymentsCreateDeploymentProjectSlug
+		}
 	}
 	var idempotencyKey string
 	{
@@ -99,9 +103,11 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 			sessionToken = &deploymentsListDeploymentsSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = deploymentsListDeploymentsProjectSlug
+		if deploymentsListDeploymentsProjectSlug != "" {
+			projectSlug = &deploymentsListDeploymentsProjectSlug
+		}
 	}
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor

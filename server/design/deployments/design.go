@@ -8,7 +8,7 @@ import (
 var _ = Service("deployments", func() {
 	Description("Manages deployments of tools from upstream sources.")
 
-	Security(security.Session)
+	Security(security.Session, security.ProjectSlug)
 
 	Method("getDeployment", func() {
 		Description("Create a deployment to load tool definitions.")

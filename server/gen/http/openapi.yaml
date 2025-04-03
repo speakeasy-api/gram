@@ -48,7 +48,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
                 - description: Session header
                   in: header
@@ -65,7 +65,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: uploadOpenAPIv3 assets
             tags:
                 - assets
@@ -202,7 +203,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
                 - description: A unique identifier that will mitigate against duplicate deployments.
                   in: header
@@ -222,7 +223,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: createDeployment deployments
             tags:
                 - deployments
@@ -246,7 +248,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
             responses:
                 "200":
@@ -263,7 +265,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: getDeployment deployments
             tags:
                 - deployments
@@ -287,7 +290,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
             responses:
                 "200":
@@ -299,7 +302,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: listDeployments deployments
             tags:
                 - deployments
@@ -318,7 +322,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
                 - in: body
                   name: CreateEnvironmentRequestBody
@@ -346,7 +350,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: createEnvironment environments
             tags:
                 - environments
@@ -370,7 +375,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
             responses:
                 "200":
@@ -378,7 +383,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: deleteEnvironment environments
             tags:
                 - environments
@@ -397,7 +403,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
             responses:
                 "200":
@@ -409,7 +415,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: listEnvironments environments
             tags:
                 - environments
@@ -433,7 +440,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
                 - in: body
                   name: UpdateEnvironmentRequestBody
@@ -461,7 +468,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: updateEnvironment environments
             tags:
                 - environments
@@ -574,7 +582,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
                 - in: body
                   name: CreateToolsetRequestBody
@@ -599,7 +607,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: createToolset toolsets
             tags:
                 - toolsets
@@ -623,7 +632,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
             responses:
                 "204":
@@ -631,7 +640,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: deleteToolset toolsets
             tags:
                 - toolsets
@@ -655,7 +665,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
             responses:
                 "200":
@@ -674,7 +684,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: getToolsetDetails toolsets
             tags:
                 - toolsets
@@ -693,7 +704,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
             responses:
                 "200":
@@ -705,7 +716,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: listToolsets toolsets
             tags:
                 - toolsets
@@ -729,7 +741,7 @@ paths:
                 - description: project header
                   in: header
                   name: Gram-Project
-                  required: true
+                  required: false
                   type: string
                 - in: body
                   name: UpdateToolsetRequestBody
@@ -752,7 +764,8 @@ paths:
             schemes:
                 - http
             security:
-                - session_header_Gram-Session: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: updateToolset toolsets
             tags:
                 - toolsets
@@ -2402,6 +2415,11 @@ definitions:
         required:
             - asset
 securityDefinitions:
+    project_slug_header_Gram-Project:
+        type: apiKey
+        description: project slug header auth.
+        name: Gram-Project
+        in: header
     session_header_Gram-Session:
         type: apiKey
         description: Session based auth. By cookie or header.

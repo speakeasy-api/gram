@@ -41,20 +41,15 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 
 func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvironmentPayload) (*gen.Environment, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("auth not found in context")
-	}
-
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
 	}
 
 	slug := conv.ToSlug(payload.Name)
 
 	environment, err := s.repo.CreateEnvironment(ctx, repo.CreateEnvironmentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      access.ProjectID,
+		ProjectID:      *authCtx.ProjectID,
 		Slug:           slug,
 		Name:           payload.Name,
 	})
@@ -96,12 +91,12 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 }
 
 func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnvironmentsPayload) (*gen.ListEnvironmentsResult, error) {
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("auth not found in context")
 	}
 
-	environments, err := s.repo.ListEnvironments(ctx, access.ProjectID)
+	environments, err := s.repo.ListEnvironments(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -140,9 +135,9 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 }
 
 func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvironmentPayload) (*gen.Environment, error) {
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("auth not found in context")
 	}
 
 	environment, err := s.repo.GetEnvironment(ctx, uuid.MustParse(payload.EnvironmentID))
@@ -150,7 +145,9 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, err
 	}
 
-	if environment.ProjectID.String() != access.ProjectID.String() {
+	projectID := *authCtx.ProjectID
+
+	if environment.ProjectID.String() != projectID.String() {
 		return nil, errors.New("environment not found")
 	}
 
@@ -200,14 +197,14 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 }
 
 func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvironmentPayload) error {
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return errors.New("auth not found in context")
 	}
 
 	return s.repo.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{
 		ID:        uuid.MustParse(payload.ID),
-		ProjectID: access.ProjectID,
+		ProjectID: *authCtx.ProjectID,
 	})
 }
 

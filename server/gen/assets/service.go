@@ -63,9 +63,8 @@ type Asset struct {
 // UploadOpenAPIv3Payload is the payload type of the assets service
 // uploadOpenAPIv3 method.
 type UploadOpenAPIv3Payload struct {
-	SessionToken *string
-	// The project the action belongs too
-	ProjectSlug   string
+	SessionToken  *string
+	ProjectSlug   *string
 	ContentType   string
 	ContentLength int64
 }

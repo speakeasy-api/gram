@@ -7,7 +7,7 @@ import (
 
 var _ = Service("environments", func() {
 	Description("Managing toolset environments.")
-	Security(security.Session)
+	Security(security.Session, security.ProjectSlug)
 
 	Method("createEnvironment", func() {
 		Description("Create a new environment")

@@ -4,9 +4,14 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+const ProjectSlugSecuritySchema = "project_slug"
+
+var ProjectSlug = APIKeySecurity(ProjectSlugSecuritySchema, func() {
+	Description("project slug header auth.")
+})
+
 var ProjectPayload = func() {
-	Attribute("project_slug", String, "The project the action belongs too")
-	Required("project_slug")
+	APIKey(ProjectSlugSecuritySchema, "project_slug", String)
 }
 
 var ProjectHeader = func() {

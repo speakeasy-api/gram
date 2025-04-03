@@ -31,9 +31,11 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 			sessionToken = &toolsetsCreateToolsetSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = toolsetsCreateToolsetProjectSlug
+		if toolsetsCreateToolsetProjectSlug != "" {
+			projectSlug = &toolsetsCreateToolsetProjectSlug
+		}
 	}
 	v := &toolsets.CreateToolsetPayload{
 		Name:                 body.Name,
@@ -61,9 +63,11 @@ func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsL
 			sessionToken = &toolsetsListToolsetsSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = toolsetsListToolsetsProjectSlug
+		if toolsetsListToolsetsProjectSlug != "" {
+			projectSlug = &toolsetsListToolsetsProjectSlug
+		}
 	}
 	v := &toolsets.ListToolsetsPayload{}
 	v.SessionToken = sessionToken
@@ -93,9 +97,11 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 			sessionToken = &toolsetsUpdateToolsetSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = toolsetsUpdateToolsetProjectSlug
+		if toolsetsUpdateToolsetProjectSlug != "" {
+			projectSlug = &toolsetsUpdateToolsetProjectSlug
+		}
 	}
 	v := &toolsets.UpdateToolsetPayload{
 		Name:                 body.Name,
@@ -134,9 +140,11 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetID string, toolsetsDeleteToo
 			sessionToken = &toolsetsDeleteToolsetSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = toolsetsDeleteToolsetProjectSlug
+		if toolsetsDeleteToolsetProjectSlug != "" {
+			projectSlug = &toolsetsDeleteToolsetProjectSlug
+		}
 	}
 	v := &toolsets.DeleteToolsetPayload{}
 	v.ID = id
@@ -159,9 +167,11 @@ func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsG
 			sessionToken = &toolsetsGetToolsetDetailsSessionToken
 		}
 	}
-	var projectSlug string
+	var projectSlug *string
 	{
-		projectSlug = toolsetsGetToolsetDetailsProjectSlug
+		if toolsetsGetToolsetDetailsProjectSlug != "" {
+			projectSlug = &toolsetsGetToolsetDetailsProjectSlug
+		}
 	}
 	v := &toolsets.GetToolsetDetailsPayload{}
 	v.ID = id

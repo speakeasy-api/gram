@@ -202,7 +202,7 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 
 // NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
-func NewGetDeploymentPayload(id string, sessionToken *string, projectSlug string) *deployments.GetDeploymentPayload {
+func NewGetDeploymentPayload(id string, sessionToken *string, projectSlug *string) *deployments.GetDeploymentPayload {
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
@@ -213,7 +213,7 @@ func NewGetDeploymentPayload(id string, sessionToken *string, projectSlug string
 
 // NewCreateDeploymentPayload builds a deployments service createDeployment
 // endpoint payload.
-func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string, projectSlug string, idempotencyKey string) *deployments.CreateDeploymentPayload {
+func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string, projectSlug *string, idempotencyKey string) *deployments.CreateDeploymentPayload {
 	v := &deployments.CreateDeploymentPayload{
 		GithubRepo:  body.GithubRepo,
 		GithubPr:    body.GithubPr,
@@ -236,7 +236,7 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
-func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlug string) *deployments.ListDeploymentsPayload {
+func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlug *string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.SessionToken = sessionToken

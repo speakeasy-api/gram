@@ -37,7 +37,7 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			contentType   string
 			contentLength int64
-			projectSlug   string
+			projectSlug   *string
 			sessionToken  *string
 			err           error
 		)
@@ -56,9 +56,9 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 			}
 			contentLength = v
 		}
-		projectSlug = r.Header.Get("Gram-Project")
-		if projectSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "header"))
+		projectSlugRaw := r.Header.Get("Gram-Project")
+		if projectSlugRaw != "" {
+			projectSlug = &projectSlugRaw
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -73,6 +73,13 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlug != nil {
+			if strings.Contains(*payload.ProjectSlug, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
+				payload.ProjectSlug = &cred
 			}
 		}
 

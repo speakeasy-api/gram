@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -66,9 +67,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Payload, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
 	defer reader.Close()
 
-	access, err := auth.EnsureProjectAccess(ctx, s.logger, s.db, payload.ProjectSlug)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("project id not found")
 	}
 
 	if payload.ContentLength == 0 {
@@ -102,7 +103,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	sha := hex.EncodeToString(hash.Sum(nil))
 
 	asset, err := s.repo.GetProjectAssetBySHA256(ctx, repo.GetProjectAssetBySHA256Params{
-		ProjectID: access.ProjectID,
+		ProjectID: *authCtx.ProjectID,
 		Sha256:    sha,
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -147,7 +148,8 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		return nil, fmt.Errorf("seek to start: offset not 0: %d", off)
 	}
 
-	dst, uri, err := s.storage.Write(ctx, path.Join(access.ProjectID.String(), filename), f, contentType)
+	projectID := *authCtx.ProjectID
+	dst, uri, err := s.storage.Write(ctx, path.Join(projectID.String(), filename), f, contentType)
 	if err != nil {
 		return nil, fmt.Errorf("write to blob storage: %w", err)
 	}
@@ -168,7 +170,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	asset, err = s.repo.CreateAsset(ctx, repo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
-		ProjectID:     access.ProjectID,
+		ProjectID:     *authCtx.ProjectID,
 		Sha256:        sha,
 		Kind:          "openapiv3",
 		ContentType:   contentType,

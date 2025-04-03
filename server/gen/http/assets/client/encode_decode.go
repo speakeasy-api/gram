@@ -61,8 +61,8 @@ func EncodeUploadOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) f
 			headStr := strconv.FormatInt(head, 10)
 			req.Header.Set("Content-Length", headStr)
 		}
-		{
-			head := p.ProjectSlug
+		if p.ProjectSlug != nil {
+			head := *p.ProjectSlug
 			req.Header.Set("Gram-Project", head)
 		}
 		if p.SessionToken != nil {

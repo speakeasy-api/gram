@@ -51,8 +51,7 @@ var MethodNames = [4]string{"createEnvironment", "listEnvironments", "updateEnvi
 // createEnvironment method.
 type CreateEnvironmentPayload struct {
 	SessionToken *string
-	// The project the action belongs too
-	ProjectSlug string
+	ProjectSlug  *string
 	// The organization ID this environment belongs to
 	OrganizationID string
 	// The name of the environment
@@ -69,8 +68,7 @@ type DeleteEnvironmentPayload struct {
 	// The ID of the environment to delete
 	ID           string
 	SessionToken *string
-	// The project the action belongs too
-	ProjectSlug string
+	ProjectSlug  *string
 }
 
 // Environment is the result type of the environments service createEnvironment
@@ -118,8 +116,7 @@ type EnvironmentEntryInput struct {
 // listEnvironments method.
 type ListEnvironmentsPayload struct {
 	SessionToken *string
-	// The project the action belongs too
-	ProjectSlug string
+	ProjectSlug  *string
 }
 
 // ListEnvironmentsResult is the result type of the environments service
@@ -134,8 +131,7 @@ type UpdateEnvironmentPayload struct {
 	// The ID of the environment to update
 	ID           string
 	SessionToken *string
-	// The project the action belongs too
-	ProjectSlug string
+	ProjectSlug  *string
 	// The ID of the environment to update
 	EnvironmentID string
 	// List of environment entries to update or create
