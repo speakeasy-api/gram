@@ -139,8 +139,6 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 }
 
 func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.Toolset, error) {
-	toolsetID := must.Value(uuid.Parse(payload.ID))
-
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("project ID not found in context")
@@ -148,7 +146,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	// First get the existing toolset
 	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
-		ID:        toolsetID,
+		Slug:      payload.Slug,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
@@ -157,7 +155,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	// Convert update params
 	updateParams := repo.UpdateToolsetParams{
-		ID:                   toolsetID,
+		Slug:                 payload.Slug,
 		Description:          existingToolset.Description,
 		Name:                 existingToolset.Name,
 		DefaultEnvironmentID: existingToolset.DefaultEnvironmentID,
@@ -231,20 +229,19 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 
 	return s.repo.DeleteToolset(ctx, repo.DeleteToolsetParams{
-		ID:        uuid.MustParse(payload.ID),
+		Slug:      payload.Slug,
 		ProjectID: *authCtx.ProjectID,
 	})
 }
 
 func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolsetDetailsPayload) (*gen.ToolsetDetails, error) {
-	toolsetID := must.Value(uuid.Parse(payload.ID))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("project ID not found in context")
 	}
 
 	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
-		ID:        toolsetID,
+		Slug:      payload.Slug,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {

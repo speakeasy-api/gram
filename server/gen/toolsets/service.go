@@ -67,8 +67,8 @@ type CreateToolsetPayload struct {
 // DeleteToolsetPayload is the payload type of the toolsets service
 // deleteToolset method.
 type DeleteToolsetPayload struct {
-	// The ID of the toolset
-	ID           string
+	// The slug of the toolset
+	Slug         string
 	SessionToken *string
 	ProjectSlug  *string
 }
@@ -76,8 +76,8 @@ type DeleteToolsetPayload struct {
 // GetToolsetDetailsPayload is the payload type of the toolsets service
 // getToolsetDetails method.
 type GetToolsetDetailsPayload struct {
-	// The ID of the toolset
-	ID           string
+	// The slug of the toolset
+	Slug         string
 	SessionToken *string
 	ProjectSlug  *string
 }
@@ -188,8 +188,8 @@ type ToolsetDetails struct {
 // updateToolset method.
 type UpdateToolsetPayload struct {
 	SessionToken *string
-	// The ID of the toolset to update
-	ID string
+	// The slug of the toolset to update
+	Slug string
 	// The new name of the toolset
 	Name *string
 	// The new description of the toolset

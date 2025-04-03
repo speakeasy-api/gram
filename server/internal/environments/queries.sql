@@ -17,15 +17,10 @@ FROM environments e
 WHERE e.project_id = $1 AND e.deleted_at IS NULL
 ORDER BY e.created_at DESC;
 
--- name: GetEnvironmentBySlug :one
-SELECT e.*
-FROM environments e
-WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted_at IS NULL;
-
 -- name: GetEnvironment :one
 SELECT e.*
 FROM environments e
-WHERE e.id = $1 AND e.deleted_at IS NULL;
+WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted_at IS NULL;
 
 -- name: ListEnvironmentEntries :many
 SELECT 
@@ -41,7 +36,7 @@ ORDER BY ee.name ASC;
 -- name: DeleteEnvironment :exec
 UPDATE environments
 SET deleted_at = now()
-WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL;
+WHERE slug = $1 AND project_id = $2 AND deleted_at IS NULL;
 
 -- name: CreateEnvironmentEntries :many
 INSERT INTO environment_entries (

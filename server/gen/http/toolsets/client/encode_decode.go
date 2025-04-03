@@ -176,16 +176,16 @@ func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, re
 // path set to call the "toolsets" service "updateToolset" endpoint
 func (c *Client) BuildUpdateToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
-		id string
+		slug string
 	)
 	{
 		p, ok := v.(*toolsets.UpdateToolsetPayload)
 		if !ok {
 			return nil, goahttp.ErrInvalidType("toolsets", "updateToolset", "*toolsets.UpdateToolsetPayload", v)
 		}
-		id = p.ID
+		slug = p.Slug
 	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateToolsetToolsetsPath(id)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateToolsetToolsetsPath(slug)}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("toolsets", "updateToolset", u.String(), err)
@@ -265,16 +265,16 @@ func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 // path set to call the "toolsets" service "deleteToolset" endpoint
 func (c *Client) BuildDeleteToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
-		id string
+		slug string
 	)
 	{
 		p, ok := v.(*toolsets.DeleteToolsetPayload)
 		if !ok {
 			return nil, goahttp.ErrInvalidType("toolsets", "deleteToolset", "*toolsets.DeleteToolsetPayload", v)
 		}
-		id = p.ID
+		slug = p.Slug
 	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteToolsetToolsetsPath(id)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteToolsetToolsetsPath(slug)}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("toolsets", "deleteToolset", u.String(), err)
@@ -337,16 +337,16 @@ func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 // and path set to call the "toolsets" service "getToolsetDetails" endpoint
 func (c *Client) BuildGetToolsetDetailsRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
-		id string
+		slug string
 	)
 	{
 		p, ok := v.(*toolsets.GetToolsetDetailsPayload)
 		if !ok {
 			return nil, goahttp.ErrInvalidType("toolsets", "getToolsetDetails", "*toolsets.GetToolsetDetailsPayload", v)
 		}
-		id = p.ID
+		slug = p.Slug
 	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolsetDetailsToolsetsPath(id)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolsetDetailsToolsetsPath(slug)}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("toolsets", "getToolsetDetails", u.String(), err)

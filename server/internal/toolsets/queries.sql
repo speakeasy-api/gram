@@ -13,7 +13,7 @@ SELECT
   , deleted_at
   , deleted
 FROM toolsets
-WHERE id = @id AND project_id = @project_id;
+WHERE slug = @slug AND project_id = @project_id;
 
 -- name: CreateToolset :one
 INSERT INTO toolsets (
@@ -74,7 +74,7 @@ SET
   , http_tool_ids = COALESCE(NULLIF(@http_tool_ids::uuid[], '{}'::uuid[]), http_tool_ids)
   , default_environment_id = COALESCE(@default_environment_id, default_environment_id)
   , updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id
 RETURNING 
     id
   , organization_id
@@ -92,7 +92,7 @@ RETURNING
 -- name: DeleteToolset :exec
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
-WHERE id = @id
+WHERE slug = @slug
   AND project_id = @project_id;
 
 -- name: GetHTTPToolDefinitions :many

@@ -101,17 +101,17 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (C
 const deleteToolset = `-- name: DeleteToolset :exec
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
-WHERE id = $1
+WHERE slug = $1
   AND project_id = $2
 `
 
 type DeleteToolsetParams struct {
-	ID        uuid.UUID
+	Slug      string
 	ProjectID uuid.UUID
 }
 
 func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) error {
-	_, err := q.db.Exec(ctx, deleteToolset, arg.ID, arg.ProjectID)
+	_, err := q.db.Exec(ctx, deleteToolset, arg.Slug, arg.ProjectID)
 	return err
 }
 
@@ -227,11 +227,11 @@ SELECT
   , deleted_at
   , deleted
 FROM toolsets
-WHERE id = $1 AND project_id = $2
+WHERE slug = $1 AND project_id = $2
 `
 
 type GetToolsetParams struct {
-	ID        uuid.UUID
+	Slug      string
 	ProjectID uuid.UUID
 }
 
@@ -251,7 +251,7 @@ type GetToolsetRow struct {
 }
 
 func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (GetToolsetRow, error) {
-	row := q.db.QueryRow(ctx, getToolset, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getToolset, arg.Slug, arg.ProjectID)
 	var i GetToolsetRow
 	err := row.Scan(
 		&i.ID,
@@ -346,7 +346,7 @@ SET
   , http_tool_ids = COALESCE(NULLIF($3::uuid[], '{}'::uuid[]), http_tool_ids)
   , default_environment_id = COALESCE($4, default_environment_id)
   , updated_at = clock_timestamp()
-WHERE id = $5 AND project_id = $6
+WHERE slug = $5 AND project_id = $6
 RETURNING 
     id
   , organization_id
@@ -367,7 +367,7 @@ type UpdateToolsetParams struct {
 	Description          pgtype.Text
 	HttpToolIds          []uuid.UUID
 	DefaultEnvironmentID uuid.NullUUID
-	ID                   uuid.UUID
+	Slug                 string
 	ProjectID            uuid.UUID
 }
 
@@ -392,7 +392,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (U
 		arg.Description,
 		arg.HttpToolIds,
 		arg.DefaultEnvironmentID,
-		arg.ID,
+		arg.Slug,
 		arg.ProjectID,
 	)
 	var i UpdateToolsetRow

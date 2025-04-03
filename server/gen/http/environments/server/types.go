@@ -28,8 +28,6 @@ type CreateEnvironmentRequestBody struct {
 // UpdateEnvironmentRequestBody is the type of the "environments" service
 // "updateEnvironment" endpoint HTTP request body.
 type UpdateEnvironmentRequestBody struct {
-	// The ID of the environment to update
-	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// List of environment entries to update or create
 	EntriesToUpdate []*EnvironmentEntryInputRequestBody `form:"entries_to_update,omitempty" json:"entries_to_update,omitempty" xml:"entries_to_update,omitempty"`
 	// List of environment entry names to remove
@@ -216,10 +214,8 @@ func NewListEnvironmentsPayload(sessionToken *string, projectSlug *string) *envi
 
 // NewUpdateEnvironmentPayload builds a environments service updateEnvironment
 // endpoint payload.
-func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, id string, sessionToken *string, projectSlug *string) *environments.UpdateEnvironmentPayload {
-	v := &environments.UpdateEnvironmentPayload{
-		EnvironmentID: *body.EnvironmentID,
-	}
+func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string, sessionToken *string, projectSlug *string) *environments.UpdateEnvironmentPayload {
+	v := &environments.UpdateEnvironmentPayload{}
 	v.EntriesToUpdate = make([]*environments.EnvironmentEntryInput, len(body.EntriesToUpdate))
 	for i, val := range body.EntriesToUpdate {
 		v.EntriesToUpdate[i] = unmarshalEnvironmentEntryInputRequestBodyToEnvironmentsEnvironmentEntryInput(val)
@@ -228,7 +224,7 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, id string, 
 	for i, val := range body.EntriesToRemove {
 		v.EntriesToRemove[i] = val
 	}
-	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
@@ -237,9 +233,9 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, id string, 
 
 // NewDeleteEnvironmentPayload builds a environments service deleteEnvironment
 // endpoint payload.
-func NewDeleteEnvironmentPayload(id string, sessionToken *string, projectSlug *string) *environments.DeleteEnvironmentPayload {
+func NewDeleteEnvironmentPayload(slug string, sessionToken *string, projectSlug *string) *environments.DeleteEnvironmentPayload {
 	v := &environments.DeleteEnvironmentPayload{}
-	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
@@ -271,9 +267,6 @@ func ValidateCreateEnvironmentRequestBody(body *CreateEnvironmentRequestBody) (e
 // ValidateUpdateEnvironmentRequestBody runs the validations defined on
 // UpdateEnvironmentRequestBody
 func ValidateUpdateEnvironmentRequestBody(body *UpdateEnvironmentRequestBody) (err error) {
-	if body.EnvironmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("environment_id", "body"))
-	}
 	if body.EntriesToUpdate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("entries_to_update", "body"))
 	}

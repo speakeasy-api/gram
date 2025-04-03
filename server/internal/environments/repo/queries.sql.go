@@ -112,16 +112,16 @@ func (q *Queries) CreateEnvironmentEntries(ctx context.Context, arg CreateEnviro
 const deleteEnvironment = `-- name: DeleteEnvironment :exec
 UPDATE environments
 SET deleted_at = now()
-WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
+WHERE slug = $1 AND project_id = $2 AND deleted_at IS NULL
 `
 
 type DeleteEnvironmentParams struct {
-	ID        uuid.UUID
+	Slug      string
 	ProjectID uuid.UUID
 }
 
 func (q *Queries) DeleteEnvironment(ctx context.Context, arg DeleteEnvironmentParams) error {
-	_, err := q.db.Exec(ctx, deleteEnvironment, arg.ID, arg.ProjectID)
+	_, err := q.db.Exec(ctx, deleteEnvironment, arg.Slug, arg.ProjectID)
 	return err
 }
 
@@ -144,39 +144,16 @@ func (q *Queries) DeleteEnvironmentEntry(ctx context.Context, arg DeleteEnvironm
 const getEnvironment = `-- name: GetEnvironment :one
 SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.created_at, e.updated_at, e.deleted_at, e.deleted
 FROM environments e
-WHERE e.id = $1 AND e.deleted_at IS NULL
-`
-
-func (q *Queries) GetEnvironment(ctx context.Context, id uuid.UUID) (Environment, error) {
-	row := q.db.QueryRow(ctx, getEnvironment, id)
-	var i Environment
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const getEnvironmentBySlug = `-- name: GetEnvironmentBySlug :one
-SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.created_at, e.updated_at, e.deleted_at, e.deleted
-FROM environments e
 WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted_at IS NULL
 `
 
-type GetEnvironmentBySlugParams struct {
+type GetEnvironmentParams struct {
 	Slug      string
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) GetEnvironmentBySlug(ctx context.Context, arg GetEnvironmentBySlugParams) (Environment, error) {
-	row := q.db.QueryRow(ctx, getEnvironmentBySlug, arg.Slug, arg.ProjectID)
+func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, getEnvironment, arg.Slug, arg.ProjectID)
 	var i Environment
 	err := row.Scan(
 		&i.ID,

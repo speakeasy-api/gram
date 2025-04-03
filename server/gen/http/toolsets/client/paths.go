@@ -22,16 +22,16 @@ func ListToolsetsToolsetsPath() string {
 }
 
 // UpdateToolsetToolsetsPath returns the URL path to the toolsets service updateToolset HTTP endpoint.
-func UpdateToolsetToolsetsPath(id string) string {
-	return fmt.Sprintf("/rpc/toolsets.update/%v", id)
+func UpdateToolsetToolsetsPath(slug string) string {
+	return fmt.Sprintf("/rpc/toolsets.update/%v", slug)
 }
 
 // DeleteToolsetToolsetsPath returns the URL path to the toolsets service deleteToolset HTTP endpoint.
-func DeleteToolsetToolsetsPath(id string) string {
-	return fmt.Sprintf("/rpc/toolsets.delete/%v", id)
+func DeleteToolsetToolsetsPath(slug string) string {
+	return fmt.Sprintf("/rpc/toolsets.delete/%v", slug)
 }
 
 // GetToolsetDetailsToolsetsPath returns the URL path to the toolsets service getToolsetDetails HTTP endpoint.
-func GetToolsetDetailsToolsetsPath(id string) string {
-	return fmt.Sprintf("/rpc/toolsets.get/%v", id)
+func GetToolsetDetailsToolsetsPath(slug string) string {
+	return fmt.Sprintf("/rpc/toolsets.get/%v", slug)
 }

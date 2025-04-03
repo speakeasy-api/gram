@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Hic maxime unde.\",\n      \"description\": \"Ut quas nesciunt.\",\n      \"http_tool_ids\": [\n         \"Aliquid ipsa.\",\n         \"Veritatis numquam non aliquid.\",\n         \"Minus inventore voluptatem cum ipsam voluptatem illum.\",\n         \"Nobis doloremque.\"\n      ],\n      \"name\": \"Unde voluptates ipsa qui adipisci odit.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Consequuntur qui.\",\n      \"description\": \"Quis a error doloribus.\",\n      \"http_tool_ids\": [\n         \"Delectus soluta eos consectetur nobis dolores.\",\n         \"Nisi occaecati sunt quas ut id occaecati.\",\n         \"Autem voluptatum doloribus et.\"\n      ],\n      \"name\": \"Eum blanditiis.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -78,18 +78,18 @@ func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsL
 
 // BuildUpdateToolsetPayload builds the payload for the toolsets updateToolset
 // endpoint from CLI flags.
-func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetID string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetProjectSlug string) (*toolsets.UpdateToolsetPayload, error) {
+func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetSlug string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetProjectSlug string) (*toolsets.UpdateToolsetPayload, error) {
 	var err error
 	var body UpdateToolsetRequestBody
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Nihil asperiores.\",\n      \"description\": \"Eveniet impedit necessitatibus.\",\n      \"http_tool_ids_to_add\": [\n         \"Qui vel voluptas et.\",\n         \"Reprehenderit atque non inventore aut ipsa.\",\n         \"Dolor laudantium magni aspernatur.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Incidunt non similique veniam qui.\",\n         \"Et quas.\"\n      ],\n      \"name\": \"Provident nihil officiis non quod qui.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Voluptas et et molestias et.\",\n      \"description\": \"Odio porro dignissimos non dignissimos dicta at.\",\n      \"http_tool_ids_to_add\": [\n         \"Non dicta.\",\n         \"Eius nostrum.\",\n         \"Doloribus aut.\"\n      ],\n      \"http_tool_ids_to_remove\": [\n         \"Consequuntur est.\",\n         \"Ratione eligendi officia qui ut.\",\n         \"Est excepturi quasi libero mollitia velit autem.\"\n      ],\n      \"name\": \"Sit dolorum perspiciatis.\"\n   }'")
 		}
 	}
-	var id string
+	var slug string
 	{
-		id = toolsetsUpdateToolsetID
+		slug = toolsetsUpdateToolsetSlug
 	}
 	var sessionToken *string
 	{
@@ -120,7 +120,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 			v.HTTPToolIdsToRemove[i] = val
 		}
 	}
-	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
@@ -129,10 +129,10 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 
 // BuildDeleteToolsetPayload builds the payload for the toolsets deleteToolset
 // endpoint from CLI flags.
-func BuildDeleteToolsetPayload(toolsetsDeleteToolsetID string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetProjectSlug string) (*toolsets.DeleteToolsetPayload, error) {
-	var id string
+func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetProjectSlug string) (*toolsets.DeleteToolsetPayload, error) {
+	var slug string
 	{
-		id = toolsetsDeleteToolsetID
+		slug = toolsetsDeleteToolsetSlug
 	}
 	var sessionToken *string
 	{
@@ -147,7 +147,7 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetID string, toolsetsDeleteToo
 		}
 	}
 	v := &toolsets.DeleteToolsetPayload{}
-	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
@@ -156,10 +156,10 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetID string, toolsetsDeleteToo
 
 // BuildGetToolsetDetailsPayload builds the payload for the toolsets
 // getToolsetDetails endpoint from CLI flags.
-func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsGetToolsetDetailsSessionToken string, toolsetsGetToolsetDetailsProjectSlug string) (*toolsets.GetToolsetDetailsPayload, error) {
-	var id string
+func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsSlug string, toolsetsGetToolsetDetailsSessionToken string, toolsetsGetToolsetDetailsProjectSlug string) (*toolsets.GetToolsetDetailsPayload, error) {
+	var slug string
 	{
-		id = toolsetsGetToolsetDetailsID
+		slug = toolsetsGetToolsetDetailsSlug
 	}
 	var sessionToken *string
 	{
@@ -174,7 +174,7 @@ func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsID string, toolsetsG
 		}
 	}
 	v := &toolsets.GetToolsetDetailsPayload{}
-	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 

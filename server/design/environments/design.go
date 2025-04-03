@@ -55,8 +55,6 @@ var _ = Service("environments", func() {
 
 		Payload(func() {
 			Extend(UpdateEnvironmentForm)
-			Attribute("id", String, "The ID of the environment to update")
-			Required("id")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -64,8 +62,8 @@ var _ = Service("environments", func() {
 		Result(Environment)
 
 		HTTP(func() {
-			POST("/rpc/environments.update/{id}")
-			Param("id")
+			POST("/rpc/environments.update/{slug}")
+			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -78,15 +76,15 @@ var _ = Service("environments", func() {
 		Description("Delete an environment")
 
 		Payload(func() {
-			Attribute("id", String, "The ID of the environment to delete")
-			Required("id")
+			Attribute("slug", String, "The slug of the environment to delete")
+			Required("slug")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/environments.delete/{id}")
-			Param("id")
+			DELETE("/rpc/environments.delete/{slug}")
+			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -157,11 +155,11 @@ var CreateEnvironmentForm = Type("CreateEnvironmentForm", func() {
 var UpdateEnvironmentForm = Type("UpdateEnvironmentForm", func() {
 	Description("Form for updating an environment")
 
-	Attribute("environment_id", String, "The ID of the environment to update")
+	Attribute("slug", String, "The slug of the environment to update")
 	Attribute("entries_to_update", ArrayOf(EnvironmentEntryInput), "List of environment entries to update or create")
 	Attribute("entries_to_remove", ArrayOf(String), "List of environment entry names to remove")
 
-	Required("environment_id", "entries_to_update", "entries_to_remove")
+	Required("slug", "entries_to_update", "entries_to_remove")
 })
 
 var ListEnvironmentsResult = Type("ListEnvironmentsResult", func() {

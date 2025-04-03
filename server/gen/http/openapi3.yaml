@@ -392,17 +392,17 @@ paths:
                 - environments
             x-speakeasy-react-hook:
                 name: CreateEnvironment
-    /rpc/environments.delete/{id}:
+    /rpc/environments.delete/{slug}:
         delete:
             description: Delete an environment
             operationId: environments#deleteEnvironment
             parameters:
-                - description: The ID of the environment to delete
+                - description: The slug of the environment to delete
                   in: path
-                  name: id
+                  name: slug
                   required: true
                   schema:
-                    description: The ID of the environment to delete
+                    description: The slug of the environment to delete
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -463,17 +463,17 @@ paths:
                 - environments
             x-speakeasy-react-hook:
                 name: ListEnvironments
-    /rpc/environments.update/{id}:
+    /rpc/environments.update/{slug}:
         post:
             description: Update an environment
             operationId: environments#updateEnvironment
             parameters:
-                - description: The ID of the environment to update
+                - description: The slug of the environment to update
                   in: path
-                  name: id
+                  name: slug
                   required: true
                   schema:
-                    description: The ID of the environment to update
+                    description: The slug of the environment to update
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -493,7 +493,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateEnvironmentForm'
+                            $ref: '#/components/schemas/UpdateEnvironmentRequestBody'
                 required: true
             responses:
                 "200":
@@ -678,17 +678,17 @@ paths:
                 - toolsets
             x-speakeasy-react-hook:
                 name: CreateToolset
-    /rpc/toolsets.delete/{id}:
+    /rpc/toolsets.delete/{slug}:
         delete:
             description: Delete a toolset by its ID
             operationId: toolsets#deleteToolset
             parameters:
-                - description: The ID of the toolset
+                - description: The slug of the toolset
                   in: path
-                  name: id
+                  name: slug
                   required: true
                   schema:
-                    description: The ID of the toolset
+                    description: The slug of the toolset
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -715,17 +715,17 @@ paths:
                 - toolsets
             x-speakeasy-react-hook:
                 name: DeleteToolset
-    /rpc/toolsets.get/{id}:
+    /rpc/toolsets.get/{slug}:
         get:
             description: Get detailed information about a toolset including full HTTP tool definitions
             operationId: toolsets#getToolsetDetails
             parameters:
-                - description: The ID of the toolset
+                - description: The slug of the toolset
                   in: path
-                  name: id
+                  name: slug
                   required: true
                   schema:
-                    description: The ID of the toolset
+                    description: The slug of the toolset
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -790,17 +790,17 @@ paths:
                 - toolsets
             x-speakeasy-react-hook:
                 name: ListToolsets
-    /rpc/toolsets.update/{id}:
+    /rpc/toolsets.update/{slug}:
         post:
             description: Update a toolset's properties including name, description, and HTTP tools
             operationId: toolsets#updateToolset
             parameters:
-                - description: The ID of the toolset to update
+                - description: The slug of the toolset to update
                   in: path
-                  name: id
+                  name: slug
                   required: true
                   schema:
-                    description: The ID of the toolset to update
+                    description: The slug of the toolset to update
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -1609,12 +1609,28 @@ components:
                     items:
                         $ref: '#/components/schemas/EnvironmentEntryInput'
                     description: List of environment entries to update or create
-                environment_id:
+                slug:
                     type: string
-                    description: The ID of the environment to update
+                    description: The slug of the environment to update
             description: Form for updating an environment
             required:
-                - environment_id
+                - slug
+                - entries_to_update
+                - entries_to_remove
+        UpdateEnvironmentRequestBody:
+            type: object
+            properties:
+                entries_to_remove:
+                    type: array
+                    items:
+                        type: string
+                    description: List of environment entry names to remove
+                entries_to_update:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EnvironmentEntryInput'
+                    description: List of environment entries to update or create
+            required:
                 - entries_to_update
                 - entries_to_remove
         UpdateToolsetForm:
@@ -1636,16 +1652,16 @@ components:
                     items:
                         type: string
                     description: HTTP tool IDs to remove from the toolset
-                id:
-                    type: string
-                    description: The ID of the toolset to update
                 name:
                     type: string
                     description: The new name of the toolset
                 project_slug:
                     type: string
+                slug:
+                    type: string
+                    description: The slug of the toolset to update
             required:
-                - id
+                - slug
         UpdateToolsetRequestBody:
             type: object
             properties:

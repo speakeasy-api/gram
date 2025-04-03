@@ -61,8 +61,8 @@ var _ = Service("toolsets", func() {
 		Result(Toolset)
 
 		HTTP(func() {
-			Param("id")
-			POST("/rpc/toolsets.update/{id}")
+			Param("slug")
+			POST("/rpc/toolsets.update/{slug}")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -75,17 +75,17 @@ var _ = Service("toolsets", func() {
 		Description("Delete a toolset by its ID")
 
 		Payload(func() {
-			Attribute("id", String, "The ID of the toolset")
-			Required("id")
+			Attribute("slug", String, "The slug of the toolset")
+			Required("slug")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
 		HTTP(func() {
-			Param("id")
+			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()
-			DELETE("/rpc/toolsets.delete/{id}")
+			DELETE("/rpc/toolsets.delete/{slug}")
 			Response(StatusNoContent)
 		})
 
@@ -96,8 +96,8 @@ var _ = Service("toolsets", func() {
 		Description("Get detailed information about a toolset including full HTTP tool definitions")
 
 		Payload(func() {
-			Attribute("id", String, "The ID of the toolset")
-			Required("id")
+			Attribute("slug", String, "The slug of the toolset")
+			Required("slug")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -105,10 +105,10 @@ var _ = Service("toolsets", func() {
 		Result(ToolsetDetails)
 
 		HTTP(func() {
-			Param("id")
+			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()
-			GET("/rpc/toolsets.get/{id}")
+			GET("/rpc/toolsets.get/{slug}")
 			Response(StatusOK)
 		})
 
@@ -151,14 +151,14 @@ var ListToolsetsResult = Type("ListToolsetsResult", func() {
 })
 
 var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
-	Attribute("id", String, "The ID of the toolset to update")
+	Attribute("slug", String, "The slug of the toolset to update")
 	Attribute("name", String, "The new name of the toolset")
 	Attribute("description", String, "The new description of the toolset")
 	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
 	Attribute("http_tool_ids_to_add", ArrayOf(String), "HTTP tool IDs to add to the toolset")
 	Attribute("http_tool_ids_to_remove", ArrayOf(String), "HTTP tool IDs to remove from the toolset")
 	security.ProjectPayload()
-	Required("id")
+	Required("slug")
 })
 
 var ToolsetDetails = Type("ToolsetDetails", func() {

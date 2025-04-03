@@ -176,16 +176,16 @@ func DecodeListEnvironmentsResponse(decoder func(*http.Response) goahttp.Decoder
 // and path set to call the "environments" service "updateEnvironment" endpoint
 func (c *Client) BuildUpdateEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
-		id string
+		slug string
 	)
 	{
 		p, ok := v.(*environments.UpdateEnvironmentPayload)
 		if !ok {
 			return nil, goahttp.ErrInvalidType("environments", "updateEnvironment", "*environments.UpdateEnvironmentPayload", v)
 		}
-		id = p.ID
+		slug = p.Slug
 	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateEnvironmentEnvironmentsPath(id)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateEnvironmentEnvironmentsPath(slug)}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("environments", "updateEnvironment", u.String(), err)
@@ -265,16 +265,16 @@ func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 // and path set to call the "environments" service "deleteEnvironment" endpoint
 func (c *Client) BuildDeleteEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
-		id string
+		slug string
 	)
 	{
 		p, ok := v.(*environments.DeleteEnvironmentPayload)
 		if !ok {
 			return nil, goahttp.ErrInvalidType("environments", "deleteEnvironment", "*environments.DeleteEnvironmentPayload", v)
 		}
-		id = p.ID
+		slug = p.Slug
 	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteEnvironmentEnvironmentsPath(id)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteEnvironmentEnvironmentsPath(slug)}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("environments", "deleteEnvironment", u.String(), err)

@@ -172,13 +172,13 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		}
 
 		var (
-			id           string
+			slug         string
 			sessionToken *string
 			projectSlug  *string
 
 			params = mux.Vars(r)
 		)
-		id = params["id"]
+		slug = params["slug"]
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -187,7 +187,7 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugRaw != "" {
 			projectSlug = &projectSlugRaw
 		}
-		payload := NewUpdateEnvironmentPayload(&body, id, sessionToken, projectSlug)
+		payload := NewUpdateEnvironmentPayload(&body, slug, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -221,13 +221,13 @@ func EncodeDeleteEnvironmentResponse(encoder func(context.Context, http.Response
 func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id           string
+			slug         string
 			sessionToken *string
 			projectSlug  *string
 
 			params = mux.Vars(r)
 		)
-		id = params["id"]
+		slug = params["slug"]
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -236,7 +236,7 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugRaw != "" {
 			projectSlug = &projectSlugRaw
 		}
-		payload := NewDeleteEnvironmentPayload(id, sessionToken, projectSlug)
+		payload := NewDeleteEnvironmentPayload(slug, sessionToken, projectSlug)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -22,11 +22,11 @@ func ListEnvironmentsEnvironmentsPath() string {
 }
 
 // UpdateEnvironmentEnvironmentsPath returns the URL path to the environments service updateEnvironment HTTP endpoint.
-func UpdateEnvironmentEnvironmentsPath(id string) string {
-	return fmt.Sprintf("/rpc/environments.update/%v", id)
+func UpdateEnvironmentEnvironmentsPath(slug string) string {
+	return fmt.Sprintf("/rpc/environments.update/%v", slug)
 }
 
 // DeleteEnvironmentEnvironmentsPath returns the URL path to the environments service deleteEnvironment HTTP endpoint.
-func DeleteEnvironmentEnvironmentsPath(id string) string {
-	return fmt.Sprintf("/rpc/environments.delete/%v", id)
+func DeleteEnvironmentEnvironmentsPath(slug string) string {
+	return fmt.Sprintf("/rpc/environments.delete/%v", slug)
 }

@@ -23,7 +23,7 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsCreateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Repellat et.\",\n      \"entries\": [\n         {\n            \"name\": \"Porro ipsum debitis voluptatem.\",\n            \"value\": \"Doloribus eum ut cumque.\"\n         },\n         {\n            \"name\": \"Porro ipsum debitis voluptatem.\",\n            \"value\": \"Doloribus eum ut cumque.\"\n         },\n         {\n            \"name\": \"Porro ipsum debitis voluptatem.\",\n            \"value\": \"Doloribus eum ut cumque.\"\n         }\n      ],\n      \"name\": \"Sed consequuntur labore tempora.\",\n      \"organization_id\": \"Earum consequatur officiis eum eum beatae.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Voluptas ut reiciendis dolore est alias.\",\n      \"entries\": [\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         }\n      ],\n      \"name\": \"Excepturi similique laborum at et et a.\",\n      \"organization_id\": \"Fugiat reiciendis nisi.\"\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
@@ -87,13 +87,13 @@ func BuildListEnvironmentsPayload(environmentsListEnvironmentsSessionToken strin
 
 // BuildUpdateEnvironmentPayload builds the payload for the environments
 // updateEnvironment endpoint from CLI flags.
-func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, environmentsUpdateEnvironmentID string, environmentsUpdateEnvironmentSessionToken string, environmentsUpdateEnvironmentProjectSlug string) (*environments.UpdateEnvironmentPayload, error) {
+func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, environmentsUpdateEnvironmentSlug string, environmentsUpdateEnvironmentSessionToken string, environmentsUpdateEnvironmentProjectSlug string) (*environments.UpdateEnvironmentPayload, error) {
 	var err error
 	var body UpdateEnvironmentRequestBody
 	{
 		err = json.Unmarshal([]byte(environmentsUpdateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries_to_remove\": [\n         \"Dolor omnis.\",\n         \"Fugit fugiat fuga quia fuga ipsa nihil.\",\n         \"Aut nisi odio officiis.\",\n         \"Officiis dolor.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Porro ipsum debitis voluptatem.\",\n            \"value\": \"Doloribus eum ut cumque.\"\n         },\n         {\n            \"name\": \"Porro ipsum debitis voluptatem.\",\n            \"value\": \"Doloribus eum ut cumque.\"\n         }\n      ],\n      \"environment_id\": \"Reprehenderit est.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries_to_remove\": [\n         \"Velit vel dolor et id.\",\n         \"Voluptas ullam eum vitae voluptatum sint.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         }\n      ]\n   }'")
 		}
 		if body.EntriesToUpdate == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries_to_update", "body"))
@@ -105,9 +105,9 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 			return nil, err
 		}
 	}
-	var id string
+	var slug string
 	{
-		id = environmentsUpdateEnvironmentID
+		slug = environmentsUpdateEnvironmentSlug
 	}
 	var sessionToken *string
 	{
@@ -121,9 +121,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 			projectSlug = &environmentsUpdateEnvironmentProjectSlug
 		}
 	}
-	v := &environments.UpdateEnvironmentPayload{
-		EnvironmentID: body.EnvironmentID,
-	}
+	v := &environments.UpdateEnvironmentPayload{}
 	if body.EntriesToUpdate != nil {
 		v.EntriesToUpdate = make([]*environments.EnvironmentEntryInput, len(body.EntriesToUpdate))
 		for i, val := range body.EntriesToUpdate {
@@ -140,7 +138,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	} else {
 		v.EntriesToRemove = []string{}
 	}
-	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 
@@ -149,10 +147,10 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 
 // BuildDeleteEnvironmentPayload builds the payload for the environments
 // deleteEnvironment endpoint from CLI flags.
-func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentID string, environmentsDeleteEnvironmentSessionToken string, environmentsDeleteEnvironmentProjectSlug string) (*environments.DeleteEnvironmentPayload, error) {
-	var id string
+func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, environmentsDeleteEnvironmentSessionToken string, environmentsDeleteEnvironmentProjectSlug string) (*environments.DeleteEnvironmentPayload, error) {
+	var slug string
 	{
-		id = environmentsDeleteEnvironmentID
+		slug = environmentsDeleteEnvironmentSlug
 	}
 	var sessionToken *string
 	{
@@ -167,7 +165,7 @@ func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentID string, envir
 		}
 	}
 	v := &environments.DeleteEnvironmentPayload{}
-	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlug = projectSlug
 

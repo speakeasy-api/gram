@@ -28,8 +28,6 @@ type CreateEnvironmentRequestBody struct {
 // UpdateEnvironmentRequestBody is the type of the "environments" service
 // "updateEnvironment" endpoint HTTP request body.
 type UpdateEnvironmentRequestBody struct {
-	// The ID of the environment to update
-	EnvironmentID string `form:"environment_id" json:"environment_id" xml:"environment_id"`
 	// List of environment entries to update or create
 	EntriesToUpdate []*EnvironmentEntryInputRequestBody `form:"entries_to_update" json:"entries_to_update" xml:"entries_to_update"`
 	// List of environment entry names to remove
@@ -147,9 +145,7 @@ func NewCreateEnvironmentRequestBody(p *environments.CreateEnvironmentPayload) *
 // NewUpdateEnvironmentRequestBody builds the HTTP request body from the
 // payload of the "updateEnvironment" endpoint of the "environments" service.
 func NewUpdateEnvironmentRequestBody(p *environments.UpdateEnvironmentPayload) *UpdateEnvironmentRequestBody {
-	body := &UpdateEnvironmentRequestBody{
-		EnvironmentID: p.EnvironmentID,
-	}
+	body := &UpdateEnvironmentRequestBody{}
 	if p.EntriesToUpdate != nil {
 		body.EntriesToUpdate = make([]*EnvironmentEntryInputRequestBody, len(p.EntriesToUpdate))
 		for i, val := range p.EntriesToUpdate {

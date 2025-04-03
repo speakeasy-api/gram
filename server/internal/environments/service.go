@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/gen/environments"
 	srv "github.com/speakeasy-api/gram/gen/http/environments/server"
@@ -140,7 +139,10 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, errors.New("auth not found in context")
 	}
 
-	environment, err := s.repo.GetEnvironment(ctx, uuid.MustParse(payload.EnvironmentID))
+	environment, err := s.repo.GetEnvironment(ctx, repo.GetEnvironmentParams{
+		Slug:      payload.Slug,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +155,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 	for _, updatedEntry := range payload.EntriesToUpdate {
 		if _, err := s.repo.UpdateEnvironmentEntry(ctx, repo.UpdateEnvironmentEntryParams{
-			EnvironmentID: uuid.MustParse(payload.EnvironmentID),
+			EnvironmentID: environment.ID,
 			Name:          updatedEntry.Name,
 			Value:         updatedEntry.Value,
 		}); err != nil {
@@ -162,14 +164,14 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 	for _, removedEntry := range payload.EntriesToRemove {
 		if err := s.repo.DeleteEnvironmentEntry(ctx, repo.DeleteEnvironmentEntryParams{
-			EnvironmentID: uuid.MustParse(payload.EnvironmentID),
+			EnvironmentID: environment.ID,
 			Name:          removedEntry,
 		}); err != nil {
 			return nil, err
 		}
 	}
 
-	entries, err := s.repo.ListEnvironmentEntries(ctx, uuid.MustParse(payload.EnvironmentID))
+	entries, err := s.repo.ListEnvironmentEntries(ctx, environment.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +205,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 	}
 
 	return s.repo.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{
-		ID:        uuid.MustParse(payload.ID),
+		Slug:      payload.Slug,
 		ProjectID: *authCtx.ProjectID,
 	})
 }

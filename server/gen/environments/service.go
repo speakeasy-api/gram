@@ -65,8 +65,8 @@ type CreateEnvironmentPayload struct {
 // DeleteEnvironmentPayload is the payload type of the environments service
 // deleteEnvironment method.
 type DeleteEnvironmentPayload struct {
-	// The ID of the environment to delete
-	ID           string
+	// The slug of the environment to delete
+	Slug         string
 	SessionToken *string
 	ProjectSlug  *string
 }
@@ -128,12 +128,10 @@ type ListEnvironmentsResult struct {
 // UpdateEnvironmentPayload is the payload type of the environments service
 // updateEnvironment method.
 type UpdateEnvironmentPayload struct {
-	// The ID of the environment to update
-	ID           string
 	SessionToken *string
 	ProjectSlug  *string
-	// The ID of the environment to update
-	EnvironmentID string
+	// The slug of the environment to update
+	Slug string
 	// List of environment entries to update or create
 	EntriesToUpdate []*EnvironmentEntryInput
 	// List of environment entry names to remove

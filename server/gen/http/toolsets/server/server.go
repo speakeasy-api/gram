@@ -56,9 +56,9 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateToolset", "POST", "/rpc/toolsets.create"},
 			{"ListToolsets", "GET", "/rpc/toolsets.list"},
-			{"UpdateToolset", "POST", "/rpc/toolsets.update/{id}"},
-			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete/{id}"},
-			{"GetToolsetDetails", "GET", "/rpc/toolsets.get/{id}"},
+			{"UpdateToolset", "POST", "/rpc/toolsets.update/{slug}"},
+			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete/{slug}"},
+			{"GetToolsetDetails", "GET", "/rpc/toolsets.get/{slug}"},
 		},
 		CreateToolset:     NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:      NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
@@ -208,7 +208,7 @@ func MountUpdateToolsetHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/toolsets.update/{id}", otelhttp.WithRouteTag("/rpc/toolsets.update/{id}", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/toolsets.update/{slug}", otelhttp.WithRouteTag("/rpc/toolsets.update/{slug}", f).ServeHTTP)
 }
 
 // NewUpdateToolsetHandler creates a HTTP handler which loads the HTTP request
@@ -259,7 +259,7 @@ func MountDeleteToolsetHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/toolsets.delete/{id}", otelhttp.WithRouteTag("/rpc/toolsets.delete/{id}", f).ServeHTTP)
+	mux.Handle("DELETE", "/rpc/toolsets.delete/{slug}", otelhttp.WithRouteTag("/rpc/toolsets.delete/{slug}", f).ServeHTTP)
 }
 
 // NewDeleteToolsetHandler creates a HTTP handler which loads the HTTP request
@@ -310,7 +310,7 @@ func MountGetToolsetDetailsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/toolsets.get/{id}", otelhttp.WithRouteTag("/rpc/toolsets.get/{id}", f).ServeHTTP)
+	mux.Handle("GET", "/rpc/toolsets.get/{slug}", otelhttp.WithRouteTag("/rpc/toolsets.get/{slug}", f).ServeHTTP)
 }
 
 // NewGetToolsetDetailsHandler creates a HTTP handler which loads the HTTP
