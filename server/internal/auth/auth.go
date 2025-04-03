@@ -51,13 +51,13 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 	case dsecurity.SessionSecurityScheme:
 		return s.sessions.SessionAuth(ctx, key)
 	case dsecurity.ProjectSlugSecuritySchema:
-		return s.checkProjectAccess(ctx, s.logger, s.db, key)
+		return s.checkProjectAccess(ctx, s.logger, key)
 	default:
 		return ctx, errors.New("unsupported security scheme")
 	}
 }
 
-func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, projectSlug string) (context.Context, error) {
+func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok {
 		return ctx, fmt.Errorf("project access: %w", ErrAuthNoSession)
