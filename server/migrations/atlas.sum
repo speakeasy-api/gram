@@ -1,4 +1,4 @@
-h1:Ai1l9o9ktGh9Fd0iC9thukx2nU7uAITp0EQIKqOS6SM=
+h1:0pm2BnooeS47wvN6nZHKF3FeG5fVUek6HzZQjWjPtHU=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
@@ -21,3 +21,4 @@ h1:Ai1l9o9ktGh9Fd0iC9thukx2nU7uAITp0EQIKqOS6SM=
 20250402220415_add_default_environment_to_toolset.sql h1:Tkk5kxy1Vd+FzS5DaTgOFgN3D+WTXlW6iRpknOjYoCY=
 20250403183818_add-tags-to-http-tools.sql h1:aFPbU8dPOidREfWSnhpR5VvnYIQ56zYBnsXiCjVOaiU=
 20250403210847_deployments_seq.sql h1:zr7nVdh1eOKs8+hGqzK7+h4BoaZ5XmuUSmMvfvwW8zo=
+20250403212636_http_tool_definitions_deployment_id.sql h1:jdDXUY3A60QdrnRlZw36DLYWprFN3P+SMcirJQdGESk=
