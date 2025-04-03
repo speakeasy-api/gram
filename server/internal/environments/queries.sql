@@ -50,7 +50,7 @@ SET
     description = COALESCE(@description, description),
     updated_at = now()
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted;
+RETURNING id, organization_id, project_id, name, slug, description, updated_at, deleted;
 
 -- name: ListEnvironmentEntries :many
 SELECT 
@@ -86,12 +86,13 @@ VALUES (
 )
 RETURNING *;
 
--- name: UpdateEnvironmentEntry :one
-UPDATE environment_entries
-SET 
-    value = $3,
+-- name: UpsertEnvironmentEntry :one
+INSERT INTO environment_entries (environment_id, name, value, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (environment_id, name) 
+DO UPDATE SET 
+    value = EXCLUDED.value,
     updated_at = now()
-WHERE environment_id = $1 AND name = $2
 RETURNING *;
 
 -- name: DeleteEnvironmentEntry :exec

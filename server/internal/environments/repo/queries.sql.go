@@ -311,7 +311,7 @@ SET
     description = COALESCE($2, description),
     updated_at = now()
 WHERE slug = $3 AND project_id = $4 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, updated_at, deleted
 `
 
 type UpdateEnvironmentParams struct {
@@ -328,7 +328,6 @@ type UpdateEnvironmentRow struct {
 	Name           string
 	Slug           string
 	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	Deleted        bool
 }
@@ -348,30 +347,30 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 		&i.Name,
 		&i.Slug,
 		&i.Description,
-		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Deleted,
 	)
 	return i, err
 }
 
-const updateEnvironmentEntry = `-- name: UpdateEnvironmentEntry :one
-UPDATE environment_entries
-SET 
-    value = $3,
+const upsertEnvironmentEntry = `-- name: UpsertEnvironmentEntry :one
+INSERT INTO environment_entries (environment_id, name, value, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (environment_id, name) 
+DO UPDATE SET 
+    value = EXCLUDED.value,
     updated_at = now()
-WHERE environment_id = $1 AND name = $2
 RETURNING name, value, environment_id, created_at, updated_at
 `
 
-type UpdateEnvironmentEntryParams struct {
+type UpsertEnvironmentEntryParams struct {
 	EnvironmentID uuid.UUID
 	Name          string
 	Value         string
 }
 
-func (q *Queries) UpdateEnvironmentEntry(ctx context.Context, arg UpdateEnvironmentEntryParams) (EnvironmentEntry, error) {
-	row := q.db.QueryRow(ctx, updateEnvironmentEntry, arg.EnvironmentID, arg.Name, arg.Value)
+func (q *Queries) UpsertEnvironmentEntry(ctx context.Context, arg UpsertEnvironmentEntryParams) (EnvironmentEntry, error) {
+	row := q.db.QueryRow(ctx, upsertEnvironmentEntry, arg.EnvironmentID, arg.Name, arg.Value)
 	var i EnvironmentEntry
 	err := row.Scan(
 		&i.Name,

@@ -184,7 +184,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 
 	for _, updatedEntry := range payload.EntriesToUpdate {
-		if _, err := s.repo.UpdateEnvironmentEntry(ctx, repo.UpdateEnvironmentEntryParams{
+		if _, err := s.repo.UpsertEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
 			Name:          updatedEntry.Name,
 			Value:         updatedEntry.Value,
