@@ -1,14 +1,14 @@
 package assets
 
 import (
-	"github.com/speakeasy-api/gram/design/sessions"
+	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("assets", func() {
 	Description("Manages assets used by Gram projects.")
 
-	Security(sessions.Session)
+	Security(security.Session)
 
 	Method("uploadOpenAPIv3", func() {
 		Description("Upload an OpenAPI v3 document to Gram.")
@@ -23,8 +23,8 @@ var _ = Service("assets", func() {
 			POST("/rpc/assets.uploadOpenAPIv3")
 			Header("content_type:Content-Type")
 			Header("content_length:Content-Length")
-			sessions.ProjectHeader()
-			sessions.SessionHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
 			SkipRequestBodyEncodeDecode()
 		})
 
@@ -34,8 +34,8 @@ var _ = Service("assets", func() {
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
 	Required("content_type", "content_length")
-	sessions.SessionPayload()
-	sessions.ProjectPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)

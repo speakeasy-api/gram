@@ -1,8 +1,16 @@
-package sessions
+package contextvalues
 
-import "context"
+import (
+	"context"
+)
 
 type contextKey string
+
+type AuthContext struct {
+	SessionID            *string
+	ActiveOrganizationID string
+	UserID               string
+}
 
 const (
 	SessionTokenContextKey contextKey = "sessionTokenKey"
@@ -18,11 +26,11 @@ func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	return value, ok
 }
 
-func SetSessionValueInContext(ctx context.Context, value *Session) context.Context {
+func SetAuthContext(ctx context.Context, value *AuthContext) context.Context {
 	return context.WithValue(ctx, SessionValueContextKey, value)
 }
 
-func GetSessionValueFromContext(ctx context.Context) (*Session, bool) {
-	value, ok := ctx.Value(SessionValueContextKey).(*Session)
+func GetAuthContext(ctx context.Context) (*AuthContext, bool) {
+	value, ok := ctx.Value(SessionValueContextKey).(*AuthContext)
 	return value, ok
 }

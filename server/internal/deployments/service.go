@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/sessions"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -22,16 +21,16 @@ import (
 )
 
 type Service struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	sessions *sessions.Sessions
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	repo   *repo.Queries
+	auth   *auth.Auth
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New(logger)}
+	return &Service{logger: logger, db: db, repo: repo.New(db), auth: auth.New(logger, db)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
@@ -235,5 +234,5 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.SessionAuth(ctx, key)
+	return s.auth.Authorize(ctx, key, schema)
 }

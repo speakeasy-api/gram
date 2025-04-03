@@ -1,27 +1,27 @@
 package keys
 
 import (
-	"github.com/speakeasy-api/gram/design/sessions"
+	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("keys", func() {
 	Description("Managing system api keys.")
-	Security(sessions.Session)
+	Security(security.Session)
 
 	Method("createKey", func() {
 		Description("Create a new api key")
 
 		Payload(func() {
 			Extend(CreateKeyForm)
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		Result(KeyModel)
 
 		HTTP(func() {
 			POST("/rpc/keys.create")
-			sessions.SessionHeader()
+			security.SessionHeader()
 			Response(StatusOK)
 		})
 
@@ -32,14 +32,14 @@ var _ = Service("keys", func() {
 		Description("List all api keys for an organization")
 
 		Payload(func() {
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		Result(ListKeysResult)
 
 		HTTP(func() {
 			GET("/rpc/keys.list")
-			sessions.SessionHeader()
+			security.SessionHeader()
 			Response(StatusOK)
 		})
 
@@ -52,13 +52,13 @@ var _ = Service("keys", func() {
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to revoke")
 			Required("id")
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		HTTP(func() {
 			Param("id")
 			DELETE("/rpc/keys.revoke/{id}")
-			sessions.SessionHeader()
+			security.SessionHeader()
 			Response(StatusOK)
 		})
 

@@ -12,18 +12,17 @@ const (
 )
 
 type Session struct {
-	ID                   string
+	SessionID            string
 	ActiveOrganizationID string
 	UserID               string
-	UserEmail            string
 }
 
-func SessionCacheKey(ID string) string {
-	return "sessions:" + ID
+func SessionCacheKey(sessionID string) string {
+	return "sessions:" + sessionID
 }
 
 func (s Session) CacheKey() string {
-	return SessionCacheKey(s.ID)
+	return SessionCacheKey(s.SessionID)
 }
 
 func (s Session) AdditionalCacheKeys() []string {

@@ -1,13 +1,13 @@
 package auth
 
 import (
-	"github.com/speakeasy-api/gram/design/sessions"
+	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
-	Security(sessions.Session)
+	Security(security.Session)
 
 	Method("callback", func() {
 		Description("Handles the authentication callback.")
@@ -33,8 +33,8 @@ var _ = Service("auth", func() {
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
 				})
-				sessions.WriteSessionCookie()
-				sessions.SessionHeader()
+				security.WriteSessionCookie()
+				security.SessionHeader()
 			})
 		})
 
@@ -47,7 +47,7 @@ var _ = Service("auth", func() {
 		Payload(func() {
 			Attribute("organization_id", String, "The organization slug to switch scopes")
 			Attribute("project_id", String, "The project id to switch scopes too")
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		Result(func() {
@@ -60,10 +60,10 @@ var _ = Service("auth", func() {
 			POST("/rpc/auth.switchScopes")
 			Param("organization_id")
 			Param("project_id")
-			sessions.SessionHeader()
+			security.SessionHeader()
 			Response(StatusOK, func() {
-				sessions.WriteSessionCookie()
-				sessions.SessionHeader()
+				security.WriteSessionCookie()
+				security.SessionHeader()
 			})
 		})
 
@@ -74,7 +74,7 @@ var _ = Service("auth", func() {
 		Description("Logs out the current user by clearing their session.")
 
 		Payload(func() {
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		Result(func() {
@@ -84,10 +84,10 @@ var _ = Service("auth", func() {
 
 		HTTP(func() {
 			GET("/rpc/auth.logout")
-			sessions.SessionHeader()
+			security.SessionHeader()
 
 			Response(StatusOK, func() {
-				sessions.DeleteSessionCookie()
+				security.DeleteSessionCookie()
 			})
 		})
 
@@ -99,7 +99,7 @@ var _ = Service("auth", func() {
 		Description("Provides information about the current authentication status.")
 
 		Payload(func() {
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		Result(func() {
@@ -114,11 +114,11 @@ var _ = Service("auth", func() {
 
 		HTTP(func() {
 			GET("/rpc/auth.info")
-			sessions.SessionHeader()
+			security.SessionHeader()
 
 			Response(StatusOK, func() {
-				sessions.WriteSessionCookie()
-				sessions.SessionHeader()
+				security.WriteSessionCookie()
+				security.SessionHeader()
 			})
 		})
 

@@ -1,4 +1,4 @@
-package sessions
+package security
 
 import (
 	. "goa.design/goa/v3/dsl"

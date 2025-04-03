@@ -1,16 +1,18 @@
-package sessions
+package security
 
 import (
 	. "goa.design/goa/v3/dsl"
 )
 
+const GramSessionSecurityScheme = "session"
+
 // Session defines the security scheme for session-based authentication
-var Session = APIKeySecurity("session", func() {
+var Session = APIKeySecurity(GramSessionSecurityScheme, func() {
 	Description("Session based auth. By cookie or header.")
 })
 
 var SessionPayload = func() {
-	APIKey("session", "session_token", String)
+	APIKey(GramSessionSecurityScheme, "session_token", String)
 }
 
 var WriteSessionCookie = func() {

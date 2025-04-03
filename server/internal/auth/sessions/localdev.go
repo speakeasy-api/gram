@@ -97,9 +97,8 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 			s.logger.WarnContext(ctx, "failed to invalidate user info cache", slog.String("error", err.Error()))
 		}
 		gramSession = &Session{
-			ID:                   uuid.NewString(),
+			SessionID:            uuid.NewString(),
 			UserID:               userID,
-			UserEmail:            userInfo.UserEmail,
 			ActiveOrganizationID: userInfo.Organizations[0].OrgID,
 		}
 		break
@@ -114,5 +113,5 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 		return "", fmt.Errorf("failed to store session in cache: %w", err)
 	}
 
-	return gramSession.ID, nil
+	return gramSession.SessionID, nil
 }

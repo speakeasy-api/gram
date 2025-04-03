@@ -6,8 +6,9 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/projects"
-	"github.com/speakeasy-api/gram/internal/sessions"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -15,6 +16,7 @@ import (
 	srv "github.com/speakeasy-api/gram/gen/http/auth/server"
 )
 
+// Service for gram dashboard authentication endpoints
 type Service struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
@@ -25,7 +27,7 @@ type Service struct {
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, sessions: sessions.New(logger), projects: projects.NewService(logger, db)}
+	return &Service{logger: logger, db: db, sessions: sessions.NewSessionAuth(logger), projects: projects.NewService(logger, db)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
@@ -44,12 +46,12 @@ func (s *Service) Callback(context.Context, *gen.CallbackPayload) (res *gen.Call
 }
 
 func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, errors.New("session not found in context")
 	}
 
-	userInfo, err := s.sessions.GetUserInfo(ctx, session.UserID)
+	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -65,37 +67,45 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		if !orgFound {
 			return nil, errors.New("organization not found")
 		}
-		session.ActiveOrganizationID = *payload.OrganizationID
+		authCtx.ActiveOrganizationID = *payload.OrganizationID
 	}
 
-	if err := s.sessions.UpdateSession(ctx, *session); err != nil {
+	if err := s.sessions.UpdateSession(ctx, sessions.Session{
+		SessionID:            *authCtx.SessionID,
+		ActiveOrganizationID: authCtx.ActiveOrganizationID,
+		UserID:               authCtx.UserID,
+	}); err != nil {
 		return nil, err
 	}
 
 	return &gen.SwitchScopesResult{
-		SessionToken:  session.ID,
-		SessionCookie: session.ID,
+		SessionToken:  *authCtx.SessionID,
+		SessionCookie: *authCtx.SessionID,
 	}, nil
 }
 
 func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *gen.LogoutResult, err error) {
 	// Clears cookie and invalidates session
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, errors.New("session not found in context")
 	}
-	if err := s.sessions.ClearSession(ctx, *session); err != nil {
+	if err := s.sessions.ClearSession(ctx, sessions.Session{
+		SessionID:            *authCtx.SessionID,
+		ActiveOrganizationID: authCtx.ActiveOrganizationID,
+		UserID:               authCtx.UserID,
+	}); err != nil {
 		return nil, err
 	}
 	return &gen.LogoutResult{SessionCookie: ""}, nil
 }
 func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.InfoResult, err error) {
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, errors.New("session not found in context")
 	}
 
-	userInfo, err := s.sessions.GetUserInfo(ctx, session.UserID)
+	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,9 +136,9 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}
 
 	return &gen.InfoResult{
-		SessionToken:         session.ID,
-		SessionCookie:        session.ID,
-		ActiveOrganizationID: session.ActiveOrganizationID,
+		SessionToken:         *authCtx.SessionID,
+		SessionCookie:        *authCtx.SessionID,
+		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,
 		Organizations:        organizations,

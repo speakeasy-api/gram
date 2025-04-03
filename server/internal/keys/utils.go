@@ -11,8 +11,8 @@ const keyPrefix = "gram_"
 const randomKeyLength = 64
 
 const (
-	APIKeyScopesReadConsumer  APIKeyScopes = "read:consumer"  // allows read access as a tool consumer
-	APIKeyScopesWriteConsumer APIKeyScopes = "write:consumer" // allows write access (execution) as a tool consumer
+	APIKeyScopesConsumer APIKeyScopes = "consumer" // allows api key access a tool consumer
+	APIKeyScopesProducer APIKeyScopes = "producer" // allows api key access a tool producer
 )
 
 func generateKey() (string, error) {

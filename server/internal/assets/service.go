@@ -25,14 +25,13 @@ import (
 	"github.com/speakeasy-api/gram/internal/assets/repo"
 	"github.com/speakeasy-api/gram/internal/auth"
 	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
-	"github.com/speakeasy-api/gram/internal/sessions"
 )
 
 type Service struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	sessions *sessions.Sessions
-	storage  BlobStore
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	auth    *auth.Auth
+	storage BlobStore
 
 	projects *projectsRepo.Queries
 	repo     *repo.Queries
@@ -45,7 +44,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, storage BlobStore) *Servi
 	return &Service{
 		logger:   logger,
 		db:       db,
-		sessions: sessions.New(logger),
+		auth:     auth.New(logger, db),
 		storage:  storage,
 		projects: projectsRepo.New(db),
 		repo:     repo.New(db),
@@ -61,7 +60,7 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.SessionAuth(ctx, key)
+	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Payload, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {

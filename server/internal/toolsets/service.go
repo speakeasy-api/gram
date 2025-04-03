@@ -13,25 +13,25 @@ import (
 	srv "github.com/speakeasy-api/gram/gen/http/toolsets/server"
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
 	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/must"
-	"github.com/speakeasy-api/gram/internal/sessions"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 )
 
 type Service struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	sessions *sessions.Sessions
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	repo   *repo.Queries
+	auth   *auth.Auth
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New(logger)}
+	return &Service{logger: logger, db: db, repo: repo.New(db), auth: auth.New(logger, db)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
@@ -43,8 +43,8 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 }
 
 func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*gen.Toolset, error) {
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
 		return nil, errors.New("session not found in context")
 	}
 
@@ -54,7 +54,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	createToolParams := repo.CreateToolsetParams{
-		OrganizationID: session.ActiveOrganizationID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      access.ProjectID,
 		Name:           payload.Name,
 		Slug:           conv.ToSlug(payload.Name),
@@ -300,5 +300,5 @@ func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolset
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.SessionAuth(ctx, key)
+	return s.auth.Authorize(ctx, key, schema)
 }

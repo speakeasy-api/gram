@@ -1,29 +1,29 @@
 package environments
 
 import (
-	"github.com/speakeasy-api/gram/design/sessions"
+	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("environments", func() {
 	Description("Managing toolset environments.")
-	Security(sessions.Session)
+	Security(security.Session)
 
 	Method("createEnvironment", func() {
 		Description("Create a new environment")
 
 		Payload(func() {
 			Extend(CreateEnvironmentForm)
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(Environment)
 
 		HTTP(func() {
 			POST("/rpc/environments.create")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -34,16 +34,16 @@ var _ = Service("environments", func() {
 		Description("List all environments for an organization")
 
 		Payload(func() {
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(ListEnvironmentsResult)
 
 		HTTP(func() {
 			GET("/rpc/environments.list")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -57,8 +57,8 @@ var _ = Service("environments", func() {
 			Extend(UpdateEnvironmentForm)
 			Attribute("id", String, "The ID of the environment to update")
 			Required("id")
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(Environment)
@@ -66,8 +66,8 @@ var _ = Service("environments", func() {
 		HTTP(func() {
 			POST("/rpc/environments.update/{id}")
 			Param("id")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -80,15 +80,15 @@ var _ = Service("environments", func() {
 		Payload(func() {
 			Attribute("id", String, "The ID of the environment to delete")
 			Required("id")
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/environments.delete/{id}")
 			Param("id")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

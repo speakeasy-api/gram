@@ -1,28 +1,28 @@
 package toolsets
 
 import (
-	"github.com/speakeasy-api/gram/design/sessions"
+	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("toolsets", func() {
 	Description("Managed toolsets for gram AI consumers.")
-	Security(sessions.Session)
+	Security(security.Session)
 
 	Method("createToolset", func() {
 		Description("Create a new toolset with associated tools")
 
 		Payload(func() {
 			Extend(CreateToolsetForm)
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		Result(Toolset)
 
 		HTTP(func() {
 			POST("/rpc/toolsets.create")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -33,16 +33,16 @@ var _ = Service("toolsets", func() {
 		Description("List all toolsets for a project")
 
 		Payload(func() {
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(ListToolsetsResult)
 
 		HTTP(func() {
 			GET("/rpc/toolsets.list")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -54,7 +54,7 @@ var _ = Service("toolsets", func() {
 
 		Payload(func() {
 			Extend(UpdateToolsetForm)
-			sessions.SessionPayload()
+			security.SessionPayload()
 		})
 
 		Result(Toolset)
@@ -62,8 +62,8 @@ var _ = Service("toolsets", func() {
 		HTTP(func() {
 			Param("id")
 			POST("/rpc/toolsets.update/{id}")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -76,14 +76,14 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Attribute("id", String, "The ID of the toolset")
 			Required("id")
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			Param("id")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			DELETE("/rpc/toolsets.delete/{id}")
 			Response(StatusNoContent)
 		})
@@ -97,16 +97,16 @@ var _ = Service("toolsets", func() {
 		Payload(func() {
 			Attribute("id", String, "The ID of the toolset")
 			Required("id")
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(ToolsetDetails)
 
 		HTTP(func() {
 			Param("id")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			GET("/rpc/toolsets.get/{id}")
 			Response(StatusOK)
 		})
@@ -120,7 +120,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs to include")
 	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
-	sessions.ProjectPayload()
+	security.ProjectPayload()
 	Required("name")
 })
 
@@ -156,7 +156,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
 	Attribute("http_tool_ids_to_add", ArrayOf(String), "HTTP tool IDs to add to the toolset")
 	Attribute("http_tool_ids_to_remove", ArrayOf(String), "HTTP tool IDs to remove from the toolset")
-	sessions.ProjectPayload()
+	security.ProjectPayload()
 	Required("id")
 })
 

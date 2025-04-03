@@ -10,24 +10,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/gen/http/keys/server"
 	gen "github.com/speakeasy-api/gram/gen/keys"
+	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/keys/repo"
-	"github.com/speakeasy-api/gram/internal/sessions"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 )
 
 type Service struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	sessions *sessions.Sessions
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	repo   *repo.Queries
+	auth   *auth.Auth
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), sessions: sessions.New(logger)}
+	return &Service{logger: logger, db: db, repo: repo.New(db), auth: auth.New(logger, db)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
@@ -39,9 +40,9 @@ func Attach(mux goahttp.Muxer, service gen.Service) {
 }
 
 func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) (*gen.Key, error) {
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
-		return nil, errors.New("session not found in context")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, errors.New("auth not found in context")
 	}
 
 	token, err := generateKey()
@@ -50,11 +51,11 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	}
 
 	createdKey, err := s.repo.CreateAPIKey(ctx, repo.CreateAPIKeyParams{
-		OrganizationID:  session.ActiveOrganizationID,
+		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            payload.Name,
 		Token:           token,
-		Scopes:          []string{string(APIKeyScopesReadConsumer), string(APIKeyScopesWriteConsumer)}, // these are the only default scopes for now
-		CreatedByUserID: session.UserID,
+		Scopes:          []string{string(APIKeyScopesConsumer)}, // this is the only default scopes for now
+		CreatedByUserID: authCtx.UserID,
 	})
 
 	if err != nil {
@@ -74,12 +75,12 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 }
 
 func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*gen.ListKeysResult, error) {
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
 		return nil, errors.New("session not found in context")
 	}
 
-	keys, err := s.repo.ListAPIKeysByOrganization(ctx, session.ActiveOrganizationID)
+	keys, err := s.repo.ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,17 +103,17 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 }
 
 func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) (err error) {
-	session, ok := sessions.GetSessionValueFromContext(ctx)
-	if !ok || session == nil {
-		return errors.New("session not found in context")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return errors.New("auth not found in context")
 	}
 
 	return s.repo.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
 		ID:             uuid.MustParse(payload.ID),
-		OrganizationID: session.ActiveOrganizationID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.SessionAuth(ctx, key)
+	return s.auth.Authorize(ctx, key, schema)
 }

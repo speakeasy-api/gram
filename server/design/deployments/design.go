@@ -1,30 +1,30 @@
 package deployments
 
 import (
-	"github.com/speakeasy-api/gram/design/sessions"
+	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("deployments", func() {
 	Description("Manages deployments of tools from upstream sources.")
 
-	Security(sessions.Session)
+	Security(security.Session)
 
 	Method("getDeployment", func() {
 		Description("Create a deployment to load tool definitions.")
 
 		Payload(func() {
 			Extend(GetDeploymentForm)
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(GetDeploymentResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.get")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Param("id")
 			Response(StatusOK)
 		})
@@ -37,16 +37,16 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(CreateDeploymentForm)
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(CreateDeploymentResult)
 
 		HTTP(func() {
 			POST("/rpc/deployments.create")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Header("idempotency_key:Idempotency-Key")
 			Response(StatusOK)
 		})
@@ -59,16 +59,16 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(ListDeploymentForm)
-			sessions.SessionPayload()
-			sessions.ProjectPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(ListDeploymentResult)
 
 		HTTP(func() {
 			GET("/rpc/deployments.list")
-			sessions.SessionHeader()
-			sessions.ProjectHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
 			Param("cursor")
 			Response(StatusOK)
 		})

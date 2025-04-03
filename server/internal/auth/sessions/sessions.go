@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/speakeasy-api/gram/internal/cache"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 )
 
 type Sessions struct {
@@ -15,7 +16,7 @@ type Sessions struct {
 	userInfoCache cache.Cache[CachedUserInfo]
 }
 
-func New(logger *slog.Logger) *Sessions {
+func NewSessionAuth(logger *slog.Logger) *Sessions {
 	return &Sessions{
 		logger:        logger.With("component", "sessions"),
 		sessionCache:  cache.New[Session](logger.With("cache", "session"), sessionCacheExpiry),
@@ -26,7 +27,7 @@ func New(logger *slog.Logger) *Sessions {
 func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context, error) {
 	if key == "" {
 		// This may have been set via cookie from http middleware, GOA does not support natively
-		key, _ = GetSessionTokenFromContext(ctx)
+		key, _ = contextvalues.GetSessionTokenFromContext(ctx)
 	}
 
 	if key == "" {
@@ -51,7 +52,11 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 		return ctx, errors.New("user does not have access to organization")
 	}
 
-	ctx = SetSessionValueInContext(ctx, &session)
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		SessionID:            &session.SessionID,
+		ActiveOrganizationID: session.ActiveOrganizationID,
+		UserID:               session.UserID,
+	})
 
 	return ctx, nil
 }
