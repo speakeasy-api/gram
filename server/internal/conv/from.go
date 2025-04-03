@@ -48,12 +48,13 @@ func FromBytes(b []byte) *string {
 	return &s
 }
 
-var cleanSlugRegex = regexp.MustCompile(`[^a-zA-Z0-9 ]+`)
+var cleanSlugRegex = regexp.MustCompile(`[^a-zA-Z0-9\s-]`) // Remove special characters leaving dashes
+var dashCollapseRegex = regexp.MustCompile(`[-\s]+`)       // collapses multiple dashes or spaces into a single dash
 
 func ToSlug(s string) string {
 	s = cleanSlugRegex.ReplaceAllString(s, "")
 	s = strings.ToLower(s)
-	s = strings.TrimSpace(s)
-	s = strings.ReplaceAll(s, " ", "-")
+	s = dashCollapseRegex.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-") // trim leading and trailing dashes
 	return s
 }
