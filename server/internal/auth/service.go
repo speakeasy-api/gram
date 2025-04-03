@@ -116,7 +116,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	for i, org := range userInfo.Organizations {
 		// TODO: Not the cleanest but a temporary measue while in POC phase.
 		// This may actually be bettter executed from elsewhere
-		projectRows, err := s.projects.GetProjectsOrSetuptDefaults(ctx, org.OrganizationID)
+		projectRows, err := s.projects.GetProjectsOrSetupDefaults(ctx, org.OrganizationID)
 		if err != nil {
 			return nil, err
 		}

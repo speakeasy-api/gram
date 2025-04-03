@@ -26,7 +26,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
 	return &Service{logger: logger, db: db, repo: repo.New(db), envRepo: envrepo.New(db)}
 }
 
-func (s *Service) GetProjectsOrSetuptDefaults(ctx context.Context, organizationID string) ([]repo.Project, error) {
+func (s *Service) GetProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]repo.Project, error) {
 	projects, err := s.repo.ListProjectsByOrganization(ctx, organizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to list projects by organization", slog.String("error", err.Error()))
