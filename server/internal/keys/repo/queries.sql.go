@@ -81,7 +81,7 @@ UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = $1
   AND organization_id = $2
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 `
 
 type DeleteAPIKeyParams struct {
@@ -109,7 +109,7 @@ SELECT
   , deleted
 FROM api_keys
 WHERE token = $1
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 `
 
 func (q *Queries) GetAPIKeyByToken(ctx context.Context, token string) (ApiKey, error) {
@@ -146,7 +146,7 @@ SELECT
   , deleted
 FROM api_keys
 WHERE organization_id = $1
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 ORDER BY created_at DESC
 `
 

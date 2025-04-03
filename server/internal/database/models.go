@@ -40,6 +40,7 @@ type Asset struct {
 
 type Deployment struct {
 	ID             uuid.UUID
+	Seq            int64
 	UserID         string
 	ProjectID      uuid.UUID
 	OrganizationID string
@@ -109,6 +110,7 @@ type HttpToolDefinition struct {
 	ID                  uuid.UUID
 	OrganizationID      string
 	ProjectID           uuid.UUID
+	DeploymentID        uuid.NullUUID
 	Openapiv3DocumentID uuid.NullUUID
 	Name                string
 	Description         string

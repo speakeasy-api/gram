@@ -102,7 +102,7 @@ const deleteToolset = `-- name: DeleteToolset :exec
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
 WHERE slug = $1
-  AND project_id = $2
+  AND project_id = $2 AND deleted IS FALSE
 `
 
 type DeleteToolsetParams struct {
@@ -141,7 +141,7 @@ SELECT
   , deleted
 FROM http_tool_definitions
 WHERE id = ANY($1::uuid[])
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 `
 
 type GetHTTPToolDefinitionsRow struct {
@@ -227,7 +227,7 @@ SELECT
   , deleted_at
   , deleted
 FROM toolsets
-WHERE slug = $1 AND project_id = $2
+WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
 type GetToolsetParams struct {
@@ -286,7 +286,7 @@ SELECT
   , deleted
 FROM toolsets
 WHERE project_id = $1
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 ORDER BY created_at DESC
 `
 

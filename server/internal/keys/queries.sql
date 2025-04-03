@@ -42,7 +42,7 @@ SELECT
   , deleted
 FROM api_keys
 WHERE token = @token
-  AND deleted_at IS NULL;
+  AND deleted IS FALSE;
 
 -- name: ListAPIKeysByOrganization :many
 SELECT 
@@ -59,7 +59,7 @@ SELECT
   , deleted
 FROM api_keys
 WHERE organization_id = @organization_id
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 ORDER BY created_at DESC;
 
 -- name: DeleteAPIKey :exec
@@ -67,4 +67,4 @@ UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = @id
   AND organization_id = @organization_id
-  AND deleted_at IS NULL;
+  AND deleted IS FALSE;

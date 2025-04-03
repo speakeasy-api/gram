@@ -14,13 +14,13 @@ INSERT INTO environments (
 -- name: ListEnvironments :many
 SELECT e.*
 FROM environments e
-WHERE e.project_id = $1 AND e.deleted_at IS NULL
+WHERE e.project_id = $1 AND e.deleted IS FALSE
 ORDER BY e.created_at DESC;
 
 -- name: GetEnvironment :one
 SELECT e.*
 FROM environments e
-WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted_at IS NULL;
+WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE;
 
 -- name: ListEnvironmentEntries :many
 SELECT 
@@ -30,13 +30,13 @@ SELECT
     ee.updated_at as updated_at,
     ee.deleted_at as deleted_at
 FROM environment_entries ee
-WHERE ee.environment_id = $1 AND ee.deleted_at IS NULL
+WHERE ee.environment_id = $1 AND ee.deleted IS FALSE
 ORDER BY ee.name ASC;
 
 -- name: DeleteEnvironment :exec
 UPDATE environments
 SET deleted_at = now()
-WHERE slug = $1 AND project_id = $2 AND deleted_at IS NULL;
+WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE;
 
 -- name: CreateEnvironmentEntries :many
 INSERT INTO environment_entries (

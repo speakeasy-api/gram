@@ -39,9 +39,12 @@ CREATE TABLE IF NOT EXISTS projects (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT projects_pkey PRIMARY KEY (id),
-  CONSTRAINT projects_organization_id_slug_key UNIQUE (organization_id, slug)
+  CONSTRAINT projects_pkey PRIMARY KEY (id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS projects_organization_id_slug_key
+ON projects (organization_id, slug)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -141,9 +144,12 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
   CONSTRAINT api_keys_pkey PRIMARY KEY (id),
   CONSTRAINT api_keys_token_key UNIQUE (token),
-  CONSTRAINT api_keys_organization_id_name_key UNIQUE (organization_id, name),
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
+ON api_keys (organization_id, name)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -230,9 +236,12 @@ CREATE TABLE IF NOT EXISTS environments (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT environments_pkey PRIMARY KEY (id),
-  CONSTRAINT environments_project_id_slug_key UNIQUE (project_id, slug),
   CONSTRAINT environments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
+ON environments (project_id, slug)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS environment_entries (
   name text NOT NULL,
@@ -265,6 +274,9 @@ CREATE TABLE IF NOT EXISTS toolsets (
 
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
   CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_project_id_slug_key UNIQUE (project_id, slug),
   CONSTRAINT toolsets_default_environment_id_fkey FOREIGN key (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
+ON toolsets (project_id, slug)
+WHERE deleted IS FALSE;

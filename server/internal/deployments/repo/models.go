@@ -11,6 +11,7 @@ import (
 
 type Deployment struct {
 	ID             uuid.UUID
+	Seq            int64
 	UserID         string
 	ProjectID      uuid.UUID
 	OrganizationID string

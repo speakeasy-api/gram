@@ -107,7 +107,7 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 }
 
 const getDeployment = `-- name: GetDeployment :one
-SELECT id, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
+SELECT id, seq, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
 FROM deployments
 WHERE id = $1
 `
@@ -117,6 +117,7 @@ func (q *Queries) GetDeployment(ctx context.Context, id uuid.UUID) (Deployment, 
 	var i Deployment
 	err := row.Scan(
 		&i.ID,
+		&i.Seq,
 		&i.UserID,
 		&i.ProjectID,
 		&i.OrganizationID,
@@ -133,7 +134,7 @@ func (q *Queries) GetDeployment(ctx context.Context, id uuid.UUID) (Deployment, 
 }
 
 const getDeploymentByIdempotencyKey = `-- name: GetDeploymentByIdempotencyKey :one
-SELECT id, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
+SELECT id, seq, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
 FROM deployments
 WHERE idempotency_key = $1
  AND project_id = $2
@@ -149,6 +150,7 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 	var i Deployment
 	err := row.Scan(
 		&i.ID,
+		&i.Seq,
 		&i.UserID,
 		&i.ProjectID,
 		&i.OrganizationID,
@@ -197,7 +199,7 @@ func (q *Queries) GetDeploymentOpenAPIv3(ctx context.Context, deploymentID uuid.
 }
 
 const getDeploymentWithAssets = `-- name: GetDeploymentWithAssets :many
-SELECT deployments.id, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug
+SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 WHERE deployments.id = $1 AND deployments.project_id = $2
@@ -224,6 +226,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 		var i GetDeploymentWithAssetsRow
 		if err := rows.Scan(
 			&i.Deployment.ID,
+			&i.Deployment.Seq,
 			&i.Deployment.UserID,
 			&i.Deployment.ProjectID,
 			&i.Deployment.OrganizationID,

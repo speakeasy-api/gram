@@ -65,7 +65,7 @@ SELECT
   , deleted_at
   , deleted
 FROM projects
-WHERE id = $1
+WHERE id = $1 AND deleted IS FALSE
 `
 
 func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
@@ -96,7 +96,7 @@ SELECT
   , deleted
 FROM projects
 WHERE organization_id = $1
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 ORDER BY created_at DESC
 `
 

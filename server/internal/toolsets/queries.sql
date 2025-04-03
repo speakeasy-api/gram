@@ -13,7 +13,7 @@ SELECT
   , deleted_at
   , deleted
 FROM toolsets
-WHERE slug = @slug AND project_id = @project_id;
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: CreateToolset :one
 INSERT INTO toolsets (
@@ -63,7 +63,7 @@ SELECT
   , deleted
 FROM toolsets
 WHERE project_id = @project_id
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 ORDER BY created_at DESC;
 
 -- name: UpdateToolset :one
@@ -93,7 +93,7 @@ RETURNING
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
 WHERE slug = @slug
-  AND project_id = @project_id;
+  AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: GetHTTPToolDefinitions :many
 SELECT 
@@ -121,5 +121,5 @@ SELECT
   , deleted
 FROM http_tool_definitions
 WHERE id = ANY(@ids::uuid[])
-  AND deleted_at IS NULL;
+  AND deleted IS FALSE;
 

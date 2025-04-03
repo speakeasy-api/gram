@@ -21,7 +21,7 @@ SELECT
   , deleted
 FROM projects
 WHERE organization_id = $1
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 ORDER BY created_at DESC
 `
 

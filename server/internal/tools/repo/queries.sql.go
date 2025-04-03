@@ -37,7 +37,7 @@ SELECT
 , updated_at
 FROM http_tool_definitions
 WHERE project_id = $1 
-  AND deleted = false
+  AND deleted IS FALSE
   AND ($2::uuid IS NULL OR id < $2)
 ORDER BY id DESC
 LIMIT 100

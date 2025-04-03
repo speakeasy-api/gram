@@ -112,7 +112,7 @@ func (q *Queries) CreateEnvironmentEntries(ctx context.Context, arg CreateEnviro
 const deleteEnvironment = `-- name: DeleteEnvironment :exec
 UPDATE environments
 SET deleted_at = now()
-WHERE slug = $1 AND project_id = $2 AND deleted_at IS NULL
+WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
 type DeleteEnvironmentParams struct {
@@ -144,7 +144,7 @@ func (q *Queries) DeleteEnvironmentEntry(ctx context.Context, arg DeleteEnvironm
 const getEnvironment = `-- name: GetEnvironment :one
 SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.created_at, e.updated_at, e.deleted_at, e.deleted
 FROM environments e
-WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted_at IS NULL
+WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE
 `
 
 type GetEnvironmentParams struct {
@@ -177,7 +177,7 @@ SELECT
     ee.updated_at as updated_at,
     ee.deleted_at as deleted_at
 FROM environment_entries ee
-WHERE ee.environment_id = $1 AND ee.deleted_at IS NULL
+WHERE ee.environment_id = $1 AND ee.deleted IS FALSE
 ORDER BY ee.name ASC
 `
 
@@ -218,7 +218,7 @@ func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid
 const listEnvironments = `-- name: ListEnvironments :many
 SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.created_at, e.updated_at, e.deleted_at, e.deleted
 FROM environments e
-WHERE e.project_id = $1 AND e.deleted_at IS NULL
+WHERE e.project_id = $1 AND e.deleted IS FALSE
 ORDER BY e.created_at DESC
 `
 
