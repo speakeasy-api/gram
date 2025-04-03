@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/projects"
@@ -26,8 +27,8 @@ type Service struct {
 
 var _ gen.Service = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, sessions: sessions.NewSessionAuth(logger), projects: projects.NewService(logger, db)}
+func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Service {
+	return &Service{logger: logger, db: db, sessions: sessions.NewSessionAuth(logger, redisClient), projects: projects.NewService(logger, db)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {

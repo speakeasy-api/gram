@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	dsecurity "github.com/speakeasy-api/gram/design/security"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
@@ -30,12 +31,12 @@ type Auth struct {
 	repo     *repo.Queries
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool) *Auth {
+func New(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Auth {
 	return &Auth{
 		logger:   logger,
 		db:       db,
 		keys:     NewKeyAuth(db),
-		sessions: sessions.NewSessionAuth(logger),
+		sessions: sessions.NewSessionAuth(logger, redisClient),
 		repo:     repo.New(db),
 	}
 }

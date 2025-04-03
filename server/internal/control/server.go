@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,7 +15,7 @@ type Server struct {
 	DisableProfiling bool
 }
 
-func (s *Server) Start(ctx context.Context) (shutdown func(context.Context) error, err error) {
+func (s *Server) Start(ctx context.Context, healthCheck http.Handler) (shutdown func(context.Context) error, err error) {
 	mux := http.NewServeMux()
 
 	if !s.DisableProfiling {
@@ -31,10 +30,8 @@ func (s *Server) Start(ctx context.Context) (shutdown func(context.Context) erro
 		panic("forced panic")
 	}))
 
-	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status": "control server is healthy"}`)
-	}))
+	mux.Handle("GET /healthz", healthCheck)
+	mux.Handle("GET /livez", healthCheck)
 
 	srv := &http.Server{
 		Addr:    s.Address,
