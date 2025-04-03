@@ -42,7 +42,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool) *Auth {
 
 func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	if schema == nil {
-		panic("GOA has not passed a scheme") // TODO: figure something out here
+		panic("GOA has not passed a schema") // TODO: figure something out here
 	}
 
 	switch schema.Name {
