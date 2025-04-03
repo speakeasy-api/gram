@@ -102,6 +102,7 @@ var Environment = Type("Environment", func() {
 	Attribute("project_id", String, "The project ID this environment belongs to")
 	Attribute("name", String, "The name of the environment")
 	Attribute("slug", String, "The slug identifier for the environment")
+	Attribute("description", String, "The description of the environment")
 	Attribute("entries", ArrayOf(EnvironmentEntry), "List of environment entries")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the environment")
@@ -156,6 +157,8 @@ var UpdateEnvironmentForm = Type("UpdateEnvironmentForm", func() {
 	Description("Form for updating an environment")
 
 	Attribute("slug", String, "The slug of the environment to update")
+	Attribute("description", String, "The description of the environment")
+	Attribute("name", String, "The name of the environment")
 	Attribute("entries_to_update", ArrayOf(EnvironmentEntryInput), "List of environment entries to update or create")
 	Attribute("entries_to_remove", ArrayOf(String), "List of environment entry names to remove")
 

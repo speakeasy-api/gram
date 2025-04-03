@@ -28,6 +28,10 @@ type CreateEnvironmentRequestBody struct {
 // UpdateEnvironmentRequestBody is the type of the "environments" service
 // "updateEnvironment" endpoint HTTP request body.
 type UpdateEnvironmentRequestBody struct {
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The name of the environment
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// List of environment entries to update or create
 	EntriesToUpdate []*EnvironmentEntryInputRequestBody `form:"entries_to_update,omitempty" json:"entries_to_update,omitempty" xml:"entries_to_update,omitempty"`
 	// List of environment entry names to remove
@@ -47,6 +51,8 @@ type CreateEnvironmentResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug identifier for the environment
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
 	// The creation date of the environment
@@ -74,6 +80,8 @@ type UpdateEnvironmentResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug identifier for the environment
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
 	// The creation date of the environment
@@ -106,6 +114,8 @@ type EnvironmentResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug identifier for the environment
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
 	// The creation date of the environment
@@ -132,6 +142,7 @@ func NewCreateEnvironmentResponseBody(res *environments.Environment) *CreateEnvi
 		ProjectID:      res.ProjectID,
 		Name:           res.Name,
 		Slug:           res.Slug,
+		Description:    res.Description,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
@@ -170,6 +181,7 @@ func NewUpdateEnvironmentResponseBody(res *environments.Environment) *UpdateEnvi
 		ProjectID:      res.ProjectID,
 		Name:           res.Name,
 		Slug:           res.Slug,
+		Description:    res.Description,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
@@ -215,7 +227,10 @@ func NewListEnvironmentsPayload(sessionToken *string, projectSlug *string) *envi
 // NewUpdateEnvironmentPayload builds a environments service updateEnvironment
 // endpoint payload.
 func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string, sessionToken *string, projectSlug *string) *environments.UpdateEnvironmentPayload {
-	v := &environments.UpdateEnvironmentPayload{}
+	v := &environments.UpdateEnvironmentPayload{
+		Description: body.Description,
+		Name:        body.Name,
+	}
 	v.EntriesToUpdate = make([]*environments.EnvironmentEntryInput, len(body.EntriesToUpdate))
 	for i, val := range body.EntriesToUpdate {
 		v.EntriesToUpdate[i] = unmarshalEnvironmentEntryInputRequestBodyToEnvironmentsEnvironmentEntryInput(val)

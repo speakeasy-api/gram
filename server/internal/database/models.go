@@ -90,6 +90,7 @@ type Environment struct {
 	ProjectID      uuid.UUID
 	Name           string
 	Slug           string
+	Description    pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
@@ -102,8 +103,6 @@ type EnvironmentEntry struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
 }
 
 type HttpToolDefinition struct {

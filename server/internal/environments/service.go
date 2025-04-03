@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/gen/environments"
 	srv "github.com/speakeasy-api/gram/gen/http/environments/server"
@@ -46,12 +47,18 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 
 	slug := conv.ToSlug(payload.Name)
 
-	environment, err := s.repo.CreateEnvironment(ctx, repo.CreateEnvironmentParams{
+	input := repo.CreateEnvironmentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		Slug:           slug,
 		Name:           payload.Name,
-	})
+	}
+
+	if payload.Description != nil {
+		input.Description = pgtype.Text{String: *payload.Description, Valid: true}
+	}
+
+	environment, err := s.repo.CreateEnvironment(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +93,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		ProjectID:      environment.ProjectID.String(),
 		Name:           environment.Name,
 		Slug:           environment.Slug,
+		Description:    conv.FromPGText(environment.Description),
 		Entries:        entries,
 		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
@@ -126,6 +134,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 			ProjectID:      environment.ProjectID.String(),
 			Name:           environment.Name,
 			Slug:           environment.Slug,
+			Description:    conv.FromPGText(environment.Description),
 			Entries:        genEntries,
 			CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
@@ -150,8 +159,27 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, err
 	}
 
-	projectID := *authCtx.ProjectID
+	if payload.Name != nil || payload.Description != nil {
+		updateInput := repo.UpdateEnvironmentParams{
+			Slug:      payload.Slug,
+			ProjectID: *authCtx.ProjectID,
+			Name:      environment.Name,
+		}
+		if payload.Name != nil {
+			updateInput.Name = *payload.Name
+		}
 
+		if payload.Description != nil {
+			updateInput.Description = pgtype.Text{String: *payload.Description, Valid: true}
+		}
+
+		_, err := s.repo.UpdateEnvironment(ctx, updateInput)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	projectID := *authCtx.ProjectID
 	if environment.ProjectID.String() != projectID.String() {
 		return nil, errors.New("environment not found")
 	}
@@ -195,6 +223,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		ProjectID:      environment.ProjectID.String(),
 		Name:           environment.Name,
 		Slug:           environment.Slug,
+		Description:    conv.FromPGText(environment.Description),
 		Entries:        genEntries,
 		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),

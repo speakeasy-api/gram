@@ -84,6 +84,8 @@ type Environment struct {
 	Name string
 	// The slug identifier for the environment
 	Slug string
+	// The description of the environment
+	Description *string
 	// List of environment entries
 	Entries []*EnvironmentEntry
 	// The creation date of the environment
@@ -132,6 +134,10 @@ type UpdateEnvironmentPayload struct {
 	ProjectSlug  *string
 	// The slug of the environment to update
 	Slug string
+	// The description of the environment
+	Description *string
+	// The name of the environment
+	Name *string
 	// List of environment entries to update or create
 	EntriesToUpdate []*EnvironmentEntryInput
 	// List of environment entry names to remove

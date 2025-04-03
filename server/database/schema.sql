@@ -229,6 +229,7 @@ CREATE TABLE IF NOT EXISTS environments (
   project_id uuid NOT NULL,
   name text NOT NULL,
   slug text NOT NULL,
+  description text,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -250,8 +251,6 @@ CREATE TABLE IF NOT EXISTS environment_entries (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   CONSTRAINT environments_entries_pkey PRIMARY KEY (environment_id, name),
   CONSTRAINT environments_entries_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE
 );

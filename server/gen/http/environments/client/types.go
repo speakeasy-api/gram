@@ -28,6 +28,10 @@ type CreateEnvironmentRequestBody struct {
 // UpdateEnvironmentRequestBody is the type of the "environments" service
 // "updateEnvironment" endpoint HTTP request body.
 type UpdateEnvironmentRequestBody struct {
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The name of the environment
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// List of environment entries to update or create
 	EntriesToUpdate []*EnvironmentEntryInputRequestBody `form:"entries_to_update" json:"entries_to_update" xml:"entries_to_update"`
 	// List of environment entry names to remove
@@ -47,6 +51,8 @@ type CreateEnvironmentResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The slug identifier for the environment
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 	// The creation date of the environment
@@ -74,6 +80,8 @@ type UpdateEnvironmentResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The slug identifier for the environment
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 	// The creation date of the environment
@@ -115,6 +123,8 @@ type EnvironmentResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The slug identifier for the environment
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of environment entries
 	Entries []*EnvironmentEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 	// The creation date of the environment
@@ -145,7 +155,10 @@ func NewCreateEnvironmentRequestBody(p *environments.CreateEnvironmentPayload) *
 // NewUpdateEnvironmentRequestBody builds the HTTP request body from the
 // payload of the "updateEnvironment" endpoint of the "environments" service.
 func NewUpdateEnvironmentRequestBody(p *environments.UpdateEnvironmentPayload) *UpdateEnvironmentRequestBody {
-	body := &UpdateEnvironmentRequestBody{}
+	body := &UpdateEnvironmentRequestBody{
+		Description: p.Description,
+		Name:        p.Name,
+	}
 	if p.EntriesToUpdate != nil {
 		body.EntriesToUpdate = make([]*EnvironmentEntryInputRequestBody, len(p.EntriesToUpdate))
 		for i, val := range p.EntriesToUpdate {
@@ -174,6 +187,7 @@ func NewCreateEnvironmentEnvironmentOK(body *CreateEnvironmentResponseBody) *env
 		ProjectID:      *body.ProjectID,
 		Name:           *body.Name,
 		Slug:           *body.Slug,
+		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
@@ -206,6 +220,7 @@ func NewUpdateEnvironmentEnvironmentOK(body *UpdateEnvironmentResponseBody) *env
 		ProjectID:      *body.ProjectID,
 		Name:           *body.Name,
 		Slug:           *body.Slug,
+		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}

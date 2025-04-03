@@ -291,6 +291,7 @@ func marshalEnvironmentsEnvironmentToEnvironmentResponseBody(v *environments.Env
 		ProjectID:      v.ProjectID,
 		Name:           v.Name,
 		Slug:           v.Slug,
+		Description:    v.Description,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
 	}

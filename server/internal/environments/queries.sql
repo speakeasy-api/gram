@@ -3,34 +3,63 @@ INSERT INTO environments (
     organization_id,
     project_id,
     name,
-    slug
+    slug,
+    description
 ) VALUES (
-    $1,
-    $2,
-    $3,
-    $4
-) RETURNING *;
+    @organization_id,
+    @project_id,
+    @name,
+    @slug,
+    @description
+) RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted;
 
 -- name: ListEnvironments :many
-SELECT e.*
+SELECT 
+    e.id,
+    e.organization_id,
+    e.project_id,
+    e.name,
+    e.slug,
+    e.description,
+    e.created_at,
+    e.updated_at,
+    e.deleted
 FROM environments e
 WHERE e.project_id = $1 AND e.deleted IS FALSE
 ORDER BY e.created_at DESC;
 
 -- name: GetEnvironment :one
-SELECT e.*
+SELECT 
+    e.id,
+    e.organization_id,
+    e.project_id,
+    e.name,
+    e.slug,
+    e.description,
+    e.created_at,
+    e.updated_at,
+    e.deleted
 FROM environments e
 WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE;
+
+
+-- name: UpdateEnvironment :one
+UPDATE environments
+SET 
+    name = COALESCE(@name, name),
+    description = COALESCE(@description, description),
+    updated_at = now()
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted;
 
 -- name: ListEnvironmentEntries :many
 SELECT 
     ee.name as name,
     ee.value as value,
     ee.created_at as created_at,
-    ee.updated_at as updated_at,
-    ee.deleted_at as deleted_at
+    ee.updated_at as updated_at
 FROM environment_entries ee
-WHERE ee.environment_id = $1 AND ee.deleted IS FALSE
+WHERE ee.environment_id = $1
 ORDER BY ee.name ASC;
 
 -- name: DeleteEnvironment :exec
@@ -62,10 +91,9 @@ UPDATE environment_entries
 SET 
     value = $3,
     updated_at = now()
-WHERE environment_id = $1 AND name = $2 AND deleted_at IS NULL
+WHERE environment_id = $1 AND name = $2
 RETURNING *;
 
 -- name: DeleteEnvironmentEntry :exec
-UPDATE environment_entries
-SET deleted_at = now()
-WHERE environment_id = $1 AND name = $2 AND deleted_at IS NULL;
+DELETE FROM environment_entries
+WHERE environment_id = $1 AND name = $2;

@@ -1099,6 +1099,9 @@ components:
                     type: string
                     description: The creation date of the environment
                     format: date-time
+                description:
+                    type: string
+                    description: The description of the environment
                 entries:
                     type: array
                     items:
@@ -1599,6 +1602,9 @@ components:
         UpdateEnvironmentForm:
             type: object
             properties:
+                description:
+                    type: string
+                    description: The description of the environment
                 entries_to_remove:
                     type: array
                     items:
@@ -1609,6 +1615,9 @@ components:
                     items:
                         $ref: '#/components/schemas/EnvironmentEntryInput'
                     description: List of environment entries to update or create
+                name:
+                    type: string
+                    description: The name of the environment
                 slug:
                     type: string
                     description: The slug of the environment to update
@@ -1620,6 +1629,9 @@ components:
         UpdateEnvironmentRequestBody:
             type: object
             properties:
+                description:
+                    type: string
+                    description: The description of the environment
                 entries_to_remove:
                     type: array
                     items:
@@ -1630,6 +1642,9 @@ components:
                     items:
                         $ref: '#/components/schemas/EnvironmentEntryInput'
                     description: List of environment entries to update or create
+                name:
+                    type: string
+                    description: The name of the environment
             required:
                 - entries_to_update
                 - entries_to_remove

@@ -17,13 +17,15 @@ INSERT INTO environments (
     organization_id,
     project_id,
     name,
-    slug
+    slug,
+    description
 ) VALUES (
     $1,
     $2,
     $3,
-    $4
-) RETURNING id, organization_id, project_id, name, slug, created_at, updated_at, deleted_at, deleted
+    $4,
+    $5
+) RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted
 `
 
 type CreateEnvironmentParams struct {
@@ -31,25 +33,39 @@ type CreateEnvironmentParams struct {
 	ProjectID      uuid.UUID
 	Name           string
 	Slug           string
+	Description    pgtype.Text
 }
 
-func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (Environment, error) {
+type CreateEnvironmentRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (CreateEnvironmentRow, error) {
 	row := q.db.QueryRow(ctx, createEnvironment,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Name,
 		arg.Slug,
+		arg.Description,
 	)
-	var i Environment
+	var i CreateEnvironmentRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
 		&i.Slug,
+		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
@@ -72,7 +88,7 @@ VALUES (
     unnest($2::text[]),
     unnest($3::text[])
 )
-RETURNING name, value, environment_id, created_at, updated_at, deleted_at, deleted
+RETURNING name, value, environment_id, created_at, updated_at
 `
 
 type CreateEnvironmentEntriesParams struct {
@@ -96,8 +112,6 @@ func (q *Queries) CreateEnvironmentEntries(ctx context.Context, arg CreateEnviro
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -126,9 +140,8 @@ func (q *Queries) DeleteEnvironment(ctx context.Context, arg DeleteEnvironmentPa
 }
 
 const deleteEnvironmentEntry = `-- name: DeleteEnvironmentEntry :exec
-UPDATE environment_entries
-SET deleted_at = now()
-WHERE environment_id = $1 AND name = $2 AND deleted_at IS NULL
+DELETE FROM environment_entries
+WHERE environment_id = $1 AND name = $2
 `
 
 type DeleteEnvironmentEntryParams struct {
@@ -142,7 +155,16 @@ func (q *Queries) DeleteEnvironmentEntry(ctx context.Context, arg DeleteEnvironm
 }
 
 const getEnvironment = `-- name: GetEnvironment :one
-SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.created_at, e.updated_at, e.deleted_at, e.deleted
+SELECT 
+    e.id,
+    e.organization_id,
+    e.project_id,
+    e.name,
+    e.slug,
+    e.description,
+    e.created_at,
+    e.updated_at,
+    e.deleted
 FROM environments e
 WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE
 `
@@ -152,18 +174,30 @@ type GetEnvironmentParams struct {
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) (Environment, error) {
+type GetEnvironmentRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) (GetEnvironmentRow, error) {
 	row := q.db.QueryRow(ctx, getEnvironment, arg.Slug, arg.ProjectID)
-	var i Environment
+	var i GetEnvironmentRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
 		&i.Slug,
+		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
@@ -174,10 +208,9 @@ SELECT
     ee.name as name,
     ee.value as value,
     ee.created_at as created_at,
-    ee.updated_at as updated_at,
-    ee.deleted_at as deleted_at
+    ee.updated_at as updated_at
 FROM environment_entries ee
-WHERE ee.environment_id = $1 AND ee.deleted IS FALSE
+WHERE ee.environment_id = $1
 ORDER BY ee.name ASC
 `
 
@@ -186,7 +219,6 @@ type ListEnvironmentEntriesRow struct {
 	Value     string
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
 }
 
 func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid.UUID) ([]ListEnvironmentEntriesRow, error) {
@@ -203,7 +235,6 @@ func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid
 			&i.Value,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -216,30 +247,51 @@ func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid
 }
 
 const listEnvironments = `-- name: ListEnvironments :many
-SELECT e.id, e.organization_id, e.project_id, e.name, e.slug, e.created_at, e.updated_at, e.deleted_at, e.deleted
+SELECT 
+    e.id,
+    e.organization_id,
+    e.project_id,
+    e.name,
+    e.slug,
+    e.description,
+    e.created_at,
+    e.updated_at,
+    e.deleted
 FROM environments e
 WHERE e.project_id = $1 AND e.deleted IS FALSE
 ORDER BY e.created_at DESC
 `
 
-func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]Environment, error) {
+type ListEnvironmentsRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]ListEnvironmentsRow, error) {
 	rows, err := q.db.Query(ctx, listEnvironments, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Environment
+	var items []ListEnvironmentsRow
 	for rows.Next() {
-		var i Environment
+		var i ListEnvironmentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
 			&i.ProjectID,
 			&i.Name,
 			&i.Slug,
+			&i.Description,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
 			return nil, err
@@ -252,13 +304,64 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const updateEnvironment = `-- name: UpdateEnvironment :one
+UPDATE environments
+SET 
+    name = COALESCE($1, name),
+    description = COALESCE($2, description),
+    updated_at = now()
+WHERE slug = $3 AND project_id = $4 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted
+`
+
+type UpdateEnvironmentParams struct {
+	Name        string
+	Description pgtype.Text
+	Slug        string
+	ProjectID   uuid.UUID
+}
+
+type UpdateEnvironmentRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (UpdateEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, updateEnvironment,
+		arg.Name,
+		arg.Description,
+		arg.Slug,
+		arg.ProjectID,
+	)
+	var i UpdateEnvironmentRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateEnvironmentEntry = `-- name: UpdateEnvironmentEntry :one
 UPDATE environment_entries
 SET 
     value = $3,
     updated_at = now()
-WHERE environment_id = $1 AND name = $2 AND deleted_at IS NULL
-RETURNING name, value, environment_id, created_at, updated_at, deleted_at, deleted
+WHERE environment_id = $1 AND name = $2
+RETURNING name, value, environment_id, created_at, updated_at
 `
 
 type UpdateEnvironmentEntryParams struct {
@@ -276,8 +379,6 @@ func (q *Queries) UpdateEnvironmentEntry(ctx context.Context, arg UpdateEnvironm
 		&i.EnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
 	)
 	return i, err
 }

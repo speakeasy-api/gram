@@ -23,7 +23,7 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsCreateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Voluptas ut reiciendis dolore est alias.\",\n      \"entries\": [\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         }\n      ],\n      \"name\": \"Excepturi similique laborum at et et a.\",\n      \"organization_id\": \"Fugiat reiciendis nisi.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Consequatur officiis eum eum beatae.\",\n      \"entries\": [\n         {\n            \"name\": \"Consequuntur labore tempora molestias.\",\n            \"value\": \"Et cum molestiae porro ipsum debitis voluptatem.\"\n         },\n         {\n            \"name\": \"Consequuntur labore tempora molestias.\",\n            \"value\": \"Et cum molestiae porro ipsum debitis voluptatem.\"\n         },\n         {\n            \"name\": \"Consequuntur labore tempora molestias.\",\n            \"value\": \"Et cum molestiae porro ipsum debitis voluptatem.\"\n         }\n      ],\n      \"name\": \"Ex velit.\",\n      \"organization_id\": \"Omnis sint.\"\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
@@ -93,7 +93,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsUpdateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries_to_remove\": [\n         \"Velit vel dolor et id.\",\n         \"Voluptas ullam eum vitae voluptatum sint.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         },\n         {\n            \"name\": \"Ad vel et laudantium vel.\",\n            \"value\": \"Odit doloribus.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Aut nisi odio officiis.\",\n      \"entries_to_remove\": [\n         \"Ab sit nostrum iste eum.\",\n         \"A accusamus qui quidem corrupti.\",\n         \"Est nisi fuga dolores.\",\n         \"Id pariatur impedit.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Consequuntur labore tempora molestias.\",\n            \"value\": \"Et cum molestiae porro ipsum debitis voluptatem.\"\n         },\n         {\n            \"name\": \"Consequuntur labore tempora molestias.\",\n            \"value\": \"Et cum molestiae porro ipsum debitis voluptatem.\"\n         },\n         {\n            \"name\": \"Consequuntur labore tempora molestias.\",\n            \"value\": \"Et cum molestiae porro ipsum debitis voluptatem.\"\n         }\n      ],\n      \"name\": \"Officiis dolor.\"\n   }'")
 		}
 		if body.EntriesToUpdate == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries_to_update", "body"))
@@ -121,7 +121,10 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 			projectSlug = &environmentsUpdateEnvironmentProjectSlug
 		}
 	}
-	v := &environments.UpdateEnvironmentPayload{}
+	v := &environments.UpdateEnvironmentPayload{
+		Description: body.Description,
+		Name:        body.Name,
+	}
 	if body.EntriesToUpdate != nil {
 		v.EntriesToUpdate = make([]*environments.EnvironmentEntryInput, len(body.EntriesToUpdate))
 		for i, val := range body.EntriesToUpdate {
