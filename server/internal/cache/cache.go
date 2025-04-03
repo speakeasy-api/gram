@@ -8,8 +8,10 @@ import (
 	"os"
 	"time"
 
-	redisCache "github.com/go-redis/cache/v8"
-	"github.com/go-redis/redis/v8"
+	redisCache "github.com/go-redis/cache/v9"
+	"github.com/redis/go-redis/extra/redisotel/v9"
+	"github.com/redis/go-redis/v9"
+	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
 )
 
 type Cache[T Cacheable[T]] struct {
@@ -184,10 +186,11 @@ func New[T Cacheable[T]](logger *slog.Logger, ttl time.Duration) Cache[T] {
 		redisPassword = "xi9XILbY"
 	}
 
+	db := 0 // we always use default DB
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         redisAddr,
 		Password:     redisPassword,
-		DB:           0, // we always use default DB
+		DB:           db,
 		DialTimeout:  1 * time.Second,
 		ReadTimeout:  300 * time.Millisecond,
 		WriteTimeout: 1 * time.Second,
@@ -195,6 +198,14 @@ func New[T Cacheable[T]](logger *slog.Logger, ttl time.Duration) Cache[T] {
 
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		logger.Error("redis connection failed", slog.String("error", err.Error()))
+		panic(err)
+	}
+
+	attrs := redisotel.WithAttributes(
+		semconv.DBSystemRedis,
+		semconv.DBRedisDBIndex(db),
+	)
+	if err := redisotel.InstrumentTracing(rdb, redisotel.WithDBStatement(false), attrs); err != nil {
 		panic(err)
 	}
 
