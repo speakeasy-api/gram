@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  seq BIGSERIAL NOT NULL, -- Use this to serialize the processing of deployments. Tools will be created from the latest deployment.
   user_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS deployments (
 
   CONSTRAINT deployments_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_project_id_idempotency_key UNIQUE (project_id, idempotency_key),
+  CONSTRAINT deployments_project_id_seq_key UNIQUE (project_id, seq),
   CONSTRAINT deployments_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE RESTRICT
 );
 
