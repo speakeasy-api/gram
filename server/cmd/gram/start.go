@@ -32,7 +32,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/system"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
@@ -199,7 +198,6 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))
-			system.Attach(mux, system.NewService())
 			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient))
 			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, redisClient))
 			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, redisClient))

@@ -7,22 +7,6 @@ servers:
     - url: http://localhost:80
       description: Default server for gram
 paths:
-    /health:
-        get:
-            description: Check the health of the service.
-            operationId: system#healthCheck
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/HealthCheckResult'
-                    description: OK response.
-            summary: healthCheck system
-            tags:
-                - system
-            x-speakeasy-react-hook:
-                disabled: true
     /rpc/assets.uploadOpenAPIv3:
         post:
             description: Upload an OpenAPI v3 document to Gram.
@@ -1307,14 +1291,6 @@ components:
                 - path
                 - created_at
                 - updated_at
-        HealthCheckResult:
-            type: object
-            properties:
-                status:
-                    type: string
-                    description: The status of the service.
-            required:
-                - status
         InfoResponseBody:
             type: object
             properties:
@@ -1743,8 +1719,6 @@ tags:
       description: Managing toolset environments.
     - name: keys
       description: Managing system api keys.
-    - name: system
-      description: Exposes service health and status information.
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: toolsets
