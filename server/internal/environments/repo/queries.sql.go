@@ -311,7 +311,7 @@ SET
     description = COALESCE($2, description),
     updated_at = now()
 WHERE slug = $3 AND project_id = $4 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, updated_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted
 `
 
 type UpdateEnvironmentParams struct {
@@ -328,6 +328,7 @@ type UpdateEnvironmentRow struct {
 	Name           string
 	Slug           string
 	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	Deleted        bool
 }
@@ -347,6 +348,7 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Deleted,
 	)
