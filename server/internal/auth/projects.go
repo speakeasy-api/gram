@@ -21,12 +21,6 @@ var (
 	ErrAuthAccessDenied   = errors.New("access denied")
 )
 
-type ProjectAccess struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         string
-}
-
 func checkProjectAccess(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, projectSlug string) (context.Context, error) {
 	if projectSlug == "" {
 		return ctx, fmt.Errorf("project access: %w: empty slug", ErrAuthInvalidProject)
