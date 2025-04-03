@@ -1,8 +1,14 @@
--- name: CanAccessProject :one
-SELECT id, deleted
+-- name: ListProjectsByOrganization :many
+SELECT 
+    id
+  , name
+  , slug
+  , organization_id
+  , created_at
+  , updated_at
+  , deleted_at
+  , deleted
 FROM projects
-WHERE
-  organization_id = @organization_id
-  AND slug = @project_slug
+WHERE organization_id = @organization_id
   AND deleted_at IS NULL
-LIMIT 1;
+ORDER BY created_at DESC;

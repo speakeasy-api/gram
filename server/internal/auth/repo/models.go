@@ -3,3 +3,19 @@
 //   sqlc v1.28.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Project struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}

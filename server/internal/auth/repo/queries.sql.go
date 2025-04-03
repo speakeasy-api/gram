@@ -7,33 +7,49 @@ package repo
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
-const canAccessProject = `-- name: CanAccessProject :one
-SELECT id, deleted
+const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
+SELECT 
+    id
+  , name
+  , slug
+  , organization_id
+  , created_at
+  , updated_at
+  , deleted_at
+  , deleted
 FROM projects
-WHERE
-  organization_id = $1
-  AND slug = $2
+WHERE organization_id = $1
   AND deleted_at IS NULL
-LIMIT 1
+ORDER BY created_at DESC
 `
 
-type CanAccessProjectParams struct {
-	OrganizationID string
-	ProjectSlug    string
-}
-
-type CanAccessProjectRow struct {
-	ID      uuid.UUID
-	Deleted bool
-}
-
-func (q *Queries) CanAccessProject(ctx context.Context, arg CanAccessProjectParams) (CanAccessProjectRow, error) {
-	row := q.db.QueryRow(ctx, canAccessProject, arg.OrganizationID, arg.ProjectSlug)
-	var i CanAccessProjectRow
-	err := row.Scan(&i.ID, &i.Deleted)
-	return i, err
+func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID string) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.OrganizationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
