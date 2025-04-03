@@ -88,14 +88,9 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   seq BIGSERIAL NOT NULL,
 
   event text NOT NULL,
+  message text NOT NULL,
   deployment_id uuid NOT NULL,
   project_id uuid NOT NULL,
-  tooltemplate_id uuid,
-  tooltemplate_type text CHECK (
-    -- Cannot be null if tooltemplate_id is not null
-    (tooltemplate_id IS NULL) OR (tooltemplate_type IS NOT NULL)
-  ),
-  collection_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
