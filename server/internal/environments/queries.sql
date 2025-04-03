@@ -50,7 +50,7 @@ SET
     description = COALESCE(@description, description),
     updated_at = now()
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, updated_at, deleted;
+RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted;
 
 -- name: ListEnvironmentEntries :many
 SELECT 
