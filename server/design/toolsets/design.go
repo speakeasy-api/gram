@@ -164,6 +164,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("id", String, "The ID of the HTTP tool")
 	Attribute("name", String, "The name of the tool")
 	Attribute("description", String, "Description of the tool")
+	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
 	Attribute("server_env_var", String, "Environment variable for the server URL")
 	Attribute("security_type", String, "Type of security (http:bearer, http:basic, apikey)")
 	Attribute("bearer_env_var", String, "Environment variable for bearer token")
@@ -176,7 +177,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("queries_schema", String, "JSON schema for query parameters")
 	Attribute("pathparams_schema", String, "JSON schema for path parameters")
 	Attribute("body_schema", String, "JSON schema for request body")
-	Required("id", "name", "description", "server_env_var", "security_type", "http_method", "path")
+	Required("id", "name", "description", "tags", "server_env_var", "security_type", "http_method", "path")
 })
 
 var ToolsetDetails = Type("ToolsetDetails", func() {

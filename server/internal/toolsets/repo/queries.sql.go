@@ -122,6 +122,7 @@ SELECT
   , project_id
   , name
   , description
+  , tags
   , server_env_var
   , security_type
   , bearer_env_var
@@ -149,6 +150,7 @@ type GetHTTPToolDefinitionsRow struct {
 	ProjectID        uuid.UUID
 	Name             string
 	Description      string
+	Tags             []string
 	ServerEnvVar     string
 	SecurityType     string
 	BearerEnvVar     pgtype.Text
@@ -182,6 +184,7 @@ func (q *Queries) GetHTTPToolDefinitions(ctx context.Context, ids []uuid.UUID) (
 			&i.ProjectID,
 			&i.Name,
 			&i.Description,
+			&i.Tags,
 			&i.ServerEnvVar,
 			&i.SecurityType,
 			&i.BearerEnvVar,

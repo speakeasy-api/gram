@@ -102,6 +102,7 @@ SELECT
   , project_id
   , name
   , description
+  , tags
   , server_env_var
   , security_type
   , bearer_env_var

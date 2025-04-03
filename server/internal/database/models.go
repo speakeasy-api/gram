@@ -112,6 +112,7 @@ type HttpToolDefinition struct {
 	Openapiv3DocumentID uuid.NullUUID
 	Name                string
 	Description         string
+	Tags                []string
 	ServerEnvVar        string
 	SecurityType        string
 	BearerEnvVar        pgtype.Text

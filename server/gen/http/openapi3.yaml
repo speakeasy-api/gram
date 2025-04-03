@@ -1236,6 +1236,11 @@ components:
                 server_env_var:
                     type: string
                     description: Environment variable for the server URL
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: The tags list for this http tool
                 username_env_var:
                     type: string
                     description: Environment variable for username
@@ -1243,6 +1248,7 @@ components:
                 - id
                 - name
                 - description
+                - tags
                 - server_env_var
                 - security_type
                 - http_method

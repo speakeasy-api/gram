@@ -89,6 +89,8 @@ type HTTPToolDefinition struct {
 	Name string
 	// Description of the tool
 	Description string
+	// The tags list for this http tool
+	Tags []string
 	// Environment variable for the server URL
 	ServerEnvVar string
 	// Type of security (http:bearer, http:basic, apikey)

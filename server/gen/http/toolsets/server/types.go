@@ -155,6 +155,8 @@ type HTTPToolDefinitionResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Description of the tool
 	Description string `form:"description" json:"description" xml:"description"`
+	// The tags list for this http tool
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// Environment variable for the server URL
 	ServerEnvVar string `form:"server_env_var" json:"server_env_var" xml:"server_env_var"`
 	// Type of security (http:bearer, http:basic, apikey)

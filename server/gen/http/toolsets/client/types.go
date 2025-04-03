@@ -155,6 +155,8 @@ type HTTPToolDefinitionResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Description of the tool
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The tags list for this http tool
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Environment variable for the server URL
 	ServerEnvVar *string `form:"server_env_var,omitempty" json:"server_env_var,omitempty" xml:"server_env_var,omitempty"`
 	// Type of security (http:bearer, http:basic, apikey)
@@ -472,6 +474,9 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Tags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 	}
 	if body.ServerEnvVar == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("server_env_var", "body"))

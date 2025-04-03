@@ -264,6 +264,7 @@ func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolset
 				ID:               def.ID.String(),
 				Name:             def.Name,
 				Description:      def.Description,
+				Tags:             def.Tags,
 				ServerEnvVar:     def.ServerEnvVar,
 				SecurityType:     def.SecurityType,
 				BearerEnvVar:     conv.FromPGText(def.BearerEnvVar),

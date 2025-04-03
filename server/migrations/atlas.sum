@@ -1,4 +1,4 @@
-h1:CorOAfS2PqtU2vSxTtOwTb5OxTj4+Y+p1/or1IAppyM=
+h1:GeNn2pUPrbNxeAQWBjZ5Fy8av8gnab0iTL6EM9rZA4M=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
@@ -19,3 +19,4 @@ h1:CorOAfS2PqtU2vSxTtOwTb5OxTj4+Y+p1/or1IAppyM=
 20250402213350_add-environments.sql h1:0bUlb7911+TVnutGaeLNV4bw1Tx50XLxG3IsGZVzArE=
 20250402213941_deployments_nonnullable_user_id.sql h1:DeOp8Zwd8617frvZrN/mOqeLGeMmQEwpjMRO2zHLcsc=
 20250402220415_add_default_environment_to_toolset.sql h1:Tkk5kxy1Vd+FzS5DaTgOFgN3D+WTXlW6iRpknOjYoCY=
+20250403183818_add-tags-to-http-tools.sql h1:aFPbU8dPOidREfWSnhpR5VvnYIQ56zYBnsXiCjVOaiU=

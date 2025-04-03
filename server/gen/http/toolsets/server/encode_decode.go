@@ -349,6 +349,14 @@ func marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *toolse
 		PathparamsSchema: v.PathparamsSchema,
 		BodySchema:       v.BodySchema,
 	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	} else {
+		res.Tags = []string{}
+	}
 
 	return res
 }

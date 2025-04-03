@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
   name text NOT NULL,
   description text NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   server_env_var text NOT NULL,
   security_type text NOT NULL CHECK (
