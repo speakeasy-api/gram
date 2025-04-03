@@ -10,17 +10,22 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgx-contrib/pgxotel"
+	"github.com/redis/go-redis/extra/redisotel/v9"
+	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/deployments"
 	"github.com/speakeasy-api/gram/internal/environments"
 	"github.com/speakeasy-api/gram/internal/keys"
@@ -33,6 +38,8 @@ import (
 )
 
 func newStartCommand() *cli.Command {
+	var shutdownFuncs []func(context.Context) error
+
 	return &cli.Command{
 		Name:  "start",
 		Usage: "Start the Gram API server",
@@ -42,6 +49,12 @@ func newStartCommand() *cli.Command {
 				Value:   ":8080",
 				Usage:   "HTTP address to listen on",
 				EnvVars: []string{"GRAM_SERVER_ADDRESS"},
+			},
+			&cli.StringFlag{
+				Name:    "control-address",
+				Value:   ":8081",
+				Usage:   "HTTP address to listen on",
+				EnvVars: []string{"GRAM_CONTROL_ADDRESS"},
 			},
 			&cli.StringFlag{
 				Name:     "database-url",
@@ -81,7 +94,7 @@ func newStartCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
-			logger := PullLogger(ctx).With(slog.String("app", "gram"))
+			logger := PullLogger(ctx)
 
 			sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer sigcancel()
@@ -92,13 +105,7 @@ func newStartCommand() *cli.Command {
 				if err != nil {
 					return err
 				}
-				defer func() {
-					graceCtx, graceCancel := context.WithTimeout(ctx, 60*time.Second)
-					defer graceCancel()
-					if err := shutdown(graceCtx); err != nil {
-						logger.ErrorContext(ctx, "failed to shutdown OpenTelemetry", slog.String("err", err.Error()))
-					}
-				}()
+				shutdownFuncs = append(shutdownFuncs, shutdown)
 
 				poolcfg.ConnConfig.Tracer = &pgxotel.QueryTracer{
 					Name: "pgx",
@@ -140,17 +147,64 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			var redisClient *redis.Client
+			{
+				var redisAddr string
+				var redisPassword string
+				if os.Getenv("GRAM_ENVIRONMENT") == "local" {
+					redisAddr = fmt.Sprintf("localhost:%s", os.Getenv("CACHE_PORT"))
+					redisPassword = "xi9XILbY"
+				}
+
+				db := 0 // we always use default DB
+				redisClient = redis.NewClient(&redis.Options{
+					Addr:         redisAddr,
+					Password:     redisPassword,
+					DB:           db,
+					DialTimeout:  1 * time.Second,
+					ReadTimeout:  300 * time.Millisecond,
+					WriteTimeout: 1 * time.Second,
+				})
+
+				if err := redisClient.Ping(context.Background()).Err(); err != nil {
+					logger.Error("redis connection failed", slog.String("error", err.Error()))
+					panic(err)
+				}
+
+				attrs := redisotel.WithAttributes(
+					semconv.DBSystemRedis,
+					semconv.DBRedisDBIndex(db),
+				)
+				if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
+					panic(err)
+				}
+			}
+
+			{
+				controlServer := control.Server{
+					Address: c.String("control-address"),
+					Logger:  logger.With(slog.String("component", "control")),
+				}
+
+				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(db, redisClient))
+				if err != nil {
+					return err
+				}
+
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+
 			mux := goahttp.NewMuxer()
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
-			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db))
-			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, assetStorage))
+			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
+			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))
 			system.Attach(mux, system.NewService())
-			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db))
-			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db))
-			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db))
-			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db))
-			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db))
+			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient))
+			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, redisClient))
+			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, redisClient))
+			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, redisClient))
+			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db, redisClient))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),
@@ -165,7 +219,7 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(ctx, 60*time.Second)
+				graceCtx, graceCancel := context.WithTimeout(ctx, 10*time.Second)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
@@ -178,6 +232,41 @@ func newStartCommand() *cli.Command {
 				logger.ErrorContext(ctx, "server error", slog.String("err", err.Error()))
 			}
 
+			return nil
+		},
+		After: func(c *cli.Context) error {
+			ctx := context.Background()
+			logger := PullLogger(c.Context)
+
+			var wg sync.WaitGroup
+			wg.Add(len(shutdownFuncs))
+
+			done := make(chan struct{})
+
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
+			for _, shutdown := range shutdownFuncs {
+				go func(shutdown func(context.Context) error) {
+					defer wg.Done()
+					if err := shutdown(ctx); err != nil {
+						logger.ErrorContext(ctx, "failed to shutdown component", slog.String("err", err.Error()))
+					}
+				}(shutdown)
+			}
+
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
+
+			select {
+			case <-done:
+			case <-ctx.Done():
+				return errors.New("failed to shutdown all components")
+			}
+
+			logger.InfoContext(c.Context, "all components shutdown")
 			return nil
 		},
 	}

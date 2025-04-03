@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -41,11 +42,11 @@ type Service struct {
 var _ gen.Service = &Service{}
 var _ gen.Auther = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, storage BlobStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, storage BlobStore) *Service {
 	return &Service{
 		logger:   logger,
 		db:       db,
-		auth:     auth.New(logger, db),
+		auth:     auth.New(logger, db, redisClient),
 		storage:  storage,
 		projects: projectsRepo.New(db),
 		repo:     repo.New(db),

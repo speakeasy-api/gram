@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 )
@@ -16,11 +17,11 @@ type Sessions struct {
 	userInfoCache cache.Cache[CachedUserInfo]
 }
 
-func NewSessionAuth(logger *slog.Logger) *Sessions {
+func NewSessionAuth(logger *slog.Logger, redisClient *redis.Client) *Sessions {
 	return &Sessions{
 		logger:        logger.With("component", "sessions"),
-		sessionCache:  cache.New[Session](logger.With("cache", "session"), sessionCacheExpiry),
-		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), userInfoCacheExpiry),
+		sessionCache:  cache.New[Session](redisClient, logger.With("cache", "session"), sessionCacheExpiry),
+		userInfoCache: cache.New[CachedUserInfo](redisClient, logger.With("cache", "user_info"), userInfoCacheExpiry),
 	}
 }
 

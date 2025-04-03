@@ -9,9 +9,7 @@ import (
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
-	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
-	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
 )
 
 type Cache[T Cacheable[T]] struct {
@@ -175,43 +173,16 @@ func (d *Cache[T]) Update(ctx context.Context, obj T) error {
 	return nil
 }
 
-func New[T Cacheable[T]](logger *slog.Logger, ttl time.Duration) Cache[T] {
+func New[T Cacheable[T]](redisClient *redis.Client, logger *slog.Logger, ttl time.Duration) Cache[T] {
 	// TODO: Stable server versions
 	var serverVersion string
-	var redisAddr string
-	var redisPassword string
 	if os.Getenv("GRAM_ENVIRONMENT") == "local" {
 		serverVersion = "gram-local"
-		redisAddr = fmt.Sprintf("localhost:%s", os.Getenv("CACHE_PORT"))
-		redisPassword = "xi9XILbY"
-	}
-
-	db := 0 // we always use default DB
-	rdb := redis.NewClient(&redis.Options{
-		Addr:         redisAddr,
-		Password:     redisPassword,
-		DB:           db,
-		DialTimeout:  1 * time.Second,
-		ReadTimeout:  300 * time.Millisecond,
-		WriteTimeout: 1 * time.Second,
-	})
-
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		logger.Error("redis connection failed", slog.String("error", err.Error()))
-		panic(err)
-	}
-
-	attrs := redisotel.WithAttributes(
-		semconv.DBSystemRedis,
-		semconv.DBRedisDBIndex(db),
-	)
-	if err := redisotel.InstrumentTracing(rdb, redisotel.WithDBStatement(false), attrs); err != nil {
-		panic(err)
 	}
 
 	cache := redisCache.New(&redisCache.Options{
-		Redis: rdb,
+		Redis: redisClient,
 	})
 
-	return Cache[T]{logger: logger, rdb: rdb, cache: cache, ttl: ttl, keySuffix: serverVersion}
+	return Cache[T]{logger: logger, rdb: redisClient, cache: cache, ttl: ttl, keySuffix: serverVersion}
 }

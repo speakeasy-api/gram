@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	goahttp "goa.design/goa/v3/http"
@@ -30,8 +31,8 @@ type Service struct {
 
 var _ gen.Service = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), auth: auth.New(logger, db)}
+func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Service {
+	return &Service{logger: logger, db: db, repo: repo.New(db), auth: auth.New(logger, db, redisClient)}
 }
 
 func Attach(mux goahttp.Muxer, service gen.Service) {
