@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	system "github.com/speakeasy-api/gram/gen/system"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -85,7 +86,7 @@ func MountHealthCheckHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/health", f)
+	mux.Handle("GET", "/health", otelhttp.WithRouteTag("/health", f).ServeHTTP)
 }
 
 // NewHealthCheckHandler creates a HTTP handler which loads the HTTP request

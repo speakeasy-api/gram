@@ -44,7 +44,7 @@ echo -e "\n⏳ Installing dependencies"
 mise run install
 
 echo -e "\n⏳ Starting infra"
-mise start:infra
+mise infra:start
 
 echo -e "\n⏳ Running migrations"
 mise db:migrate

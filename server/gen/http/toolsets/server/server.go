@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -105,7 +106,7 @@ func MountCreateToolsetHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/toolsets.create", f)
+	mux.Handle("POST", "/rpc/toolsets.create", otelhttp.WithRouteTag("/rpc/toolsets.create", f).ServeHTTP)
 }
 
 // NewCreateToolsetHandler creates a HTTP handler which loads the HTTP request
@@ -156,7 +157,7 @@ func MountListToolsetsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/toolsets.list", f)
+	mux.Handle("GET", "/rpc/toolsets.list", otelhttp.WithRouteTag("/rpc/toolsets.list", f).ServeHTTP)
 }
 
 // NewListToolsetsHandler creates a HTTP handler which loads the HTTP request
@@ -207,7 +208,7 @@ func MountUpdateToolsetHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/toolsets.update/{id}", f)
+	mux.Handle("POST", "/rpc/toolsets.update/{id}", otelhttp.WithRouteTag("/rpc/toolsets.update/{id}", f).ServeHTTP)
 }
 
 // NewUpdateToolsetHandler creates a HTTP handler which loads the HTTP request
@@ -258,7 +259,7 @@ func MountDeleteToolsetHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/toolsets.delete/{id}", f)
+	mux.Handle("DELETE", "/rpc/toolsets.delete/{id}", otelhttp.WithRouteTag("/rpc/toolsets.delete/{id}", f).ServeHTTP)
 }
 
 // NewDeleteToolsetHandler creates a HTTP handler which loads the HTTP request
@@ -309,7 +310,7 @@ func MountGetToolsetDetailsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/toolsets.get/{id}", f)
+	mux.Handle("GET", "/rpc/toolsets.get/{id}", otelhttp.WithRouteTag("/rpc/toolsets.get/{id}", f).ServeHTTP)
 }
 
 // NewGetToolsetDetailsHandler creates a HTTP handler which loads the HTTP

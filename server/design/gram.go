@@ -2,6 +2,7 @@ package design
 
 import (
 	. "goa.design/goa/v3/dsl"
+	_ "goa.design/plugins/v3/otel"
 
 	_ "github.com/speakeasy-api/gram/design/assets"
 	_ "github.com/speakeasy-api/gram/design/auth"

@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	auth "github.com/speakeasy-api/gram/gen/auth"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -100,7 +101,7 @@ func MountCallbackHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/auth.callback", f)
+	mux.Handle("GET", "/rpc/auth.callback", otelhttp.WithRouteTag("/rpc/auth.callback", f).ServeHTTP)
 }
 
 // NewCallbackHandler creates a HTTP handler which loads the HTTP request and
@@ -151,7 +152,7 @@ func MountSwitchScopesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/auth.switchScopes", f)
+	mux.Handle("POST", "/rpc/auth.switchScopes", otelhttp.WithRouteTag("/rpc/auth.switchScopes", f).ServeHTTP)
 }
 
 // NewSwitchScopesHandler creates a HTTP handler which loads the HTTP request
@@ -202,7 +203,7 @@ func MountLogoutHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/auth.logout", f)
+	mux.Handle("GET", "/rpc/auth.logout", otelhttp.WithRouteTag("/rpc/auth.logout", f).ServeHTTP)
 }
 
 // NewLogoutHandler creates a HTTP handler which loads the HTTP request and
@@ -253,7 +254,7 @@ func MountInfoHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/auth.info", f)
+	mux.Handle("GET", "/rpc/auth.info", otelhttp.WithRouteTag("/rpc/auth.info", f).ServeHTTP)
 }
 
 // NewInfoHandler creates a HTTP handler which loads the HTTP request and calls

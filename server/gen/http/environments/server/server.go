@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	environments "github.com/speakeasy-api/gram/gen/environments"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -100,7 +101,7 @@ func MountCreateEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/environments.create", f)
+	mux.Handle("POST", "/rpc/environments.create", otelhttp.WithRouteTag("/rpc/environments.create", f).ServeHTTP)
 }
 
 // NewCreateEnvironmentHandler creates a HTTP handler which loads the HTTP
@@ -151,7 +152,7 @@ func MountListEnvironmentsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/environments.list", f)
+	mux.Handle("GET", "/rpc/environments.list", otelhttp.WithRouteTag("/rpc/environments.list", f).ServeHTTP)
 }
 
 // NewListEnvironmentsHandler creates a HTTP handler which loads the HTTP
@@ -202,7 +203,7 @@ func MountUpdateEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/environments.update/{id}", f)
+	mux.Handle("POST", "/rpc/environments.update/{id}", otelhttp.WithRouteTag("/rpc/environments.update/{id}", f).ServeHTTP)
 }
 
 // NewUpdateEnvironmentHandler creates a HTTP handler which loads the HTTP
@@ -253,7 +254,7 @@ func MountDeleteEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/environments.delete/{id}", f)
+	mux.Handle("DELETE", "/rpc/environments.delete/{id}", otelhttp.WithRouteTag("/rpc/environments.delete/{id}", f).ServeHTTP)
 }
 
 // NewDeleteEnvironmentHandler creates a HTTP handler which loads the HTTP

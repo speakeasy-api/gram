@@ -14,20 +14,21 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/tracelog"
-	"github.com/speakeasy-api/gram/internal/database"
-	"github.com/speakeasy-api/gram/internal/environments"
-	"github.com/speakeasy-api/gram/internal/keys"
-	"github.com/speakeasy-api/gram/internal/must"
-	"github.com/speakeasy-api/gram/internal/toolsets"
+	"github.com/pgx-contrib/pgxotel"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/deployments"
+	"github.com/speakeasy-api/gram/internal/environments"
+	"github.com/speakeasy-api/gram/internal/keys"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/must"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/system"
+	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
 func newStartCommand() *cli.Command {
@@ -46,6 +47,11 @@ func newStartCommand() *cli.Command {
 				Usage:    "Database URL",
 				EnvVars:  []string{"GRAM_DATABASE_URL"},
 				Required: true,
+			},
+			&cli.BoolFlag{
+				Name:    "observe",
+				Usage:   "Enable OpenTelemetry observability",
+				EnvVars: []string{"GRAM_ENABLE_OTEL"},
 			},
 			&cli.BoolFlag{
 				Name:    "trace-queries",
@@ -76,13 +82,28 @@ func newStartCommand() *cli.Command {
 			defer cancel()
 			logger := PullLogger(ctx).With(slog.String("app", "gram"))
 
+			sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+			defer sigcancel()
+
 			poolcfg := must.Value(pgxpool.ParseConfig(c.String("database-url")))
-			if c.Bool("trace-queries") {
-				poolcfg.ConnConfig.Tracer = &tracelog.TraceLog{
-					Logger:   database.NewLogger(logger.With("component", "pgx")),
-					LogLevel: tracelog.LogLevelInfo,
+			if c.Bool("observe") {
+				shutdown, err := o11y.SetupOTelSDK(ctx)
+				if err != nil {
+					return err
+				}
+				defer func() {
+					graceCtx, graceCancel := context.WithTimeout(ctx, 60*time.Second)
+					defer graceCancel()
+					if err := shutdown(graceCtx); err != nil {
+						logger.ErrorContext(ctx, "failed to shutdown OpenTelemetry", slog.String("err", err.Error()))
+					}
+				}()
+
+				poolcfg.ConnConfig.Tracer = &pgxotel.QueryTracer{
+					Name: "pgx",
 				}
 			}
+
 			db, err := pgxpool.NewWithConfig(ctx, poolcfg)
 			if err != nil {
 				return err
@@ -131,14 +152,11 @@ func newStartCommand() *cli.Command {
 
 			srv := &http.Server{
 				Addr:    c.String("address"),
-				Handler: mux,
+				Handler: otelhttp.NewHandler(mux, "/"),
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
 				},
 			}
-
-			sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-			defer sigcancel()
 
 			go func() {
 				<-sigctx.Done()

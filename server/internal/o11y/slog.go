@@ -1,11 +1,31 @@
-package log
+package o11y
 
 import (
 	"context"
 	"log/slog"
+	"os"
 
+	charmlog "github.com/charmbracelet/log"
 	goa "goa.design/goa/v3/pkg"
 )
+
+func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
+	if pretty {
+		return &ContextHandler{
+			Handler: charmlog.NewWithOptions(os.Stderr, charmlog.Options{
+				ReportCaller: true,
+				Level:        LogLevels[rawLevel].Charm,
+			}),
+		}
+	} else {
+		return &ContextHandler{
+			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+				AddSource: true,
+				Level:     LogLevels[rawLevel].Slog,
+			}),
+		}
+	}
+}
 
 type ContextHandler struct {
 	Handler slog.Handler
@@ -26,6 +46,10 @@ func (h *ContextHandler) WithGroup(name string) slog.Handler {
 }
 
 func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
+	appInfo := PullAppInfo(ctx)
+	record.Add("app.name", appInfo.Name)
+	record.Add("app.git_sha", appInfo.GitSHA)
+
 	if service, ok := ctx.Value(goa.ServiceKey).(string); ok {
 		record.Add("goa.service", service)
 	}

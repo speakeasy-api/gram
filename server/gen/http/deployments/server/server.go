@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -95,7 +96,7 @@ func MountGetDeploymentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/deployments.get", f)
+	mux.Handle("POST", "/rpc/deployments.get", otelhttp.WithRouteTag("/rpc/deployments.get", f).ServeHTTP)
 }
 
 // NewGetDeploymentHandler creates a HTTP handler which loads the HTTP request
@@ -146,7 +147,7 @@ func MountCreateDeploymentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/deployments.create", f)
+	mux.Handle("POST", "/rpc/deployments.create", otelhttp.WithRouteTag("/rpc/deployments.create", f).ServeHTTP)
 }
 
 // NewCreateDeploymentHandler creates a HTTP handler which loads the HTTP
@@ -197,7 +198,7 @@ func MountListDeploymentsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/deployments.list", f)
+	mux.Handle("GET", "/rpc/deployments.list", otelhttp.WithRouteTag("/rpc/deployments.list", f).ServeHTTP)
 }
 
 // NewListDeploymentsHandler creates a HTTP handler which loads the HTTP

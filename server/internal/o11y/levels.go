@@ -1,4 +1,4 @@
-package log
+package o11y
 
 import (
 	"log/slog"

@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	keys "github.com/speakeasy-api/gram/gen/keys"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -95,7 +96,7 @@ func MountCreateKeyHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/keys.create", f)
+	mux.Handle("POST", "/rpc/keys.create", otelhttp.WithRouteTag("/rpc/keys.create", f).ServeHTTP)
 }
 
 // NewCreateKeyHandler creates a HTTP handler which loads the HTTP request and
@@ -146,7 +147,7 @@ func MountListKeysHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/keys.list", f)
+	mux.Handle("GET", "/rpc/keys.list", otelhttp.WithRouteTag("/rpc/keys.list", f).ServeHTTP)
 }
 
 // NewListKeysHandler creates a HTTP handler which loads the HTTP request and
@@ -197,7 +198,7 @@ func MountRevokeKeyHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/keys.revoke/{id}", f)
+	mux.Handle("DELETE", "/rpc/keys.revoke/{id}", otelhttp.WithRouteTag("/rpc/keys.revoke/{id}", f).ServeHTTP)
 }
 
 // NewRevokeKeyHandler creates a HTTP handler which loads the HTTP request and

@@ -7,12 +7,15 @@ import (
 	"os"
 
 	"github.com/KimMachineGun/automemlimit/memlimit"
-	charmlog "github.com/charmbracelet/log"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/speakeasy-api/gram/internal/control"
-	"github.com/speakeasy-api/gram/internal/log"
+	"github.com/speakeasy-api/gram/internal/o11y"
+)
+
+var (
+	GitSHA = "dev"
 )
 
 func newApp() *cli.App {
@@ -28,7 +31,7 @@ func newApp() *cli.App {
 				Usage:   "Set the base log level",
 				EnvVars: []string{"GRAM_LOG_LEVEL"},
 				Action: func(c *cli.Context, val string) error {
-					if _, ok := log.LogLevels[val]; !ok {
+					if _, ok := o11y.LogLevels[val]; !ok {
 						return fmt.Errorf("invalid log level: %s", val)
 					}
 					return nil
@@ -43,24 +46,12 @@ func newApp() *cli.App {
 		},
 		Commands: []*cli.Command{newStartCommand()},
 		Before: func(c *cli.Context) error {
-			pretty := c.Bool("log-pretty")
+			c.Context = o11y.PushAppInfo(c.Context, &o11y.AppInfo{
+				Name:   "gram",
+				GitSHA: GitSHA,
+			})
 
-			var logger *slog.Logger
-			if pretty {
-				logger = slog.New(&log.ContextHandler{
-					Handler: charmlog.NewWithOptions(os.Stderr, charmlog.Options{
-						ReportCaller: true,
-						Level:        log.LogLevels[c.String("log-level")].Charm,
-					}),
-				})
-			} else {
-				logger = slog.New(&log.ContextHandler{
-					Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-						AddSource: true,
-						Level:     log.LogLevels[c.String("log-level")].Slog,
-					}),
-				})
-			}
+			logger := slog.New(o11y.NewLogHandler(c.String("log-level"), c.Bool("log-pretty")))
 
 			// Sets GOMAXPROCS to match the Linux container CPU quota.
 			maxprocs.Set(maxprocs.Logger(func(s string, i ...interface{}) {

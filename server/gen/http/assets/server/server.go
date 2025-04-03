@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	assets "github.com/speakeasy-api/gram/gen/assets"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -85,7 +86,7 @@ func MountUploadOpenAPIv3Handler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/assets.uploadOpenAPIv3", f)
+	mux.Handle("POST", "/rpc/assets.uploadOpenAPIv3", otelhttp.WithRouteTag("/rpc/assets.uploadOpenAPIv3", f).ServeHTTP)
 }
 
 // NewUploadOpenAPIv3Handler creates a HTTP handler which loads the HTTP
