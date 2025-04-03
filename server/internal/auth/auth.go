@@ -29,9 +29,9 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 	}
 
 	switch schema.Name {
-	case dsecurity.GramKeySecurityScheme:
+	case dsecurity.KeySecurityScheme:
 		return s.keys.KeyBasedAuth(ctx, key, schema.Scopes)
-	case dsecurity.GramSessionSecurityScheme:
+	case dsecurity.SessionSecurityScheme:
 		return s.sessions.SessionAuth(ctx, key)
 	default:
 		return ctx, errors.New("unsupported security scheme")
