@@ -3,6 +3,7 @@ package toolsets
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -21,28 +22,31 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
+	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	auth   *auth.Auth
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	repo            *repo.Queries
+	environmentRepo *environments_repo.Queries
+	auth            *auth.Auth
 }
 
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Service {
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/internal/toolsets"),
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
-		auth:   auth.New(logger, db, redisClient),
+		tracer:          otel.Tracer("github.com/speakeasy-api/gram/internal/toolsets"),
+		logger:          logger,
+		db:              db,
+		repo:            repo.New(db),
+		auth:            auth.New(logger, db, redisClient),
+		environmentRepo: environments_repo.New(db),
 	}
 }
 
@@ -69,6 +73,13 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	if payload.DefaultEnvironmentID != nil {
+		_, err := s.environmentRepo.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
+			ID:        uuid.MustParse(*payload.DefaultEnvironmentID),
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to find environment: %w", err)
+		}
 		createToolParams.DefaultEnvironmentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DefaultEnvironmentID), Valid: true}
 	}
 
@@ -182,6 +193,13 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.DefaultEnvironmentID != nil {
+		_, err := s.environmentRepo.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
+			ID:        uuid.MustParse(*payload.DefaultEnvironmentID),
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to find environment: %w", err)
+		}
 		updateParams.DefaultEnvironmentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DefaultEnvironmentID), Valid: true}
 	}
 
