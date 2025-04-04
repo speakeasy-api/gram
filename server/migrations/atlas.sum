@@ -1,4 +1,4 @@
-h1:mgpe/aSYoOvEdTFwdzr95xqYYpne8ACyUmstH1nYoHg=
+h1:PcGErZOIMBwKTwMcMVGjfBdF+ht9xARonnArxt8Lu+Q=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
@@ -26,3 +26,4 @@ h1:mgpe/aSYoOvEdTFwdzr95xqYYpne8ACyUmstH1nYoHg=
 20250403215904_update-environments.sql h1:0uSB14G7jnWTmmVg0dRUNeXgQikvLwYiB95SBCjxKsg=
 20250403231226_deployment_logs_message.sql h1:0gNlB0aANOqpv9bKVALPpqVKY37o8v5vgi4wFFfX5a0=
 20250404003538_deployment_constraints.sql h1:tFy5VjELsKOBwC81PWehta1CQxbLj+lvBPMJeSKionU=
+20250404195148_http_tool_definitions_index.sql h1:d2Hua7NePHPbDr5Gkr+CnXHXd3ZVaeWRMCkvEtq7qv8=

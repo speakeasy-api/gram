@@ -181,14 +181,15 @@ CREATE TABLE IF NOT EXISTS openapiv3_documents (
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   deployment_id uuid,
 
   openapiv3_document_id uuid,
 
   name text NOT NULL,
+  summary text NOT NULL,
   description text NOT NULL,
+  openapiv3_operation text,
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   server_env_var text NOT NULL,
@@ -214,10 +215,11 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
   CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
   CONSTRAINT http_tool_definitions_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
-  CONSTRAINT http_tool_definitions_project_id_name_key UNIQUE (project_id, name),
   CONSTRAINT http_tool_definitions_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES openapiv3_documents (id) ON DELETE RESTRICT,
   CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 
 CREATE TABLE IF NOT EXISTS environments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
