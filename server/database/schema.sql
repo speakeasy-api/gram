@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS deployments (
 
   CONSTRAINT deployments_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_project_id_idempotency_key UNIQUE (project_id, idempotency_key),
-  CONSTRAINT deployments_project_id_seq_key UNIQUE (project_id, seq),
+  CONSTRAINT deployments_seq_key UNIQUE (seq),
   CONSTRAINT deployments_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE RESTRICT
 );
 
@@ -155,7 +155,8 @@ CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
 
   CONSTRAINT deployments_openapiv3_documents_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_openapiv3_documents_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
-  CONSTRAINT deployments_openapiv3_documents_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE CASCADE
+  CONSTRAINT deployments_openapiv3_documents_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE CASCADE,
+  CONSTRAINT deployments_openapiv3_documents_deployment_id_slug_key UNIQUE (deployment_id, slug)
 );
 
 CREATE TABLE IF NOT EXISTS openapiv3_documents (
