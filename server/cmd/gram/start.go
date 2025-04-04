@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/deployments"
 	"github.com/speakeasy-api/gram/internal/environments"
+	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/keys"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
@@ -203,6 +204,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, redisClient))
 			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, redisClient))
 			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db, redisClient))
+			instances.Attach(mux, instances.NewService(logger.With("component", "instances"), db, redisClient))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),

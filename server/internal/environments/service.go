@@ -153,7 +153,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, errors.New("auth not found in context")
 	}
 
-	environment, err := s.repo.GetEnvironment(ctx, repo.GetEnvironmentParams{
+	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
 		Slug:      payload.Slug,
 		ProjectID: *authCtx.ProjectID,
 	})

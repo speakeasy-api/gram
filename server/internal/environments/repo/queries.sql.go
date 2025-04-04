@@ -25,7 +25,7 @@ INSERT INTO environments (
     $3,
     $4,
     $5
-) RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted
+) RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateEnvironmentParams struct {
@@ -36,19 +36,7 @@ type CreateEnvironmentParams struct {
 	Description    pgtype.Text
 }
 
-type CreateEnvironmentRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	Deleted        bool
-}
-
-func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (CreateEnvironmentRow, error) {
+func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (Environment, error) {
 	row := q.db.QueryRow(ctx, createEnvironment,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -56,7 +44,7 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 		arg.Slug,
 		arg.Description,
 	)
-	var i CreateEnvironmentRow
+	var i Environment
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -66,6 +54,7 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
@@ -154,41 +143,20 @@ func (q *Queries) DeleteEnvironmentEntry(ctx context.Context, arg DeleteEnvironm
 	return err
 }
 
-const getEnvironment = `-- name: GetEnvironment :one
-SELECT 
-    e.id,
-    e.organization_id,
-    e.project_id,
-    e.name,
-    e.slug,
-    e.description,
-    e.created_at,
-    e.updated_at,
-    e.deleted
+const getEnvironmentByID = `-- name: GetEnvironmentByID :one
+SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 FROM environments e
-WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE
+WHERE e.id = $1 AND e.project_id = $2 AND e.deleted IS FALSE
 `
 
-type GetEnvironmentParams struct {
-	Slug      string
+type GetEnvironmentByIDParams struct {
+	ID        uuid.UUID
 	ProjectID uuid.UUID
 }
 
-type GetEnvironmentRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	Deleted        bool
-}
-
-func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) (GetEnvironmentRow, error) {
-	row := q.db.QueryRow(ctx, getEnvironment, arg.Slug, arg.ProjectID)
-	var i GetEnvironmentRow
+func (q *Queries) GetEnvironmentByID(ctx context.Context, arg GetEnvironmentByIDParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentByID, arg.ID, arg.ProjectID)
+	var i Environment
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -198,41 +166,62 @@ func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) 
 		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getEnvironmentBySlug = `-- name: GetEnvironmentBySlug :one
+SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+FROM environments e
+WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE
+`
+
+type GetEnvironmentBySlugParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+// returns: GetEnvironmentByIDRow
+func (q *Queries) GetEnvironmentBySlug(ctx context.Context, arg GetEnvironmentBySlugParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentBySlug, arg.Slug, arg.ProjectID)
+	var i Environment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
 }
 
 const listEnvironmentEntries = `-- name: ListEnvironmentEntries :many
-SELECT 
-    ee.name as name,
-    ee.value as value,
-    ee.created_at as created_at,
-    ee.updated_at as updated_at
+SELECT name, value, environment_id, created_at, updated_at
 FROM environment_entries ee
 WHERE ee.environment_id = $1
 ORDER BY ee.name ASC
 `
 
-type ListEnvironmentEntriesRow struct {
-	Name      string
-	Value     string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid.UUID) ([]ListEnvironmentEntriesRow, error) {
+func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid.UUID) ([]EnvironmentEntry, error) {
 	rows, err := q.db.Query(ctx, listEnvironmentEntries, environmentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListEnvironmentEntriesRow
+	var items []EnvironmentEntry
 	for rows.Next() {
-		var i ListEnvironmentEntriesRow
+		var i EnvironmentEntry
 		if err := rows.Scan(
 			&i.Name,
 			&i.Value,
+			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -247,42 +236,21 @@ func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid
 }
 
 const listEnvironments = `-- name: ListEnvironments :many
-SELECT 
-    e.id,
-    e.organization_id,
-    e.project_id,
-    e.name,
-    e.slug,
-    e.description,
-    e.created_at,
-    e.updated_at,
-    e.deleted
+SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 FROM environments e
 WHERE e.project_id = $1 AND e.deleted IS FALSE
 ORDER BY e.created_at DESC
 `
 
-type ListEnvironmentsRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	Deleted        bool
-}
-
-func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]ListEnvironmentsRow, error) {
+func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]Environment, error) {
 	rows, err := q.db.Query(ctx, listEnvironments, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListEnvironmentsRow
+	var items []Environment
 	for rows.Next() {
-		var i ListEnvironmentsRow
+		var i Environment
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
@@ -292,6 +260,7 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 			&i.Description,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
 			return nil, err
@@ -311,7 +280,7 @@ SET
     description = COALESCE($2, description),
     updated_at = now()
 WHERE slug = $3 AND project_id = $4 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateEnvironmentParams struct {
@@ -321,26 +290,14 @@ type UpdateEnvironmentParams struct {
 	ProjectID   uuid.UUID
 }
 
-type UpdateEnvironmentRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	Deleted        bool
-}
-
-func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (UpdateEnvironmentRow, error) {
+func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (Environment, error) {
 	row := q.db.QueryRow(ctx, updateEnvironment,
 		arg.Name,
 		arg.Description,
 		arg.Slug,
 		arg.ProjectID,
 	)
-	var i UpdateEnvironmentRow
+	var i Environment
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -350,6 +307,7 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err

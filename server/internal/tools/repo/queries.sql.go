@@ -9,32 +9,10 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const listHttpToolDefinitions = `-- name: ListHttpToolDefinitions :many
-SELECT 
-  id
-, organization_id
-, project_id
-, openapiv3_document_id
-, name
-, description
-, tags
-, server_env_var
-, security_type
-, bearer_env_var
-, apikey_env_var
-, username_env_var
-, password_env_var
-, http_method
-, path
-, headers_schema
-, queries_schema
-, pathparams_schema
-, body_schema
-, created_at
-, updated_at
+SELECT id, organization_id, project_id, deployment_id, openapiv3_document_id, name, description, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, headers_schema, queries_schema, pathparams_schema, body_schema, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE project_id = $1 
   AND deleted IS FALSE
@@ -48,43 +26,20 @@ type ListHttpToolDefinitionsParams struct {
 	Cursor    uuid.NullUUID
 }
 
-type ListHttpToolDefinitionsRow struct {
-	ID                  uuid.UUID
-	OrganizationID      string
-	ProjectID           uuid.UUID
-	Openapiv3DocumentID uuid.NullUUID
-	Name                string
-	Description         string
-	Tags                []string
-	ServerEnvVar        string
-	SecurityType        string
-	BearerEnvVar        pgtype.Text
-	ApikeyEnvVar        pgtype.Text
-	UsernameEnvVar      pgtype.Text
-	PasswordEnvVar      pgtype.Text
-	HttpMethod          string
-	Path                string
-	HeadersSchema       []byte
-	QueriesSchema       []byte
-	PathparamsSchema    []byte
-	BodySchema          []byte
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-}
-
-func (q *Queries) ListHttpToolDefinitions(ctx context.Context, arg ListHttpToolDefinitionsParams) ([]ListHttpToolDefinitionsRow, error) {
+func (q *Queries) ListHttpToolDefinitions(ctx context.Context, arg ListHttpToolDefinitionsParams) ([]HttpToolDefinition, error) {
 	rows, err := q.db.Query(ctx, listHttpToolDefinitions, arg.ProjectID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListHttpToolDefinitionsRow
+	var items []HttpToolDefinition
 	for rows.Next() {
-		var i ListHttpToolDefinitionsRow
+		var i HttpToolDefinition
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
 			&i.ProjectID,
+			&i.DeploymentID,
 			&i.Openapiv3DocumentID,
 			&i.Name,
 			&i.Description,
@@ -103,6 +58,8 @@ func (q *Queries) ListHttpToolDefinitions(ctx context.Context, arg ListHttpToolD
 			&i.BodySchema,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}

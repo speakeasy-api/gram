@@ -20,18 +20,18 @@ func NewKeyAuth(db *pgxpool.Pool) *ByKey {
 	}
 }
 
-func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, scopes []string) (context.Context, error) {
+func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []string) (context.Context, error) {
 	if key == "" {
 		return nil, errors.New("unauthorized: api key not provided")
 	}
 
 	apiKey, err := k.keyDB.GetAPIKeyByToken(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("unauthorized: api key no key found")
 	}
-	for _, scope := range scopes {
+	for _, scope := range requiredScopes {
 		if !slices.Contains(apiKey.Scopes, scope) {
-			return nil, errors.New("unauthorized: api key scope does not match")
+			return nil, errors.New("unauthorized: api key insufficient scopes")
 		}
 	}
 

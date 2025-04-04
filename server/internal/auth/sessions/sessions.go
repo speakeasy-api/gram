@@ -25,7 +25,7 @@ func NewSessionAuth(logger *slog.Logger, redisClient *redis.Client) *Sessions {
 	}
 }
 
-func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context, error) {
+func (s *Sessions) SessionAuth(ctx context.Context, key string, canStubAuth bool) (context.Context, error) {
 	if key == "" {
 		// This may have been set via cookie from http middleware, GOA does not support natively
 		key, _ = contextvalues.GetSessionTokenFromContext(ctx)
@@ -33,7 +33,7 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string) (context.Context
 
 	if key == "" {
 		// If you attempt auth with no token provided in local we will automatically populate the session from local env
-		if os.Getenv("GRAM_ENVIRONMENT") == "local" {
+		if canStubAuth && os.Getenv("GRAM_ENVIRONMENT") == "local" {
 			var err error
 			key, err = s.PopulateLocalDevDefaultAuthSession(ctx)
 			if err != nil {

@@ -149,5 +149,5 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.SessionAuth(ctx, key)
+	return s.sessions.SessionAuth(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
 }

@@ -26,7 +26,7 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 		w.Header().Set("Gram-Session", res.SessionToken)
 		sessionCookie := res.SessionCookie
 		http.SetCookie(w, &http.Cookie{
-			Name:     "session",
+			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   2592000,
 			Secure:   true,
@@ -66,7 +66,7 @@ func EncodeSwitchScopesResponse(encoder func(context.Context, http.ResponseWrite
 		w.Header().Set("Gram-Session", res.SessionToken)
 		sessionCookie := res.SessionCookie
 		http.SetCookie(w, &http.Cookie{
-			Name:     "session",
+			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   2592000,
 			Secure:   true,
@@ -119,7 +119,7 @@ func EncodeLogoutResponse(encoder func(context.Context, http.ResponseWriter) goa
 		res, _ := v.(*auth.LogoutResult)
 		sessionCookie := res.SessionCookie
 		http.SetCookie(w, &http.Cookie{
-			Name:     "session",
+			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   0,
 			Secure:   true,
@@ -164,7 +164,7 @@ func EncodeInfoResponse(encoder func(context.Context, http.ResponseWriter) goaht
 		w.Header().Set("Gram-Session", res.SessionToken)
 		sessionCookie := res.SessionCookie
 		http.SetCookie(w, &http.Cookie{
-			Name:     "session",
+			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   2592000,
 			Secure:   true,

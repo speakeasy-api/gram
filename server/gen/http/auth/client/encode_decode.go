@@ -91,7 +91,7 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			)
 			for _, c := range cookies {
 				switch c.Name {
-				case "session":
+				case "gram_session":
 					sessionCookieRaw = c.Value
 				}
 			}
@@ -186,7 +186,7 @@ func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, re
 			)
 			for _, c := range cookies {
 				switch c.Name {
-				case "session":
+				case "gram_session":
 					sessionCookieRaw = c.Value
 				}
 			}
@@ -265,7 +265,7 @@ func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			)
 			for _, c := range cookies {
 				switch c.Name {
-				case "session":
+				case "gram_session":
 					sessionCookieRaw = c.Value
 				}
 			}
@@ -363,7 +363,7 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			)
 			for _, c := range cookies {
 				switch c.Name {
-				case "session":
+				case "gram_session":
 					sessionCookieRaw = c.Value
 				}
 			}

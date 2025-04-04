@@ -11,36 +11,24 @@ INSERT INTO environments (
     @name,
     @slug,
     @description
-) RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted;
+) RETURNING *;
 
 -- name: ListEnvironments :many
-SELECT 
-    e.id,
-    e.organization_id,
-    e.project_id,
-    e.name,
-    e.slug,
-    e.description,
-    e.created_at,
-    e.updated_at,
-    e.deleted
+SELECT *
 FROM environments e
 WHERE e.project_id = $1 AND e.deleted IS FALSE
 ORDER BY e.created_at DESC;
 
--- name: GetEnvironment :one
-SELECT 
-    e.id,
-    e.organization_id,
-    e.project_id,
-    e.name,
-    e.slug,
-    e.description,
-    e.created_at,
-    e.updated_at,
-    e.deleted
+-- name: GetEnvironmentBySlug :one
+-- returns: GetEnvironmentByIDRow
+SELECT *
 FROM environments e
 WHERE e.slug = $1 AND e.project_id = $2 AND e.deleted IS FALSE;
+
+-- name: GetEnvironmentByID :one
+SELECT *
+FROM environments e
+WHERE e.id = $1 AND e.project_id = $2 AND e.deleted IS FALSE;
 
 
 -- name: UpdateEnvironment :one
@@ -50,14 +38,10 @@ SET
     description = COALESCE(@description, description),
     updated_at = now()
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted;
+RETURNING *;
 
 -- name: ListEnvironmentEntries :many
-SELECT 
-    ee.name as name,
-    ee.value as value,
-    ee.created_at as created_at,
-    ee.updated_at as updated_at
+SELECT *
 FROM environment_entries ee
 WHERE ee.environment_id = $1
 ORDER BY ee.name ASC;

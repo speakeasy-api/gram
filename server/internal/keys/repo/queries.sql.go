@@ -27,18 +27,7 @@ INSERT INTO api_keys (
   , $5
   , $6::text[]
 )
-RETURNING 
-    id
-  , organization_id
-  , project_id
-  , created_by_user_id
-  , name
-  , token
-  , scopes
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+RETURNING id, organization_id, project_id, created_by_user_id, name, token, scopes, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAPIKeyParams struct {
@@ -95,18 +84,7 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) erro
 }
 
 const getAPIKeyByToken = `-- name: GetAPIKeyByToken :one
-SELECT 
-    id
-  , organization_id
-  , project_id
-  , created_by_user_id
-  , name
-  , token
-  , scopes
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+SELECT id, organization_id, project_id, created_by_user_id, name, token, scopes, created_at, updated_at, deleted_at, deleted
 FROM api_keys
 WHERE token = $1
   AND deleted IS FALSE
@@ -132,18 +110,7 @@ func (q *Queries) GetAPIKeyByToken(ctx context.Context, token string) (ApiKey, e
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT 
-    id
-  , organization_id
-  , project_id
-  , created_by_user_id
-  , name
-  , token
-  , scopes
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+SELECT id, organization_id, project_id, created_by_user_id, name, token, scopes, created_at, updated_at, deleted_at, deleted
 FROM api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE

@@ -16,7 +16,7 @@ var SessionPayload = func() {
 }
 
 var WriteSessionCookie = func() {
-	Cookie("session_cookie:session", String, func() {
+	Cookie("session_cookie:gram_session", String, func() {
 	})
 	// TODO: We want to restrict cookie domain here
 	CookieMaxAge(2592000) // 30 days in seconds
@@ -25,7 +25,7 @@ var WriteSessionCookie = func() {
 }
 
 var DeleteSessionCookie = func() {
-	Cookie("session_cookie:session", String, func() {
+	Cookie("session_cookie:gram_session", String, func() {
 	})
 	CookieMaxAge(0)
 	CookieSecure()

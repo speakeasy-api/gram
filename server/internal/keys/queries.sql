@@ -14,49 +14,16 @@ INSERT INTO api_keys (
   , @token
   , @scopes::text[]
 )
-RETURNING 
-    id
-  , organization_id
-  , project_id
-  , created_by_user_id
-  , name
-  , token
-  , scopes
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted;
+RETURNING *;
 
 -- name: GetAPIKeyByToken :one
-SELECT 
-    id
-  , organization_id
-  , project_id
-  , created_by_user_id
-  , name
-  , token
-  , scopes
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+SELECT *
 FROM api_keys
 WHERE token = @token
   AND deleted IS FALSE;
 
 -- name: ListAPIKeysByOrganization :many
-SELECT 
-    id
-  , organization_id
-  , project_id
-  , created_by_user_id
-  , name
-  , token
-  , scopes
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+SELECT *
 FROM api_keys
 WHERE organization_id = @organization_id
   AND deleted IS FALSE

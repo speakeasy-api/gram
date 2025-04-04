@@ -19,15 +19,7 @@ INSERT INTO projects (
   , $2
   , $3
 )
-RETURNING 
-    id
-  , name
-  , slug
-  , organization_id
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+RETURNING id, name, slug, organization_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateProjectParams struct {
@@ -53,15 +45,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 }
 
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
-SELECT 
-    id
-  , name
-  , slug
-  , organization_id
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+SELECT id, name, slug, organization_id, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE

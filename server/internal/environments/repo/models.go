@@ -9,6 +9,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Environment struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type EnvironmentEntry struct {
 	Name          string
 	Value         string

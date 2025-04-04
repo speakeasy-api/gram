@@ -8,26 +8,10 @@ INSERT INTO projects (
   , @slug
   , @organization_id
 )
-RETURNING 
-    id
-  , name
-  , slug
-  , organization_id
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted;
+RETURNING *;
 
 -- name: ListProjectsByOrganization :many
-SELECT 
-    id
-  , name
-  , slug
-  , organization_id
-  , created_at
-  , updated_at
-  , deleted_at
-  , deleted
+SELECT *
 FROM projects
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
