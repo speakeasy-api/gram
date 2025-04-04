@@ -1,7 +1,15 @@
 -- name: GetDeployment :one
-SELECT *
+WITH latest_status as (
+    SELECT deployment_id, status
+    FROM deployment_statuses
+    WHERE deployment_id = @id
+    ORDER BY seq DESC
+    LIMIT 1
+)
+SELECT sqlc.embed(deployments), coalesce(latest_status.status, 'unknown') as status
 FROM deployments
-WHERE id = @id;
+LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
+WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: ListDeployments :many
 SELECT 
@@ -22,14 +30,30 @@ ORDER BY d.id DESC
 LIMIT 51;
 
 -- name: GetDeploymentWithAssets :many
-SELECT sqlc.embed(deployments), sqlc.embed(deployments_openapiv3_assets)
+WITH latest_status as (
+    SELECT deployment_id, status
+    FROM deployment_statuses
+    WHERE deployment_id = @id
+    ORDER BY seq DESC
+    LIMIT 1
+)
+SELECT sqlc.embed(deployments), sqlc.embed(deployments_openapiv3_assets), coalesce(latest_status.status, 'unknown') as status
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
+LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetDeploymentByIdempotencyKey :one
-SELECT *
+WITH latest_status as (
+    SELECT deployment_id, status
+    FROM deployment_statuses
+    WHERE deployment_id = @id
+    ORDER BY seq DESC
+    LIMIT 1
+)
+SELECT sqlc.embed(deployments), coalesce(latest_status.status, 'unknown') as status
 FROM deployments
+LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE idempotency_key = @idempotency_key
  AND project_id = @project_id;
 
@@ -86,4 +110,5 @@ INSERT INTO deployments_openapiv3_assets (
   @name,
   @slug
 )
+ON CONFLICT (deployment_id, slug) DO NOTHING
 RETURNING id, asset_id, name, slug;

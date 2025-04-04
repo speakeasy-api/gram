@@ -254,7 +254,7 @@ paths:
             x-speakeasy-react-hook:
                 name: CreateDeployment
     /rpc/deployments.get:
-        post:
+        get:
             description: Create a deployment to load tool definitions.
             operationId: deployments#getDeployment
             parameters:

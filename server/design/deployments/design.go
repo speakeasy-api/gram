@@ -22,7 +22,7 @@ var _ = Service("deployments", func() {
 		Result(GetDeploymentResult)
 
 		HTTP(func() {
-			POST("/rpc/deployments.get")
+			GET("/rpc/deployments.get")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("id")

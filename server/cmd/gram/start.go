@@ -198,7 +198,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient))
+			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, redisClient))
 			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, redisClient))
 			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, redisClient))

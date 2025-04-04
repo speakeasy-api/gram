@@ -52,7 +52,7 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"GetDeployment", "POST", "/rpc/deployments.get"},
+			{"GetDeployment", "GET", "/rpc/deployments.get"},
 			{"CreateDeployment", "POST", "/rpc/deployments.create"},
 			{"ListDeployments", "GET", "/rpc/deployments.list"},
 		},
@@ -96,7 +96,7 @@ func MountGetDeploymentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/deployments.get", otelhttp.WithRouteTag("/rpc/deployments.get", f).ServeHTTP)
+	mux.Handle("GET", "/rpc/deployments.get", otelhttp.WithRouteTag("/rpc/deployments.get", f).ServeHTTP)
 }
 
 // NewGetDeploymentHandler creates a HTTP handler which loads the HTTP request

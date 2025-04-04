@@ -22,7 +22,7 @@ import (
 // path set to call the "deployments" service "getDeployment" endpoint
 func (c *Client) BuildGetDeploymentRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetDeploymentDeploymentsPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("deployments", "getDeployment", u.String(), err)
 	}

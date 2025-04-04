@@ -73,6 +73,35 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 	return i, err
 }
 
+const getProjectAsset = `-- name: GetProjectAsset :one
+SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND id = $2
+`
+
+type GetProjectAssetParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) GetProjectAsset(ctx context.Context, arg GetProjectAssetParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, getProjectAsset, arg.ProjectID, arg.ID)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Url,
+		&i.Kind,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.Sha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectAssetBySHA256 = `-- name: GetProjectAssetBySHA256 :one
 SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND sha256 = $2
 `

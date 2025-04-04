@@ -25,6 +25,7 @@ INSERT INTO deployments_openapiv3_assets (
   $3,
   $4
 )
+ON CONFLICT (deployment_id, slug) DO NOTHING
 RETURNING id, asset_id, name, slug
 `
 
@@ -107,35 +108,62 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 }
 
 const getDeployment = `-- name: GetDeployment :one
-SELECT id, seq, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
+WITH latest_status as (
+    SELECT deployment_id, status
+    FROM deployment_statuses
+    WHERE deployment_id = $1
+    ORDER BY seq DESC
+    LIMIT 1
+)
+SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, coalesce(latest_status.status, 'unknown') as status
 FROM deployments
-WHERE id = $1
+LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
+WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
-func (q *Queries) GetDeployment(ctx context.Context, id uuid.UUID) (Deployment, error) {
-	row := q.db.QueryRow(ctx, getDeployment, id)
-	var i Deployment
+type GetDeploymentParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetDeploymentRow struct {
+	Deployment Deployment
+	Status     string
+}
+
+func (q *Queries) GetDeployment(ctx context.Context, arg GetDeploymentParams) (GetDeploymentRow, error) {
+	row := q.db.QueryRow(ctx, getDeployment, arg.ID, arg.ProjectID)
+	var i GetDeploymentRow
 	err := row.Scan(
-		&i.ID,
-		&i.Seq,
-		&i.UserID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.IdempotencyKey,
-		&i.GithubRepo,
-		&i.GithubPr,
-		&i.GithubSha,
-		&i.ExternalID,
-		&i.ExternalUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.Deployment.ID,
+		&i.Deployment.Seq,
+		&i.Deployment.UserID,
+		&i.Deployment.ProjectID,
+		&i.Deployment.OrganizationID,
+		&i.Deployment.IdempotencyKey,
+		&i.Deployment.GithubRepo,
+		&i.Deployment.GithubPr,
+		&i.Deployment.GithubSha,
+		&i.Deployment.ExternalID,
+		&i.Deployment.ExternalUrl,
+		&i.Deployment.CreatedAt,
+		&i.Deployment.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getDeploymentByIdempotencyKey = `-- name: GetDeploymentByIdempotencyKey :one
-SELECT id, seq, user_id, project_id, organization_id, idempotency_key, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
+WITH latest_status as (
+    SELECT deployment_id, status
+    FROM deployment_statuses
+    WHERE deployment_id = $3
+    ORDER BY seq DESC
+    LIMIT 1
+)
+SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, coalesce(latest_status.status, 'unknown') as status
 FROM deployments
+LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE idempotency_key = $1
  AND project_id = $2
 `
@@ -143,25 +171,32 @@ WHERE idempotency_key = $1
 type GetDeploymentByIdempotencyKeyParams struct {
 	IdempotencyKey string
 	ProjectID      uuid.UUID
+	ID             uuid.UUID
 }
 
-func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDeploymentByIdempotencyKeyParams) (Deployment, error) {
-	row := q.db.QueryRow(ctx, getDeploymentByIdempotencyKey, arg.IdempotencyKey, arg.ProjectID)
-	var i Deployment
+type GetDeploymentByIdempotencyKeyRow struct {
+	Deployment Deployment
+	Status     string
+}
+
+func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDeploymentByIdempotencyKeyParams) (GetDeploymentByIdempotencyKeyRow, error) {
+	row := q.db.QueryRow(ctx, getDeploymentByIdempotencyKey, arg.IdempotencyKey, arg.ProjectID, arg.ID)
+	var i GetDeploymentByIdempotencyKeyRow
 	err := row.Scan(
-		&i.ID,
-		&i.Seq,
-		&i.UserID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.IdempotencyKey,
-		&i.GithubRepo,
-		&i.GithubPr,
-		&i.GithubSha,
-		&i.ExternalID,
-		&i.ExternalUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.Deployment.ID,
+		&i.Deployment.Seq,
+		&i.Deployment.UserID,
+		&i.Deployment.ProjectID,
+		&i.Deployment.OrganizationID,
+		&i.Deployment.IdempotencyKey,
+		&i.Deployment.GithubRepo,
+		&i.Deployment.GithubPr,
+		&i.Deployment.GithubSha,
+		&i.Deployment.ExternalID,
+		&i.Deployment.ExternalUrl,
+		&i.Deployment.CreatedAt,
+		&i.Deployment.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
@@ -199,9 +234,17 @@ func (q *Queries) GetDeploymentOpenAPIv3(ctx context.Context, deploymentID uuid.
 }
 
 const getDeploymentWithAssets = `-- name: GetDeploymentWithAssets :many
-SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug
+WITH latest_status as (
+    SELECT deployment_id, status
+    FROM deployment_statuses
+    WHERE deployment_id = $1
+    ORDER BY seq DESC
+    LIMIT 1
+)
+SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug, coalesce(latest_status.status, 'unknown') as status
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
+LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
@@ -213,6 +256,7 @@ type GetDeploymentWithAssetsParams struct {
 type GetDeploymentWithAssetsRow struct {
 	Deployment                Deployment
 	DeploymentsOpenapiv3Asset DeploymentsOpenapiv3Asset
+	Status                    string
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -243,6 +287,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.DeploymentsOpenapiv3Asset.AssetID,
 			&i.DeploymentsOpenapiv3Asset.Name,
 			&i.DeploymentsOpenapiv3Asset.Slug,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}

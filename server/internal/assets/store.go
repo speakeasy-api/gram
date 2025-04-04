@@ -94,7 +94,9 @@ func NewGCSBlobStore(ctx context.Context, bucketURI string) (*GCSBlobStore, erro
 }
 
 func (gbs *GCSBlobStore) getBucketURI(subpath string) (*url.URL, error) {
-	u := gbs.bucketURI.JoinPath(strings.TrimPrefix(subpath, "/"))
+	noPrefix := strings.TrimPrefix(subpath, gbs.bucketURI.Path)
+	noSlash := strings.TrimPrefix(noPrefix, "/")
+	u := gbs.bucketURI.JoinPath(noSlash)
 	us := u.String()
 	if us == "" || !strings.HasPrefix(us, gbs.bucketURI.String()) || us == gbs.bucketURI.String() {
 		return nil, fmt.Errorf("invalid path: %s", subpath)

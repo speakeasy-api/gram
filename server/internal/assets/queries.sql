@@ -21,5 +21,8 @@ ON CONFLICT (project_id, sha256) DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: GetProjectAsset :one
+SELECT * FROM assets WHERE project_id = @project_id AND id = @id;
+
 -- name: GetProjectAssetBySHA256 :one
 SELECT * FROM assets WHERE project_id = @project_id AND sha256 = @sha256;
