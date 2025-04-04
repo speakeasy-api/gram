@@ -21,24 +21,21 @@ Create a deployment to load tool definitions.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
 });
 
 async function run() {
   const result = await gram.deployments.deploymentsNumberCreateDeployment({
     gramSession: "Rerum laborum voluptatum in qui culpa sed.",
-    createDeploymentForm: {
+    idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
+    createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       externalUrl: "Corrupti voluptas corporis dolor nisi.",
       githubRepo: "speakeasyapi/gram",
       githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
-      idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
-      openapiv3AssetIds: [
-        "Dolores deleniti aut ipsam voluptate non.",
-        "Et ut accusantium et voluptatum.",
-        "Autem quasi vel.",
-        "Quasi enim.",
-      ],
     },
   });
 
@@ -60,24 +57,21 @@ import { deploymentsDeploymentsNumberCreateDeployment } from "@gram/sdk/funcs/de
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
 });
 
 async function run() {
   const res = await deploymentsDeploymentsNumberCreateDeployment(gram, {
     gramSession: "Rerum laborum voluptatum in qui culpa sed.",
-    createDeploymentForm: {
+    idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
+    createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       externalUrl: "Corrupti voluptas corporis dolor nisi.",
       githubRepo: "speakeasyapi/gram",
       githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
-      idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
-      openapiv3AssetIds: [
-        "Dolores deleniti aut ipsam voluptate non.",
-        "Et ut accusantium et voluptatum.",
-        "Autem quasi vel.",
-        "Quasi enim.",
-      ],
     },
   });
 
@@ -140,7 +134,10 @@ Create a deployment to load tool definitions.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
 });
 
 async function run() {
@@ -167,7 +164,10 @@ import { deploymentsDeploymentsNumberGetDeployment } from "@gram/sdk/funcs/deplo
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
 });
 
 async function run() {
@@ -235,7 +235,10 @@ List all deployments in descending order of creation.
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
 });
 
 async function run() {
@@ -262,7 +265,10 @@ import { deploymentsDeploymentsNumberListDeployments } from "@gram/sdk/funcs/dep
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
 });
 
 async function run() {
@@ -296,8 +302,19 @@ associated utilities.
 
 ```tsx
 import {
-  // Mutation hook for triggering the API call.
-  useDeploymentsDeploymentsNumberListDeploymentsMutation
+  // Query hooks for fetching data.
+  useListDeployments,
+  useListDeploymentsSuspense,
+
+  // Utility for prefetching data during server-side rendering and in React
+  // Server Components that will be immediately available to client components
+  // using the hooks.
+  prefetchListDeployments,
+  
+  // Utilities to invalidate the query cache for this query in response to
+  // mutations and other user actions.
+  invalidateListDeployments,
+  invalidateAllListDeployments,
 } from "@gram/sdk/react-query/deploymentsDeploymentsNumberListDeployments.js";
 ```
 

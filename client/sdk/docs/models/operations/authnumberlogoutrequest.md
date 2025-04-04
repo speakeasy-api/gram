@@ -5,13 +5,11 @@
 ```typescript
 import { AuthNumberLogoutRequest } from "@gram/sdk/models/operations";
 
-let value: AuthNumberLogoutRequest = {
-  gramSession: "Minus dolore consequuntur eum necessitatibus est quisquam.",
-};
+let value: AuthNumberLogoutRequest = {};
 ```
 
 ## Fields
 
-| Field                                                      | Type                                                       | Required                                                   | Description                                                | Example                                                    |
-| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `gramSession`                                              | *string*                                                   | :heavy_minus_sign:                                         | Session header                                             | Minus dolore consequuntur eum necessitatibus est quisquam. |
+| Field              | Type               | Required           | Description        |
+| ------------------ | ------------------ | ------------------ | ------------------ |
+| `gramSession`      | *string*           | :heavy_minus_sign: | Session header     |

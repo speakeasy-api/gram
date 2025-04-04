@@ -1,8 +1,20 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+interface InputProps extends React.ComponentProps<"input"> {
+  onEnter?: () => void;
+}
+
+function Input({ className, type, onEnter, ...props }: InputProps) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && onEnter) {
+      onEnter();
+    }
+    // Call the original onKeyDown if it exists
+    props.onKeyDown?.(e);
+  };
+
   return (
     <input
       type={type}
@@ -13,9 +25,10 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
         className
       )}
+      onKeyDown={handleKeyDown}
       {...props}
     />
-  )
+  );
 }
 
-export { Input }
+export { Input };

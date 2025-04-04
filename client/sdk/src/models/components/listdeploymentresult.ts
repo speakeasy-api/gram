@@ -8,17 +8,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  Deployment,
-  Deployment$inboundSchema,
-  Deployment$Outbound,
-  Deployment$outboundSchema,
-} from "./deployment.js";
+  DeploymentSummary,
+  DeploymentSummary$inboundSchema,
+  DeploymentSummary$Outbound,
+  DeploymentSummary$outboundSchema,
+} from "./deploymentsummary.js";
 
 export type ListDeploymentResult = {
   /**
    * A list of deployments
    */
-  items: Array<Deployment>;
+  items: Array<DeploymentSummary>;
   /**
    * The cursor to fetch results from
    */
@@ -31,7 +31,7 @@ export const ListDeploymentResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  items: z.array(Deployment$inboundSchema),
+  items: z.array(DeploymentSummary$inboundSchema),
   next_cursor: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
@@ -41,7 +41,7 @@ export const ListDeploymentResult$inboundSchema: z.ZodType<
 
 /** @internal */
 export type ListDeploymentResult$Outbound = {
-  items: Array<Deployment$Outbound>;
+  items: Array<DeploymentSummary$Outbound>;
   next_cursor?: string | undefined;
 };
 
@@ -51,7 +51,7 @@ export const ListDeploymentResult$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListDeploymentResult
 > = z.object({
-  items: z.array(Deployment$outboundSchema),
+  items: z.array(DeploymentSummary$outboundSchema),
   nextCursor: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {

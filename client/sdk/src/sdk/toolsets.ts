@@ -3,6 +3,7 @@
  */
 
 import { toolsetsToolsetsNumberCreateToolset } from "../funcs/toolsetsToolsetsNumberCreateToolset.js";
+import { toolsetsToolsetsNumberDeleteToolset } from "../funcs/toolsetsToolsetsNumberDeleteToolset.js";
 import { toolsetsToolsetsNumberGetToolsetDetails } from "../funcs/toolsetsToolsetsNumberGetToolsetDetails.js";
 import { toolsetsToolsetsNumberListToolsets } from "../funcs/toolsetsToolsetsNumberListToolsets.js";
 import { toolsetsToolsetsNumberUpdateToolset } from "../funcs/toolsetsToolsetsNumberUpdateToolset.js";
@@ -23,6 +24,23 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsToolsetsNumberCreateToolset(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * deleteToolset toolsets
+   *
+   * @remarks
+   * Delete a toolset by its ID
+   */
+  async toolsetsNumberDeleteToolset(
+    request: operations.ToolsetsNumberDeleteToolsetRequest,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(toolsetsToolsetsNumberDeleteToolset(
       this,
       request,
       options,
@@ -53,7 +71,7 @@ export class Toolsets extends ClientSDK {
    * List all toolsets for a project
    */
   async toolsetsNumberListToolsets(
-    request: operations.ToolsetsNumberListToolsetsRequest,
+    request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
     options?: RequestOptions,
   ): Promise<components.ListToolsetsResult> {
     return unwrapAsync(toolsetsToolsetsNumberListToolsets(

@@ -17,7 +17,7 @@ export type ToolsetsNumberCreateToolsetRequest = {
   /**
    * project header
    */
-  gramProject: string;
+  gramProject?: string | undefined;
   createToolsetRequestBody: components.CreateToolsetRequestBody;
 };
 
@@ -28,7 +28,7 @@ export const ToolsetsNumberCreateToolsetRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string(),
+  "Gram-Project": z.string().optional(),
   CreateToolsetRequestBody: components.CreateToolsetRequestBody$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
@@ -41,7 +41,7 @@ export const ToolsetsNumberCreateToolsetRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type ToolsetsNumberCreateToolsetRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  "Gram-Project": string;
+  "Gram-Project"?: string | undefined;
   CreateToolsetRequestBody: components.CreateToolsetRequestBody$Outbound;
 };
 
@@ -52,7 +52,7 @@ export const ToolsetsNumberCreateToolsetRequest$outboundSchema: z.ZodType<
   ToolsetsNumberCreateToolsetRequest
 > = z.object({
   gramSession: z.string().optional(),
-  gramProject: z.string(),
+  gramProject: z.string().optional(),
   createToolsetRequestBody: components.CreateToolsetRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {

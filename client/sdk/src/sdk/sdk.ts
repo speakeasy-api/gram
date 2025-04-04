@@ -6,8 +6,10 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Assets } from "./assets.js";
 import { Auth } from "./auth.js";
 import { Deployments } from "./deployments.js";
+import { Environments } from "./environments.js";
 import { Keys } from "./keys.js";
 import { System } from "./system.js";
+import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 
 export class Gram extends ClientSDK {
@@ -31,9 +33,19 @@ export class Gram extends ClientSDK {
     return (this._deployments ??= new Deployments(this._options));
   }
 
+  private _environments?: Environments;
+  get environments(): Environments {
+    return (this._environments ??= new Environments(this._options));
+  }
+
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
+  }
+
+  private _tools?: Tools;
+  get tools(): Tools {
+    return (this._tools ??= new Tools(this._options));
   }
 
   private _toolsets?: Toolsets;

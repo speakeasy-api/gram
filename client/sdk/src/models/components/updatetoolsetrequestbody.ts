@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type UpdateToolsetRequestBody = {
   /**
+   * The ID of the environment to use as the default for the toolset
+   */
+  defaultEnvironmentId?: string | undefined;
+  /**
    * The new description of the toolset
    */
   description?: string | undefined;
@@ -33,12 +37,14 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  default_environment_id: z.string().optional(),
   description: z.string().optional(),
   http_tool_ids_to_add: z.array(z.string()).optional(),
   http_tool_ids_to_remove: z.array(z.string()).optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "default_environment_id": "defaultEnvironmentId",
     "http_tool_ids_to_add": "httpToolIdsToAdd",
     "http_tool_ids_to_remove": "httpToolIdsToRemove",
   });
@@ -46,6 +52,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
 
 /** @internal */
 export type UpdateToolsetRequestBody$Outbound = {
+  default_environment_id?: string | undefined;
   description?: string | undefined;
   http_tool_ids_to_add?: Array<string> | undefined;
   http_tool_ids_to_remove?: Array<string> | undefined;
@@ -58,12 +65,14 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   UpdateToolsetRequestBody
 > = z.object({
+  defaultEnvironmentId: z.string().optional(),
   description: z.string().optional(),
   httpToolIdsToAdd: z.array(z.string()).optional(),
   httpToolIdsToRemove: z.array(z.string()).optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    defaultEnvironmentId: "default_environment_id",
     httpToolIdsToAdd: "http_tool_ids_to_add",
     httpToolIdsToRemove: "http_tool_ids_to_remove",
   });

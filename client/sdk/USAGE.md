@@ -3,8 +3,12 @@
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-    ?? "",
+  security: {
+    projectSlugHeaderGramProject:
+      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  },
 });
 
 async function run() {

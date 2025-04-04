@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type KeysNumberRevokeKeySecurity = {
+  sessionHeaderGramSession: string;
+};
+
 export type KeysNumberRevokeKeyRequest = {
   /**
    * The ID of the key to revoke
@@ -18,6 +22,70 @@ export type KeysNumberRevokeKeyRequest = {
    */
   gramSession?: string | undefined;
 };
+
+/** @internal */
+export const KeysNumberRevokeKeySecurity$inboundSchema: z.ZodType<
+  KeysNumberRevokeKeySecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type KeysNumberRevokeKeySecurity$Outbound = {
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const KeysNumberRevokeKeySecurity$outboundSchema: z.ZodType<
+  KeysNumberRevokeKeySecurity$Outbound,
+  z.ZodTypeDef,
+  KeysNumberRevokeKeySecurity
+> = z.object({
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace KeysNumberRevokeKeySecurity$ {
+  /** @deprecated use `KeysNumberRevokeKeySecurity$inboundSchema` instead. */
+  export const inboundSchema = KeysNumberRevokeKeySecurity$inboundSchema;
+  /** @deprecated use `KeysNumberRevokeKeySecurity$outboundSchema` instead. */
+  export const outboundSchema = KeysNumberRevokeKeySecurity$outboundSchema;
+  /** @deprecated use `KeysNumberRevokeKeySecurity$Outbound` instead. */
+  export type Outbound = KeysNumberRevokeKeySecurity$Outbound;
+}
+
+export function keysNumberRevokeKeySecurityToJSON(
+  keysNumberRevokeKeySecurity: KeysNumberRevokeKeySecurity,
+): string {
+  return JSON.stringify(
+    KeysNumberRevokeKeySecurity$outboundSchema.parse(
+      keysNumberRevokeKeySecurity,
+    ),
+  );
+}
+
+export function keysNumberRevokeKeySecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<KeysNumberRevokeKeySecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => KeysNumberRevokeKeySecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KeysNumberRevokeKeySecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const KeysNumberRevokeKeyRequest$inboundSchema: z.ZodType<

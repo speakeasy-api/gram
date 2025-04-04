@@ -8,7 +8,7 @@ import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { extractSecurity, resolveGlobalSecurity } from "../lib/security.js";
+import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import * as components from "../models/components/index.js";
 import { APIError } from "../models/errors/apierror.js";
@@ -32,6 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function keysKeysNumberCreateKey(
   client: GramCore,
+  security: operations.KeysNumberCreateKeySecurity,
   request: operations.KeysNumberCreateKeyRequest,
   options?: RequestOptions,
 ): APIPromise<
@@ -48,6 +49,7 @@ export function keysKeysNumberCreateKey(
 > {
   return new APIPromise($do(
     client,
+    security,
     request,
     options,
   ));
@@ -55,6 +57,7 @@ export function keysKeysNumberCreateKey(
 
 async function $do(
   client: GramCore,
+  security: operations.KeysNumberCreateKeySecurity,
   request: operations.KeysNumberCreateKeyRequest,
   options?: RequestOptions,
 ): Promise<
@@ -95,13 +98,15 @@ async function $do(
     }),
   }));
 
-  const secConfig = await extractSecurity(
-    client._options.sessionHeaderGramSession,
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.sessionHeaderGramSession,
+      },
+    ],
   );
-  const securityInput = secConfig == null
-    ? {}
-    : { sessionHeaderGramSession: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
@@ -110,7 +115,7 @@ async function $do(
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.sessionHeaderGramSession,
+    securitySource: security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },

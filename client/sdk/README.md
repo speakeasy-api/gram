@@ -111,6 +111,7 @@ Add the following server definition to your `claude_desktop_config.json` file:
         "-y", "--package", "@gram/sdk",
         "--",
         "mcp", "start",
+        "--project-slug-header-gram-project", "...",
         "--session-header-gram-session", "..."
       ]
     }
@@ -134,6 +135,7 @@ Create a `.cursor/mcp.json` file in your project root with the following content
         "-y", "--package", "@gram/sdk",
         "--",
         "mcp", "start",
+        "--project-slug-header-gram-project", "...",
         "--session-header-gram-session", "..."
       ]
     }
@@ -189,8 +191,12 @@ For supported JavaScript runtimes, please consult [RUNTIMES.md](RUNTIMES.md).
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-    ?? "",
+  security: {
+    projectSlugHeaderGramProject:
+      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  },
 });
 
 async function run() {
@@ -210,23 +216,52 @@ run();
 
 ### Per-Client Security Schemes
 
-This SDK supports the following security scheme globally:
+This SDK supports the following security schemes globally:
 
-| Name                       | Type   | Scheme  | Environment Variable               |
-| -------------------------- | ------ | ------- | ---------------------------------- |
-| `sessionHeaderGramSession` | apiKey | API key | `GRAM_SESSION_HEADER_GRAM_SESSION` |
+| Name                           | Type   | Scheme  | Environment Variable                    |
+| ------------------------------ | ------ | ------- | --------------------------------------- |
+| `projectSlugHeaderGramProject` | apiKey | API key | `GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT` |
+| `sessionHeaderGramSession`     | apiKey | API key | `GRAM_SESSION_HEADER_GRAM_SESSION`      |
 
-To authenticate with the API the `sessionHeaderGramSession` parameter must be set when initializing the SDK client instance. For example:
+You can set the security parameters through the `security` optional parameter when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
 ```typescript
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-    ?? "",
+  security: {
+    projectSlugHeaderGramProject:
+      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  },
 });
 
 async function run() {
   const result = await gram.system.systemNumberHealthCheck();
+
+  // Handle the result
+  console.log(result);
+}
+
+run();
+
+```
+
+### Per-Operation Security Schemes
+
+Some operations in this SDK require the security scheme to be specified at the request level. For example:
+```typescript
+import { Gram } from "@gram/sdk";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.auth.authNumberInfo({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  }, {
+    gramSession: "Consequuntur error suscipit optio sunt eum.",
+  });
 
   // Handle the result
   console.log(result);
@@ -260,6 +295,13 @@ run();
 * [deploymentsNumberGetDeployment](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 * [deploymentsNumberListDeployments](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
 
+### [environments](docs/sdks/environments/README.md)
+
+* [environmentsNumberCreateEnvironment](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments
+* [environmentsNumberDeleteEnvironment](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
+* [environmentsNumberListEnvironments](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
+* [environmentsNumberUpdateEnvironment](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
+
 
 ### [keys](docs/sdks/keys/README.md)
 
@@ -271,9 +313,14 @@ run();
 
 * [systemNumberHealthCheck](docs/sdks/system/README.md#systemnumberhealthcheck) - healthCheck system
 
+### [tools](docs/sdks/tools/README.md)
+
+* [toolsNumberListTools](docs/sdks/tools/README.md#toolsnumberlisttools) - listTools tools
+
 ### [toolsets](docs/sdks/toolsets/README.md)
 
 * [toolsetsNumberCreateToolset](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
+* [toolsetsNumberDeleteToolset](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
 * [toolsetsNumberGetToolsetDetails](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
 * [toolsetsNumberListToolsets](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
 * [toolsetsNumberUpdateToolset](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
@@ -304,14 +351,20 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsDeploymentsNumberCreateDeployment`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
 - [`deploymentsDeploymentsNumberGetDeployment`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 - [`deploymentsDeploymentsNumberListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
+- [`environmentsEnvironmentsNumberCreateEnvironment`](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments
+- [`environmentsEnvironmentsNumberDeleteEnvironment`](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
+- [`environmentsEnvironmentsNumberListEnvironments`](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
+- [`environmentsEnvironmentsNumberUpdateEnvironment`](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
 - [`keysKeysNumberCreateKey`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
 - [`keysKeysNumberListKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
 - [`keysKeysNumberRevokeKey`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
 - [`systemSystemNumberHealthCheck`](docs/sdks/system/README.md#systemnumberhealthcheck) - healthCheck system
 - [`toolsetsToolsetsNumberCreateToolset`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
+- [`toolsetsToolsetsNumberDeleteToolset`](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
 - [`toolsetsToolsetsNumberGetToolsetDetails`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
 - [`toolsetsToolsetsNumberListToolsets`](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
 - [`toolsetsToolsetsNumberUpdateToolset`](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
+- [`toolsToolsNumberListTools`](docs/sdks/tools/README.md#toolsnumberlisttools) - listTools tools
 
 </details>
 <!-- End Standalone functions [standalone-funcs] -->
@@ -340,16 +393,22 @@ To learn about this feature and how to get started, check
 
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
+- [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
+- [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
+- [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
 - [`useDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
-- [`useDeploymentsDeploymentsNumberListDeploymentsMutation`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
 - [`useListAPIKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
+- [`useListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
+- [`useListEnvironments`](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
+- [`useListTools`](docs/sdks/tools/README.md#toolsnumberlisttools) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
 - [`useLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
-- [`useRevokeAPIKeysMutation`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
+- [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
 - [`useSessionInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
 - [`useToolset`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
+- [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#assetsnumberuploadopenapiv3) - uploadOpenAPIv3 assets
 
@@ -366,8 +425,12 @@ To change the default retry strategy for a single API call, simply provide a ret
 import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-    ?? "",
+  security: {
+    projectSlugHeaderGramProject:
+      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  },
 });
 
 async function run() {
@@ -407,8 +470,12 @@ const gram = new Gram({
     },
     retryConnectionErrors: false,
   },
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-    ?? "",
+  security: {
+    projectSlugHeaderGramProject:
+      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  },
 });
 
 async function run() {
@@ -437,8 +504,12 @@ import { Gram } from "@gram/sdk";
 import { SDKValidationError } from "@gram/sdk/models/errors";
 
 const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-    ?? "",
+  security: {
+    projectSlugHeaderGramProject:
+      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  },
 });
 
 async function run() {
@@ -502,8 +573,12 @@ import { Gram } from "@gram/sdk";
 
 const gram = new Gram({
   serverURL: "http://localhost:80",
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-    ?? "",
+  security: {
+    projectSlugHeaderGramProject:
+      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  },
 });
 
 async function run() {

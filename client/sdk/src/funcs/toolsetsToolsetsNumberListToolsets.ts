@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function toolsetsToolsetsNumberListToolsets(
   client: GramCore,
-  request: operations.ToolsetsNumberListToolsetsRequest,
+  request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function toolsetsToolsetsNumberListToolsets(
 
 async function $do(
   client: GramCore,
-  request: operations.ToolsetsNumberListToolsetsRequest,
+  request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -75,7 +75,8 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.ToolsetsNumberListToolsetsRequest$outboundSchema.parse(value),
+      operations.ToolsetsNumberListToolsetsRequest$outboundSchema.optional()
+        .parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -88,22 +89,17 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
   }));
 
-  const secConfig = await extractSecurity(
-    client._options.sessionHeaderGramSession,
-  );
-  const securityInput = secConfig == null
-    ? {}
-    : { sessionHeaderGramSession: secConfig };
+  const securityInput = await extractSecurity(client._options.security);
   const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
@@ -113,7 +109,7 @@ async function $do(
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.sessionHeaderGramSession,
+    securitySource: client._options.security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },

@@ -2,7 +2,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { UploadIcon } from "lucide-react";
 
-export default function FileUpload() {
+export default function FileUpload({
+  onUpload,
+}: {
+  onUpload: (file: File) => void;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [isInvalidFile, setIsInvalidFile] = useState(false);
 
@@ -13,7 +17,9 @@ export default function FileUpload() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("Uploading file:", file);
+    if (file) {
+      onUpload(file);
+    }
   };
 
   return (
@@ -54,7 +60,7 @@ export default function FileUpload() {
           className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-card trans ${
             isInvalidFile
               ? "border-destructive bg-destructive/10"
-              : "border-accent hover:bg-input"
+              : "border-muted-foreground/50 hover:bg-input"
           }`}
         >
           <div className="flex flex-col items-center justify-center pt-5 pb-6">

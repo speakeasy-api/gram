@@ -9,7 +9,7 @@ import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { extractSecurity, resolveGlobalSecurity } from "../lib/security.js";
+import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import { APIError } from "../models/errors/apierror.js";
 import {
@@ -32,6 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function keysKeysNumberRevokeKey(
   client: GramCore,
+  security: operations.KeysNumberRevokeKeySecurity,
   request: operations.KeysNumberRevokeKeyRequest,
   options?: RequestOptions,
 ): APIPromise<
@@ -48,6 +49,7 @@ export function keysKeysNumberRevokeKey(
 > {
   return new APIPromise($do(
     client,
+    security,
     request,
     options,
   ));
@@ -55,6 +57,7 @@ export function keysKeysNumberRevokeKey(
 
 async function $do(
   client: GramCore,
+  security: operations.KeysNumberRevokeKeySecurity,
   request: operations.KeysNumberRevokeKeyRequest,
   options?: RequestOptions,
 ): Promise<
@@ -101,13 +104,15 @@ async function $do(
     }),
   }));
 
-  const secConfig = await extractSecurity(
-    client._options.sessionHeaderGramSession,
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.sessionHeaderGramSession,
+      },
+    ],
   );
-  const securityInput = secConfig == null
-    ? {}
-    : { sessionHeaderGramSession: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
@@ -116,7 +121,7 @@ async function $do(
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.sessionHeaderGramSession,
+    securitySource: security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -125,7 +130,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "DELETE",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,

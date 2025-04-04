@@ -35,7 +35,7 @@ export type ListToolsetsQueryData = components.ListToolsetsResult;
  * List all toolsets for a project
  */
 export function useListToolsets(
-  request: operations.ToolsetsNumberListToolsetsRequest,
+  request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
   options?: QueryHookOptions<ListToolsetsQueryData>,
 ): UseQueryResult<ListToolsetsQueryData, Error> {
   const client = useGramContext();
@@ -56,7 +56,7 @@ export function useListToolsets(
  * List all toolsets for a project
  */
 export function useListToolsetsSuspense(
-  request: operations.ToolsetsNumberListToolsetsRequest,
+  request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
   options?: SuspenseQueryHookOptions<ListToolsetsQueryData>,
 ): UseSuspenseQueryResult<ListToolsetsQueryData, Error> {
   const client = useGramContext();
@@ -73,7 +73,7 @@ export function useListToolsetsSuspense(
 export function prefetchListToolsets(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ToolsetsNumberListToolsetsRequest,
+  request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListToolsetsQuery(
@@ -86,7 +86,10 @@ export function prefetchListToolsets(
 export function setListToolsetsData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: { gramSession?: string | undefined; gramProject: string },
+    parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    },
   ],
   data: ListToolsetsQueryData,
 ): ListToolsetsQueryData | undefined {
@@ -98,7 +101,10 @@ export function setListToolsetsData(
 export function invalidateListToolsets(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined; gramProject: string }]
+    [parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -125,7 +131,7 @@ export function invalidateAllListToolsets(
 
 export function buildListToolsetsQuery(
   client$: GramCore,
-  request: operations.ToolsetsNumberListToolsetsRequest,
+  request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -133,8 +139,8 @@ export function buildListToolsetsQuery(
 } {
   return {
     queryKey: queryKeyListToolsets({
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
     }),
     queryFn: async function listToolsetsQueryFn(
       ctx,
@@ -155,7 +161,10 @@ export function buildListToolsetsQuery(
 }
 
 export function queryKeyListToolsets(
-  parameters: { gramSession?: string | undefined; gramProject: string },
+  parameters: {
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/sdk", "toolsets", "toolsetsNumberListToolsets", parameters];
 }

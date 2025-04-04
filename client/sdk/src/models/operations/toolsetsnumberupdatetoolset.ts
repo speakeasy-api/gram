@@ -11,9 +11,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ToolsetsNumberUpdateToolsetRequest = {
   /**
-   * The ID of the toolset to update
+   * The slug of the toolset to update
    */
-  id: string;
+  slug: string;
   /**
    * Session header
    */
@@ -21,7 +21,7 @@ export type ToolsetsNumberUpdateToolsetRequest = {
   /**
    * project header
    */
-  gramProject: string;
+  gramProject?: string | undefined;
   updateToolsetRequestBody: components.UpdateToolsetRequestBody;
 };
 
@@ -31,9 +31,9 @@ export const ToolsetsNumberUpdateToolsetRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  id: z.string(),
+  slug: z.string(),
   "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string(),
+  "Gram-Project": z.string().optional(),
   UpdateToolsetRequestBody: components.UpdateToolsetRequestBody$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
@@ -45,9 +45,9 @@ export const ToolsetsNumberUpdateToolsetRequest$inboundSchema: z.ZodType<
 
 /** @internal */
 export type ToolsetsNumberUpdateToolsetRequest$Outbound = {
-  id: string;
+  slug: string;
   "Gram-Session"?: string | undefined;
-  "Gram-Project": string;
+  "Gram-Project"?: string | undefined;
   UpdateToolsetRequestBody: components.UpdateToolsetRequestBody$Outbound;
 };
 
@@ -57,9 +57,9 @@ export const ToolsetsNumberUpdateToolsetRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ToolsetsNumberUpdateToolsetRequest
 > = z.object({
-  id: z.string(),
+  slug: z.string(),
   gramSession: z.string().optional(),
-  gramProject: z.string(),
+  gramProject: z.string().optional(),
   updateToolsetRequestBody: components.UpdateToolsetRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {

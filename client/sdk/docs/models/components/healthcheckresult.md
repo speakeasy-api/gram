@@ -6,12 +6,12 @@
 import { HealthCheckResult } from "@gram/sdk/models/components";
 
 let value: HealthCheckResult = {
-  status: "Nihil rerum repellat qui saepe.",
+  status: "<value>",
 };
 ```
 
 ## Fields
 
-| Field                        | Type                         | Required                     | Description                  | Example                      |
-| ---------------------------- | ---------------------------- | ---------------------------- | ---------------------------- | ---------------------------- |
-| `status`                     | *string*                     | :heavy_check_mark:           | The status of the service.   | Recusandae ipsum dolorum ut. |
+| Field                      | Type                       | Required                   | Description                |
+| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
+| `status`                   | *string*                   | :heavy_check_mark:         | The status of the service. |

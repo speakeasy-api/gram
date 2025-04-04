@@ -20,6 +20,10 @@ export type ToolsetDetails = {
    */
   createdAt: Date;
   /**
+   * The ID of the environment to use as the default for the toolset
+   */
+  defaultEnvironmentId?: string | undefined;
+  /**
    * Description of the toolset
    */
   description?: string | undefined;
@@ -60,6 +64,7 @@ export const ToolsetDetails$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  default_environment_id: z.string().optional(),
   description: z.string().optional(),
   http_tools: z.array(HTTPToolDefinition$inboundSchema),
   id: z.string(),
@@ -71,6 +76,7 @@ export const ToolsetDetails$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
+    "default_environment_id": "defaultEnvironmentId",
     "http_tools": "httpTools",
     "organization_id": "organizationId",
     "project_id": "projectId",
@@ -81,6 +87,7 @@ export const ToolsetDetails$inboundSchema: z.ZodType<
 /** @internal */
 export type ToolsetDetails$Outbound = {
   created_at: string;
+  default_environment_id?: string | undefined;
   description?: string | undefined;
   http_tools: Array<HTTPToolDefinition$Outbound>;
   id: string;
@@ -98,6 +105,7 @@ export const ToolsetDetails$outboundSchema: z.ZodType<
   ToolsetDetails
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
+  defaultEnvironmentId: z.string().optional(),
   description: z.string().optional(),
   httpTools: z.array(HTTPToolDefinition$outboundSchema),
   id: z.string(),
@@ -109,6 +117,7 @@ export const ToolsetDetails$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
+    defaultEnvironmentId: "default_environment_id",
     httpTools: "http_tools",
     organizationId: "organization_id",
     projectId: "project_id",

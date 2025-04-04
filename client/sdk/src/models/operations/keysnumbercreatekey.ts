@@ -9,6 +9,10 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type KeysNumberCreateKeySecurity = {
+  sessionHeaderGramSession: string;
+};
+
 export type KeysNumberCreateKeyRequest = {
   /**
    * Session header
@@ -16,6 +20,70 @@ export type KeysNumberCreateKeyRequest = {
   gramSession?: string | undefined;
   createKeyForm: components.CreateKeyForm;
 };
+
+/** @internal */
+export const KeysNumberCreateKeySecurity$inboundSchema: z.ZodType<
+  KeysNumberCreateKeySecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type KeysNumberCreateKeySecurity$Outbound = {
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const KeysNumberCreateKeySecurity$outboundSchema: z.ZodType<
+  KeysNumberCreateKeySecurity$Outbound,
+  z.ZodTypeDef,
+  KeysNumberCreateKeySecurity
+> = z.object({
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace KeysNumberCreateKeySecurity$ {
+  /** @deprecated use `KeysNumberCreateKeySecurity$inboundSchema` instead. */
+  export const inboundSchema = KeysNumberCreateKeySecurity$inboundSchema;
+  /** @deprecated use `KeysNumberCreateKeySecurity$outboundSchema` instead. */
+  export const outboundSchema = KeysNumberCreateKeySecurity$outboundSchema;
+  /** @deprecated use `KeysNumberCreateKeySecurity$Outbound` instead. */
+  export type Outbound = KeysNumberCreateKeySecurity$Outbound;
+}
+
+export function keysNumberCreateKeySecurityToJSON(
+  keysNumberCreateKeySecurity: KeysNumberCreateKeySecurity,
+): string {
+  return JSON.stringify(
+    KeysNumberCreateKeySecurity$outboundSchema.parse(
+      keysNumberCreateKeySecurity,
+    ),
+  );
+}
+
+export function keysNumberCreateKeySecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<KeysNumberCreateKeySecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => KeysNumberCreateKeySecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KeysNumberCreateKeySecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const KeysNumberCreateKeyRequest$inboundSchema: z.ZodType<

@@ -18,11 +18,13 @@ export class Keys extends ClientSDK {
    * Create a new api key
    */
   async keysNumberCreateKey(
+    security: operations.KeysNumberCreateKeySecurity,
     request: operations.KeysNumberCreateKeyRequest,
     options?: RequestOptions,
   ): Promise<components.Key> {
     return unwrapAsync(keysKeysNumberCreateKey(
       this,
+      security,
       request,
       options,
     ));
@@ -35,11 +37,13 @@ export class Keys extends ClientSDK {
    * List all api keys for an organization
    */
   async keysNumberListKeys(
+    security: operations.KeysNumberListKeysSecurity,
     request?: operations.KeysNumberListKeysRequest | undefined,
     options?: RequestOptions,
   ): Promise<components.ListKeysResult> {
     return unwrapAsync(keysKeysNumberListKeys(
       this,
+      security,
       request,
       options,
     ));
@@ -52,11 +56,13 @@ export class Keys extends ClientSDK {
    * Revoke a api key
    */
   async keysNumberRevokeKey(
+    security: operations.KeysNumberRevokeKeySecurity,
     request: operations.KeysNumberRevokeKeyRequest,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(keysKeysNumberRevokeKey(
       this,
+      security,
       request,
       options,
     ));

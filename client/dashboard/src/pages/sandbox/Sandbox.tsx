@@ -3,7 +3,9 @@ import { Page } from "@/components/page-layout";
 export default function Sandbox() {
   return (
     <Page>
-      <Page.Header title="Sandbox" />
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
       <Page.Body>
         <div>
           <h1>Sandbox</h1>

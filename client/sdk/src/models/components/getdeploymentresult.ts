@@ -7,6 +7,12 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  OpenAPIv3DeploymentAsset,
+  OpenAPIv3DeploymentAsset$inboundSchema,
+  OpenAPIv3DeploymentAsset$Outbound,
+  OpenAPIv3DeploymentAsset$outboundSchema,
+} from "./openapiv3deploymentasset.js";
 
 export type GetDeploymentResult = {
   /**
@@ -21,6 +27,10 @@ export type GetDeploymentResult = {
    * The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
    */
   externalUrl?: string | undefined;
+  /**
+   * The github pull request that resulted in the deployment.
+   */
+  githubPr?: string | undefined;
   /**
    * The github repository in the form of "owner/repo".
    */
@@ -40,7 +50,7 @@ export type GetDeploymentResult = {
   /**
    * The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
    */
-  openapiv3AssetIds: Array<string>;
+  openapiv3Assets: Array<OpenAPIv3DeploymentAsset>;
   /**
    * The ID of the organization that the deployment belongs to.
    */
@@ -64,11 +74,12 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_id: z.string().optional(),
   external_url: z.string().optional(),
+  github_pr: z.string().optional(),
   github_repo: z.string().optional(),
   github_sha: z.string().optional(),
   id: z.string(),
   idempotency_key: z.string().optional(),
-  openapiv3_asset_ids: z.array(z.string()),
+  openapiv3_assets: z.array(OpenAPIv3DeploymentAsset$inboundSchema),
   organization_id: z.string(),
   project_id: z.string(),
   user_id: z.string(),
@@ -77,10 +88,11 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "external_id": "externalId",
     "external_url": "externalUrl",
+    "github_pr": "githubPr",
     "github_repo": "githubRepo",
     "github_sha": "githubSha",
     "idempotency_key": "idempotencyKey",
-    "openapiv3_asset_ids": "openapiv3AssetIds",
+    "openapiv3_assets": "openapiv3Assets",
     "organization_id": "organizationId",
     "project_id": "projectId",
     "user_id": "userId",
@@ -92,11 +104,12 @@ export type GetDeploymentResult$Outbound = {
   created_at: string;
   external_id?: string | undefined;
   external_url?: string | undefined;
+  github_pr?: string | undefined;
   github_repo?: string | undefined;
   github_sha?: string | undefined;
   id: string;
   idempotency_key?: string | undefined;
-  openapiv3_asset_ids: Array<string>;
+  openapiv3_assets: Array<OpenAPIv3DeploymentAsset$Outbound>;
   organization_id: string;
   project_id: string;
   user_id: string;
@@ -111,11 +124,12 @@ export const GetDeploymentResult$outboundSchema: z.ZodType<
   createdAt: z.date().transform(v => v.toISOString()),
   externalId: z.string().optional(),
   externalUrl: z.string().optional(),
+  githubPr: z.string().optional(),
   githubRepo: z.string().optional(),
   githubSha: z.string().optional(),
   id: z.string(),
   idempotencyKey: z.string().optional(),
-  openapiv3AssetIds: z.array(z.string()),
+  openapiv3Assets: z.array(OpenAPIv3DeploymentAsset$outboundSchema),
   organizationId: z.string(),
   projectId: z.string(),
   userId: z.string(),
@@ -124,10 +138,11 @@ export const GetDeploymentResult$outboundSchema: z.ZodType<
     createdAt: "created_at",
     externalId: "external_id",
     externalUrl: "external_url",
+    githubPr: "github_pr",
     githubRepo: "github_repo",
     githubSha: "github_sha",
     idempotencyKey: "idempotency_key",
-    openapiv3AssetIds: "openapiv3_asset_ids",
+    openapiv3Assets: "openapiv3_assets",
     organizationId: "organization_id",
     projectId: "project_id",
     userId: "user_id",

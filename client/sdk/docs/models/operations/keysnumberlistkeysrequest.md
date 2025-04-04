@@ -5,13 +5,11 @@
 ```typescript
 import { KeysNumberListKeysRequest } from "@gram/sdk/models/operations";
 
-let value: KeysNumberListKeysRequest = {
-  gramSession: "Velit sunt iusto.",
-};
+let value: KeysNumberListKeysRequest = {};
 ```
 
 ## Fields
 
-| Field              | Type               | Required           | Description        | Example            |
-| ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| `gramSession`      | *string*           | :heavy_minus_sign: | Session header     | Velit sunt iusto.  |
+| Field              | Type               | Required           | Description        |
+| ------------------ | ------------------ | ------------------ | ------------------ |
+| `gramSession`      | *string*           | :heavy_minus_sign: | Session header     |

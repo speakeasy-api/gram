@@ -34,6 +34,7 @@ export type LogoutQueryData = operations.AuthNumberLogoutResponse | undefined;
  * Logs out the current user by clearing their session.
  */
 export function useLogout(
+  security: operations.AuthNumberLogoutSecurity,
   request?: operations.AuthNumberLogoutRequest | undefined,
   options?: QueryHookOptions<LogoutQueryData>,
 ): UseQueryResult<LogoutQueryData, Error> {
@@ -41,6 +42,7 @@ export function useLogout(
   return useQuery({
     ...buildLogoutQuery(
       client,
+      security,
       request,
       options,
     ),
@@ -55,6 +57,7 @@ export function useLogout(
  * Logs out the current user by clearing their session.
  */
 export function useLogoutSuspense(
+  security: operations.AuthNumberLogoutSecurity,
   request?: operations.AuthNumberLogoutRequest | undefined,
   options?: SuspenseQueryHookOptions<LogoutQueryData>,
 ): UseSuspenseQueryResult<LogoutQueryData, Error> {
@@ -62,6 +65,7 @@ export function useLogoutSuspense(
   return useSuspenseQuery({
     ...buildLogoutQuery(
       client,
+      security,
       request,
       options,
     ),
@@ -72,11 +76,13 @@ export function useLogoutSuspense(
 export function prefetchLogout(
   queryClient: QueryClient,
   client$: GramCore,
+  security: operations.AuthNumberLogoutSecurity,
   request?: operations.AuthNumberLogoutRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildLogoutQuery(
       client$,
+      security,
       request,
     ),
   });
@@ -117,6 +123,7 @@ export function invalidateAllLogout(
 
 export function buildLogoutQuery(
   client$: GramCore,
+  security: operations.AuthNumberLogoutSecurity,
   request?: operations.AuthNumberLogoutRequest | undefined,
   options?: RequestOptions,
 ): {
@@ -134,6 +141,7 @@ export function buildLogoutQuery(
 
       return unwrapAsync(authAuthNumberLogout(
         client$,
+        security,
         request,
         mergedOptions,
       ));

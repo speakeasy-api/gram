@@ -20,12 +20,12 @@ Create a new api key
 ```typescript
 import { Gram } from "@gram/sdk";
 
-const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-});
+const gram = new Gram();
 
 async function run() {
   const result = await gram.keys.keysNumberCreateKey({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
     gramSession: "Esse est omnis fuga illum expedita corporis.",
     createKeyForm: {
       name: "At expedita magni perferendis amet unde.",
@@ -49,12 +49,12 @@ import { keysKeysNumberCreateKey } from "@gram/sdk/funcs/keysKeysNumberCreateKey
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const gram = new GramCore({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-});
+const gram = new GramCore();
 
 async function run() {
   const res = await keysKeysNumberCreateKey(gram, {
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
     gramSession: "Esse est omnis fuga illum expedita corporis.",
     createKeyForm: {
       name: "At expedita magni perferendis amet unde.",
@@ -96,6 +96,7 @@ import {
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `request`                                                                                                                                                                      | [operations.KeysNumberCreateKeyRequest](../../models/operations/keysnumbercreatekeyrequest.md)                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.KeysNumberCreateKeySecurity](../../models/operations/keysnumbercreatekeysecurity.md)                                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
@@ -119,12 +120,12 @@ List all api keys for an organization
 ```typescript
 import { Gram } from "@gram/sdk";
 
-const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-});
+const gram = new Gram();
 
 async function run() {
   const result = await gram.keys.keysNumberListKeys({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
     gramSession: "Vitae sed doloremque et perspiciatis.",
   });
 
@@ -145,12 +146,12 @@ import { keysKeysNumberListKeys } from "@gram/sdk/funcs/keysKeysNumberListKeys.j
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const gram = new GramCore({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-});
+const gram = new GramCore();
 
 async function run() {
   const res = await keysKeysNumberListKeys(gram, {
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
     gramSession: "Vitae sed doloremque et perspiciatis.",
   });
 
@@ -200,6 +201,7 @@ import {
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `request`                                                                                                                                                                      | [operations.KeysNumberListKeysRequest](../../models/operations/keysnumberlistkeysrequest.md)                                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.KeysNumberListKeysSecurity](../../models/operations/keysnumberlistkeyssecurity.md)                                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
@@ -223,12 +225,12 @@ Revoke a api key
 ```typescript
 import { Gram } from "@gram/sdk";
 
-const gram = new Gram({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-});
+const gram = new Gram();
 
 async function run() {
   await gram.keys.keysNumberRevokeKey({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
     id: "Enim accusantium nisi est enim.",
     gramSession: "Itaque facilis.",
   });
@@ -249,12 +251,12 @@ import { keysKeysNumberRevokeKey } from "@gram/sdk/funcs/keysKeysNumberRevokeKey
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const gram = new GramCore({
-  sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-});
+const gram = new GramCore();
 
 async function run() {
   const res = await keysKeysNumberRevokeKey(gram, {
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
     id: "Enim accusantium nisi est enim.",
     gramSession: "Itaque facilis.",
   });
@@ -284,7 +286,7 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useRevokeAPIKeysMutation
+  useRevokeAPIKeyMutation
 } from "@gram/sdk/react-query/keysKeysNumberRevokeKey.js";
 ```
 
@@ -293,6 +295,7 @@ import {
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `request`                                                                                                                                                                      | [operations.KeysNumberRevokeKeyRequest](../../models/operations/keysnumberrevokekeyrequest.md)                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.KeysNumberRevokeKeySecurity](../../models/operations/keysnumberrevokekeysecurity.md)                                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |

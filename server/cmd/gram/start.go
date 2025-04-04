@@ -195,8 +195,12 @@ func newStartCommand() *cli.Command {
 			}
 
 			mux := goahttp.NewMuxer()
+
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
+      mux.Use(middleware.CORSMiddleware)
+
+      
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient, assetStorage))

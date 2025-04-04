@@ -86,8 +86,11 @@ export function prefetchToolset(
 export function setToolsetData(
   client: QueryClient,
   queryKeyBase: [
-    id: string,
-    parameters: { gramSession?: string | undefined; gramProject: string },
+    slug: string,
+    parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    },
   ],
   data: ToolsetQueryData,
 ): ToolsetQueryData | undefined {
@@ -100,8 +103,11 @@ export function invalidateToolset(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [
-      id: string,
-      parameters: { gramSession?: string | undefined; gramProject: string },
+      slug: string,
+      parameters: {
+        gramSession?: string | undefined;
+        gramProject?: string | undefined;
+      },
     ]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -136,7 +142,7 @@ export function buildToolsetQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ToolsetQueryData>;
 } {
   return {
-    queryKey: queryKeyToolset(request.id, {
+    queryKey: queryKeyToolset(request.slug, {
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
@@ -157,14 +163,17 @@ export function buildToolsetQuery(
 }
 
 export function queryKeyToolset(
-  id: string,
-  parameters: { gramSession?: string | undefined; gramProject: string },
+  slug: string,
+  parameters: {
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
 ): QueryKey {
   return [
     "@gram/sdk",
     "toolsets",
     "toolsetsNumberGetToolsetDetails",
-    id,
+    slug,
     parameters,
   ];
 }

@@ -8,12 +8,78 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type KeysNumberListKeysSecurity = {
+  sessionHeaderGramSession: string;
+};
+
 export type KeysNumberListKeysRequest = {
   /**
    * Session header
    */
   gramSession?: string | undefined;
 };
+
+/** @internal */
+export const KeysNumberListKeysSecurity$inboundSchema: z.ZodType<
+  KeysNumberListKeysSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type KeysNumberListKeysSecurity$Outbound = {
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const KeysNumberListKeysSecurity$outboundSchema: z.ZodType<
+  KeysNumberListKeysSecurity$Outbound,
+  z.ZodTypeDef,
+  KeysNumberListKeysSecurity
+> = z.object({
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace KeysNumberListKeysSecurity$ {
+  /** @deprecated use `KeysNumberListKeysSecurity$inboundSchema` instead. */
+  export const inboundSchema = KeysNumberListKeysSecurity$inboundSchema;
+  /** @deprecated use `KeysNumberListKeysSecurity$outboundSchema` instead. */
+  export const outboundSchema = KeysNumberListKeysSecurity$outboundSchema;
+  /** @deprecated use `KeysNumberListKeysSecurity$Outbound` instead. */
+  export type Outbound = KeysNumberListKeysSecurity$Outbound;
+}
+
+export function keysNumberListKeysSecurityToJSON(
+  keysNumberListKeysSecurity: KeysNumberListKeysSecurity,
+): string {
+  return JSON.stringify(
+    KeysNumberListKeysSecurity$outboundSchema.parse(keysNumberListKeysSecurity),
+  );
+}
+
+export function keysNumberListKeysSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<KeysNumberListKeysSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => KeysNumberListKeysSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KeysNumberListKeysSecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const KeysNumberListKeysRequest$inboundSchema: z.ZodType<

@@ -35,6 +35,7 @@ export type ListAPIKeysQueryData = components.ListKeysResult;
  * List all api keys for an organization
  */
 export function useListAPIKeys(
+  security: operations.KeysNumberListKeysSecurity,
   request?: operations.KeysNumberListKeysRequest | undefined,
   options?: QueryHookOptions<ListAPIKeysQueryData>,
 ): UseQueryResult<ListAPIKeysQueryData, Error> {
@@ -42,6 +43,7 @@ export function useListAPIKeys(
   return useQuery({
     ...buildListAPIKeysQuery(
       client,
+      security,
       request,
       options,
     ),
@@ -56,6 +58,7 @@ export function useListAPIKeys(
  * List all api keys for an organization
  */
 export function useListAPIKeysSuspense(
+  security: operations.KeysNumberListKeysSecurity,
   request?: operations.KeysNumberListKeysRequest | undefined,
   options?: SuspenseQueryHookOptions<ListAPIKeysQueryData>,
 ): UseSuspenseQueryResult<ListAPIKeysQueryData, Error> {
@@ -63,6 +66,7 @@ export function useListAPIKeysSuspense(
   return useSuspenseQuery({
     ...buildListAPIKeysQuery(
       client,
+      security,
       request,
       options,
     ),
@@ -73,11 +77,13 @@ export function useListAPIKeysSuspense(
 export function prefetchListAPIKeys(
   queryClient: QueryClient,
   client$: GramCore,
+  security: operations.KeysNumberListKeysSecurity,
   request?: operations.KeysNumberListKeysRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListAPIKeysQuery(
       client$,
+      security,
       request,
     ),
   });
@@ -118,6 +124,7 @@ export function invalidateAllListAPIKeys(
 
 export function buildListAPIKeysQuery(
   client$: GramCore,
+  security: operations.KeysNumberListKeysSecurity,
   request?: operations.KeysNumberListKeysRequest | undefined,
   options?: RequestOptions,
 ): {
@@ -137,6 +144,7 @@ export function buildListAPIKeysQuery(
 
       return unwrapAsync(keysKeysNumberListKeys(
         client$,
+        security,
         request,
         mergedOptions,
       ));

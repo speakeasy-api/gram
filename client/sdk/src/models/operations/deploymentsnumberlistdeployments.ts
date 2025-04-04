@@ -14,13 +14,13 @@ export type DeploymentsNumberListDeploymentsRequest = {
    */
   cursor?: string | undefined;
   /**
-   * Results per page
-   */
-  limit?: number | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -30,19 +30,20 @@ export const DeploymentsNumberListDeploymentsRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   cursor: z.string().optional(),
-  limit: z.number().int().default(10),
   "Gram-Session": z.string().optional(),
+  "Gram-Project": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "Gram-Session": "gramSession",
+    "Gram-Project": "gramProject",
   });
 });
 
 /** @internal */
 export type DeploymentsNumberListDeploymentsRequest$Outbound = {
   cursor?: string | undefined;
-  limit: number;
   "Gram-Session"?: string | undefined;
+  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -52,11 +53,12 @@ export const DeploymentsNumberListDeploymentsRequest$outboundSchema: z.ZodType<
   DeploymentsNumberListDeploymentsRequest
 > = z.object({
   cursor: z.string().optional(),
-  limit: z.number().int().default(10),
   gramSession: z.string().optional(),
+  gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramProject: "Gram-Project",
   });
 });
 

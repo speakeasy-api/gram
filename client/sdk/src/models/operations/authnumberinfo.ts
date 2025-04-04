@@ -9,6 +9,10 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type AuthNumberInfoSecurity = {
+  sessionHeaderGramSession: string;
+};
+
 export type AuthNumberInfoRequest = {
   /**
    * Session header
@@ -20,6 +24,68 @@ export type AuthNumberInfoResponse = {
   headers: { [k: string]: Array<string> };
   result: components.InfoResponseBody;
 };
+
+/** @internal */
+export const AuthNumberInfoSecurity$inboundSchema: z.ZodType<
+  AuthNumberInfoSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type AuthNumberInfoSecurity$Outbound = {
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const AuthNumberInfoSecurity$outboundSchema: z.ZodType<
+  AuthNumberInfoSecurity$Outbound,
+  z.ZodTypeDef,
+  AuthNumberInfoSecurity
+> = z.object({
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AuthNumberInfoSecurity$ {
+  /** @deprecated use `AuthNumberInfoSecurity$inboundSchema` instead. */
+  export const inboundSchema = AuthNumberInfoSecurity$inboundSchema;
+  /** @deprecated use `AuthNumberInfoSecurity$outboundSchema` instead. */
+  export const outboundSchema = AuthNumberInfoSecurity$outboundSchema;
+  /** @deprecated use `AuthNumberInfoSecurity$Outbound` instead. */
+  export type Outbound = AuthNumberInfoSecurity$Outbound;
+}
+
+export function authNumberInfoSecurityToJSON(
+  authNumberInfoSecurity: AuthNumberInfoSecurity,
+): string {
+  return JSON.stringify(
+    AuthNumberInfoSecurity$outboundSchema.parse(authNumberInfoSecurity),
+  );
+}
+
+export function authNumberInfoSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<AuthNumberInfoSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AuthNumberInfoSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AuthNumberInfoSecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const AuthNumberInfoRequest$inboundSchema: z.ZodType<

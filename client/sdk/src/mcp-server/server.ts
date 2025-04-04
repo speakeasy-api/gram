@@ -15,36 +15,36 @@ import { MCPScope, mcpScopes } from "./scopes.js";
 import { createRegisterTool } from "./tools.js";
 import { tool$assetsAssetsNumberUploadOpenAPIv3 } from "./tools/assetsAssetsNumberUploadOpenAPIv3.js";
 import { tool$authAuthNumberCallback } from "./tools/authAuthNumberCallback.js";
-import { tool$authAuthNumberInfo } from "./tools/authAuthNumberInfo.js";
-import { tool$authAuthNumberLogout } from "./tools/authAuthNumberLogout.js";
-import { tool$authAuthNumberSwitchScopes } from "./tools/authAuthNumberSwitchScopes.js";
 import { tool$deploymentsDeploymentsNumberCreateDeployment } from "./tools/deploymentsDeploymentsNumberCreateDeployment.js";
 import { tool$deploymentsDeploymentsNumberGetDeployment } from "./tools/deploymentsDeploymentsNumberGetDeployment.js";
 import { tool$deploymentsDeploymentsNumberListDeployments } from "./tools/deploymentsDeploymentsNumberListDeployments.js";
-import { tool$keysKeysNumberCreateKey } from "./tools/keysKeysNumberCreateKey.js";
-import { tool$keysKeysNumberListKeys } from "./tools/keysKeysNumberListKeys.js";
-import { tool$keysKeysNumberRevokeKey } from "./tools/keysKeysNumberRevokeKey.js";
+import { tool$environmentsEnvironmentsNumberCreateEnvironment } from "./tools/environmentsEnvironmentsNumberCreateEnvironment.js";
+import { tool$environmentsEnvironmentsNumberDeleteEnvironment } from "./tools/environmentsEnvironmentsNumberDeleteEnvironment.js";
+import { tool$environmentsEnvironmentsNumberListEnvironments } from "./tools/environmentsEnvironmentsNumberListEnvironments.js";
+import { tool$environmentsEnvironmentsNumberUpdateEnvironment } from "./tools/environmentsEnvironmentsNumberUpdateEnvironment.js";
 import { tool$systemSystemNumberHealthCheck } from "./tools/systemSystemNumberHealthCheck.js";
 import { tool$toolsetsToolsetsNumberCreateToolset } from "./tools/toolsetsToolsetsNumberCreateToolset.js";
+import { tool$toolsetsToolsetsNumberDeleteToolset } from "./tools/toolsetsToolsetsNumberDeleteToolset.js";
 import { tool$toolsetsToolsetsNumberGetToolsetDetails } from "./tools/toolsetsToolsetsNumberGetToolsetDetails.js";
 import { tool$toolsetsToolsetsNumberListToolsets } from "./tools/toolsetsToolsetsNumberListToolsets.js";
 import { tool$toolsetsToolsetsNumberUpdateToolset } from "./tools/toolsetsToolsetsNumberUpdateToolset.js";
+import { tool$toolsToolsNumberListTools } from "./tools/toolsToolsNumberListTools.js";
 
 export function createMCPServer(deps: {
   logger: ConsoleLogger;
   allowedTools?: string[] | undefined;
   scopes?: MCPScope[] | undefined;
   serverURL?: string | undefined;
-  sessionHeaderGramSession?: SDKOptions["sessionHeaderGramSession"] | undefined;
+  security?: SDKOptions["security"] | undefined;
   serverIdx?: SDKOptions["serverIdx"] | undefined;
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.2.2",
+    version: "0.3.2",
   });
 
   const client = new GramCore({
-    sessionHeaderGramSession: deps.sessionHeaderGramSession,
+    security: deps.security,
     serverURL: deps.serverURL,
     serverIdx: deps.serverIdx,
   });
@@ -73,16 +73,16 @@ export function createMCPServer(deps: {
   tool(tool$systemSystemNumberHealthCheck);
   tool(tool$assetsAssetsNumberUploadOpenAPIv3);
   tool(tool$authAuthNumberCallback);
-  tool(tool$authAuthNumberInfo);
-  tool(tool$authAuthNumberLogout);
-  tool(tool$authAuthNumberSwitchScopes);
   tool(tool$deploymentsDeploymentsNumberCreateDeployment);
   tool(tool$deploymentsDeploymentsNumberGetDeployment);
   tool(tool$deploymentsDeploymentsNumberListDeployments);
-  tool(tool$keysKeysNumberCreateKey);
-  tool(tool$keysKeysNumberListKeys);
-  tool(tool$keysKeysNumberRevokeKey);
+  tool(tool$environmentsEnvironmentsNumberCreateEnvironment);
+  tool(tool$environmentsEnvironmentsNumberDeleteEnvironment);
+  tool(tool$environmentsEnvironmentsNumberListEnvironments);
+  tool(tool$environmentsEnvironmentsNumberUpdateEnvironment);
+  tool(tool$toolsToolsNumberListTools);
   tool(tool$toolsetsToolsetsNumberCreateToolset);
+  tool(tool$toolsetsToolsetsNumberDeleteToolset);
   tool(tool$toolsetsToolsetsNumberGetToolsetDetails);
   tool(tool$toolsetsToolsetsNumberListToolsets);
   tool(tool$toolsetsToolsetsNumberUpdateToolset);

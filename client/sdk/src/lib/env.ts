@@ -7,12 +7,14 @@ import { dlv } from "./dlv.js";
 import * as z from "zod";
 
 export interface Env {
+  GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT?: string | undefined;
   GRAM_SESSION_HEADER_GRAM_SESSION?: string | undefined;
 
   GRAM_DEBUG?: boolean | undefined;
 }
 
 export const envSchema: z.ZodType<Env, z.ZodTypeDef, unknown> = z.object({
+  GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: z.string().optional(),
   GRAM_SESSION_HEADER_GRAM_SESSION: z.string().optional(),
 
   GRAM_DEBUG: z.coerce.boolean().optional(),

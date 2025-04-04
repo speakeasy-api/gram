@@ -94,18 +94,17 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
   }));
 
-  const secConfig = await extractSecurity(
-    client._options.sessionHeaderGramSession,
-  );
-  const securityInput = secConfig == null
-    ? {}
-    : { sessionHeaderGramSession: secConfig };
+  const securityInput = await extractSecurity(client._options.security);
   const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
@@ -115,7 +114,7 @@ async function $do(
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.sessionHeaderGramSession,
+    securitySource: client._options.security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },

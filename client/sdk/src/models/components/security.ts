@@ -9,6 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type Security = {
+  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -18,15 +19,18 @@ export const Security$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  "project_slug_header_Gram-Project": z.string().optional(),
   "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
     "session_header_Gram-Session": "sessionHeaderGramSession",
   });
 });
 
 /** @internal */
 export type Security$Outbound = {
+  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -36,9 +40,11 @@ export const Security$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   Security
 > = z.object({
+  projectSlugHeaderGramProject: z.string().optional(),
   sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });

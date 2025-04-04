@@ -16,7 +16,7 @@ export type ToolsetsNumberListToolsetsRequest = {
   /**
    * project header
    */
-  gramProject: string;
+  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -26,7 +26,7 @@ export const ToolsetsNumberListToolsetsRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string(),
+  "Gram-Project": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "Gram-Session": "gramSession",
@@ -37,7 +37,7 @@ export const ToolsetsNumberListToolsetsRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type ToolsetsNumberListToolsetsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  "Gram-Project": string;
+  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -47,7 +47,7 @@ export const ToolsetsNumberListToolsetsRequest$outboundSchema: z.ZodType<
   ToolsetsNumberListToolsetsRequest
 > = z.object({
   gramSession: z.string().optional(),
-  gramProject: z.string(),
+  gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",

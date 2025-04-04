@@ -13,7 +13,7 @@ export type AssetsNumberUploadOpenAPIv3Request = {
   /**
    * project header
    */
-  gramProject: string;
+  gramProject?: string | undefined;
   /**
    * Session header
    */
@@ -27,7 +27,7 @@ export const AssetsNumberUploadOpenAPIv3Request$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   "Content-Length": z.number().int(),
-  "Gram-Project": z.string(),
+  "Gram-Project": z.string().optional(),
   "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
@@ -40,7 +40,7 @@ export const AssetsNumberUploadOpenAPIv3Request$inboundSchema: z.ZodType<
 /** @internal */
 export type AssetsNumberUploadOpenAPIv3Request$Outbound = {
   "Content-Length": number;
-  "Gram-Project": string;
+  "Gram-Project"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -51,7 +51,7 @@ export const AssetsNumberUploadOpenAPIv3Request$outboundSchema: z.ZodType<
   AssetsNumberUploadOpenAPIv3Request
 > = z.object({
   contentLength: z.number().int(),
-  gramProject: z.string(),
+  gramProject: z.string().optional(),
   gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {

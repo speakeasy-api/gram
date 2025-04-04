@@ -35,11 +35,13 @@ export class Auth extends ClientSDK {
    * Provides information about the current authentication status.
    */
   async authNumberInfo(
+    security: operations.AuthNumberInfoSecurity,
     request?: operations.AuthNumberInfoRequest | undefined,
     options?: RequestOptions,
   ): Promise<operations.AuthNumberInfoResponse> {
     return unwrapAsync(authAuthNumberInfo(
       this,
+      security,
       request,
       options,
     ));
@@ -52,11 +54,13 @@ export class Auth extends ClientSDK {
    * Logs out the current user by clearing their session.
    */
   async authNumberLogout(
+    security: operations.AuthNumberLogoutSecurity,
     request?: operations.AuthNumberLogoutRequest | undefined,
     options?: RequestOptions,
   ): Promise<operations.AuthNumberLogoutResponse | undefined> {
     return unwrapAsync(authAuthNumberLogout(
       this,
+      security,
       request,
       options,
     ));
@@ -69,11 +73,13 @@ export class Auth extends ClientSDK {
    * Switches the authentication scope to a different organization.
    */
   async authNumberSwitchScopes(
+    security: operations.AuthNumberSwitchScopesSecurity,
     request?: operations.AuthNumberSwitchScopesRequest | undefined,
     options?: RequestOptions,
   ): Promise<operations.AuthNumberSwitchScopesResponse | undefined> {
     return unwrapAsync(authAuthNumberSwitchScopes(
       this,
+      security,
       request,
       options,
     ));

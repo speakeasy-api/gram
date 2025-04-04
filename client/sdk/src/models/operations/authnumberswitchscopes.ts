@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type AuthNumberSwitchScopesSecurity = {
+  sessionHeaderGramSession: string;
+};
+
 export type AuthNumberSwitchScopesRequest = {
   /**
    * The organization slug to switch scopes
@@ -26,6 +30,70 @@ export type AuthNumberSwitchScopesRequest = {
 export type AuthNumberSwitchScopesResponse = {
   headers: { [k: string]: Array<string> };
 };
+
+/** @internal */
+export const AuthNumberSwitchScopesSecurity$inboundSchema: z.ZodType<
+  AuthNumberSwitchScopesSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type AuthNumberSwitchScopesSecurity$Outbound = {
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const AuthNumberSwitchScopesSecurity$outboundSchema: z.ZodType<
+  AuthNumberSwitchScopesSecurity$Outbound,
+  z.ZodTypeDef,
+  AuthNumberSwitchScopesSecurity
+> = z.object({
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AuthNumberSwitchScopesSecurity$ {
+  /** @deprecated use `AuthNumberSwitchScopesSecurity$inboundSchema` instead. */
+  export const inboundSchema = AuthNumberSwitchScopesSecurity$inboundSchema;
+  /** @deprecated use `AuthNumberSwitchScopesSecurity$outboundSchema` instead. */
+  export const outboundSchema = AuthNumberSwitchScopesSecurity$outboundSchema;
+  /** @deprecated use `AuthNumberSwitchScopesSecurity$Outbound` instead. */
+  export type Outbound = AuthNumberSwitchScopesSecurity$Outbound;
+}
+
+export function authNumberSwitchScopesSecurityToJSON(
+  authNumberSwitchScopesSecurity: AuthNumberSwitchScopesSecurity,
+): string {
+  return JSON.stringify(
+    AuthNumberSwitchScopesSecurity$outboundSchema.parse(
+      authNumberSwitchScopesSecurity,
+    ),
+  );
+}
+
+export function authNumberSwitchScopesSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<AuthNumberSwitchScopesSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AuthNumberSwitchScopesSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AuthNumberSwitchScopesSecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const AuthNumberSwitchScopesRequest$inboundSchema: z.ZodType<

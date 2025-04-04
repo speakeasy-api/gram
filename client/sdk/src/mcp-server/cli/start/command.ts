@@ -49,6 +49,14 @@ export const startCommand = buildCommand({
           },
         }
         : {}),
+      "project-slug-header-gram-project": {
+        kind: "parsed",
+        brief: "Sets the projectSlugHeaderGramProject auth field for the API",
+        optional: true,
+        parse: (value) => {
+          return z.string().parse(value);
+        },
+      },
       "session-header-gram-session": {
         kind: "parsed",
         brief: "Sets the sessionHeaderGramSession auth field for the API",

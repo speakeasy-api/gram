@@ -34,6 +34,7 @@ export type SessionInfoQueryData = operations.AuthNumberInfoResponse;
  * Provides information about the current authentication status.
  */
 export function useSessionInfo(
+  security: operations.AuthNumberInfoSecurity,
   request?: operations.AuthNumberInfoRequest | undefined,
   options?: QueryHookOptions<SessionInfoQueryData>,
 ): UseQueryResult<SessionInfoQueryData, Error> {
@@ -41,6 +42,7 @@ export function useSessionInfo(
   return useQuery({
     ...buildSessionInfoQuery(
       client,
+      security,
       request,
       options,
     ),
@@ -55,6 +57,7 @@ export function useSessionInfo(
  * Provides information about the current authentication status.
  */
 export function useSessionInfoSuspense(
+  security: operations.AuthNumberInfoSecurity,
   request?: operations.AuthNumberInfoRequest | undefined,
   options?: SuspenseQueryHookOptions<SessionInfoQueryData>,
 ): UseSuspenseQueryResult<SessionInfoQueryData, Error> {
@@ -62,6 +65,7 @@ export function useSessionInfoSuspense(
   return useSuspenseQuery({
     ...buildSessionInfoQuery(
       client,
+      security,
       request,
       options,
     ),
@@ -72,11 +76,13 @@ export function useSessionInfoSuspense(
 export function prefetchSessionInfo(
   queryClient: QueryClient,
   client$: GramCore,
+  security: operations.AuthNumberInfoSecurity,
   request?: operations.AuthNumberInfoRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildSessionInfoQuery(
       client$,
+      security,
       request,
     ),
   });
@@ -117,6 +123,7 @@ export function invalidateAllSessionInfo(
 
 export function buildSessionInfoQuery(
   client$: GramCore,
+  security: operations.AuthNumberInfoSecurity,
   request?: operations.AuthNumberInfoRequest | undefined,
   options?: RequestOptions,
 ): {
@@ -136,6 +143,7 @@ export function buildSessionInfoQuery(
 
       return unwrapAsync(authAuthNumberInfo(
         client$,
+        security,
         request,
         mergedOptions,
       ));

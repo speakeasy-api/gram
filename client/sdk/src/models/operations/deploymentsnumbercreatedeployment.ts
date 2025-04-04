@@ -14,7 +14,15 @@ export type DeploymentsNumberCreateDeploymentRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createDeploymentForm: components.CreateDeploymentForm;
+  /**
+   * project header
+   */
+  gramProject?: string | undefined;
+  /**
+   * A unique identifier that will mitigate against duplicate deployments.
+   */
+  idempotencyKey: string;
+  createDeploymentRequestBody: components.CreateDeploymentRequestBody;
 };
 
 /** @internal */
@@ -24,18 +32,25 @@ export const DeploymentsNumberCreateDeploymentRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   "Gram-Session": z.string().optional(),
-  CreateDeploymentForm: components.CreateDeploymentForm$inboundSchema,
+  "Gram-Project": z.string().optional(),
+  "Idempotency-Key": z.string(),
+  CreateDeploymentRequestBody:
+    components.CreateDeploymentRequestBody$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
     "Gram-Session": "gramSession",
-    "CreateDeploymentForm": "createDeploymentForm",
+    "Gram-Project": "gramProject",
+    "Idempotency-Key": "idempotencyKey",
+    "CreateDeploymentRequestBody": "createDeploymentRequestBody",
   });
 });
 
 /** @internal */
 export type DeploymentsNumberCreateDeploymentRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  CreateDeploymentForm: components.CreateDeploymentForm$Outbound;
+  "Gram-Project"?: string | undefined;
+  "Idempotency-Key": string;
+  CreateDeploymentRequestBody: components.CreateDeploymentRequestBody$Outbound;
 };
 
 /** @internal */
@@ -45,11 +60,16 @@ export const DeploymentsNumberCreateDeploymentRequest$outboundSchema: z.ZodType<
   DeploymentsNumberCreateDeploymentRequest
 > = z.object({
   gramSession: z.string().optional(),
-  createDeploymentForm: components.CreateDeploymentForm$outboundSchema,
+  gramProject: z.string().optional(),
+  idempotencyKey: z.string(),
+  createDeploymentRequestBody:
+    components.CreateDeploymentRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
-    createDeploymentForm: "CreateDeploymentForm",
+    gramProject: "Gram-Project",
+    idempotencyKey: "Idempotency-Key",
+    createDeploymentRequestBody: "CreateDeploymentRequestBody",
   });
 });
 

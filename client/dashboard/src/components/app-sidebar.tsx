@@ -1,103 +1,60 @@
 import * as React from "react";
-import {
-  IconBlocks,
-  IconCirclePlusFilled,
-  IconDashboard,
-  IconHelp,
-  IconInnerShadowTop,
-  IconMessageChatbot,
-  IconSearch,
-  IconSettings,
-  IconSparkles,
-  IconTools,
-} from "@tabler/icons-react";
-
-import { NavMain } from "@/components/nav-main";
-import { NavSecondary } from "@/components/nav-secondary";
-import { NavUser } from "@/components/nav-user";
+import { NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import Home from "@/pages/home/Home";
-import Integrations from "@/pages/integrations/Integrations";
-import Toolsets from "@/pages/toolsets/Toolsets";
-import Sandbox from "@/pages/sandbox/Sandbox";
-import { Link } from "react-router-dom";
-import Onboarding from "@/pages/onboarding/Onboarding";
+import { Link, useNavigate } from "react-router-dom";
+import { ROUTES } from "@/routes";
 
-export const NAV_ITEMS = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  primaryCTA: {
-    title: "Upload OpenAPI",
-    url: "/upload",
-    icon: IconCirclePlusFilled,
-    component: Onboarding,
-  },
-  navMain: [
-    {
-      title: "Home",
-      url: "/",
-      icon: IconDashboard,
-      component: Home,
-    },
-    {
-      title: "Integrations",
-      url: "/integrations",
-      icon: IconBlocks,
-      component: Integrations,
-    },
-    {
-      title: "Toolsets",
-      url: "/toolsets",
-      icon: IconTools,
-      component: Toolsets,
-    },
-    {
-      title: "Sandbox",
-      url: "/sandbox",
-      icon: IconMessageChatbot,
-      component: Sandbox,
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Settings",
-      url: "#",
-      icon: IconSettings,
-    },
-    {
-      title: "Get Help",
-      url: "#",
-      icon: IconHelp,
-    },
-    {
-      title: "Search",
-      url: "#",
-      icon: IconSearch,
-    },
-  ],
-};
+import { ProjectMenu } from "./project-menu";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const navigate = useNavigate();
+
   const textGradient =
     "bg-linear-to-b from-stone-600 dark:from-stone-300 to-transparent inline-block text-transparent bg-clip-text";
 
   const logo = (
     <span
-      className={`font-[Mona_Sans] tracking-wide font-[1] text-3xl ${textGradient} group-hover/logo:text-stone-600 dark:group-hover/logo:text-stone-300 trans`}
+      className={`font-[Mona_Sans] tracking-wide font-[1] text-3xl ${textGradient} group-hover/logo:text-stone-500 dark:group-hover/logo:text-stone-400 trans`}
     >
       Gram
     </span>
+  );
+  // Reverse sort the items by url length to ensure the most specific item is selected
+  const activeItem = [...ROUTES.navMain, ...ROUTES.navSecondary]
+    .sort((a, b) => b.url.length - a.url.length)
+    .find((item) => location.pathname.startsWith(item.url));
+
+  const topNavItems = ROUTES.navMain.map((item) => ({
+    ...item,
+    active: activeItem?.url === item.url,
+  }));
+
+  const secondaryNavItems = ROUTES.navSecondary.map((item) => ({
+    ...item,
+    active: activeItem?.url === item.url,
+  }));
+
+  const uploadOpenAPIButton = (
+    <SidebarMenuButton
+      tooltip={ROUTES.primaryCTA.title}
+      className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground min-w-8 trans"
+      onClick={() => {
+        navigate(ROUTES.primaryCTA.url);
+      }}
+    >
+      <ROUTES.primaryCTA.icon />
+      <span>{ROUTES.primaryCTA.title}</span>
+    </SidebarMenuButton>
   );
 
   return (
@@ -115,11 +72,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain primaryCTA={NAV_ITEMS.primaryCTA} items={NAV_ITEMS.navMain} />
-        <NavSecondary items={NAV_ITEMS.navSecondary} className="mt-auto" />
+        <SidebarGroup>
+          <SidebarGroupContent className="flex flex-col gap-6">
+            <SidebarMenu>
+              <SidebarMenuItem className="flex items-center gap-2">
+                {uploadOpenAPIButton}
+              </SidebarMenuItem>
+            </SidebarMenu>
+            <NavMenu items={topNavItems} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <NavMenu items={secondaryNavItems} />
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={NAV_ITEMS.user} />
+        <ProjectMenu />
       </SidebarFooter>
     </Sidebar>
   );

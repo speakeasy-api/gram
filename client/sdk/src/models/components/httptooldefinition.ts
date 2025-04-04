@@ -22,6 +22,10 @@ export type HTTPToolDefinition = {
    */
   bodySchema?: string | undefined;
   /**
+   * The creation date of the tool.
+   */
+  createdAt: Date;
+  /**
    * Description of the tool
    */
   description: string;
@@ -66,6 +70,14 @@ export type HTTPToolDefinition = {
    */
   serverEnvVar: string;
   /**
+   * The tags list for this http tool
+   */
+  tags: Array<string>;
+  /**
+   * The last update date of the tool.
+   */
+  updatedAt: Date;
+  /**
    * Environment variable for username
    */
   usernameEnvVar?: string | undefined;
@@ -80,6 +92,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   apikey_env_var: z.string().optional(),
   bearer_env_var: z.string().optional(),
   body_schema: z.string().optional(),
+  created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   description: z.string(),
   headers_schema: z.string().optional(),
   http_method: z.string(),
@@ -91,12 +104,15 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   queries_schema: z.string().optional(),
   security_type: z.string(),
   server_env_var: z.string(),
+  tags: z.array(z.string()),
+  updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   username_env_var: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "apikey_env_var": "apikeyEnvVar",
     "bearer_env_var": "bearerEnvVar",
     "body_schema": "bodySchema",
+    "created_at": "createdAt",
     "headers_schema": "headersSchema",
     "http_method": "httpMethod",
     "password_env_var": "passwordEnvVar",
@@ -104,6 +120,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "queries_schema": "queriesSchema",
     "security_type": "securityType",
     "server_env_var": "serverEnvVar",
+    "updated_at": "updatedAt",
     "username_env_var": "usernameEnvVar",
   });
 });
@@ -113,6 +130,7 @@ export type HTTPToolDefinition$Outbound = {
   apikey_env_var?: string | undefined;
   bearer_env_var?: string | undefined;
   body_schema?: string | undefined;
+  created_at: string;
   description: string;
   headers_schema?: string | undefined;
   http_method: string;
@@ -124,6 +142,8 @@ export type HTTPToolDefinition$Outbound = {
   queries_schema?: string | undefined;
   security_type: string;
   server_env_var: string;
+  tags: Array<string>;
+  updated_at: string;
   username_env_var?: string | undefined;
 };
 
@@ -136,6 +156,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   apikeyEnvVar: z.string().optional(),
   bearerEnvVar: z.string().optional(),
   bodySchema: z.string().optional(),
+  createdAt: z.date().transform(v => v.toISOString()),
   description: z.string(),
   headersSchema: z.string().optional(),
   httpMethod: z.string(),
@@ -147,12 +168,15 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   queriesSchema: z.string().optional(),
   securityType: z.string(),
   serverEnvVar: z.string(),
+  tags: z.array(z.string()),
+  updatedAt: z.date().transform(v => v.toISOString()),
   usernameEnvVar: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     apikeyEnvVar: "apikey_env_var",
     bearerEnvVar: "bearer_env_var",
     bodySchema: "body_schema",
+    createdAt: "created_at",
     headersSchema: "headers_schema",
     httpMethod: "http_method",
     passwordEnvVar: "password_env_var",
@@ -160,6 +184,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     queriesSchema: "queries_schema",
     securityType: "security_type",
     serverEnvVar: "server_env_var",
+    updatedAt: "updated_at",
     usernameEnvVar: "username_env_var",
   });
 });

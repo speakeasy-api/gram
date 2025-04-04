@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type AuthNumberLogoutSecurity = {
+  sessionHeaderGramSession: string;
+};
+
 export type AuthNumberLogoutRequest = {
   /**
    * Session header
@@ -18,6 +22,68 @@ export type AuthNumberLogoutRequest = {
 export type AuthNumberLogoutResponse = {
   headers: { [k: string]: Array<string> };
 };
+
+/** @internal */
+export const AuthNumberLogoutSecurity$inboundSchema: z.ZodType<
+  AuthNumberLogoutSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type AuthNumberLogoutSecurity$Outbound = {
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const AuthNumberLogoutSecurity$outboundSchema: z.ZodType<
+  AuthNumberLogoutSecurity$Outbound,
+  z.ZodTypeDef,
+  AuthNumberLogoutSecurity
+> = z.object({
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AuthNumberLogoutSecurity$ {
+  /** @deprecated use `AuthNumberLogoutSecurity$inboundSchema` instead. */
+  export const inboundSchema = AuthNumberLogoutSecurity$inboundSchema;
+  /** @deprecated use `AuthNumberLogoutSecurity$outboundSchema` instead. */
+  export const outboundSchema = AuthNumberLogoutSecurity$outboundSchema;
+  /** @deprecated use `AuthNumberLogoutSecurity$Outbound` instead. */
+  export type Outbound = AuthNumberLogoutSecurity$Outbound;
+}
+
+export function authNumberLogoutSecurityToJSON(
+  authNumberLogoutSecurity: AuthNumberLogoutSecurity,
+): string {
+  return JSON.stringify(
+    AuthNumberLogoutSecurity$outboundSchema.parse(authNumberLogoutSecurity),
+  );
+}
+
+export function authNumberLogoutSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<AuthNumberLogoutSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AuthNumberLogoutSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AuthNumberLogoutSecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const AuthNumberLogoutRequest$inboundSchema: z.ZodType<
