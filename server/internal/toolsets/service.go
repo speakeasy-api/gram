@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -19,11 +21,13 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
 
 type Service struct {
+	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	repo   *repo.Queries
@@ -33,11 +37,18 @@ type Service struct {
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Service {
-	return &Service{logger: logger, db: db, repo: repo.New(db), auth: auth.New(logger, db, redisClient)}
+	return &Service{
+		tracer: otel.Tracer("github.com/speakeasy-api/gram/internal/toolsets"),
+		logger: logger,
+		db:     db,
+		repo:   repo.New(db),
+		auth:   auth.New(logger, db, redisClient),
+	}
 }
 
-func Attach(mux goahttp.Muxer, service gen.Service) {
+func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),

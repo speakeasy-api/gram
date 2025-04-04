@@ -44,7 +44,7 @@ var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, assetStorage assets.BlobStore) *Service {
 	return &Service{
-		tracer:       otel.Tracer("deployments"),
+		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/deployments"),
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),

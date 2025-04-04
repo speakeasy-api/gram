@@ -9,7 +9,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/projects"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -19,6 +22,7 @@ import (
 
 // Service for gram dashboard authentication endpoints
 type Service struct {
+	tracer   trace.Tracer
 	logger   *slog.Logger
 	db       *pgxpool.Pool
 	sessions *sessions.Sessions
@@ -28,11 +32,18 @@ type Service struct {
 var _ gen.Service = &Service{}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Service {
-	return &Service{logger: logger, db: db, sessions: sessions.NewSessionAuth(logger, redisClient), projects: projects.NewService(logger, db)}
+	return &Service{
+		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
+		logger:   logger,
+		db:       db,
+		sessions: sessions.NewSessionAuth(logger, redisClient),
+		projects: projects.NewService(logger, db),
+	}
 }
 
-func Attach(mux goahttp.Muxer, service gen.Service) {
+func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
