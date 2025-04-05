@@ -15,6 +15,7 @@ import {
 import { GramCore } from "@gram/sdk/core.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./contexts/Auth.tsx";
+import { HTTPClient } from "@gram/sdk/lib/http.js";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -38,8 +39,22 @@ export default function App() {
   }, []);
 
   const queryClient = new QueryClient();
+  
+  // Temporary measure to allow the dashboard to persist cookies between calls to the server
+  // If the dashboard eventually keeps track of sesssion and manually attaches or we move to a BFF model we can remove this
+  const httpClient = new HTTPClient({
+    fetcher: (request) => {
+      const newRequest = new Request(request, {
+        credentials: 'include',
+      });
+  
+      return fetch(newRequest);
+    }
+  });
+  
   const gramClient = new GramCore({
     serverURL: "http://localhost:8080",
+    httpClient,
   });
 
   return (
