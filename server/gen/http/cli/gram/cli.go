@@ -907,7 +907,7 @@ load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances load-instance --toolset-slug "Qui aliquid." --environment-slug "In repellat vero autem tempora dolorem." --session-token "Quibusdam dolorem enim rem natus aut molestiae." --project-slug "Repellat enim possimus quis inventore." --apikey-token "Cupiditate enim."
+    %[1]s instances load-instance --toolset-slug "Rerum aut ut ipsum." --environment-slug "Fuga animi expedita saepe expedita." --session-token "Dolores qui aliquid voluptatem in repellat." --project-slug "Autem tempora dolorem quasi quibusdam." --apikey-token "Enim rem natus aut molestiae aliquam."
 `, os.Args[0])
 }
 
@@ -938,16 +938,14 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_id": "In et.",
-      "description": "Harum id.",
+      "default_environment_id": "Ut quidem.",
+      "description": "Consectetur nam odio veniam nisi.",
       "http_tool_ids": [
-         "Non et dolores qui facere necessitatibus.",
-         "Nam ut.",
-         "Et quod eligendi omnis voluptate laboriosam porro.",
-         "Saepe soluta at earum blanditiis voluptatibus."
+         "Id impedit sunt non et dolores.",
+         "Facere necessitatibus aut."
       ],
-      "name": "Nam odio veniam nisi."
-   }' --session-token "Aliquid corrupti corporis beatae officiis." --project-slug "Quod enim dolorem doloribus ut."
+      "name": "Possimus quis inventore cumque cupiditate enim."
+   }' --session-token "Quod eligendi omnis voluptate laboriosam." --project-slug "Voluptatem saepe soluta."
 `, os.Args[0])
 }
 
@@ -959,7 +957,7 @@ List all toolsets for a project
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "A occaecati sed nostrum adipisci." --project-slug "Non repellendus corporis."
+    %[1]s toolsets list-toolsets --session-token "Esse quo et deleniti ipsa architecto." --project-slug "Occaecati sed nostrum adipisci doloremque non."
 `, os.Args[0])
 }
 

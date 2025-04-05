@@ -1,4 +1,4 @@
-h1:PcGErZOIMBwKTwMcMVGjfBdF+ht9xARonnArxt8Lu+Q=
+h1:CHc8pOhJT9pahnUID4OZT5iiaWIV4zHXuIiNy3Y7Wf0=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
@@ -27,3 +27,7 @@ h1:PcGErZOIMBwKTwMcMVGjfBdF+ht9xARonnArxt8Lu+Q=
 20250403231226_deployment_logs_message.sql h1:0gNlB0aANOqpv9bKVALPpqVKY37o8v5vgi4wFFfX5a0=
 20250404003538_deployment_constraints.sql h1:tFy5VjELsKOBwC81PWehta1CQxbLj+lvBPMJeSKionU=
 20250404195148_http_tool_definitions_index.sql h1:d2Hua7NePHPbDr5Gkr+CnXHXd3ZVaeWRMCkvEtq7qv8=
+20250404214531_http_tool_definitions_nullables.sql h1:c7HoUTqNen8T8j3h4kgR/OvegufoXo0Vyy5qhQ1JmX4=
+20250404232320_drop_openapiv3_documents.sql h1:Tdlou3Bg+PqmB35wxU3v2U/GJjlsAnQDsoAlnAQxaq0=
+20250404232404_http_tool_definitions_openapiv3_document.sql h1:MNYGZs8Q3bHeqHaFkHcj+JT+uFOUrxKaGYWt15cq8Jw=
+20250405193123_http_tool_definitions_schema.sql h1:ag5VNDlNFD13o7Gaa4zD+a01YbdCAk8wfIpDOyOago4=

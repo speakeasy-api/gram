@@ -107,6 +107,96 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 	)
 }
 
+const createOpenAPIv3ToolDefinition = `-- name: CreateOpenAPIv3ToolDefinition :one
+INSERT INTO http_tool_definitions (
+    project_id
+  , deployment_id
+  , openapiv3_document_id
+  , name
+  , openapiv3_operation
+  , summary
+  , description
+  , tags
+  , http_method
+  , path
+  , schema_version
+  , schema
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+)
+RETURNING id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateOpenAPIv3ToolDefinitionParams struct {
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.NullUUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Openapiv3Operation  pgtype.Text
+	Summary             string
+	Description         string
+	Tags                []string
+	HttpMethod          string
+	Path                string
+	SchemaVersion       string
+	Schema              []byte
+}
+
+func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateOpenAPIv3ToolDefinitionParams) (HttpToolDefinition, error) {
+	row := q.db.QueryRow(ctx, createOpenAPIv3ToolDefinition,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.Openapiv3DocumentID,
+		arg.Name,
+		arg.Openapiv3Operation,
+		arg.Summary,
+		arg.Description,
+		arg.Tags,
+		arg.HttpMethod,
+		arg.Path,
+		arg.SchemaVersion,
+		arg.Schema,
+	)
+	var i HttpToolDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.Openapiv3DocumentID,
+		&i.Name,
+		&i.Summary,
+		&i.Description,
+		&i.Openapiv3Operation,
+		&i.Tags,
+		&i.ServerEnvVar,
+		&i.SecurityType,
+		&i.BearerEnvVar,
+		&i.ApikeyEnvVar,
+		&i.UsernameEnvVar,
+		&i.PasswordEnvVar,
+		&i.HttpMethod,
+		&i.Path,
+		&i.SchemaVersion,
+		&i.Schema,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getDeployment = `-- name: GetDeployment :one
 WITH latest_status as (
     SELECT deployment_id, status
@@ -355,35 +445,66 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 	return items, nil
 }
 
-const markDeploymentCreated = `-- name: MarkDeploymentCreated :one
+const logDeploymentEvent = `-- name: LogDeploymentEvent :exec
+INSERT INTO deployment_logs (deployment_id, project_id, event, message)
+VALUES ($1, $2, $3, $4)
+`
+
+type LogDeploymentEventParams struct {
+	DeploymentID uuid.UUID
+	ProjectID    uuid.UUID
+	Event        string
+	Message      string
+}
+
+func (q *Queries) LogDeploymentEvent(ctx context.Context, arg LogDeploymentEventParams) error {
+	_, err := q.db.Exec(ctx, logDeploymentEvent,
+		arg.DeploymentID,
+		arg.ProjectID,
+		arg.Event,
+		arg.Message,
+	)
+	return err
+}
+
+const transitionDeployment = `-- name: TransitionDeployment :one
 WITH status AS (
   INSERT INTO deployment_statuses (deployment_id , status)
-  VALUES ($1, 'created')
+  VALUES ($1, $2)
   RETURNING id, status
 ), 
 log AS (
   INSERT INTO deployment_logs (deployment_id, project_id, event, message)
-  VALUES ($1, $2, 'deployment:created', 'Deployment created')
+  VALUES ($1, $3, $4, $5)
   RETURNING id
 )
 SELECT status.id as status_id, status.status as status, log.id as log_id
 FROM status, log
 `
 
-type MarkDeploymentCreatedParams struct {
+type TransitionDeploymentParams struct {
 	DeploymentID uuid.UUID
+	Status       string
 	ProjectID    uuid.UUID
+	Event        string
+	Message      string
 }
 
-type MarkDeploymentCreatedRow struct {
+type TransitionDeploymentRow struct {
 	StatusID uuid.UUID
 	Status   string
 	LogID    uuid.UUID
 }
 
-func (q *Queries) MarkDeploymentCreated(ctx context.Context, arg MarkDeploymentCreatedParams) (MarkDeploymentCreatedRow, error) {
-	row := q.db.QueryRow(ctx, markDeploymentCreated, arg.DeploymentID, arg.ProjectID)
-	var i MarkDeploymentCreatedRow
+func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploymentParams) (TransitionDeploymentRow, error) {
+	row := q.db.QueryRow(ctx, transitionDeployment,
+		arg.DeploymentID,
+		arg.Status,
+		arg.ProjectID,
+		arg.Event,
+		arg.Message,
+	)
+	var i TransitionDeploymentRow
 	err := row.Scan(&i.StatusID, &i.Status, &i.LogID)
 	return i, err
 }

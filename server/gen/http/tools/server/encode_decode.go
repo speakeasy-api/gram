@@ -74,23 +74,20 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 // *tools.HTTPToolDefinition.
 func marshalToolsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *tools.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
 	res := &HTTPToolDefinitionResponseBody{
-		ID:               v.ID,
-		Name:             v.Name,
-		Description:      v.Description,
-		ServerEnvVar:     v.ServerEnvVar,
-		SecurityType:     v.SecurityType,
-		BearerEnvVar:     v.BearerEnvVar,
-		ApikeyEnvVar:     v.ApikeyEnvVar,
-		UsernameEnvVar:   v.UsernameEnvVar,
-		PasswordEnvVar:   v.PasswordEnvVar,
-		HTTPMethod:       v.HTTPMethod,
-		Path:             v.Path,
-		HeadersSchema:    v.HeadersSchema,
-		QueriesSchema:    v.QueriesSchema,
-		PathparamsSchema: v.PathparamsSchema,
-		BodySchema:       v.BodySchema,
-		CreatedAt:        v.CreatedAt,
-		UpdatedAt:        v.UpdatedAt,
+		ID:             v.ID,
+		Name:           v.Name,
+		Description:    v.Description,
+		ServerEnvVar:   v.ServerEnvVar,
+		SecurityType:   v.SecurityType,
+		BearerEnvVar:   v.BearerEnvVar,
+		ApikeyEnvVar:   v.ApikeyEnvVar,
+		UsernameEnvVar: v.UsernameEnvVar,
+		PasswordEnvVar: v.PasswordEnvVar,
+		HTTPMethod:     v.HTTPMethod,
+		Path:           v.Path,
+		Schema:         v.Schema,
+		CreatedAt:      v.CreatedAt,
+		UpdatedAt:      v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

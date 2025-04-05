@@ -103,23 +103,20 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 // *HTTPToolDefinitionResponseBody.
 func unmarshalHTTPToolDefinitionResponseBodyToToolsHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *tools.HTTPToolDefinition {
 	res := &tools.HTTPToolDefinition{
-		ID:               *v.ID,
-		Name:             *v.Name,
-		Description:      *v.Description,
-		ServerEnvVar:     *v.ServerEnvVar,
-		SecurityType:     *v.SecurityType,
-		BearerEnvVar:     v.BearerEnvVar,
-		ApikeyEnvVar:     v.ApikeyEnvVar,
-		UsernameEnvVar:   v.UsernameEnvVar,
-		PasswordEnvVar:   v.PasswordEnvVar,
-		HTTPMethod:       *v.HTTPMethod,
-		Path:             *v.Path,
-		HeadersSchema:    v.HeadersSchema,
-		QueriesSchema:    v.QueriesSchema,
-		PathparamsSchema: v.PathparamsSchema,
-		BodySchema:       v.BodySchema,
-		CreatedAt:        *v.CreatedAt,
-		UpdatedAt:        *v.UpdatedAt,
+		ID:             *v.ID,
+		Name:           *v.Name,
+		Description:    *v.Description,
+		ServerEnvVar:   v.ServerEnvVar,
+		SecurityType:   v.SecurityType,
+		BearerEnvVar:   v.BearerEnvVar,
+		ApikeyEnvVar:   v.ApikeyEnvVar,
+		UsernameEnvVar: v.UsernameEnvVar,
+		PasswordEnvVar: v.PasswordEnvVar,
+		HTTPMethod:     *v.HTTPMethod,
+		Path:           *v.Path,
+		Schema:         v.Schema,
+		CreatedAt:      *v.CreatedAt,
+		UpdatedAt:      *v.UpdatedAt,
 	}
 	res.Tags = make([]string, len(v.Tags))
 	for i, val := range v.Tags {

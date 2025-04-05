@@ -173,14 +173,8 @@ type HTTPToolDefinitionResponseBody struct {
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Path for the request
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// JSON schema for headers
-	HeadersSchema *string `form:"headers_schema,omitempty" json:"headers_schema,omitempty" xml:"headers_schema,omitempty"`
-	// JSON schema for query parameters
-	QueriesSchema *string `form:"queries_schema,omitempty" json:"queries_schema,omitempty" xml:"queries_schema,omitempty"`
-	// JSON schema for path parameters
-	PathparamsSchema *string `form:"pathparams_schema,omitempty" json:"pathparams_schema,omitempty" xml:"pathparams_schema,omitempty"`
-	// JSON schema for request body
-	BodySchema *string `form:"body_schema,omitempty" json:"body_schema,omitempty" xml:"body_schema,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
 	// The creation date of the tool.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the tool.
@@ -481,12 +475,6 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.Tags == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
-	}
-	if body.ServerEnvVar == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("server_env_var", "body"))
-	}
-	if body.SecurityType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("security_type", "body"))
 	}
 	if body.HTTPMethod == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("http_method", "body"))

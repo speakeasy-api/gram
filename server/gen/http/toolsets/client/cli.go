@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"In et.\",\n      \"description\": \"Harum id.\",\n      \"http_tool_ids\": [\n         \"Non et dolores qui facere necessitatibus.\",\n         \"Nam ut.\",\n         \"Et quod eligendi omnis voluptate laboriosam porro.\",\n         \"Saepe soluta at earum blanditiis voluptatibus.\"\n      ],\n      \"name\": \"Nam odio veniam nisi.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Ut quidem.\",\n      \"description\": \"Consectetur nam odio veniam nisi.\",\n      \"http_tool_ids\": [\n         \"Id impedit sunt non et dolores.\",\n         \"Facere necessitatibus aut.\"\n      ],\n      \"name\": \"Possimus quis inventore cumque cupiditate enim.\"\n   }'")
 		}
 	}
 	var sessionToken *string

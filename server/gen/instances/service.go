@@ -86,9 +86,9 @@ type HTTPToolDefinition struct {
 	// The tags list for this http tool
 	Tags []string
 	// Environment variable for the server URL
-	ServerEnvVar string
+	ServerEnvVar *string
 	// Type of security (http:bearer, http:basic, apikey)
-	SecurityType string
+	SecurityType *string
 	// Environment variable for bearer token
 	BearerEnvVar *string
 	// Environment variable for API key
@@ -101,14 +101,8 @@ type HTTPToolDefinition struct {
 	HTTPMethod string
 	// Path for the request
 	Path string
-	// JSON schema for headers
-	HeadersSchema *string
-	// JSON schema for query parameters
-	QueriesSchema *string
-	// JSON schema for path parameters
-	PathparamsSchema *string
-	// JSON schema for request body
-	BodySchema *string
+	// JSON schema for the request
+	Schema *string
 	// The creation date of the tool.
 	CreatedAt string
 	// The last update date of the tool.

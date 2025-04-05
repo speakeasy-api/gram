@@ -1294,9 +1294,6 @@ components:
                 bearer_env_var:
                     type: string
                     description: Environment variable for bearer token
-                body_schema:
-                    type: string
-                    description: JSON schema for request body
                 created_at:
                     type: string
                     description: The creation date of the tool.
@@ -1304,9 +1301,6 @@ components:
                 description:
                     type: string
                     description: Description of the tool
-                headers_schema:
-                    type: string
-                    description: JSON schema for headers
                 http_method:
                     type: string
                     description: HTTP method for the request
@@ -1322,12 +1316,9 @@ components:
                 path:
                     type: string
                     description: Path for the request
-                pathparams_schema:
+                schema:
                     type: string
-                    description: JSON schema for path parameters
-                queries_schema:
-                    type: string
-                    description: JSON schema for query parameters
+                    description: JSON schema for the request
                 security_type:
                     type: string
                     description: Type of security (http:bearer, http:basic, apikey)
@@ -1351,8 +1342,6 @@ components:
                 - name
                 - description
                 - tags
-                - server_env_var
-                - security_type
                 - http_method
                 - path
                 - created_at

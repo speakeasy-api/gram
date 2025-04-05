@@ -1580,23 +1580,15 @@ definitions:
                 type: string
                 description: Environment variable for bearer token
                 example: Eveniet placeat autem doloribus delectus autem placeat.
-            body_schema:
-                type: string
-                description: JSON schema for request body
-                example: Suscipit quo minima laboriosam ipsam qui.
             created_at:
                 type: string
                 description: The creation date of the tool.
-                example: "1981-02-21T12:03:10Z"
+                example: "1986-10-24T05:06:07Z"
                 format: date-time
             description:
                 type: string
                 description: Description of the tool
                 example: Consectetur voluptatibus ex consequatur.
-            headers_schema:
-                type: string
-                description: JSON schema for headers
-                example: Voluptas et molestiae temporibus vero.
             http_method:
                 type: string
                 description: HTTP method for the request
@@ -1617,14 +1609,10 @@ definitions:
                 type: string
                 description: Path for the request
                 example: Laudantium qui autem est.
-            pathparams_schema:
+            schema:
                 type: string
-                description: JSON schema for path parameters
-                example: Totam id voluptatum repellat ut voluptatem suscipit.
-            queries_schema:
-                type: string
-                description: JSON schema for query parameters
-                example: Consequatur eos voluptates vero.
+                description: JSON schema for the request
+                example: Voluptas et molestiae temporibus vero.
             security_type:
                 type: string
                 description: Type of security (http:bearer, http:basic, apikey)
@@ -1646,40 +1634,36 @@ definitions:
             updated_at:
                 type: string
                 description: The last update date of the tool.
-                example: "1971-01-16T20:07:07Z"
+                example: "2002-06-07T00:35:05Z"
                 format: date-time
             username_env_var:
                 type: string
                 description: Environment variable for username
                 example: Et consequatur aliquid.
         example:
-            apikey_env_var: Architecto voluptatem provident fugiat quasi qui.
-            bearer_env_var: Numquam ea incidunt.
-            body_schema: Et voluptates dignissimos exercitationem.
-            created_at: "1982-10-02T00:39:06Z"
-            description: At corrupti recusandae aut asperiores nihil.
-            headers_schema: Est cumque nemo officiis omnis.
-            http_method: Qui eum error ipsa harum necessitatibus.
-            id: Nulla exercitationem.
-            name: Aut quos deserunt dicta.
-            password_env_var: Voluptatem suscipit.
-            path: Consequatur modi qui fugiat eveniet dolores adipisci.
-            pathparams_schema: Alias ipsa.
-            queries_schema: Et sunt inventore sed.
-            security_type: Nihil eos ipsa dolorum ut eum.
-            server_env_var: Qui quasi sed.
+            apikey_env_var: Fugit nihil eos ipsa.
+            bearer_env_var: Aliquam sint velit qui quasi.
+            created_at: "1986-04-07T08:11:48Z"
+            description: Dolorum distinctio aut quae.
+            http_method: Reprehenderit occaecati ratione quia rerum distinctio.
+            id: Eligendi omnis harum.
+            name: Velit accusamus architecto voluptate.
+            password_env_var: Architecto voluptatem provident fugiat quasi qui.
+            path: Voluptatem suscipit.
+            schema: Qui eum error ipsa harum necessitatibus.
+            security_type: Quasi et omnis nihil repudiandae aut.
+            server_env_var: Ut molestiae.
             tags:
-                - Molestiae sit quasi et omnis nihil.
-                - Aut quibusdam aliquam sint.
-            updated_at: "2002-06-26T03:27:33Z"
-            username_env_var: Reprehenderit occaecati ratione quia rerum distinctio.
+                - Voluptates et voluptates reiciendis nulla exercitationem.
+                - Aut quos deserunt dicta.
+                - At corrupti recusandae aut asperiores nihil.
+            updated_at: "2006-12-25T03:10:45Z"
+            username_env_var: Ut eum neque numquam ea incidunt.
         required:
             - id
             - name
             - description
             - tags
-            - server_env_var
-            - security_type
             - http_method
             - path
             - created_at
@@ -1698,83 +1682,37 @@ definitions:
                 example:
                     - apikey_env_var: Animi fugiat.
                       bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
+                      created_at: "2002-09-10T02:10:49Z"
                       description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
                       http_method: Eum quis a error.
                       id: Est cumque.
                       name: Ipsa officiis sapiente suscipit iure ea culpa.
                       password_env_var: Et fugiat eum.
                       path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
+                      schema: Nobis dolores quos nisi.
                       security_type: Amet ut voluptas ut explicabo.
                       server_env_var: Quia hic saepe quia voluptatem.
                       tags:
                         - Explicabo vero quia.
                         - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
+                      updated_at: "2011-04-19T05:26:32Z"
                       username_env_var: Aut sit quis et minus dolores vero.
                     - apikey_env_var: Animi fugiat.
                       bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
+                      created_at: "2002-09-10T02:10:49Z"
                       description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
                       http_method: Eum quis a error.
                       id: Est cumque.
                       name: Ipsa officiis sapiente suscipit iure ea culpa.
                       password_env_var: Et fugiat eum.
                       path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
+                      schema: Nobis dolores quos nisi.
                       security_type: Amet ut voluptas ut explicabo.
                       server_env_var: Quia hic saepe quia voluptatem.
                       tags:
                         - Explicabo vero quia.
                         - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
-                      username_env_var: Aut sit quis et minus dolores vero.
-                    - apikey_env_var: Animi fugiat.
-                      bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
-                      description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
-                      http_method: Eum quis a error.
-                      id: Est cumque.
-                      name: Ipsa officiis sapiente suscipit iure ea culpa.
-                      password_env_var: Et fugiat eum.
-                      path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
-                      security_type: Amet ut voluptas ut explicabo.
-                      server_env_var: Quia hic saepe quia voluptatem.
-                      tags:
-                        - Explicabo vero quia.
-                        - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
-                      username_env_var: Aut sit quis et minus dolores vero.
-                    - apikey_env_var: Animi fugiat.
-                      bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
-                      description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
-                      http_method: Eum quis a error.
-                      id: Est cumque.
-                      name: Ipsa officiis sapiente suscipit iure ea culpa.
-                      password_env_var: Et fugiat eum.
-                      path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
-                      security_type: Amet ut voluptas ut explicabo.
-                      server_env_var: Quia hic saepe quia voluptatem.
-                      tags:
-                        - Explicabo vero quia.
-                        - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
+                      updated_at: "2011-04-19T05:26:32Z"
                       username_env_var: Aut sit quis et minus dolores vero.
         example:
             environment:
@@ -1798,43 +1736,54 @@ definitions:
             tools:
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
+                  username_env_var: Aut sit quis et minus dolores vero.
+                - apikey_env_var: Animi fugiat.
+                  bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
+                  created_at: "2002-09-10T02:10:49Z"
+                  description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
+                  http_method: Eum quis a error.
+                  id: Est cumque.
+                  name: Ipsa officiis sapiente suscipit iure ea culpa.
+                  password_env_var: Et fugiat eum.
+                  path: Dolor officiis delectus soluta eos.
+                  schema: Nobis dolores quos nisi.
+                  security_type: Amet ut voluptas ut explicabo.
+                  server_env_var: Quia hic saepe quia voluptatem.
+                  tags:
+                    - Explicabo vero quia.
+                    - Totam debitis explicabo repellendus nemo.
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
         required:
             - tools
@@ -2172,146 +2121,91 @@ definitions:
                 example:
                     - apikey_env_var: Animi fugiat.
                       bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
+                      created_at: "2002-09-10T02:10:49Z"
                       description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
                       http_method: Eum quis a error.
                       id: Est cumque.
                       name: Ipsa officiis sapiente suscipit iure ea culpa.
                       password_env_var: Et fugiat eum.
                       path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
+                      schema: Nobis dolores quos nisi.
                       security_type: Amet ut voluptas ut explicabo.
                       server_env_var: Quia hic saepe quia voluptatem.
                       tags:
                         - Explicabo vero quia.
                         - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
+                      updated_at: "2011-04-19T05:26:32Z"
                       username_env_var: Aut sit quis et minus dolores vero.
                     - apikey_env_var: Animi fugiat.
                       bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
+                      created_at: "2002-09-10T02:10:49Z"
                       description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
                       http_method: Eum quis a error.
                       id: Est cumque.
                       name: Ipsa officiis sapiente suscipit iure ea culpa.
                       password_env_var: Et fugiat eum.
                       path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
+                      schema: Nobis dolores quos nisi.
                       security_type: Amet ut voluptas ut explicabo.
                       server_env_var: Quia hic saepe quia voluptatem.
                       tags:
                         - Explicabo vero quia.
                         - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
-                      username_env_var: Aut sit quis et minus dolores vero.
-                    - apikey_env_var: Animi fugiat.
-                      bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
-                      description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
-                      http_method: Eum quis a error.
-                      id: Est cumque.
-                      name: Ipsa officiis sapiente suscipit iure ea culpa.
-                      password_env_var: Et fugiat eum.
-                      path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
-                      security_type: Amet ut voluptas ut explicabo.
-                      server_env_var: Quia hic saepe quia voluptatem.
-                      tags:
-                        - Explicabo vero quia.
-                        - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
-                      username_env_var: Aut sit quis et minus dolores vero.
-                    - apikey_env_var: Animi fugiat.
-                      bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
-                      description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
-                      http_method: Eum quis a error.
-                      id: Est cumque.
-                      name: Ipsa officiis sapiente suscipit iure ea culpa.
-                      password_env_var: Et fugiat eum.
-                      path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
-                      security_type: Amet ut voluptas ut explicabo.
-                      server_env_var: Quia hic saepe quia voluptatem.
-                      tags:
-                        - Explicabo vero quia.
-                        - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
+                      updated_at: "2011-04-19T05:26:32Z"
                       username_env_var: Aut sit quis et minus dolores vero.
         example:
-            next_cursor: Voluptates quisquam possimus eos fuga.
+            next_cursor: Minima ut assumenda similique magnam sunt.
             tools:
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
         required:
             - tools
@@ -2331,7 +2225,7 @@ definitions:
                       http_tool_ids:
                         - Excepturi quasi.
                         - Mollitia velit autem.
-                      id: Sit dolorum perspiciatis.
+                      id: Corporis aut sit dolorum perspiciatis.
                       name: In non dicta doloribus eius nostrum.
                       organization_id: Voluptas et et molestias et.
                       project_id: Odio porro dignissimos non dignissimos dicta at.
@@ -2343,19 +2237,7 @@ definitions:
                       http_tool_ids:
                         - Excepturi quasi.
                         - Mollitia velit autem.
-                      id: Sit dolorum perspiciatis.
-                      name: In non dicta doloribus eius nostrum.
-                      organization_id: Voluptas et et molestias et.
-                      project_id: Odio porro dignissimos non dignissimos dicta at.
-                      slug: Doloribus aut.
-                      updated_at: "2005-07-10T08:05:14Z"
-                    - created_at: "2006-03-25T12:28:02Z"
-                      default_environment_id: Ratione eligendi officia qui ut.
-                      description: Laboriosam consequuntur est.
-                      http_tool_ids:
-                        - Excepturi quasi.
-                        - Mollitia velit autem.
-                      id: Sit dolorum perspiciatis.
+                      id: Corporis aut sit dolorum perspiciatis.
                       name: In non dicta doloribus eius nostrum.
                       organization_id: Voluptas et et molestias et.
                       project_id: Odio porro dignissimos non dignissimos dicta at.
@@ -2369,7 +2251,7 @@ definitions:
                   http_tool_ids:
                     - Excepturi quasi.
                     - Mollitia velit autem.
-                  id: Sit dolorum perspiciatis.
+                  id: Corporis aut sit dolorum perspiciatis.
                   name: In non dicta doloribus eius nostrum.
                   organization_id: Voluptas et et molestias et.
                   project_id: Odio porro dignissimos non dignissimos dicta at.
@@ -2381,7 +2263,7 @@ definitions:
                   http_tool_ids:
                     - Excepturi quasi.
                     - Mollitia velit autem.
-                  id: Sit dolorum perspiciatis.
+                  id: Corporis aut sit dolorum perspiciatis.
                   name: In non dicta doloribus eius nostrum.
                   organization_id: Voluptas et et molestias et.
                   project_id: Odio porro dignissimos non dignissimos dicta at.
@@ -2393,7 +2275,7 @@ definitions:
                   http_tool_ids:
                     - Excepturi quasi.
                     - Mollitia velit autem.
-                  id: Sit dolorum perspiciatis.
+                  id: Corporis aut sit dolorum perspiciatis.
                   name: In non dicta doloribus eius nostrum.
                   organization_id: Voluptas et et molestias et.
                   project_id: Odio porro dignissimos non dignissimos dicta at.
@@ -2537,63 +2419,64 @@ definitions:
             created_at:
                 type: string
                 description: When the toolset was created.
-                example: "1979-03-30T12:34:54Z"
+                example: "1972-10-08T06:54:43Z"
                 format: date-time
             default_environment_id:
                 type: string
                 description: The ID of the environment to use as the default for the toolset
-                example: Facere sed rerum repellat dolorem voluptatem.
+                example: Vel explicabo corporis nemo saepe nisi.
             description:
                 type: string
                 description: Description of the toolset
-                example: Quia adipisci sit explicabo error eveniet magnam.
+                example: Ratione voluptatem et aspernatur repellendus corrupti consectetur.
             http_tool_ids:
                 type: array
                 items:
                     type: string
-                    example: Et pariatur maiores dolorum.
+                    example: Necessitatibus libero eligendi aut.
                 description: List of HTTP tool IDs included in this toolset
                 example:
-                    - Ratione dolore odio corporis aliquid quis.
-                    - Eaque sint ducimus quo tenetur.
+                    - Illum consectetur sapiente aut tempora.
+                    - Mollitia voluptas dolore aut.
+                    - Quia adipisci sit explicabo error eveniet magnam.
             id:
                 type: string
                 description: The ID of the toolset
-                example: Repellendus corrupti consectetur et vel.
+                example: Dolor non consequatur.
             name:
                 type: string
                 description: The name of the toolset
-                example: Incidunt illum consectetur.
+                example: Consectetur fugiat repudiandae laboriosam.
             organization_id:
                 type: string
                 description: The organization ID this toolset belongs to
-                example: Necessitatibus libero eligendi aut.
+                example: Dolore consequatur voluptate quia.
             project_id:
                 type: string
                 description: The project ID this toolset belongs to
-                example: Corporis nemo saepe nisi.
+                example: Doloribus quo aut quam.
             slug:
                 type: string
                 description: The slug of the toolset
-                example: Aut tempora aperiam mollitia voluptas dolore aut.
+                example: Quisquam possimus eos.
             updated_at:
                 type: string
                 description: When the toolset was last updated.
-                example: "2008-12-22T02:25:55Z"
+                example: "2011-01-09T21:59:12Z"
                 format: date-time
         example:
-            created_at: "1996-12-10T01:57:57Z"
-            default_environment_id: Harum porro.
-            description: In rerum.
+            created_at: "1986-08-14T12:31:17Z"
+            default_environment_id: Quasi voluptatem.
+            description: Illo quod distinctio.
             http_tool_ids:
-                - Architecto quaerat.
-                - Iure et corrupti quia quis.
-            id: Non illo quod distinctio.
-            name: Quo atque voluptatibus aut minima iusto.
-            organization_id: Dolores non et excepturi omnis rem.
-            project_id: Quasi voluptatem.
-            slug: Occaecati accusantium quas ratione aut.
-            updated_at: "2005-02-20T01:12:34Z"
+                - Non et excepturi omnis rem.
+                - Quo atque voluptatibus aut minima iusto.
+            id: Dicta nihil perspiciatis praesentium.
+            name: Accusantium aliquam explicabo commodi inventore.
+            organization_id: Eaque laborum.
+            project_id: Magnam sit illum eum odio.
+            slug: Voluptatem dignissimos ut vel similique qui hic.
+            updated_at: "1979-05-15T15:53:09Z"
         required:
             - id
             - project_id
@@ -2609,16 +2492,16 @@ definitions:
             created_at:
                 type: string
                 description: When the toolset was created.
-                example: "1982-06-02T12:22:49Z"
+                example: "1979-02-22T07:35:07Z"
                 format: date-time
             default_environment_id:
                 type: string
                 description: The ID of the environment to use as the default for the toolset
-                example: Rerum error velit aspernatur occaecati ea.
+                example: Et tempora.
             description:
                 type: string
                 description: Description of the toolset
-                example: Et tempora.
+                example: Expedita aut qui in suscipit quibusdam.
             http_tools:
                 type: array
                 items:
@@ -2627,180 +2510,125 @@ definitions:
                 example:
                     - apikey_env_var: Animi fugiat.
                       bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
+                      created_at: "2002-09-10T02:10:49Z"
                       description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
                       http_method: Eum quis a error.
                       id: Est cumque.
                       name: Ipsa officiis sapiente suscipit iure ea culpa.
                       password_env_var: Et fugiat eum.
                       path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
+                      schema: Nobis dolores quos nisi.
                       security_type: Amet ut voluptas ut explicabo.
                       server_env_var: Quia hic saepe quia voluptatem.
                       tags:
                         - Explicabo vero quia.
                         - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
+                      updated_at: "2011-04-19T05:26:32Z"
                       username_env_var: Aut sit quis et minus dolores vero.
                     - apikey_env_var: Animi fugiat.
                       bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
+                      created_at: "2002-09-10T02:10:49Z"
                       description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
                       http_method: Eum quis a error.
                       id: Est cumque.
                       name: Ipsa officiis sapiente suscipit iure ea culpa.
                       password_env_var: Et fugiat eum.
                       path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
+                      schema: Nobis dolores quos nisi.
                       security_type: Amet ut voluptas ut explicabo.
                       server_env_var: Quia hic saepe quia voluptatem.
                       tags:
                         - Explicabo vero quia.
                         - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
-                      username_env_var: Aut sit quis et minus dolores vero.
-                    - apikey_env_var: Animi fugiat.
-                      bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
-                      description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
-                      http_method: Eum quis a error.
-                      id: Est cumque.
-                      name: Ipsa officiis sapiente suscipit iure ea culpa.
-                      password_env_var: Et fugiat eum.
-                      path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
-                      security_type: Amet ut voluptas ut explicabo.
-                      server_env_var: Quia hic saepe quia voluptatem.
-                      tags:
-                        - Explicabo vero quia.
-                        - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
-                      username_env_var: Aut sit quis et minus dolores vero.
-                    - apikey_env_var: Animi fugiat.
-                      bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                      body_schema: Voluptatum doloribus et aliquam.
-                      created_at: "1989-09-21T04:41:31Z"
-                      description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                      headers_schema: Nobis dolores quos nisi.
-                      http_method: Eum quis a error.
-                      id: Est cumque.
-                      name: Ipsa officiis sapiente suscipit iure ea culpa.
-                      password_env_var: Et fugiat eum.
-                      path: Dolor officiis delectus soluta eos.
-                      pathparams_schema: Id occaecati aut.
-                      queries_schema: Sunt quas.
-                      security_type: Amet ut voluptas ut explicabo.
-                      server_env_var: Quia hic saepe quia voluptatem.
-                      tags:
-                        - Explicabo vero quia.
-                        - Totam debitis explicabo repellendus nemo.
-                      updated_at: "2007-08-13T02:31:43Z"
+                      updated_at: "2011-04-19T05:26:32Z"
                       username_env_var: Aut sit quis et minus dolores vero.
             id:
                 type: string
                 description: The ID of the toolset
-                example: Et asperiores.
+                example: Inventore voluptatem laboriosam neque.
             name:
                 type: string
                 description: The name of the toolset
-                example: Ipsa nobis laboriosam ut voluptatem.
+                example: Quia quae et sit laborum officiis consectetur.
             organization_id:
                 type: string
                 description: The organization ID this toolset belongs to
-                example: Quia quae et sit laborum officiis consectetur.
+                example: Quibusdam molestias molestiae laboriosam accusamus.
             project_id:
                 type: string
                 description: The project ID this toolset belongs to
-                example: Quibusdam molestias molestiae laboriosam accusamus.
+                example: Et asperiores.
             slug:
                 type: string
                 description: The slug of the toolset
-                example: Expedita aut qui in suscipit quibusdam.
+                example: Ipsa nobis laboriosam ut voluptatem.
             updated_at:
                 type: string
                 description: When the toolset was last updated.
-                example: "1995-08-22T07:10:31Z"
+                example: "1988-11-23T21:10:14Z"
                 format: date-time
         example:
-            created_at: "2003-09-24T14:43:17Z"
-            default_environment_id: Voluptas neque deleniti.
-            description: Iure dolor quae sed iste est.
+            created_at: "1984-04-30T04:31:52Z"
+            default_environment_id: Perferendis dicta voluptas ut iure dolor quae.
+            description: Illo facilis recusandae.
             http_tools:
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
                 - apikey_env_var: Animi fugiat.
                   bearer_env_var: Ullam laboriosam officiis aliquam saepe non.
-                  body_schema: Voluptatum doloribus et aliquam.
-                  created_at: "1989-09-21T04:41:31Z"
+                  created_at: "2002-09-10T02:10:49Z"
                   description: Alias excepturi pariatur deserunt eligendi blanditiis dolores.
-                  headers_schema: Nobis dolores quos nisi.
                   http_method: Eum quis a error.
                   id: Est cumque.
                   name: Ipsa officiis sapiente suscipit iure ea culpa.
                   password_env_var: Et fugiat eum.
                   path: Dolor officiis delectus soluta eos.
-                  pathparams_schema: Id occaecati aut.
-                  queries_schema: Sunt quas.
+                  schema: Nobis dolores quos nisi.
                   security_type: Amet ut voluptas ut explicabo.
                   server_env_var: Quia hic saepe quia voluptatem.
                   tags:
                     - Explicabo vero quia.
                     - Totam debitis explicabo repellendus nemo.
-                  updated_at: "2007-08-13T02:31:43Z"
+                  updated_at: "2011-04-19T05:26:32Z"
                   username_env_var: Aut sit quis et minus dolores vero.
-            id: Unde esse sequi velit minima.
-            name: Facilis recusandae dolor.
-            organization_id: Esse eos fuga natus facilis.
-            project_id: Aliquam harum beatae quia repellat dolor non.
-            slug: Dicta voluptas.
-            updated_at: "1988-11-03T08:23:52Z"
+            id: Accusantium similique aut occaecati aut inventore.
+            name: Beatae quia repellat dolor non veritatis.
+            organization_id: Minima voluptatem aliquam.
+            project_id: In unde esse sequi.
+            slug: Eos fuga natus.
+            updated_at: "1996-09-04T02:34:18Z"
         required:
             - id
             - project_id
@@ -2817,33 +2645,35 @@ definitions:
             default_environment_id:
                 type: string
                 description: The ID of the environment to use as the default for the toolset
-                example: Autem id minima sit numquam.
+                example: Vel autem voluptas officiis.
             description:
                 type: string
                 description: Description of the toolset
-                example: Doloremque optio.
+                example: Rerum ullam velit molestiae odio.
             http_tool_ids:
                 type: array
                 items:
                     type: string
-                    example: Harum voluptatum.
+                    example: Et dignissimos.
                 description: List of HTTP tool IDs to include
                 example:
-                    - Repudiandae ipsa velit atque et architecto nisi.
-                    - Quis magni vel autem voluptas officiis.
+                    - Fugiat cupiditate corporis laborum cum aliquam accusamus.
+                    - Possimus id doloremque optio aliquam.
+                    - Voluptatum autem debitis repudiandae ipsa velit.
+                    - Et architecto nisi et quis.
             name:
                 type: string
                 description: The name of the toolset
-                example: Et possimus.
+                example: Dignissimos dolor tempore.
         example:
-            default_environment_id: Doloremque nesciunt optio sunt cum suscipit dignissimos.
-            description: Eligendi quibusdam qui animi illum nisi.
+            default_environment_id: Ea et autem et.
+            description: Fugiat rem et aliquid aut.
             http_tool_ids:
+                - Quibusdam qui animi illum nisi voluptatum.
                 - Architecto qui aut.
                 - Sit est ducimus voluptatem nam.
                 - Nulla vitae et maiores et atque.
-                - Ea et autem et.
-            name: Fugiat rem et aliquid aut.
+            name: Autem id minima sit numquam.
         required:
             - name
     ToolsetsUpdateToolsetRequestBody:
@@ -2853,46 +2683,46 @@ definitions:
             default_environment_id:
                 type: string
                 description: The ID of the environment to use as the default for the toolset
-                example: Omnis perspiciatis.
+                example: Ad veniam mollitia nemo ab.
             description:
                 type: string
                 description: The new description of the toolset
-                example: Temporibus sint rem.
+                example: Suscipit dignissimos odio libero ad.
             http_tool_ids_to_add:
                 type: array
                 items:
                     type: string
-                    example: Fugit vitae vitae mollitia.
+                    example: Asperiores temporibus.
                 description: HTTP tool IDs to add to the toolset
                 example:
-                    - Voluptas qui eligendi unde in quam maiores.
+                    - Ut omnis perspiciatis omnis fugit.
+                    - Vitae mollitia ad ut voluptas qui eligendi.
+                    - In quam maiores.
                     - Impedit ipsam dolor consectetur.
-                    - Hic quidem libero voluptas earum.
             http_tool_ids_to_remove:
                 type: array
                 items:
                     type: string
-                    example: Nisi voluptatem saepe eum ea harum ea.
+                    example: Hic quidem libero voluptas earum.
                 description: HTTP tool IDs to remove from the toolset
                 example:
-                    - Nesciunt dolor nostrum minima provident error dolor.
-                    - Et non.
-                    - Et dolorem quibusdam.
+                    - Voluptatem saepe eum ea harum ea.
+                    - Repudiandae nesciunt dolor nostrum minima provident.
             name:
                 type: string
                 description: The new name of the toolset
-                example: Fugiat ad veniam mollitia nemo ab nulla.
+                example: Optio sunt.
         example:
-            default_environment_id: A autem quia qui architecto.
-            description: Ea est.
+            default_environment_id: Velit officiis molestiae nulla aut corporis laboriosam.
+            description: Et dolorem quibusdam.
             http_tool_ids_to_add:
-                - Nisi aut illo totam adipisci.
-                - Ratione ut ex in fuga.
+                - Est et a autem quia qui architecto.
+                - Qui nisi aut.
             http_tool_ids_to_remove:
-                - Tempora qui et.
-                - Nam ipsam.
-                - Minima impedit inventore voluptatem laboriosam neque.
-            name: Velit officiis molestiae nulla aut corporis laboriosam.
+                - Adipisci id ratione ut ex in fuga.
+                - Sunt tempora qui.
+                - Aliquam nam ipsam asperiores minima.
+            name: Dolor perferendis et non.
     UploadOpenAPIv3Result:
         title: UploadOpenAPIv3Result
         type: object

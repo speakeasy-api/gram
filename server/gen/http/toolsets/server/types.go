@@ -158,9 +158,9 @@ type HTTPToolDefinitionResponseBody struct {
 	// The tags list for this http tool
 	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// Environment variable for the server URL
-	ServerEnvVar string `form:"server_env_var" json:"server_env_var" xml:"server_env_var"`
+	ServerEnvVar *string `form:"server_env_var,omitempty" json:"server_env_var,omitempty" xml:"server_env_var,omitempty"`
 	// Type of security (http:bearer, http:basic, apikey)
-	SecurityType string `form:"security_type" json:"security_type" xml:"security_type"`
+	SecurityType *string `form:"security_type,omitempty" json:"security_type,omitempty" xml:"security_type,omitempty"`
 	// Environment variable for bearer token
 	BearerEnvVar *string `form:"bearer_env_var,omitempty" json:"bearer_env_var,omitempty" xml:"bearer_env_var,omitempty"`
 	// Environment variable for API key
@@ -173,14 +173,8 @@ type HTTPToolDefinitionResponseBody struct {
 	HTTPMethod string `form:"http_method" json:"http_method" xml:"http_method"`
 	// Path for the request
 	Path string `form:"path" json:"path" xml:"path"`
-	// JSON schema for headers
-	HeadersSchema *string `form:"headers_schema,omitempty" json:"headers_schema,omitempty" xml:"headers_schema,omitempty"`
-	// JSON schema for query parameters
-	QueriesSchema *string `form:"queries_schema,omitempty" json:"queries_schema,omitempty" xml:"queries_schema,omitempty"`
-	// JSON schema for path parameters
-	PathparamsSchema *string `form:"pathparams_schema,omitempty" json:"pathparams_schema,omitempty" xml:"pathparams_schema,omitempty"`
-	// JSON schema for request body
-	BodySchema *string `form:"body_schema,omitempty" json:"body_schema,omitempty" xml:"body_schema,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.

@@ -159,25 +159,6 @@ CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   CONSTRAINT deployments_openapiv3_documents_deployment_id_slug_key UNIQUE (deployment_id, slug)
 );
 
-CREATE TABLE IF NOT EXISTS openapiv3_documents (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-  deployment_id uuid,
-  asset_id uuid NOT NULL,
-  name text NOT NULL,
-  slug text NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT openapiv3_documents_pkey PRIMARY KEY (id),
-  CONSTRAINT openapiv3_documents_project_id_slug_key UNIQUE (project_id, slug),
-  CONSTRAINT openapiv3_documents_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
-  CONSTRAINT openapiv3_documents_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE RESTRICT
-);
-
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -192,8 +173,8 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   openapiv3_operation text,
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
-  server_env_var text NOT NULL,
-  security_type text NOT NULL CHECK (
+  server_env_var text,
+  security_type text CHECK (
     security_type IN ('http:bearer', 'http:basic', 'apikey')
   ),
   bearer_env_var text,
@@ -203,10 +184,8 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
   http_method text NOT NULL,
   path text NOT NULL,
-  headers_schema jsonb,
-  queries_schema jsonb,
-  pathparams_schema jsonb,
-  body_schema jsonb,
+  schema_version text NOT NULL,
+  schema JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -215,7 +194,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
   CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
   CONSTRAINT http_tool_definitions_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
-  CONSTRAINT http_tool_definitions_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES openapiv3_documents (id) ON DELETE RESTRICT,
+  CONSTRAINT http_tool_definitions_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES deployments_openapiv3_assets (id) ON DELETE RESTRICT,
   CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 

@@ -32,3 +32,29 @@ type DeploymentsOpenapiv3Asset struct {
 	Name         string
 	Slug         string
 }
+
+type HttpToolDefinition struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.NullUUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Summary             string
+	Description         string
+	Openapiv3Operation  pgtype.Text
+	Tags                []string
+	ServerEnvVar        pgtype.Text
+	SecurityType        pgtype.Text
+	BearerEnvVar        pgtype.Text
+	ApikeyEnvVar        pgtype.Text
+	UsernameEnvVar      pgtype.Text
+	PasswordEnvVar      pgtype.Text
+	HttpMethod          string
+	Path                string
+	SchemaVersion       string
+	Schema              []byte
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}

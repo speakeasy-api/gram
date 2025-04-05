@@ -17,10 +17,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("password_env_var", String, "Environment variable for password")
 	Attribute("http_method", String, "HTTP method for the request")
 	Attribute("path", String, "Path for the request")
-	Attribute("headers_schema", String, "JSON schema for headers")
-	Attribute("queries_schema", String, "JSON schema for query parameters")
-	Attribute("pathparams_schema", String, "JSON schema for path parameters")
-	Attribute("body_schema", String, "JSON schema for request body")
+	Attribute("schema", String, "JSON schema for the request")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the tool.")
 		Format(FormatDateTime)
@@ -29,5 +26,5 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 		Description("The last update date of the tool.")
 		Format(FormatDateTime)
 	})
-	Required("id", "name", "description", "tags", "server_env_var", "security_type", "http_method", "path", "created_at", "updated_at")
+	Required("id", "name", "description", "tags", "http_method", "path", "created_at", "updated_at")
 })

@@ -84,19 +84,23 @@ INSERT INTO deployments (
 )
 ON CONFLICT (project_id, idempotency_key) DO NOTHING;
 
--- name: MarkDeploymentCreated :one
+-- name: TransitionDeployment :one
 WITH status AS (
   INSERT INTO deployment_statuses (deployment_id , status)
-  VALUES (@deployment_id, 'created')
+  VALUES (@deployment_id, @status)
   RETURNING id, status
 ), 
 log AS (
   INSERT INTO deployment_logs (deployment_id, project_id, event, message)
-  VALUES (@deployment_id, @project_id, 'deployment:created', 'Deployment created')
+  VALUES (@deployment_id, @project_id, @event, @message)
   RETURNING id
 )
 SELECT status.id as status_id, status.status as status, log.id as log_id
 FROM status, log;
+
+-- name: LogDeploymentEvent :exec
+INSERT INTO deployment_logs (deployment_id, project_id, event, message)
+VALUES (@deployment_id, @project_id, @event, @message);
 
 -- name: AddDeploymentOpenAPIv3Asset :one
 INSERT INTO deployments_openapiv3_assets (
@@ -112,3 +116,33 @@ INSERT INTO deployments_openapiv3_assets (
 )
 ON CONFLICT (deployment_id, slug) DO NOTHING
 RETURNING id, asset_id, name, slug;
+
+-- name: CreateOpenAPIv3ToolDefinition :one
+INSERT INTO http_tool_definitions (
+    project_id
+  , deployment_id
+  , openapiv3_document_id
+  , name
+  , openapiv3_operation
+  , summary
+  , description
+  , tags
+  , http_method
+  , path
+  , schema_version
+  , schema
+) VALUES (
+    @project_id
+  , @deployment_id
+  , @openapiv3_document_id
+  , @name
+  , @openapiv3_operation
+  , @summary
+  , @description
+  , @tags
+  , @http_method
+  , @path
+  , @schema_version
+  , @schema
+)
+RETURNING *;

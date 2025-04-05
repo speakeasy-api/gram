@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/url"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -66,7 +66,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayload) (res *gen.GetDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.ErrorContext(ctx, "failed to check project access")
 		return nil, errors.New("authorization check failed")
 	}
 
@@ -117,7 +116,6 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeploymentsPayload) (res *gen.ListDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.ErrorContext(ctx, "failed to check project access")
 		return nil, errors.New("authorization check failed")
 	}
 
@@ -167,7 +165,6 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	logger := s.logger
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.ErrorContext(ctx, "failed to check auth access")
 		return nil, errors.New("authorization check failed")
 	}
 
@@ -232,9 +229,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	if created {
 		span.AddEvent("deployment_created")
 
-		stat, err := tx.MarkDeploymentCreated(ctx, repo.MarkDeploymentCreatedParams{
+		stat, err := tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
 			DeploymentID: deployment.ID,
 			ProjectID:    *authCtx.ProjectID,
+			Status:       "created",
+			Event:        "deployment:created",
+			Message:      "Deployment created",
 		})
 		if err != nil {
 			logger.ErrorContext(ctx, "failed to mark deployment as created", slog.String("error", err.Error()))
@@ -246,7 +246,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		status = row.Status
 	}
 
-	deploymentAssets, err = s.addOpenAPIToDeployment(ctx, tx, deployment.ID, form.Openapiv3Assets)
+	deploymentAssets, err = s.addOpenAPIv3Documents(ctx, tx, deployment.ID, form.Openapiv3Assets)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to add openapi v3 assets to deployment", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error adding openapi v3 assets to deployment")
@@ -272,9 +272,16 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		Openapiv3Assets: deploymentAssets,
 	}
 
-	if err := s.processDeployment(ctx, dep); err != nil {
-		logger.ErrorContext(ctx, "failed to process deployment", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error processing deployment")
+	if status == "created" {
+		status, err = s.startDeployment(ctx, logger, projectID, deployment.ID, dep)
+		if err != nil {
+			return nil, err
+		}
+		if status == "" {
+			return nil, errors.New("unable to resolve deployment status")
+		}
+
+		dep.Status = status
 	}
 
 	return &gen.CreateDeploymentResult{
@@ -286,7 +293,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) addOpenAPIToDeployment(ctx context.Context, tx *repo.Queries, deploymentID uuid.UUID, assets []*gen.OpenAPIv3DeploymentAssetForm) ([]*gen.OpenAPIv3DeploymentAsset, error) {
+func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, deploymentID uuid.UUID, assets []*gen.OpenAPIv3DeploymentAssetForm) ([]*gen.OpenAPIv3DeploymentAsset, error) {
 	span := trace.SpanFromContext(ctx)
 	logger := s.logger.With(slog.String("deployment_id", deploymentID.String()))
 
@@ -322,53 +329,148 @@ func (s *Service) addOpenAPIToDeployment(ctx context.Context, tx *repo.Queries, 
 	return deploymentAssets, nil
 }
 
-func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deployment) error {
-	logger := s.logger.With("deployment_id", deployment.ID)
+func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *gen.Deployment) (string, error) {
+	span := trace.SpanFromContext(ctx)
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		logger.ErrorContext(
+			ctx,
+			"failed to begin database transaction",
+			slog.String("error", err.Error()),
+		)
+		return "", errors.New("unexpected database error")
+	}
+	defer dbtx.Rollback(ctx)
+
+	tx := s.repo.WithTx(dbtx)
+
+	status := ""
+	if err := s.processDeployment(ctx, tx, dep); err != nil {
+		if _, err := tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+			DeploymentID: deploymentID,
+			ProjectID:    projectID,
+			Status:       "failed",
+			Event:        "deployment:failed",
+			Message:      err.Error(),
+		}); err != nil {
+			logger.ErrorContext(ctx, "failed to transition deployment to error", slog.String("error", err.Error()))
+			return "", fmt.Errorf("error transitioning deployment to error")
+		}
+
+		span.AddEvent("deployment_failed")
+		status = "failed"
+	} else {
+		if _, err := tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+			DeploymentID: deploymentID,
+			ProjectID:    projectID,
+			Status:       "completed",
+			Event:        "deployment:completed",
+			Message:      "Deployment completed",
+		}); err != nil {
+			logger.ErrorContext(ctx, "failed to transition deployment to completed", slog.String("error", err.Error()))
+			return "", fmt.Errorf("error transitioning deployment to completed")
+		}
+
+		span.AddEvent("deployment_completed")
+		status = "completed"
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		logger.ErrorContext(ctx, "failed to commit database transaction", slog.String("error", err.Error()))
+		return "", errors.New("unexpected database error")
+	}
+
+	return status, nil
+}
+
+func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deployment *gen.Deployment) error {
+	logger := s.logger.With(
+		slog.String("deployment_id", deployment.ID),
+		slog.String("project_id", deployment.ProjectID),
+	)
+
+	deploymentID, err := uuid.Parse(deployment.ID)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to parse deployment id", slog.String("error", err.Error()))
+		return errors.New("error parsing deployment id")
+	}
+
+	projectID, err := uuid.Parse(deployment.ProjectID)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to parse project id", slog.String("error", err.Error()))
+		return errors.New("error parsing project id")
+	}
+
+	_, err = tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+		DeploymentID: deploymentID,
+		ProjectID:    projectID,
+		Status:       "pending",
+		Event:        "deployment:pending",
+		Message:      "Deployment pending",
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to mark deployment as created", slog.String("error", err.Error()))
+		return errors.New("error logging deployment event")
+	}
+
+	workers := pool.NewWithResults[[]repo.CreateOpenAPIv3ToolDefinitionParams]().WithErrors()
 	for _, a := range deployment.Openapiv3Assets {
+		logger = s.logger.With(
+			slog.String("openapi_id", a.ID),
+			slog.String("asset_id", a.AssetID),
+		)
+
+		openapiDocID, err := uuid.Parse(a.ID)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to parse openapi document id", slog.String("error", err.Error()))
+			return errors.New("error parsing asset id")
+		}
+
 		assetID, err := uuid.Parse(a.AssetID)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse asset ID", slog.String("asset_id", a.AssetID), slog.String("error", err.Error()))
-			return fmt.Errorf("error parsing asset ID")
+			logger.ErrorContext(ctx, "failed to parse asset id", slog.String("error", err.Error()))
+			return errors.New("error parsing asset id")
 		}
 
-		projectID, err := uuid.Parse(deployment.ProjectID)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse project ID", slog.String("project_id", deployment.ProjectID), slog.String("error", err.Error()))
-			return fmt.Errorf("error parsing project ID")
-		}
-
-		logger = logger.With(slog.String("asset_id", a.AssetID), slog.String("project_id", deployment.ProjectID))
 		asset, err := s.assets.GetProjectAsset(ctx, assetsRepo.GetProjectAssetParams{
 			ID:        assetID,
 			ProjectID: projectID,
 		})
 		if err != nil {
 			logger.ErrorContext(ctx, "failed to get asset", slog.String("error", err.Error()))
-			return fmt.Errorf("error getting asset")
+			return errors.New("error getting asset")
 		}
 
-		logger = logger.With(slog.String("url", asset.Url))
 		u, err := url.Parse(asset.Url)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse asset URL", slog.String("error", err.Error()))
-			return fmt.Errorf("error parsing asset URL")
+			logger.ErrorContext(ctx, "failed to parse asset URL", slog.String("url", asset.Url), slog.String("error", err.Error()))
+			return errors.New("error parsing asset URL")
 		}
 
-		rc, err := s.assetStorage.Read(ctx, u.Path)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to fetch openapi document", slog.String("error", err.Error()))
-			return fmt.Errorf("error fetching openapi document")
-		}
-		defer rc.Close()
+		workers.Go(func() ([]repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+			val, err := s.processOpenAPIv3Document(ctx, logger, tx, projectID, deploymentID, openapiDocID, u, a)
+			if err == nil {
+				trace.SpanFromContext(ctx).AddEvent("openapiv3_processed", trace.WithAttributes(attribute.Int("tools", len(val))))
+			}
+			return val, err
+		})
+	}
 
-		doc, err := io.ReadAll(rc)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to read openapi document", slog.String("error", err.Error()))
-			return fmt.Errorf("error reading openapi document")
-		}
+	results, err := workers.Wait()
+	if err != nil {
+		return err
+	}
 
-		_ = doc
+	total := 0
+	for _, r := range results {
+		total += len(r)
+		for _, params := range r {
+			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, params); err != nil {
+				logger.ErrorContext(ctx, "failed to create openapi v3 tool definition", slog.String("error", err.Error()))
+				return errors.New("error creating openapi v3 tool definition")
+			}
+		}
 	}
 
 	return nil
