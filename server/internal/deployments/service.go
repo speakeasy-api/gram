@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/url"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type Service struct {
@@ -123,8 +123,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	if form.Cursor != nil {
 		c, err := uuid.Parse(*form.Cursor)
 		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to parse cursor", slog.String("error", err.Error()))
-			return nil, errors.New("invalid cursor")
+			return nil, oops.E(err, "invalid cursor", "failed to parse cursor").Log(ctx, s.logger)
 		}
 
 		cursor = uuid.NullUUID{UUID: c, Valid: true}
@@ -184,8 +183,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to begin database transaction", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("begin tx: %w", err)
+		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
 	}
 	defer dbtx.Rollback(ctx)
 
@@ -202,8 +200,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		IdempotencyKey: form.IdempotencyKey,
 	})
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create new deployment", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error saving deployment")
+		return nil, oops.E(err, "unexpected database error", "failed to create new deployment").Log(ctx, logger)
 	}
 
 	created := cmd.RowsAffected() > 0
@@ -213,8 +210,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		ProjectID:      *authCtx.ProjectID,
 	})
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to read deployment", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error reading deployment")
+		return nil, oops.E(err, "unexpected database error", "failed to read deployment").Log(ctx, logger)
 	}
 
 	deployment := row.Deployment
@@ -237,8 +233,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			Message:      "Deployment created",
 		})
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to mark deployment as created", slog.String("error", err.Error()))
-			return nil, fmt.Errorf("error logging deployment creation")
+			return nil, oops.E(err, "error logging deployment creation", "failed to mark deployment as created").Log(ctx, logger)
 		}
 
 		status = stat.Status
@@ -248,13 +243,11 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	deploymentAssets, err = s.addOpenAPIv3Documents(ctx, tx, deployment.ID, form.Openapiv3Assets)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to add openapi v3 assets to deployment", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error adding openapi v3 assets to deployment")
+		return nil, oops.E(err, "error adding openapi v3 assets to deployment", "failed to add openapi v3 assets to deployment").Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		logger.ErrorContext(ctx, "failed to commit database transaction", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error saving deployment")
+		return nil, oops.E(err, "error saving deployment", "failed to commit database transaction").Log(ctx, logger)
 	}
 
 	dep := &gen.Deployment{
@@ -301,8 +294,7 @@ func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, d
 	for _, a := range assets {
 		assetID, err := uuid.Parse(a.AssetID)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse asset ID", slog.String("error", err.Error()))
-			return nil, fmt.Errorf("error parsing asset ID")
+			return nil, oops.E(err, "error parsing asset ID", "failed to parse asset ID").Log(ctx, logger)
 		}
 
 		dasset, err := tx.AddDeploymentOpenAPIv3Asset(ctx, repo.AddDeploymentOpenAPIv3AssetParams{
@@ -312,8 +304,7 @@ func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, d
 			Slug:         a.Slug,
 		})
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to add openapiv3 asset to deployment", slog.String("error", err.Error()))
-			return nil, fmt.Errorf("error adding openapi v3 asset to deployment")
+			return nil, oops.E(err, "error adding openapi v3 asset to deployment", "failed to add openapi v3 asset to deployment").Log(ctx, logger)
 		}
 
 		span.AddEvent("deployment_asset_added")
@@ -334,12 +325,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		logger.ErrorContext(
-			ctx,
-			"failed to begin database transaction",
-			slog.String("error", err.Error()),
-		)
-		return "", errors.New("unexpected database error")
+		return "", oops.E(err, "unexpected database error", "failed to begin database transaction").Log(ctx, logger)
 	}
 	defer dbtx.Rollback(ctx)
 
@@ -354,8 +340,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 			Event:        "deployment:failed",
 			Message:      err.Error(),
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to transition deployment to error", slog.String("error", err.Error()))
-			return "", fmt.Errorf("error transitioning deployment to error")
+			return "", oops.E(err, "error transitioning deployment to error", "failed to transition deployment to error").Log(ctx, logger)
 		}
 
 		span.AddEvent("deployment_failed")
@@ -368,8 +353,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 			Event:        "deployment:completed",
 			Message:      "Deployment completed",
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to transition deployment to completed", slog.String("error", err.Error()))
-			return "", fmt.Errorf("error transitioning deployment to completed")
+			return "", oops.E(err, "error transitioning deployment to completed", "failed to transition deployment to completed").Log(ctx, logger)
 		}
 
 		span.AddEvent("deployment_completed")
@@ -377,8 +361,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		logger.ErrorContext(ctx, "failed to commit database transaction", slog.String("error", err.Error()))
-		return "", errors.New("unexpected database error")
+		return "", oops.E(err, "unexpected database error", "failed to commit database transaction").Log(ctx, logger)
 	}
 
 	return status, nil
@@ -392,14 +375,12 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 
 	deploymentID, err := uuid.Parse(deployment.ID)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to parse deployment id", slog.String("error", err.Error()))
-		return errors.New("error parsing deployment id")
+		return oops.E(err, "error parsing deployment id", "failed to parse deployment id").Log(ctx, logger)
 	}
 
 	projectID, err := uuid.Parse(deployment.ProjectID)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to parse project id", slog.String("error", err.Error()))
-		return errors.New("error parsing project id")
+		return oops.E(err, "error parsing project id", "failed to parse project id").Log(ctx, logger)
 	}
 
 	_, err = tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
@@ -410,8 +391,7 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 		Message:      "Deployment pending",
 	})
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to mark deployment as created", slog.String("error", err.Error()))
-		return errors.New("error logging deployment event")
+		return oops.E(err, "error logging deployment event", "failed to mark deployment as created").Log(ctx, logger)
 	}
 
 	workers := pool.NewWithResults[[]repo.CreateOpenAPIv3ToolDefinitionParams]().WithErrors()
@@ -423,14 +403,12 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 
 		openapiDocID, err := uuid.Parse(a.ID)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse openapi document id", slog.String("error", err.Error()))
-			return errors.New("error parsing asset id")
+			return oops.E(err, "error parsing openapi document id", "failed to parse openapi document id").Log(ctx, logger)
 		}
 
 		assetID, err := uuid.Parse(a.AssetID)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse asset id", slog.String("error", err.Error()))
-			return errors.New("error parsing asset id")
+			return oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, logger)
 		}
 
 		asset, err := s.assets.GetProjectAsset(ctx, assetsRepo.GetProjectAssetParams{
@@ -438,14 +416,12 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 			ProjectID: projectID,
 		})
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to get asset", slog.String("error", err.Error()))
-			return errors.New("error getting asset")
+			return oops.E(err, "error getting asset", "failed to get asset").Log(ctx, logger)
 		}
 
 		u, err := url.Parse(asset.Url)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse asset URL", slog.String("url", asset.Url), slog.String("error", err.Error()))
-			return errors.New("error parsing asset URL")
+			return oops.E(err, "error parsing asset URL", "failed to parse asset URL").Log(ctx, logger)
 		}
 
 		workers.Go(func() ([]repo.CreateOpenAPIv3ToolDefinitionParams, error) {
@@ -467,8 +443,7 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 		total += len(r)
 		for _, params := range r {
 			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, params); err != nil {
-				logger.ErrorContext(ctx, "failed to create openapi v3 tool definition", slog.String("error", err.Error()))
-				return errors.New("error creating openapi v3 tool definition")
+				return oops.E(err, "error creating openapi v3 tool definition", "failed to create openapi v3 tool definition").Log(ctx, logger)
 			}
 		}
 	}

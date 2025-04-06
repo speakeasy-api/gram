@@ -2,12 +2,12 @@ package deployments
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 func (s *Service) logDeploymentError(ctx context.Context, logger *slog.Logger, tx *repo.Queries, projectID uuid.UUID, deploymentID uuid.UUID, message string) error {
@@ -19,8 +19,7 @@ func (s *Service) logDeploymentError(ctx context.Context, logger *slog.Logger, t
 	})
 
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to log deployment error", slog.String("error", err.Error()))
-		return errors.New("unexpected database error (log)")
+		return oops.E(err, "unexpected database error", "failed to log deployment error").Log(ctx, logger)
 	}
 
 	return nil

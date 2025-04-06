@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/oops"
 
 	envrepo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/projects/repo"
@@ -29,15 +30,13 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool) *Service {
 func (s *Service) GetProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]repo.Project, error) {
 	projects, err := s.repo.ListProjectsByOrganization(ctx, organizationID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to list projects by organization", slog.String("error", err.Error()))
-		return nil, err
+		return nil, oops.E(err, "error listing projects", "failed to list projects by organization").Log(ctx, s.logger)
 	}
 
 	if len(projects) == 0 {
 		project, err := s.CreateProject(ctx, organizationID, "Default")
 		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to create default project", slog.String("error", err.Error()))
-			return nil, err
+			return nil, oops.E(err, "error creating default project", "failed to create default project").Log(ctx, s.logger)
 		}
 
 		// each project has a default environment
@@ -48,8 +47,7 @@ func (s *Service) GetProjectsOrSetupDefaults(ctx context.Context, organizationID
 			Slug:           "default",
 		})
 		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to create default environment", slog.String("error", err.Error()))
-			return nil, err
+			return nil, oops.E(err, "error creating default environment", "failed to create default environment").Log(ctx, s.logger)
 		}
 
 		projects = append(projects, project)

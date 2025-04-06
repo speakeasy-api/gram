@@ -12,15 +12,16 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/repo"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"goa.design/goa/v3/security"
 )
 
 var (
-	ErrAuthCheckFailed    = errors.New("check failed")
-	ErrAuthNoSession      = errors.New("no session found")
-	ErrAuthInvalidOrgID   = errors.New("invalid session organization")
-	ErrAuthInvalidProject = errors.New("invalid project")
-	ErrAuthAccessDenied   = errors.New("access denied")
+	ErrAuthCheckFailed    = oops.New("check failed")
+	ErrAuthNoSession      = oops.New("no session found")
+	ErrAuthInvalidOrgID   = oops.New("invalid session organization")
+	ErrAuthInvalidProject = oops.New("invalid project")
+	ErrAuthAccessDenied   = oops.New("access denied")
 )
 
 type Auth struct {
@@ -66,8 +67,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 
 	projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		logger.ErrorContext(ctx, "project access lookup error", slog.String("org_id", authCtx.ActiveOrganizationID), slog.String("error", err.Error()))
-		return ctx, fmt.Errorf("project access: %w: %w", ErrAuthCheckFailed, err)
+		return ctx, oops.E(ErrAuthCheckFailed.Wrap(err), "error checking project access", "database error for project access lookup").Log(ctx, logger, slog.String("org_id", authCtx.ActiveOrganizationID))
 	}
 
 	if len(projects) == 0 {
@@ -92,8 +92,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	}
 
 	if !hasProjectAccess {
-		logger.ErrorContext(ctx, "project access lookup error", slog.String("project_slug", projectSlug), slog.String("org_id", authCtx.ActiveOrganizationID))
-		return ctx, fmt.Errorf("project access: %w", ErrAuthCheckFailed)
+		return ctx, oops.E(ErrAuthCheckFailed, "project access lookup error", "project slug not found").Log(ctx, logger, slog.String("project_slug", projectSlug), slog.String("org_id", authCtx.ActiveOrganizationID))
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)

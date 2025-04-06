@@ -25,6 +25,7 @@ import (
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
 
@@ -230,8 +231,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	updatedToolset, err := s.repo.UpdateToolset(ctx, updateParams)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to update toolset", "error", err)
-		return nil, err
+		return nil, oops.E(err, "error updating toolset", "failed to update toolset in database").Log(ctx, s.logger)
 	}
 
 	httpToolIds := make([]string, len(updatedToolset.HttpToolIds))
