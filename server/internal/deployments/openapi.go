@@ -8,11 +8,14 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	gen "github.com/speakeasy-api/gram/gen/deployments"
 	"github.com/speakeasy-api/gram/internal/conv"
@@ -20,6 +23,15 @@ import (
 	"github.com/speakeasy-api/gram/internal/orderedmap"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	preferredRequestTypes = []*regexp.Regexp{
+		regexp.MustCompile(`\bjson\b`),
+		regexp.MustCompile(`^application/x-www-form-urlencoded\b`),
+		regexp.MustCompile(`^multipart/form-data\b`),
+		regexp.MustCompile(`^text/`),
+	}
 )
 
 func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Logger, tx *repo.Queries, projectID uuid.UUID, deploymentID uuid.UUID, openapiDocID uuid.UUID, docURL *url.URL, docInfo *gen.OpenAPIv3DeploymentAsset) ([]repo.CreateOpenAPIv3ToolDefinitionParams, error) {
@@ -68,7 +80,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 				continue
 			}
 
-			def, err := toolDefFromOpenAPIv3(op.method, path, op.operation, projectID, deploymentID, openapiDocID, docInfo.Slug)
+			def, err := toolDefFromOpenAPIv3(ctx, logger, tx, op.method, path, op.operation, projectID, deploymentID, openapiDocID, docInfo)
 			if err != nil {
 				if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
 					DeploymentID: deploymentID,
@@ -95,7 +107,36 @@ type openapiV3Operation struct {
 	operation *v3.Operation
 }
 
-func toolDefFromOpenAPIv3(method string, path string, op *v3.Operation, projectID uuid.UUID, deploymentID uuid.UUID, openapiDocID uuid.UUID, slug string) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, method string, path string, op *v3.Operation, projectID uuid.UUID, deploymentID uuid.UUID, openapiDocID uuid.UUID, docInfo *gen.OpenAPIv3DeploymentAsset) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+	switch {
+	case op.OperationId == "":
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("operation id is required [line: %d]", op.GoLow().KeyNode.Line)
+	case len(op.Servers) > 0:
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("per-operation servers are not currently supported [line: %d]", op.GoLow().Servers.NodeLineNumber())
+	// case len(op.Security) == 1 && op.Security[0].Requirements.Len() == 1 && op.Security[0].ContainsEmptyRequirement:
+	// 	// This operation is public so we can allow it
+	// case len(op.Security) > 0:
+	// 	return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("per-operation security is not currently supported [line: %d]", op.GoLow().Security.NodeLineNumber())
+	case op.Deprecated != nil && *op.Deprecated:
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("operation is deprecated [line: %d]", op.GoLow().Deprecated.NodeLineNumber())
+	}
+
+	if op.RequestBody != nil && op.RequestBody.Content != nil && op.RequestBody.Content.Len() > 1 {
+		if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
+			DeploymentID: deploymentID,
+			ProjectID:    projectID,
+			Event:        "deployment:warning",
+			Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, op.OperationId),
+		}); err != nil {
+			logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", err.Error()))
+		}
+	}
+
+	requestBody, bodyRequired, err := captureRequestBody(op)
+	if err != nil {
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error parsing request body: %w", err)
+	}
+
 	headerParams := []*v3.Parameter{}
 	queryParams := []*v3.Parameter{}
 	pathParams := []*v3.Parameter{}
@@ -131,6 +172,13 @@ func toolDefFromOpenAPIv3(method string, path string, op *v3.Operation, projectI
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error merging operation schemas: %w", err)
 	}
 
+	if len(requestBody) > 0 {
+		merged.Properties.Set("body", json.RawMessage(requestBody))
+		if bodyRequired {
+			merged.Required = append(merged.Required, "body")
+		}
+	}
+
 	var schemaBytes []byte
 	if merged.Properties.Len() > 0 {
 		schemaBytes, err = json.Marshal(merged)
@@ -146,7 +194,7 @@ func toolDefFromOpenAPIv3(method string, path string, op *v3.Operation, projectI
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),
 		Openapiv3Operation:  conv.ToPGText(op.OperationId),
-		Name:                tools.SanitizeName(fmt.Sprintf("%s_%s", slug, op.OperationId)),
+		Name:                tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, op.OperationId)),
 		Tags:                op.Tags,
 		Summary:             op.Summary,
 		Description:         op.Description,
@@ -156,9 +204,10 @@ func toolDefFromOpenAPIv3(method string, path string, op *v3.Operation, projectI
 }
 
 type jsonSchemaObject struct {
-	Type       string                                   `json:"type,omitempty" yaml:"type,omitempty"`
-	Required   []string                                 `json:"required,omitempty" yaml:"required,omitempty"`
-	Properties *orderedmap.Map[string, json.RawMessage] `json:"properties,omitempty" yaml:"properties,omitempty"`
+	Type                 string                                   `json:"type,omitempty" yaml:"type,omitempty"`
+	Required             []string                                 `json:"required,omitempty" yaml:"required,omitempty"`
+	Properties           *orderedmap.Map[string, json.RawMessage] `json:"properties,omitempty" yaml:"properties,omitempty"`
+	AdditionalProperties *bool                                    `json:"additionalProperties,omitempty" yaml:"additionalProperties,omitempty"`
 }
 
 func groupJSONSchemaObjects(keyvals ...any) (*jsonSchemaObject, error) {
@@ -200,6 +249,46 @@ func groupJSONSchemaObjects(keyvals ...any) (*jsonSchemaObject, error) {
 	return &result, nil
 }
 
+func captureRequestBody(op *v3.Operation) ([]byte, bool, error) {
+	if op.RequestBody == nil || op.RequestBody.Content == nil || op.RequestBody.Content.Len() == 0 {
+		return nil, false, nil
+	}
+
+	required := false
+	if op.RequestBody.Required != nil {
+		required = *op.RequestBody.Required
+	}
+
+	mediaType := ""
+	var spec *v3.MediaType
+
+	for mt, mtspec := range op.RequestBody.Content.FromOldest() {
+		if slices.ContainsFunc(preferredRequestTypes, func(t *regexp.Regexp) bool {
+			return t.MatchString(mt)
+		}) {
+			mediaType = mt
+			spec = mtspec
+			break
+		}
+	}
+
+	if mediaType == "" {
+		types := slices.Collect(op.RequestBody.Content.KeysFromOldest())
+		return nil, false, fmt.Errorf("no supported request body content type found: %s", strings.Join(types, ", "))
+	}
+
+	if spec == nil {
+		return []byte(`{"type":"object","additionalProperties":true}`), required, nil
+	}
+
+	schemaBytes, err := extractJSONSchemaFromYaml("requestBody", spec.Schema)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to extract json schema: %w", err)
+	}
+
+	return schemaBytes, required, nil
+}
+
 type openapiV3ParameterProxy struct {
 	Schema          json.RawMessage `json:"schema,omitempty" yaml:"schema,omitempty"`
 	In              string          `json:"in,omitempty" yaml:"in,omitempty"`
@@ -230,24 +319,10 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 		if s.Description == "" && param.Description != "" {
 			s.Description = param.Description
 		}
-		schema, err := param.Schema.MarshalYAMLInline()
-		if err != nil {
-			return nil, nil, fmt.Errorf("%s: error inlining parameter schema: %w", param.Name, err)
-		}
 
-		yamlBytes, err := yaml.Marshal(schema)
+		schemaBytes, err := extractJSONSchemaFromYaml(param.Name, param.Schema)
 		if err != nil {
-			return nil, nil, fmt.Errorf("%s: error yaml marshalling parameter schema: %w", param.Name, err)
-		}
-
-		var raw interface{}
-		if err := yaml.Unmarshal(yamlBytes, &raw); err != nil {
-			return nil, nil, fmt.Errorf("%s: error yaml unmarshalling parameter schema: %w", param.Name, err)
-		}
-
-		schemaBytes, err := json.Marshal(raw)
-		if err != nil {
-			return nil, nil, fmt.Errorf("%s: error json marshalling parameter schema: %w", param.Name, err)
+			return nil, nil, fmt.Errorf("failed to extract json schema: %w", err)
 		}
 
 		proxy := &openapiV3ParameterProxy{
@@ -278,4 +353,30 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 	}
 
 	return &obj, spec, nil
+}
+
+func extractJSONSchemaFromYaml(name string, schemaProxy *base.SchemaProxy) ([]byte, error) {
+	keyNode := schemaProxy.GoLow().GetKeyNode()
+	line, col := keyNode.Line, keyNode.Column
+	schema, err := schemaProxy.MarshalYAMLInline()
+	if err != nil {
+		return nil, fmt.Errorf("%s (%d:%d): error inlining schema: %w", name, line, col, err)
+	}
+
+	yamlBytes, err := yaml.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("%s (%d:%d): error yaml marshalling schema: %w", name, line, col, err)
+	}
+
+	var raw interface{}
+	if err := yaml.Unmarshal(yamlBytes, &raw); err != nil {
+		return nil, fmt.Errorf("%s (%d:%d): error yaml unmarshalling schema: %w", name, line, col, err)
+	}
+
+	schemaBytes, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s (%d:%d): error json marshalling schema: %w", name, line, col, err)
+	}
+
+	return schemaBytes, nil
 }
