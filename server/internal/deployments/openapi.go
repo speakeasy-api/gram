@@ -75,12 +75,14 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 			{method: "PATCH", operation: pitem.Patch},
 		}
 
+		sharedParameters := pitem.Parameters
+
 		for _, op := range ops {
 			if op.operation == nil {
 				continue
 			}
 
-			def, err := toolDefFromOpenAPIv3(ctx, logger, tx, op.method, path, op.operation, projectID, deploymentID, openapiDocID, docInfo)
+			def, err := toolDefFromOpenAPIv3(ctx, logger, tx, op.method, path, op.operation, sharedParameters, projectID, deploymentID, openapiDocID, docInfo)
 			if err != nil {
 				if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
 					DeploymentID: deploymentID,
@@ -107,7 +109,7 @@ type openapiV3Operation struct {
 	operation *v3.Operation
 }
 
-func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, method string, path string, op *v3.Operation, projectID uuid.UUID, deploymentID uuid.UUID, openapiDocID uuid.UUID, docInfo *gen.OpenAPIv3DeploymentAsset) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, method string, path string, op *v3.Operation, sharedParameters []*v3.Parameter, projectID uuid.UUID, deploymentID uuid.UUID, openapiDocID uuid.UUID, docInfo *gen.OpenAPIv3DeploymentAsset) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
 	switch {
 	case op.OperationId == "":
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("operation id is required [line: %d]", op.GoLow().KeyNode.Line)
@@ -137,32 +139,32 @@ func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Que
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error parsing request body: %w", err)
 	}
 
-	headerParams := []*v3.Parameter{}
-	queryParams := []*v3.Parameter{}
-	pathParams := []*v3.Parameter{}
+	headerParams := orderedmap.New[string, *v3.Parameter]()
+	queryParams := orderedmap.New[string, *v3.Parameter]()
+	pathParams := orderedmap.New[string, *v3.Parameter]()
 
-	for _, param := range op.Parameters {
+	for _, param := range append(sharedParameters, op.Parameters...) {
 		switch param.In {
 		case "header":
-			headerParams = append(headerParams, param)
+			headerParams.Set(param.Name, param)
 		case "path":
-			pathParams = append(pathParams, param)
+			pathParams.Set(param.Name, param)
 		case "query":
-			queryParams = append(queryParams, param)
+			queryParams.Set(param.Name, param)
 		}
 	}
 
-	headerSchema, _, err := captureParameters(headerParams)
+	headerSchema, _, err := captureParameters(slices.Collect(headerParams.Values()))
 	if err != nil {
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error collecting header parameters: %w", err)
 	}
 
-	querySchema, _, err := captureParameters(queryParams)
+	querySchema, _, err := captureParameters(slices.Collect(queryParams.Values()))
 	if err != nil {
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error collecting query parameters: %w", err)
 	}
 
-	pathSchema, _, err := captureParameters(pathParams)
+	pathSchema, _, err := captureParameters(slices.Collect(pathParams.Values()))
 	if err != nil {
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error collecting path parameters: %w", err)
 	}
