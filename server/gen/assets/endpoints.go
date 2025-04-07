@@ -66,8 +66,8 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 				RequiredScopes: []string{},
 			}
 			var key string
-			if ep.Payload.ProjectSlug != nil {
-				key = *ep.Payload.ProjectSlug
+			if ep.Payload.ProjectSlugInput != nil {
+				key = *ep.Payload.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}

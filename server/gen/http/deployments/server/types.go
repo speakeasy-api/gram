@@ -207,18 +207,18 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 
 // NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
-func NewGetDeploymentPayload(id string, sessionToken *string, projectSlug *string) *deployments.GetDeploymentPayload {
+func NewGetDeploymentPayload(id string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentPayload {
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewCreateDeploymentPayload builds a deployments service createDeployment
 // endpoint payload.
-func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string, projectSlug *string, idempotencyKey string) *deployments.CreateDeploymentPayload {
+func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string, projectSlugInput *string, idempotencyKey string) *deployments.CreateDeploymentPayload {
 	v := &deployments.CreateDeploymentPayload{
 		GithubRepo:  body.GithubRepo,
 		GithubPr:    body.GithubPr,
@@ -233,7 +233,7 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 		}
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
 
 	return v
@@ -241,11 +241,11 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
-func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlug *string) *deployments.ListDeploymentsPayload {
+func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

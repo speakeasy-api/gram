@@ -56,18 +56,18 @@ func DecodeCreateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		}
 
 		var (
-			sessionToken *string
-			projectSlug  *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewCreateEnvironmentPayload(&body, sessionToken, projectSlug)
+		payload := NewCreateEnvironmentPayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -75,11 +75,11 @@ func DecodeCreateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -104,18 +104,18 @@ func EncodeListEnvironmentsResponse(encoder func(context.Context, http.ResponseW
 func DecodeListEnvironmentsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			sessionToken *string
-			projectSlug  *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewListEnvironmentsPayload(sessionToken, projectSlug)
+		payload := NewListEnvironmentsPayload(sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -123,11 +123,11 @@ func DecodeListEnvironmentsRequest(mux goahttp.Muxer, decoder func(*http.Request
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -172,9 +172,9 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		}
 
 		var (
-			slug         string
-			sessionToken *string
-			projectSlug  *string
+			slug             string
+			sessionToken     *string
+			projectSlugInput *string
 
 			params = mux.Vars(r)
 		)
@@ -183,11 +183,11 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewUpdateEnvironmentPayload(&body, slug, sessionToken, projectSlug)
+		payload := NewUpdateEnvironmentPayload(&body, slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -195,11 +195,11 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -221,9 +221,9 @@ func EncodeDeleteEnvironmentResponse(encoder func(context.Context, http.Response
 func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			slug         string
-			sessionToken *string
-			projectSlug  *string
+			slug             string
+			sessionToken     *string
+			projectSlugInput *string
 
 			params = mux.Vars(r)
 		)
@@ -232,11 +232,11 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewDeleteEnvironmentPayload(slug, sessionToken, projectSlug)
+		payload := NewDeleteEnvironmentPayload(slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -244,11 +244,11 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 

@@ -1,19 +1,20 @@
 package security
 
 import (
+	"fmt"
+
+	"github.com/speakeasy-api/gram/internal/auth"
 	. "goa.design/goa/v3/dsl"
 )
 
-const ProjectSlugSecuritySchema = "project_slug"
-
-var ProjectSlug = APIKeySecurity(ProjectSlugSecuritySchema, func() {
+var ProjectSlug = APIKeySecurity(auth.ProjectSlugSecuritySchema, func() {
 	Description("project slug header auth.")
 })
 
 var ProjectPayload = func() {
-	APIKey(ProjectSlugSecuritySchema, "project_slug", String)
+	APIKey(auth.ProjectSlugSecuritySchema, "project_slug_input", String)
 }
 
 var ProjectHeader = func() {
-	Header("project_slug:Gram-Project", String, "project header")
+	Header(fmt.Sprintf("project_slug_input:%s", auth.ProjectHeader), String, "project header")
 }

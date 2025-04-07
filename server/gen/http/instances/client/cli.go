@@ -13,7 +13,7 @@ import (
 
 // BuildLoadInstancePayload builds the payload for the instances loadInstance
 // endpoint from CLI flags.
-func BuildLoadInstancePayload(instancesLoadInstanceToolsetSlug string, instancesLoadInstanceEnvironmentSlug string, instancesLoadInstanceSessionToken string, instancesLoadInstanceProjectSlug string, instancesLoadInstanceApikeyToken string) (*instances.LoadInstancePayload, error) {
+func BuildLoadInstancePayload(instancesLoadInstanceToolsetSlug string, instancesLoadInstanceEnvironmentSlug string, instancesLoadInstanceSessionToken string, instancesLoadInstanceProjectSlugInput string, instancesLoadInstanceApikeyToken string) (*instances.LoadInstancePayload, error) {
 	var toolsetSlug string
 	{
 		toolsetSlug = instancesLoadInstanceToolsetSlug
@@ -30,10 +30,10 @@ func BuildLoadInstancePayload(instancesLoadInstanceToolsetSlug string, instances
 			sessionToken = &instancesLoadInstanceSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if instancesLoadInstanceProjectSlug != "" {
-			projectSlug = &instancesLoadInstanceProjectSlug
+		if instancesLoadInstanceProjectSlugInput != "" {
+			projectSlugInput = &instancesLoadInstanceProjectSlugInput
 		}
 	}
 	var apikeyToken *string
@@ -46,7 +46,7 @@ func BuildLoadInstancePayload(instancesLoadInstanceToolsetSlug string, instances
 	v.ToolsetSlug = toolsetSlug
 	v.EnvironmentSlug = environmentSlug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken
 
 	return v, nil

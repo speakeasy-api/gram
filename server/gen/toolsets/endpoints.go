@@ -68,8 +68,8 @@ func NewCreateToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -103,8 +103,8 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -138,8 +138,8 @@ func NewUpdateToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -173,8 +173,8 @@ func NewDeleteToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -208,8 +208,8 @@ func NewGetToolsetDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}

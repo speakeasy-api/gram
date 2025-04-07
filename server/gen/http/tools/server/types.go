@@ -75,11 +75,11 @@ func NewListToolsResponseBody(res *tools.ListToolsResult) *ListToolsResponseBody
 }
 
 // NewListToolsPayload builds a tools service listTools endpoint payload.
-func NewListToolsPayload(cursor *string, sessionToken *string, projectSlug *string) *tools.ListToolsPayload {
+func NewListToolsPayload(cursor *string, sessionToken *string, projectSlugInput *string) *tools.ListToolsPayload {
 	v := &tools.ListToolsPayload{}
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

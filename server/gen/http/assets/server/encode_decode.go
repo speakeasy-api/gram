@@ -35,11 +35,11 @@ func EncodeUploadOpenAPIv3Response(encoder func(context.Context, http.ResponseWr
 func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			contentType   string
-			contentLength int64
-			projectSlug   *string
-			sessionToken  *string
-			err           error
+			contentType      string
+			contentLength    int64
+			projectSlugInput *string
+			sessionToken     *string
+			err              error
 		)
 		contentType = r.Header.Get("Content-Type")
 		if contentType == "" {
@@ -56,9 +56,9 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 			}
 			contentLength = v
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -67,7 +67,7 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return nil, err
 		}
-		payload := NewUploadOpenAPIv3Payload(contentType, contentLength, projectSlug, sessionToken)
+		payload := NewUploadOpenAPIv3Payload(contentType, contentLength, projectSlugInput, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -75,11 +75,11 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 

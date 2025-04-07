@@ -1,22 +1,23 @@
 package security
 
 import (
+	"fmt"
+
+	"github.com/speakeasy-api/gram/internal/auth"
 	. "goa.design/goa/v3/dsl"
 )
 
-const SessionSecurityScheme = "session"
-
 // Session defines the security scheme for session-based authentication
-var Session = APIKeySecurity(SessionSecurityScheme, func() {
+var Session = APIKeySecurity(auth.SessionSecurityScheme, func() {
 	Description("Session based auth. By cookie or header.")
 })
 
 var SessionPayload = func() {
-	APIKey(SessionSecurityScheme, "session_token", String)
+	APIKey(auth.SessionSecurityScheme, "session_token", String)
 }
 
 var WriteSessionCookie = func() {
-	Cookie("session_cookie:gram_session", String, func() {
+	Cookie(fmt.Sprintf("session_cookie:%s", auth.SessionCookie), String, func() {
 	})
 	// TODO: We want to restrict cookie domain here
 	CookieMaxAge(2592000) // 30 days in seconds
@@ -25,7 +26,7 @@ var WriteSessionCookie = func() {
 }
 
 var DeleteSessionCookie = func() {
-	Cookie("session_cookie:gram_session", String, func() {
+	Cookie(fmt.Sprintf("session_cookie:%s", auth.SessionCookie), String, func() {
 	})
 	CookieMaxAge(0)
 	CookieSecure()
@@ -33,5 +34,5 @@ var DeleteSessionCookie = func() {
 }
 
 var SessionHeader = func() {
-	Header("session_token:Gram-Session", String, "Session header")
+	Header(fmt.Sprintf("session_token:%s", auth.SessionHeader), String, "Session header")
 }

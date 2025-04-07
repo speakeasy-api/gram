@@ -279,7 +279,7 @@ func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetD
 
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
-func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, projectSlug *string) *toolsets.CreateToolsetPayload {
+func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
 	v := &toolsets.CreateToolsetPayload{
 		Name:                 *body.Name,
 		Description:          body.Description,
@@ -292,24 +292,24 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *strin
 		}
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewListToolsetsPayload builds a toolsets service listToolsets endpoint
 // payload.
-func NewListToolsetsPayload(sessionToken *string, projectSlug *string) *toolsets.ListToolsetsPayload {
+func NewListToolsetsPayload(sessionToken *string, projectSlugInput *string) *toolsets.ListToolsetsPayload {
 	v := &toolsets.ListToolsetsPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewUpdateToolsetPayload builds a toolsets service updateToolset endpoint
 // payload.
-func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessionToken *string, projectSlug *string) *toolsets.UpdateToolsetPayload {
+func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessionToken *string, projectSlugInput *string) *toolsets.UpdateToolsetPayload {
 	v := &toolsets.UpdateToolsetPayload{
 		Name:                 body.Name,
 		Description:          body.Description,
@@ -329,29 +329,29 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 	}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewDeleteToolsetPayload builds a toolsets service deleteToolset endpoint
 // payload.
-func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlug *string) *toolsets.DeleteToolsetPayload {
+func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.DeleteToolsetPayload {
 	v := &toolsets.DeleteToolsetPayload{}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewGetToolsetDetailsPayload builds a toolsets service getToolsetDetails
 // endpoint payload.
-func NewGetToolsetDetailsPayload(slug string, sessionToken *string, projectSlug *string) *toolsets.GetToolsetDetailsPayload {
+func NewGetToolsetDetailsPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.GetToolsetDetailsPayload {
 	v := &toolsets.GetToolsetDetailsPayload{}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

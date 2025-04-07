@@ -126,12 +126,12 @@ func NewLoadInstanceResponseBody(res *instances.InstanceResult) *LoadInstanceRes
 
 // NewLoadInstancePayload builds a instances service loadInstance endpoint
 // payload.
-func NewLoadInstancePayload(toolsetSlug string, environmentSlug *string, sessionToken *string, projectSlug *string, apikeyToken *string) *instances.LoadInstancePayload {
+func NewLoadInstancePayload(toolsetSlug string, environmentSlug *string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.LoadInstancePayload {
 	v := &instances.LoadInstancePayload{}
 	v.ToolsetSlug = toolsetSlug
 	v.EnvironmentSlug = environmentSlug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken
 
 	return v

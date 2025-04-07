@@ -13,7 +13,7 @@ import (
 
 // BuildListToolsPayload builds the payload for the tools listTools endpoint
 // from CLI flags.
-func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsSessionToken string, toolsListToolsProjectSlug string) (*tools.ListToolsPayload, error) {
+func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
 	var cursor *string
 	{
 		if toolsListToolsCursor != "" {
@@ -26,16 +26,16 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsSessionTok
 			sessionToken = &toolsListToolsSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if toolsListToolsProjectSlug != "" {
-			projectSlug = &toolsListToolsProjectSlug
+		if toolsListToolsProjectSlugInput != "" {
+			projectSlugInput = &toolsListToolsProjectSlugInput
 		}
 	}
 	v := &tools.ListToolsPayload{}
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

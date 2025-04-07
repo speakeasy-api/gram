@@ -36,10 +36,10 @@ func EncodeGetDeploymentResponse(encoder func(context.Context, http.ResponseWrit
 func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id           string
-			sessionToken *string
-			projectSlug  *string
-			err          error
+			id               string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
@@ -49,14 +49,14 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetDeploymentPayload(id, sessionToken, projectSlug)
+		payload := NewGetDeploymentPayload(id, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -64,11 +64,11 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -113,17 +113,17 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		}
 
 		var (
-			sessionToken   *string
-			projectSlug    *string
-			idempotencyKey string
+			sessionToken     *string
+			projectSlugInput *string
+			idempotencyKey   string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
 		idempotencyKey = r.Header.Get("Idempotency-Key")
 		if idempotencyKey == "" {
@@ -132,7 +132,7 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return nil, err
 		}
-		payload := NewCreateDeploymentPayload(&body, sessionToken, projectSlug, idempotencyKey)
+		payload := NewCreateDeploymentPayload(&body, sessionToken, projectSlugInput, idempotencyKey)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -140,11 +140,11 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -169,9 +169,9 @@ func EncodeListDeploymentsResponse(encoder func(context.Context, http.ResponseWr
 func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			cursor       *string
-			sessionToken *string
-			projectSlug  *string
+			cursor           *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		cursorRaw := r.URL.Query().Get("cursor")
 		if cursorRaw != "" {
@@ -181,11 +181,11 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewListDeploymentsPayload(cursor, sessionToken, projectSlug)
+		payload := NewListDeploymentsPayload(cursor, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -193,11 +193,11 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 

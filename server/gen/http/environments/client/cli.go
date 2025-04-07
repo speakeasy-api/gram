@@ -17,7 +17,7 @@ import (
 
 // BuildCreateEnvironmentPayload builds the payload for the environments
 // createEnvironment endpoint from CLI flags.
-func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, environmentsCreateEnvironmentSessionToken string, environmentsCreateEnvironmentProjectSlug string) (*environments.CreateEnvironmentPayload, error) {
+func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, environmentsCreateEnvironmentSessionToken string, environmentsCreateEnvironmentProjectSlugInput string) (*environments.CreateEnvironmentPayload, error) {
 	var err error
 	var body CreateEnvironmentRequestBody
 	{
@@ -38,10 +38,10 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 			sessionToken = &environmentsCreateEnvironmentSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if environmentsCreateEnvironmentProjectSlug != "" {
-			projectSlug = &environmentsCreateEnvironmentProjectSlug
+		if environmentsCreateEnvironmentProjectSlugInput != "" {
+			projectSlugInput = &environmentsCreateEnvironmentProjectSlugInput
 		}
 	}
 	v := &environments.CreateEnvironmentPayload{
@@ -58,36 +58,36 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 		v.Entries = []*environments.EnvironmentEntryInput{}
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildListEnvironmentsPayload builds the payload for the environments
 // listEnvironments endpoint from CLI flags.
-func BuildListEnvironmentsPayload(environmentsListEnvironmentsSessionToken string, environmentsListEnvironmentsProjectSlug string) (*environments.ListEnvironmentsPayload, error) {
+func BuildListEnvironmentsPayload(environmentsListEnvironmentsSessionToken string, environmentsListEnvironmentsProjectSlugInput string) (*environments.ListEnvironmentsPayload, error) {
 	var sessionToken *string
 	{
 		if environmentsListEnvironmentsSessionToken != "" {
 			sessionToken = &environmentsListEnvironmentsSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if environmentsListEnvironmentsProjectSlug != "" {
-			projectSlug = &environmentsListEnvironmentsProjectSlug
+		if environmentsListEnvironmentsProjectSlugInput != "" {
+			projectSlugInput = &environmentsListEnvironmentsProjectSlugInput
 		}
 	}
 	v := &environments.ListEnvironmentsPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildUpdateEnvironmentPayload builds the payload for the environments
 // updateEnvironment endpoint from CLI flags.
-func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, environmentsUpdateEnvironmentSlug string, environmentsUpdateEnvironmentSessionToken string, environmentsUpdateEnvironmentProjectSlug string) (*environments.UpdateEnvironmentPayload, error) {
+func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, environmentsUpdateEnvironmentSlug string, environmentsUpdateEnvironmentSessionToken string, environmentsUpdateEnvironmentProjectSlugInput string) (*environments.UpdateEnvironmentPayload, error) {
 	var err error
 	var body UpdateEnvironmentRequestBody
 	{
@@ -115,10 +115,10 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 			sessionToken = &environmentsUpdateEnvironmentSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if environmentsUpdateEnvironmentProjectSlug != "" {
-			projectSlug = &environmentsUpdateEnvironmentProjectSlug
+		if environmentsUpdateEnvironmentProjectSlugInput != "" {
+			projectSlugInput = &environmentsUpdateEnvironmentProjectSlugInput
 		}
 	}
 	v := &environments.UpdateEnvironmentPayload{
@@ -143,14 +143,14 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDeleteEnvironmentPayload builds the payload for the environments
 // deleteEnvironment endpoint from CLI flags.
-func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, environmentsDeleteEnvironmentSessionToken string, environmentsDeleteEnvironmentProjectSlug string) (*environments.DeleteEnvironmentPayload, error) {
+func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, environmentsDeleteEnvironmentSessionToken string, environmentsDeleteEnvironmentProjectSlugInput string) (*environments.DeleteEnvironmentPayload, error) {
 	var slug string
 	{
 		slug = environmentsDeleteEnvironmentSlug
@@ -161,16 +161,16 @@ func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, env
 			sessionToken = &environmentsDeleteEnvironmentSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if environmentsDeleteEnvironmentProjectSlug != "" {
-			projectSlug = &environmentsDeleteEnvironmentProjectSlug
+		if environmentsDeleteEnvironmentProjectSlugInput != "" {
+			projectSlugInput = &environmentsDeleteEnvironmentProjectSlugInput
 		}
 	}
 	v := &environments.DeleteEnvironmentPayload{}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

@@ -45,8 +45,8 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlug != nil {
-			head := *p.ProjectSlug
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()

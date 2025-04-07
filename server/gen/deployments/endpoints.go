@@ -62,8 +62,8 @@ func NewGetDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -97,8 +97,8 @@ func NewCreateDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -132,8 +132,8 @@ func NewListDeploymentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}

@@ -56,8 +56,8 @@ func NewLoadInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -79,8 +79,8 @@ func NewLoadInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 					RequiredScopes: []string{"consumer"},
 				}
 				var key string
-				if p.ProjectSlug != nil {
-					key = *p.ProjectSlug
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
 				}
 				ctx, err = authAPIKeyFn(ctx, key, &sc)
 			}

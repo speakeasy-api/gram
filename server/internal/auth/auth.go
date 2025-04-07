@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	dsecurity "github.com/speakeasy-api/gram/design/security"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
@@ -48,11 +47,11 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 	}
 
 	switch schema.Name {
-	case dsecurity.KeySecurityScheme:
+	case KeySecurityScheme:
 		return s.keys.KeyBasedAuth(ctx, key, schema.RequiredScopes)
-	case dsecurity.SessionSecurityScheme:
+	case SessionSecurityScheme:
 		return s.sessions.SessionAuth(ctx, key, false)
-	case dsecurity.ProjectSlugSecuritySchema:
+	case ProjectSlugSecuritySchema:
 		return s.checkProjectAccess(ctx, s.logger, key)
 	default:
 		return ctx, errors.New("unsupported security scheme")

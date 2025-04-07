@@ -65,8 +65,8 @@ func NewCreateEnvironmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -100,8 +100,8 @@ func NewListEnvironmentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -135,8 +135,8 @@ func NewUpdateEnvironmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
@@ -170,8 +170,8 @@ func NewDeleteEnvironmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}

@@ -1033,7 +1033,7 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
-                project_slug:
+                project_slug_input:
                     type: string
             required:
                 - name
@@ -1738,7 +1738,7 @@ components:
                 name:
                     type: string
                     description: The new name of the toolset
-                project_slug:
+                project_slug_input:
                     type: string
                 slug:
                     type: string
@@ -1775,7 +1775,7 @@ components:
                     format: int64
                 content_type:
                     type: string
-                project_slug:
+                project_slug_input:
                     type: string
                 session_token:
                     type: string

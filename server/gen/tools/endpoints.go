@@ -56,8 +56,8 @@ func NewListToolsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlug != nil {
-				key = *p.ProjectSlug
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}

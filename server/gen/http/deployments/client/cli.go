@@ -16,7 +16,7 @@ import (
 
 // BuildGetDeploymentPayload builds the payload for the deployments
 // getDeployment endpoint from CLI flags.
-func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentSessionToken string, deploymentsGetDeploymentProjectSlug string) (*deployments.GetDeploymentPayload, error) {
+func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentSessionToken string, deploymentsGetDeploymentProjectSlugInput string) (*deployments.GetDeploymentPayload, error) {
 	var id string
 	{
 		id = deploymentsGetDeploymentID
@@ -27,23 +27,23 @@ func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGet
 			sessionToken = &deploymentsGetDeploymentSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if deploymentsGetDeploymentProjectSlug != "" {
-			projectSlug = &deploymentsGetDeploymentProjectSlug
+		if deploymentsGetDeploymentProjectSlugInput != "" {
+			projectSlugInput = &deploymentsGetDeploymentProjectSlugInput
 		}
 	}
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildCreateDeploymentPayload builds the payload for the deployments
 // createDeployment endpoint from CLI flags.
-func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentSessionToken string, deploymentsCreateDeploymentProjectSlug string, deploymentsCreateDeploymentIdempotencyKey string) (*deployments.CreateDeploymentPayload, error) {
+func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentSessionToken string, deploymentsCreateDeploymentProjectSlugInput string, deploymentsCreateDeploymentIdempotencyKey string) (*deployments.CreateDeploymentPayload, error) {
 	var err error
 	var body CreateDeploymentRequestBody
 	{
@@ -58,10 +58,10 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			sessionToken = &deploymentsCreateDeploymentSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if deploymentsCreateDeploymentProjectSlug != "" {
-			projectSlug = &deploymentsCreateDeploymentProjectSlug
+		if deploymentsCreateDeploymentProjectSlugInput != "" {
+			projectSlugInput = &deploymentsCreateDeploymentProjectSlugInput
 		}
 	}
 	var idempotencyKey string
@@ -82,7 +82,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 		}
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
 
 	return v, nil
@@ -90,7 +90,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 
 // BuildListDeploymentsPayload builds the payload for the deployments
 // listDeployments endpoint from CLI flags.
-func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsSessionToken string, deploymentsListDeploymentsProjectSlug string) (*deployments.ListDeploymentsPayload, error) {
+func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsSessionToken string, deploymentsListDeploymentsProjectSlugInput string) (*deployments.ListDeploymentsPayload, error) {
 	var cursor *string
 	{
 		if deploymentsListDeploymentsCursor != "" {
@@ -103,16 +103,16 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 			sessionToken = &deploymentsListDeploymentsSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if deploymentsListDeploymentsProjectSlug != "" {
-			projectSlug = &deploymentsListDeploymentsProjectSlug
+		if deploymentsListDeploymentsProjectSlugInput != "" {
+			projectSlugInput = &deploymentsListDeploymentsProjectSlugInput
 		}
 	}
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

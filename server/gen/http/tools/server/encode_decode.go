@@ -33,9 +33,9 @@ func EncodeListToolsResponse(encoder func(context.Context, http.ResponseWriter) 
 func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			cursor       *string
-			sessionToken *string
-			projectSlug  *string
+			cursor           *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		cursorRaw := r.URL.Query().Get("cursor")
 		if cursorRaw != "" {
@@ -45,11 +45,11 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewListToolsPayload(cursor, sessionToken, projectSlug)
+		payload := NewListToolsPayload(cursor, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -57,11 +57,11 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 

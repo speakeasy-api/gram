@@ -129,9 +129,9 @@ type InstanceResult struct {
 // LoadInstancePayload is the payload type of the instances service
 // loadInstance method.
 type LoadInstancePayload struct {
-	SessionToken *string
-	ApikeyToken  *string
-	ProjectSlug  *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 	// The slug of the toolset to load
 	ToolsetSlug string
 	// The slug of the environment to load

@@ -42,9 +42,9 @@ toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Rerum eveniet dignissimos ut quo." --content-length 3499744240282632758 --project-slug "Harum nemo optio vel." --session-token "Vero qui et autem vel eos dolores." --stream "goa.png"` + "\n" +
+	return os.Args[0] + ` assets upload-open-ap-iv3 --content-type "Rerum eveniet dignissimos ut quo." --content-length 3499744240282632758 --project-slug-input "Harum nemo optio vel." --session-token "Vero qui et autem vel eos dolores." --stream "goa.png"` + "\n" +
 		os.Args[0] + ` auth callback --shared-token "Explicabo vitae impedit accusamus voluptas in."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Ut veritatis praesentium et." --session-token "Quidem deserunt libero." --project-slug "Magnam vitae."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Ut veritatis praesentium et." --session-token "Quidem deserunt libero." --project-slug-input "Magnam vitae."` + "\n" +
 		os.Args[0] + ` environments create-environment --body '{
       "description": "Ducimus soluta fuga omnis iste optio ullam.",
       "entries": [
@@ -59,7 +59,7 @@ func UsageExamples() string {
       ],
       "name": "Nihil cupiditate.",
       "organization_id": "Sit voluptas in maxime est."
-   }' --session-token "Provident animi sequi rerum amet sapiente ea." --project-slug "Id unde dolores."` + "\n" +
+   }' --session-token "Provident animi sequi rerum amet sapiente ea." --project-slug-input "Id unde dolores."` + "\n" +
 		os.Args[0] + ` keys create-key --body '{
       "name": "Ut est et et debitis."
    }' --session-token "Eligendi culpa ratione nihil sunt provident quia."` + "\n" +
@@ -78,12 +78,12 @@ func ParseEndpoint(
 	var (
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
-		assetsUploadOpenAPIv3Flags             = flag.NewFlagSet("upload-open-ap-iv3", flag.ExitOnError)
-		assetsUploadOpenAPIv3ContentTypeFlag   = assetsUploadOpenAPIv3Flags.String("content-type", "REQUIRED", "")
-		assetsUploadOpenAPIv3ContentLengthFlag = assetsUploadOpenAPIv3Flags.String("content-length", "REQUIRED", "")
-		assetsUploadOpenAPIv3ProjectSlugFlag   = assetsUploadOpenAPIv3Flags.String("project-slug", "", "")
-		assetsUploadOpenAPIv3SessionTokenFlag  = assetsUploadOpenAPIv3Flags.String("session-token", "", "")
-		assetsUploadOpenAPIv3StreamFlag        = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+		assetsUploadOpenAPIv3Flags                = flag.NewFlagSet("upload-open-ap-iv3", flag.ExitOnError)
+		assetsUploadOpenAPIv3ContentTypeFlag      = assetsUploadOpenAPIv3Flags.String("content-type", "REQUIRED", "")
+		assetsUploadOpenAPIv3ContentLengthFlag    = assetsUploadOpenAPIv3Flags.String("content-length", "REQUIRED", "")
+		assetsUploadOpenAPIv3ProjectSlugInputFlag = assetsUploadOpenAPIv3Flags.String("project-slug-input", "", "")
+		assetsUploadOpenAPIv3SessionTokenFlag     = assetsUploadOpenAPIv3Flags.String("session-token", "", "")
+		assetsUploadOpenAPIv3StreamFlag           = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
@@ -103,43 +103,43 @@ func ParseEndpoint(
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
-		deploymentsGetDeploymentFlags            = flag.NewFlagSet("get-deployment", flag.ExitOnError)
-		deploymentsGetDeploymentIDFlag           = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
-		deploymentsGetDeploymentSessionTokenFlag = deploymentsGetDeploymentFlags.String("session-token", "", "")
-		deploymentsGetDeploymentProjectSlugFlag  = deploymentsGetDeploymentFlags.String("project-slug", "", "")
+		deploymentsGetDeploymentFlags                = flag.NewFlagSet("get-deployment", flag.ExitOnError)
+		deploymentsGetDeploymentIDFlag               = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
+		deploymentsGetDeploymentSessionTokenFlag     = deploymentsGetDeploymentFlags.String("session-token", "", "")
+		deploymentsGetDeploymentProjectSlugInputFlag = deploymentsGetDeploymentFlags.String("project-slug-input", "", "")
 
-		deploymentsCreateDeploymentFlags              = flag.NewFlagSet("create-deployment", flag.ExitOnError)
-		deploymentsCreateDeploymentBodyFlag           = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
-		deploymentsCreateDeploymentSessionTokenFlag   = deploymentsCreateDeploymentFlags.String("session-token", "", "")
-		deploymentsCreateDeploymentProjectSlugFlag    = deploymentsCreateDeploymentFlags.String("project-slug", "", "")
-		deploymentsCreateDeploymentIdempotencyKeyFlag = deploymentsCreateDeploymentFlags.String("idempotency-key", "REQUIRED", "")
+		deploymentsCreateDeploymentFlags                = flag.NewFlagSet("create-deployment", flag.ExitOnError)
+		deploymentsCreateDeploymentBodyFlag             = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
+		deploymentsCreateDeploymentSessionTokenFlag     = deploymentsCreateDeploymentFlags.String("session-token", "", "")
+		deploymentsCreateDeploymentProjectSlugInputFlag = deploymentsCreateDeploymentFlags.String("project-slug-input", "", "")
+		deploymentsCreateDeploymentIdempotencyKeyFlag   = deploymentsCreateDeploymentFlags.String("idempotency-key", "REQUIRED", "")
 
-		deploymentsListDeploymentsFlags            = flag.NewFlagSet("list-deployments", flag.ExitOnError)
-		deploymentsListDeploymentsCursorFlag       = deploymentsListDeploymentsFlags.String("cursor", "", "")
-		deploymentsListDeploymentsSessionTokenFlag = deploymentsListDeploymentsFlags.String("session-token", "", "")
-		deploymentsListDeploymentsProjectSlugFlag  = deploymentsListDeploymentsFlags.String("project-slug", "", "")
+		deploymentsListDeploymentsFlags                = flag.NewFlagSet("list-deployments", flag.ExitOnError)
+		deploymentsListDeploymentsCursorFlag           = deploymentsListDeploymentsFlags.String("cursor", "", "")
+		deploymentsListDeploymentsSessionTokenFlag     = deploymentsListDeploymentsFlags.String("session-token", "", "")
+		deploymentsListDeploymentsProjectSlugInputFlag = deploymentsListDeploymentsFlags.String("project-slug-input", "", "")
 
 		environmentsFlags = flag.NewFlagSet("environments", flag.ContinueOnError)
 
-		environmentsCreateEnvironmentFlags            = flag.NewFlagSet("create-environment", flag.ExitOnError)
-		environmentsCreateEnvironmentBodyFlag         = environmentsCreateEnvironmentFlags.String("body", "REQUIRED", "")
-		environmentsCreateEnvironmentSessionTokenFlag = environmentsCreateEnvironmentFlags.String("session-token", "", "")
-		environmentsCreateEnvironmentProjectSlugFlag  = environmentsCreateEnvironmentFlags.String("project-slug", "", "")
+		environmentsCreateEnvironmentFlags                = flag.NewFlagSet("create-environment", flag.ExitOnError)
+		environmentsCreateEnvironmentBodyFlag             = environmentsCreateEnvironmentFlags.String("body", "REQUIRED", "")
+		environmentsCreateEnvironmentSessionTokenFlag     = environmentsCreateEnvironmentFlags.String("session-token", "", "")
+		environmentsCreateEnvironmentProjectSlugInputFlag = environmentsCreateEnvironmentFlags.String("project-slug-input", "", "")
 
-		environmentsListEnvironmentsFlags            = flag.NewFlagSet("list-environments", flag.ExitOnError)
-		environmentsListEnvironmentsSessionTokenFlag = environmentsListEnvironmentsFlags.String("session-token", "", "")
-		environmentsListEnvironmentsProjectSlugFlag  = environmentsListEnvironmentsFlags.String("project-slug", "", "")
+		environmentsListEnvironmentsFlags                = flag.NewFlagSet("list-environments", flag.ExitOnError)
+		environmentsListEnvironmentsSessionTokenFlag     = environmentsListEnvironmentsFlags.String("session-token", "", "")
+		environmentsListEnvironmentsProjectSlugInputFlag = environmentsListEnvironmentsFlags.String("project-slug-input", "", "")
 
-		environmentsUpdateEnvironmentFlags            = flag.NewFlagSet("update-environment", flag.ExitOnError)
-		environmentsUpdateEnvironmentBodyFlag         = environmentsUpdateEnvironmentFlags.String("body", "REQUIRED", "")
-		environmentsUpdateEnvironmentSlugFlag         = environmentsUpdateEnvironmentFlags.String("slug", "REQUIRED", "The slug of the environment to update")
-		environmentsUpdateEnvironmentSessionTokenFlag = environmentsUpdateEnvironmentFlags.String("session-token", "", "")
-		environmentsUpdateEnvironmentProjectSlugFlag  = environmentsUpdateEnvironmentFlags.String("project-slug", "", "")
+		environmentsUpdateEnvironmentFlags                = flag.NewFlagSet("update-environment", flag.ExitOnError)
+		environmentsUpdateEnvironmentBodyFlag             = environmentsUpdateEnvironmentFlags.String("body", "REQUIRED", "")
+		environmentsUpdateEnvironmentSlugFlag             = environmentsUpdateEnvironmentFlags.String("slug", "REQUIRED", "The slug of the environment to update")
+		environmentsUpdateEnvironmentSessionTokenFlag     = environmentsUpdateEnvironmentFlags.String("session-token", "", "")
+		environmentsUpdateEnvironmentProjectSlugInputFlag = environmentsUpdateEnvironmentFlags.String("project-slug-input", "", "")
 
-		environmentsDeleteEnvironmentFlags            = flag.NewFlagSet("delete-environment", flag.ExitOnError)
-		environmentsDeleteEnvironmentSlugFlag         = environmentsDeleteEnvironmentFlags.String("slug", "REQUIRED", "The slug of the environment to delete")
-		environmentsDeleteEnvironmentSessionTokenFlag = environmentsDeleteEnvironmentFlags.String("session-token", "", "")
-		environmentsDeleteEnvironmentProjectSlugFlag  = environmentsDeleteEnvironmentFlags.String("project-slug", "", "")
+		environmentsDeleteEnvironmentFlags                = flag.NewFlagSet("delete-environment", flag.ExitOnError)
+		environmentsDeleteEnvironmentSlugFlag             = environmentsDeleteEnvironmentFlags.String("slug", "REQUIRED", "The slug of the environment to delete")
+		environmentsDeleteEnvironmentSessionTokenFlag     = environmentsDeleteEnvironmentFlags.String("session-token", "", "")
+		environmentsDeleteEnvironmentProjectSlugInputFlag = environmentsDeleteEnvironmentFlags.String("project-slug-input", "", "")
 
 		keysFlags = flag.NewFlagSet("keys", flag.ContinueOnError)
 
@@ -156,46 +156,46 @@ func ParseEndpoint(
 
 		toolsFlags = flag.NewFlagSet("tools", flag.ContinueOnError)
 
-		toolsListToolsFlags            = flag.NewFlagSet("list-tools", flag.ExitOnError)
-		toolsListToolsCursorFlag       = toolsListToolsFlags.String("cursor", "", "")
-		toolsListToolsSessionTokenFlag = toolsListToolsFlags.String("session-token", "", "")
-		toolsListToolsProjectSlugFlag  = toolsListToolsFlags.String("project-slug", "", "")
+		toolsListToolsFlags                = flag.NewFlagSet("list-tools", flag.ExitOnError)
+		toolsListToolsCursorFlag           = toolsListToolsFlags.String("cursor", "", "")
+		toolsListToolsSessionTokenFlag     = toolsListToolsFlags.String("session-token", "", "")
+		toolsListToolsProjectSlugInputFlag = toolsListToolsFlags.String("project-slug-input", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
-		instancesLoadInstanceFlags               = flag.NewFlagSet("load-instance", flag.ExitOnError)
-		instancesLoadInstanceToolsetSlugFlag     = instancesLoadInstanceFlags.String("toolset-slug", "REQUIRED", "")
-		instancesLoadInstanceEnvironmentSlugFlag = instancesLoadInstanceFlags.String("environment-slug", "", "")
-		instancesLoadInstanceSessionTokenFlag    = instancesLoadInstanceFlags.String("session-token", "", "")
-		instancesLoadInstanceProjectSlugFlag     = instancesLoadInstanceFlags.String("project-slug", "", "")
-		instancesLoadInstanceApikeyTokenFlag     = instancesLoadInstanceFlags.String("apikey-token", "", "")
+		instancesLoadInstanceFlags                = flag.NewFlagSet("load-instance", flag.ExitOnError)
+		instancesLoadInstanceToolsetSlugFlag      = instancesLoadInstanceFlags.String("toolset-slug", "REQUIRED", "")
+		instancesLoadInstanceEnvironmentSlugFlag  = instancesLoadInstanceFlags.String("environment-slug", "", "")
+		instancesLoadInstanceSessionTokenFlag     = instancesLoadInstanceFlags.String("session-token", "", "")
+		instancesLoadInstanceProjectSlugInputFlag = instancesLoadInstanceFlags.String("project-slug-input", "", "")
+		instancesLoadInstanceApikeyTokenFlag      = instancesLoadInstanceFlags.String("apikey-token", "", "")
 
 		toolsetsFlags = flag.NewFlagSet("toolsets", flag.ContinueOnError)
 
-		toolsetsCreateToolsetFlags            = flag.NewFlagSet("create-toolset", flag.ExitOnError)
-		toolsetsCreateToolsetBodyFlag         = toolsetsCreateToolsetFlags.String("body", "REQUIRED", "")
-		toolsetsCreateToolsetSessionTokenFlag = toolsetsCreateToolsetFlags.String("session-token", "", "")
-		toolsetsCreateToolsetProjectSlugFlag  = toolsetsCreateToolsetFlags.String("project-slug", "", "")
+		toolsetsCreateToolsetFlags                = flag.NewFlagSet("create-toolset", flag.ExitOnError)
+		toolsetsCreateToolsetBodyFlag             = toolsetsCreateToolsetFlags.String("body", "REQUIRED", "")
+		toolsetsCreateToolsetSessionTokenFlag     = toolsetsCreateToolsetFlags.String("session-token", "", "")
+		toolsetsCreateToolsetProjectSlugInputFlag = toolsetsCreateToolsetFlags.String("project-slug-input", "", "")
 
-		toolsetsListToolsetsFlags            = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
-		toolsetsListToolsetsSessionTokenFlag = toolsetsListToolsetsFlags.String("session-token", "", "")
-		toolsetsListToolsetsProjectSlugFlag  = toolsetsListToolsetsFlags.String("project-slug", "", "")
+		toolsetsListToolsetsFlags                = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
+		toolsetsListToolsetsSessionTokenFlag     = toolsetsListToolsetsFlags.String("session-token", "", "")
+		toolsetsListToolsetsProjectSlugInputFlag = toolsetsListToolsetsFlags.String("project-slug-input", "", "")
 
-		toolsetsUpdateToolsetFlags            = flag.NewFlagSet("update-toolset", flag.ExitOnError)
-		toolsetsUpdateToolsetBodyFlag         = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
-		toolsetsUpdateToolsetSlugFlag         = toolsetsUpdateToolsetFlags.String("slug", "REQUIRED", "The slug of the toolset to update")
-		toolsetsUpdateToolsetSessionTokenFlag = toolsetsUpdateToolsetFlags.String("session-token", "", "")
-		toolsetsUpdateToolsetProjectSlugFlag  = toolsetsUpdateToolsetFlags.String("project-slug", "", "")
+		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
+		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
+		toolsetsUpdateToolsetSlugFlag             = toolsetsUpdateToolsetFlags.String("slug", "REQUIRED", "The slug of the toolset to update")
+		toolsetsUpdateToolsetSessionTokenFlag     = toolsetsUpdateToolsetFlags.String("session-token", "", "")
+		toolsetsUpdateToolsetProjectSlugInputFlag = toolsetsUpdateToolsetFlags.String("project-slug-input", "", "")
 
-		toolsetsDeleteToolsetFlags            = flag.NewFlagSet("delete-toolset", flag.ExitOnError)
-		toolsetsDeleteToolsetSlugFlag         = toolsetsDeleteToolsetFlags.String("slug", "REQUIRED", "The slug of the toolset")
-		toolsetsDeleteToolsetSessionTokenFlag = toolsetsDeleteToolsetFlags.String("session-token", "", "")
-		toolsetsDeleteToolsetProjectSlugFlag  = toolsetsDeleteToolsetFlags.String("project-slug", "", "")
+		toolsetsDeleteToolsetFlags                = flag.NewFlagSet("delete-toolset", flag.ExitOnError)
+		toolsetsDeleteToolsetSlugFlag             = toolsetsDeleteToolsetFlags.String("slug", "REQUIRED", "The slug of the toolset")
+		toolsetsDeleteToolsetSessionTokenFlag     = toolsetsDeleteToolsetFlags.String("session-token", "", "")
+		toolsetsDeleteToolsetProjectSlugInputFlag = toolsetsDeleteToolsetFlags.String("project-slug-input", "", "")
 
-		toolsetsGetToolsetDetailsFlags            = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
-		toolsetsGetToolsetDetailsSlugFlag         = toolsetsGetToolsetDetailsFlags.String("slug", "REQUIRED", "The slug of the toolset")
-		toolsetsGetToolsetDetailsSessionTokenFlag = toolsetsGetToolsetDetailsFlags.String("session-token", "", "")
-		toolsetsGetToolsetDetailsProjectSlugFlag  = toolsetsGetToolsetDetailsFlags.String("project-slug", "", "")
+		toolsetsGetToolsetDetailsFlags                = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
+		toolsetsGetToolsetDetailsSlugFlag             = toolsetsGetToolsetDetailsFlags.String("slug", "REQUIRED", "The slug of the toolset")
+		toolsetsGetToolsetDetailsSessionTokenFlag     = toolsetsGetToolsetDetailsFlags.String("session-token", "", "")
+		toolsetsGetToolsetDetailsProjectSlugInputFlag = toolsetsGetToolsetDetailsFlags.String("project-slug-input", "", "")
 	)
 	assetsFlags.Usage = assetsUsage
 	assetsUploadOpenAPIv3Flags.Usage = assetsUploadOpenAPIv3Usage
@@ -404,7 +404,7 @@ func ParseEndpoint(
 			switch epn {
 			case "upload-open-ap-iv3":
 				endpoint = c.UploadOpenAPIv3()
-				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ProjectSlugFlag, *assetsUploadOpenAPIv3SessionTokenFlag)
+				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ProjectSlugInputFlag, *assetsUploadOpenAPIv3SessionTokenFlag)
 				if err == nil {
 					data, err = assetsc.BuildUploadOpenAPIv3StreamPayload(data, *assetsUploadOpenAPIv3StreamFlag)
 				}
@@ -430,29 +430,29 @@ func ParseEndpoint(
 			switch epn {
 			case "get-deployment":
 				endpoint = c.GetDeployment()
-				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentSessionTokenFlag, *deploymentsGetDeploymentProjectSlugFlag)
+				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentSessionTokenFlag, *deploymentsGetDeploymentProjectSlugInputFlag)
 			case "create-deployment":
 				endpoint = c.CreateDeployment()
-				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentSessionTokenFlag, *deploymentsCreateDeploymentProjectSlugFlag, *deploymentsCreateDeploymentIdempotencyKeyFlag)
+				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentSessionTokenFlag, *deploymentsCreateDeploymentProjectSlugInputFlag, *deploymentsCreateDeploymentIdempotencyKeyFlag)
 			case "list-deployments":
 				endpoint = c.ListDeployments()
-				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsSessionTokenFlag, *deploymentsListDeploymentsProjectSlugFlag)
+				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsSessionTokenFlag, *deploymentsListDeploymentsProjectSlugInputFlag)
 			}
 		case "environments":
 			c := environmentsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "create-environment":
 				endpoint = c.CreateEnvironment()
-				data, err = environmentsc.BuildCreateEnvironmentPayload(*environmentsCreateEnvironmentBodyFlag, *environmentsCreateEnvironmentSessionTokenFlag, *environmentsCreateEnvironmentProjectSlugFlag)
+				data, err = environmentsc.BuildCreateEnvironmentPayload(*environmentsCreateEnvironmentBodyFlag, *environmentsCreateEnvironmentSessionTokenFlag, *environmentsCreateEnvironmentProjectSlugInputFlag)
 			case "list-environments":
 				endpoint = c.ListEnvironments()
-				data, err = environmentsc.BuildListEnvironmentsPayload(*environmentsListEnvironmentsSessionTokenFlag, *environmentsListEnvironmentsProjectSlugFlag)
+				data, err = environmentsc.BuildListEnvironmentsPayload(*environmentsListEnvironmentsSessionTokenFlag, *environmentsListEnvironmentsProjectSlugInputFlag)
 			case "update-environment":
 				endpoint = c.UpdateEnvironment()
-				data, err = environmentsc.BuildUpdateEnvironmentPayload(*environmentsUpdateEnvironmentBodyFlag, *environmentsUpdateEnvironmentSlugFlag, *environmentsUpdateEnvironmentSessionTokenFlag, *environmentsUpdateEnvironmentProjectSlugFlag)
+				data, err = environmentsc.BuildUpdateEnvironmentPayload(*environmentsUpdateEnvironmentBodyFlag, *environmentsUpdateEnvironmentSlugFlag, *environmentsUpdateEnvironmentSessionTokenFlag, *environmentsUpdateEnvironmentProjectSlugInputFlag)
 			case "delete-environment":
 				endpoint = c.DeleteEnvironment()
-				data, err = environmentsc.BuildDeleteEnvironmentPayload(*environmentsDeleteEnvironmentSlugFlag, *environmentsDeleteEnvironmentSessionTokenFlag, *environmentsDeleteEnvironmentProjectSlugFlag)
+				data, err = environmentsc.BuildDeleteEnvironmentPayload(*environmentsDeleteEnvironmentSlugFlag, *environmentsDeleteEnvironmentSessionTokenFlag, *environmentsDeleteEnvironmentProjectSlugInputFlag)
 			}
 		case "keys":
 			c := keysc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -472,33 +472,33 @@ func ParseEndpoint(
 			switch epn {
 			case "list-tools":
 				endpoint = c.ListTools()
-				data, err = toolsc.BuildListToolsPayload(*toolsListToolsCursorFlag, *toolsListToolsSessionTokenFlag, *toolsListToolsProjectSlugFlag)
+				data, err = toolsc.BuildListToolsPayload(*toolsListToolsCursorFlag, *toolsListToolsSessionTokenFlag, *toolsListToolsProjectSlugInputFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "load-instance":
 				endpoint = c.LoadInstance()
-				data, err = instancesc.BuildLoadInstancePayload(*instancesLoadInstanceToolsetSlugFlag, *instancesLoadInstanceEnvironmentSlugFlag, *instancesLoadInstanceSessionTokenFlag, *instancesLoadInstanceProjectSlugFlag, *instancesLoadInstanceApikeyTokenFlag)
+				data, err = instancesc.BuildLoadInstancePayload(*instancesLoadInstanceToolsetSlugFlag, *instancesLoadInstanceEnvironmentSlugFlag, *instancesLoadInstanceSessionTokenFlag, *instancesLoadInstanceProjectSlugInputFlag, *instancesLoadInstanceApikeyTokenFlag)
 			}
 		case "toolsets":
 			c := toolsetsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "create-toolset":
 				endpoint = c.CreateToolset()
-				data, err = toolsetsc.BuildCreateToolsetPayload(*toolsetsCreateToolsetBodyFlag, *toolsetsCreateToolsetSessionTokenFlag, *toolsetsCreateToolsetProjectSlugFlag)
+				data, err = toolsetsc.BuildCreateToolsetPayload(*toolsetsCreateToolsetBodyFlag, *toolsetsCreateToolsetSessionTokenFlag, *toolsetsCreateToolsetProjectSlugInputFlag)
 			case "list-toolsets":
 				endpoint = c.ListToolsets()
-				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsSessionTokenFlag, *toolsetsListToolsetsProjectSlugFlag)
+				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsSessionTokenFlag, *toolsetsListToolsetsProjectSlugInputFlag)
 			case "update-toolset":
 				endpoint = c.UpdateToolset()
-				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetSlugFlag, *toolsetsUpdateToolsetSessionTokenFlag, *toolsetsUpdateToolsetProjectSlugFlag)
+				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetSlugFlag, *toolsetsUpdateToolsetSessionTokenFlag, *toolsetsUpdateToolsetProjectSlugInputFlag)
 			case "delete-toolset":
 				endpoint = c.DeleteToolset()
-				data, err = toolsetsc.BuildDeleteToolsetPayload(*toolsetsDeleteToolsetSlugFlag, *toolsetsDeleteToolsetSessionTokenFlag, *toolsetsDeleteToolsetProjectSlugFlag)
+				data, err = toolsetsc.BuildDeleteToolsetPayload(*toolsetsDeleteToolsetSlugFlag, *toolsetsDeleteToolsetSessionTokenFlag, *toolsetsDeleteToolsetProjectSlugInputFlag)
 			case "get-toolset-details":
 				endpoint = c.GetToolsetDetails()
-				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsSlugFlag, *toolsetsGetToolsetDetailsSessionTokenFlag, *toolsetsGetToolsetDetailsProjectSlugFlag)
+				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsSlugFlag, *toolsetsGetToolsetDetailsSessionTokenFlag, *toolsetsGetToolsetDetailsProjectSlugInputFlag)
 			}
 		}
 	}
@@ -523,17 +523,17 @@ Additional help:
 `, os.Args[0])
 }
 func assetsUploadOpenAPIv3Usage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -project-slug STRING -session-token STRING -stream STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -project-slug-input STRING -session-token STRING -stream STRING
 
 Upload an OpenAPI v3 document to Gram.
     -content-type STRING: 
     -content-length INT64: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
     -session-token STRING: 
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Rerum eveniet dignissimos ut quo." --content-length 3499744240282632758 --project-slug "Harum nemo optio vel." --session-token "Vero qui et autem vel eos dolores." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Rerum eveniet dignissimos ut quo." --content-length 3499744240282632758 --project-slug-input "Harum nemo optio vel." --session-token "Vero qui et autem vel eos dolores." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -616,25 +616,25 @@ Additional help:
 `, os.Args[0])
 }
 func deploymentsGetDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -session-token STRING -project-slug-input STRING
 
 Create a deployment to load tool definitions.
     -id STRING: 
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Ut veritatis praesentium et." --session-token "Quidem deserunt libero." --project-slug "Magnam vitae."
+    %[1]s deployments get-deployment --id "Ut veritatis praesentium et." --session-token "Quidem deserunt libero." --project-slug-input "Magnam vitae."
 `, os.Args[0])
 }
 
 func deploymentsCreateDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -session-token STRING -project-slug STRING -idempotency-key STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -session-token STRING -project-slug-input STRING -idempotency-key STRING
 
 Create a deployment to load tool definitions.
     -body JSON: 
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
     -idempotency-key STRING: 
 
 Example:
@@ -661,20 +661,20 @@ Example:
             "slug": "Sequi doloribus aperiam."
          }
       ]
-   }' --session-token "Consequatur perferendis velit est eius minima." --project-slug "Et tenetur sed aut magnam qui." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
+   }' --session-token "Consequatur perferendis velit est eius minima." --project-slug-input "Et tenetur sed aut magnam qui." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
 `, os.Args[0])
 }
 
 func deploymentsListDeploymentsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -session-token STRING -project-slug-input STRING
 
 List all deployments in descending order of creation.
     -cursor STRING: 
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Voluptatem repellat doloribus eum ut cumque qui." --session-token "Inventore voluptatem qui magnam magni." --project-slug "Consequuntur quis."
+    %[1]s deployments list-deployments --cursor "Voluptatem repellat doloribus eum ut cumque qui." --session-token "Inventore voluptatem qui magnam magni." --project-slug-input "Consequuntur quis."
 `, os.Args[0])
 }
 
@@ -696,12 +696,12 @@ Additional help:
 `, os.Args[0])
 }
 func environmentsCreateEnvironmentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments create-environment -body JSON -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments create-environment -body JSON -session-token STRING -project-slug-input STRING
 
 Create a new environment
     -body JSON: 
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
     %[1]s environments create-environment --body '{
@@ -718,30 +718,30 @@ Example:
       ],
       "name": "Nihil cupiditate.",
       "organization_id": "Sit voluptas in maxime est."
-   }' --session-token "Provident animi sequi rerum amet sapiente ea." --project-slug "Id unde dolores."
+   }' --session-token "Provident animi sequi rerum amet sapiente ea." --project-slug-input "Id unde dolores."
 `, os.Args[0])
 }
 
 func environmentsListEnvironmentsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments list-environments -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments list-environments -session-token STRING -project-slug-input STRING
 
 List all environments for an organization
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s environments list-environments --session-token "Sint doloremque dolorum." --project-slug "Suscipit excepturi."
+    %[1]s environments list-environments --session-token "Sint doloremque dolorum." --project-slug-input "Suscipit excepturi."
 `, os.Args[0])
 }
 
 func environmentsUpdateEnvironmentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments update-environment -body JSON -slug STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments update-environment -body JSON -slug STRING -session-token STRING -project-slug-input STRING
 
 Update an environment
     -body JSON: 
     -slug STRING: The slug of the environment to update
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
     %[1]s environments update-environment --body '{
@@ -761,20 +761,20 @@ Example:
          }
       ],
       "name": "Sed beatae quibusdam."
-   }' --slug "Ut nemo quis officiis cum voluptatem rerum." --session-token "Doloribus exercitationem." --project-slug "Id ipsa quo."
+   }' --slug "Ut nemo quis officiis cum voluptatem rerum." --session-token "Doloribus exercitationem." --project-slug-input "Id ipsa quo."
 `, os.Args[0])
 }
 
 func environmentsDeleteEnvironmentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments delete-environment -slug STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments delete-environment -slug STRING -session-token STRING -project-slug-input STRING
 
 Delete an environment
     -slug STRING: The slug of the environment to delete
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s environments delete-environment --slug "Autem omnis sed harum ut quasi ut." --session-token "Perspiciatis suscipit quam eveniet rerum architecto." --project-slug "Sit dolores eaque adipisci alias quo soluta."
+    %[1]s environments delete-environment --slug "Autem omnis sed harum ut quasi ut." --session-token "Perspiciatis suscipit quam eveniet rerum architecto." --project-slug-input "Sit dolores eaque adipisci alias quo soluta."
 `, os.Args[0])
 }
 
@@ -844,15 +844,15 @@ Additional help:
 `, os.Args[0])
 }
 func toolsListToolsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] tools list-tools -cursor STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] tools list-tools -cursor STRING -session-token STRING -project-slug-input STRING
 
 List all tools for a project
     -cursor STRING: 
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s tools list-tools --cursor "Cumque blanditiis ipsa officiis sapiente." --session-token "Iure ea culpa qui alias excepturi pariatur." --project-slug "Eligendi blanditiis dolores molestiae voluptates."
+    %[1]s tools list-tools --cursor "Cumque blanditiis ipsa officiis sapiente." --session-token "Iure ea culpa qui alias excepturi pariatur." --project-slug-input "Eligendi blanditiis dolores molestiae voluptates."
 `, os.Args[0])
 }
 
@@ -871,17 +871,17 @@ Additional help:
 `, os.Args[0])
 }
 func instancesLoadInstanceUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] instances load-instance -toolset-slug STRING -environment-slug STRING -session-token STRING -project-slug STRING -apikey-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] instances load-instance -toolset-slug STRING -environment-slug STRING -session-token STRING -project-slug-input STRING -apikey-token STRING
 
 load all relevant data for an instance of a toolset and environment
     -toolset-slug STRING: 
     -environment-slug STRING: 
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances load-instance --toolset-slug "Quis inventore cumque cupiditate." --environment-slug "Veritatis consectetur nam odio veniam nisi perspiciatis." --session-token "Id impedit sunt non et dolores." --project-slug "Facere necessitatibus aut." --apikey-token "Ut quidem."
+    %[1]s instances load-instance --toolset-slug "Quis inventore cumque cupiditate." --environment-slug "Veritatis consectetur nam odio veniam nisi perspiciatis." --session-token "Id impedit sunt non et dolores." --project-slug-input "Facere necessitatibus aut." --apikey-token "Ut quidem."
 `, os.Args[0])
 }
 
@@ -903,12 +903,12 @@ Additional help:
 `, os.Args[0])
 }
 func toolsetsCreateToolsetUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets create-toolset -body JSON -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets create-toolset -body JSON -session-token STRING -project-slug-input STRING
 
 Create a new toolset with associated tools
     -body JSON: 
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
     %[1]s toolsets create-toolset --body '{
@@ -919,30 +919,30 @@ Example:
          "Est harum animi esse unde molestiae iure."
       ],
       "name": "Voluptates dignissimos quis sequi distinctio veritatis."
-   }' --session-token "Optio et delectus consectetur." --project-slug "Illo enim."
+   }' --session-token "Optio et delectus consectetur." --project-slug-input "Illo enim."
 `, os.Args[0])
 }
 
 func toolsetsListToolsetsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets list-toolsets -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets list-toolsets -session-token STRING -project-slug-input STRING
 
 List all toolsets for a project
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Hic est excepturi quasi libero mollitia." --project-slug "Autem ut et voluptatem corrupti sequi."
+    %[1]s toolsets list-toolsets --session-token "Hic est excepturi quasi libero mollitia." --project-slug-input "Autem ut et voluptatem corrupti sequi."
 `, os.Args[0])
 }
 
 func toolsetsUpdateToolsetUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets update-toolset -body JSON -slug STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets update-toolset -body JSON -slug STRING -session-token STRING -project-slug-input STRING
 
 Update a toolset's properties including name, description, and HTTP tools
     -body JSON: 
     -slug STRING: The slug of the toolset to update
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
     %[1]s toolsets update-toolset --body '{
@@ -960,32 +960,32 @@ Example:
          "Asperiores eaque aut minus."
       ],
       "name": "Aliquam aut vero dolore mollitia perspiciatis totam."
-   }' --slug "Hic tempora." --session-token "Veniam architecto dolorem accusamus non et provident." --project-slug "Sit aut sapiente ipsam."
+   }' --slug "Hic tempora." --session-token "Veniam architecto dolorem accusamus non et provident." --project-slug-input "Sit aut sapiente ipsam."
 `, os.Args[0])
 }
 
 func toolsetsDeleteToolsetUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets delete-toolset -slug STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets delete-toolset -slug STRING -session-token STRING -project-slug-input STRING
 
 Delete a toolset by its ID
     -slug STRING: The slug of the toolset
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "Facere assumenda." --session-token "Soluta distinctio ut maiores nihil ut." --project-slug "Culpa architecto debitis hic recusandae officiis voluptatem."
+    %[1]s toolsets delete-toolset --slug "Facere assumenda." --session-token "Soluta distinctio ut maiores nihil ut." --project-slug-input "Culpa architecto debitis hic recusandae officiis voluptatem."
 `, os.Args[0])
 }
 
 func toolsetsGetToolsetDetailsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -slug STRING -session-token STRING -project-slug STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -slug STRING -session-token STRING -project-slug-input STRING
 
 Get detailed information about a toolset including full HTTP tool definitions
     -slug STRING: The slug of the toolset
     -session-token STRING: 
-    -project-slug STRING: 
+    -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --slug "Laborum sed sit distinctio quam." --session-token "Molestiae eveniet recusandae sapiente non." --project-slug "Hic illum ea repudiandae eius harum libero."
+    %[1]s toolsets get-toolset-details --slug "Laborum sed sit distinctio quam." --session-token "Molestiae eveniet recusandae sapiente non." --project-slug-input "Hic illum ea repudiandae eius harum libero."
 `, os.Args[0])
 }

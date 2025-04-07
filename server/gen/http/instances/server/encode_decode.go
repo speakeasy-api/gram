@@ -34,12 +34,12 @@ func EncodeLoadInstanceResponse(encoder func(context.Context, http.ResponseWrite
 func DecodeLoadInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			toolsetSlug     string
-			environmentSlug *string
-			sessionToken    *string
-			projectSlug     *string
-			apikeyToken     *string
-			err             error
+			toolsetSlug      string
+			environmentSlug  *string
+			sessionToken     *string
+			projectSlugInput *string
+			apikeyToken      *string
+			err              error
 		)
 		qp := r.URL.Query()
 		toolsetSlug = qp.Get("toolset_slug")
@@ -54,9 +54,9 @@ func DecodeLoadInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -65,7 +65,7 @@ func DecodeLoadInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return nil, err
 		}
-		payload := NewLoadInstancePayload(toolsetSlug, environmentSlug, sessionToken, projectSlug, apikeyToken)
+		payload := NewLoadInstancePayload(toolsetSlug, environmentSlug, sessionToken, projectSlugInput, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -73,11 +73,11 @@ func DecodeLoadInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {

@@ -78,8 +78,8 @@ type HTTPToolDefinition struct {
 
 // ListToolsPayload is the payload type of the tools service listTools method.
 type ListToolsPayload struct {
-	SessionToken *string
-	ProjectSlug  *string
+	SessionToken     *string
+	ProjectSlugInput *string
 	// The cursor to fetch results from
 	Cursor *string
 }

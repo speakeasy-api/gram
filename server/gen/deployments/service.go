@@ -48,8 +48,8 @@ var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployment
 // CreateDeploymentPayload is the payload type of the deployments service
 // createDeployment method.
 type CreateDeploymentPayload struct {
-	SessionToken *string
-	ProjectSlug  *string
+	SessionToken     *string
+	ProjectSlugInput *string
 	// A unique identifier that will mitigate against duplicate deployments.
 	IdempotencyKey string
 	// The github repository in the form of "owner/repo".
@@ -120,8 +120,8 @@ type DeploymentSummary struct {
 // GetDeploymentPayload is the payload type of the deployments service
 // getDeployment method.
 type GetDeploymentPayload struct {
-	SessionToken *string
-	ProjectSlug  *string
+	SessionToken     *string
+	ProjectSlugInput *string
 	// The ID of the deployment
 	ID string
 }
@@ -172,8 +172,8 @@ type ListDeploymentResult struct {
 // ListDeploymentsPayload is the payload type of the deployments service
 // listDeployments method.
 type ListDeploymentsPayload struct {
-	SessionToken *string
-	ProjectSlug  *string
+	SessionToken     *string
+	ProjectSlugInput *string
 	// The cursor to fetch results from
 	Cursor *string
 }

@@ -16,7 +16,7 @@ import (
 
 // BuildCreateToolsetPayload builds the payload for the toolsets createToolset
 // endpoint from CLI flags.
-func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetSessionToken string, toolsetsCreateToolsetProjectSlug string) (*toolsets.CreateToolsetPayload, error) {
+func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateToolsetSessionToken string, toolsetsCreateToolsetProjectSlugInput string) (*toolsets.CreateToolsetPayload, error) {
 	var err error
 	var body CreateToolsetRequestBody
 	{
@@ -31,10 +31,10 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 			sessionToken = &toolsetsCreateToolsetSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if toolsetsCreateToolsetProjectSlug != "" {
-			projectSlug = &toolsetsCreateToolsetProjectSlug
+		if toolsetsCreateToolsetProjectSlugInput != "" {
+			projectSlugInput = &toolsetsCreateToolsetProjectSlugInput
 		}
 	}
 	v := &toolsets.CreateToolsetPayload{
@@ -49,36 +49,36 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 		}
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildListToolsetsPayload builds the payload for the toolsets listToolsets
 // endpoint from CLI flags.
-func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsListToolsetsProjectSlug string) (*toolsets.ListToolsetsPayload, error) {
+func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsListToolsetsProjectSlugInput string) (*toolsets.ListToolsetsPayload, error) {
 	var sessionToken *string
 	{
 		if toolsetsListToolsetsSessionToken != "" {
 			sessionToken = &toolsetsListToolsetsSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if toolsetsListToolsetsProjectSlug != "" {
-			projectSlug = &toolsetsListToolsetsProjectSlug
+		if toolsetsListToolsetsProjectSlugInput != "" {
+			projectSlugInput = &toolsetsListToolsetsProjectSlugInput
 		}
 	}
 	v := &toolsets.ListToolsetsPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildUpdateToolsetPayload builds the payload for the toolsets updateToolset
 // endpoint from CLI flags.
-func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetSlug string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetProjectSlug string) (*toolsets.UpdateToolsetPayload, error) {
+func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetSlug string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetProjectSlugInput string) (*toolsets.UpdateToolsetPayload, error) {
 	var err error
 	var body UpdateToolsetRequestBody
 	{
@@ -97,10 +97,10 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 			sessionToken = &toolsetsUpdateToolsetSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if toolsetsUpdateToolsetProjectSlug != "" {
-			projectSlug = &toolsetsUpdateToolsetProjectSlug
+		if toolsetsUpdateToolsetProjectSlugInput != "" {
+			projectSlugInput = &toolsetsUpdateToolsetProjectSlugInput
 		}
 	}
 	v := &toolsets.UpdateToolsetPayload{
@@ -122,14 +122,14 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDeleteToolsetPayload builds the payload for the toolsets deleteToolset
 // endpoint from CLI flags.
-func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetProjectSlug string) (*toolsets.DeleteToolsetPayload, error) {
+func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetProjectSlugInput string) (*toolsets.DeleteToolsetPayload, error) {
 	var slug string
 	{
 		slug = toolsetsDeleteToolsetSlug
@@ -140,23 +140,23 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 			sessionToken = &toolsetsDeleteToolsetSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if toolsetsDeleteToolsetProjectSlug != "" {
-			projectSlug = &toolsetsDeleteToolsetProjectSlug
+		if toolsetsDeleteToolsetProjectSlugInput != "" {
+			projectSlugInput = &toolsetsDeleteToolsetProjectSlugInput
 		}
 	}
 	v := &toolsets.DeleteToolsetPayload{}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildGetToolsetDetailsPayload builds the payload for the toolsets
 // getToolsetDetails endpoint from CLI flags.
-func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsSlug string, toolsetsGetToolsetDetailsSessionToken string, toolsetsGetToolsetDetailsProjectSlug string) (*toolsets.GetToolsetDetailsPayload, error) {
+func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsSlug string, toolsetsGetToolsetDetailsSessionToken string, toolsetsGetToolsetDetailsProjectSlugInput string) (*toolsets.GetToolsetDetailsPayload, error) {
 	var slug string
 	{
 		slug = toolsetsGetToolsetDetailsSlug
@@ -167,16 +167,16 @@ func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsSlug string, toolset
 			sessionToken = &toolsetsGetToolsetDetailsSessionToken
 		}
 	}
-	var projectSlug *string
+	var projectSlugInput *string
 	{
-		if toolsetsGetToolsetDetailsProjectSlug != "" {
-			projectSlug = &toolsetsGetToolsetDetailsProjectSlug
+		if toolsetsGetToolsetDetailsProjectSlugInput != "" {
+			projectSlugInput = &toolsetsGetToolsetDetailsProjectSlugInput
 		}
 	}
 	v := &toolsets.GetToolsetDetailsPayload{}
 	v.Slug = slug
 	v.SessionToken = sessionToken
-	v.ProjectSlug = projectSlug
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

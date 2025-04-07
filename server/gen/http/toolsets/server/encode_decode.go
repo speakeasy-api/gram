@@ -56,18 +56,18 @@ func DecodeCreateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		}
 
 		var (
-			sessionToken *string
-			projectSlug  *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewCreateToolsetPayload(&body, sessionToken, projectSlug)
+		payload := NewCreateToolsetPayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -75,11 +75,11 @@ func DecodeCreateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -104,18 +104,18 @@ func EncodeListToolsetsResponse(encoder func(context.Context, http.ResponseWrite
 func DecodeListToolsetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			sessionToken *string
-			projectSlug  *string
+			sessionToken     *string
+			projectSlugInput *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewListToolsetsPayload(sessionToken, projectSlug)
+		payload := NewListToolsetsPayload(sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -123,11 +123,11 @@ func DecodeListToolsetsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -168,9 +168,9 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		}
 
 		var (
-			slug         string
-			sessionToken *string
-			projectSlug  *string
+			slug             string
+			sessionToken     *string
+			projectSlugInput *string
 
 			params = mux.Vars(r)
 		)
@@ -179,11 +179,11 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewUpdateToolsetPayload(&body, slug, sessionToken, projectSlug)
+		payload := NewUpdateToolsetPayload(&body, slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -191,11 +191,11 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -217,9 +217,9 @@ func EncodeDeleteToolsetResponse(encoder func(context.Context, http.ResponseWrit
 func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			slug         string
-			sessionToken *string
-			projectSlug  *string
+			slug             string
+			sessionToken     *string
+			projectSlugInput *string
 
 			params = mux.Vars(r)
 		)
@@ -228,11 +228,11 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewDeleteToolsetPayload(slug, sessionToken, projectSlug)
+		payload := NewDeleteToolsetPayload(slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -240,11 +240,11 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -269,9 +269,9 @@ func EncodeGetToolsetDetailsResponse(encoder func(context.Context, http.Response
 func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			slug         string
-			sessionToken *string
-			projectSlug  *string
+			slug             string
+			sessionToken     *string
+			projectSlugInput *string
 
 			params = mux.Vars(r)
 		)
@@ -280,11 +280,11 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugRaw := r.Header.Get("Gram-Project")
-		if projectSlugRaw != "" {
-			projectSlug = &projectSlugRaw
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewGetToolsetDetailsPayload(slug, sessionToken, projectSlug)
+		payload := NewGetToolsetDetailsPayload(slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -292,11 +292,11 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				payload.SessionToken = &cred
 			}
 		}
-		if payload.ProjectSlug != nil {
-			if strings.Contains(*payload.ProjectSlug, " ") {
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlug, " ", 2)[1]
-				payload.ProjectSlug = &cred
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
