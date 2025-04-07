@@ -25,6 +25,7 @@ import (
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/deployments"
 	"github.com/speakeasy-api/gram/internal/environments"
@@ -196,10 +197,14 @@ func newStartCommand() *cli.Command {
 
 			mux := goahttp.NewMuxer()
 
+			mux.Use(middleware.CORSMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
-			mux.Use(middleware.CORSMiddleware)
 
+			mux.Handle("POST", "/chat/completions", func (w http.ResponseWriter, r *http.Request) {
+				chat.HandleCompletion(w, r)
+			})
+			
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient, assetStorage))

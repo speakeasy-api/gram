@@ -5,19 +5,15 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Assets } from "./assets.js";
 import { Auth } from "./auth.js";
+import { Chat } from "./chat.js";
 import { Deployments } from "./deployments.js";
 import { Environments } from "./environments.js";
+import { Instances } from "./instances.js";
 import { Keys } from "./keys.js";
-import { System } from "./system.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 
 export class Gram extends ClientSDK {
-  private _system?: System;
-  get system(): System {
-    return (this._system ??= new System(this._options));
-  }
-
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
@@ -28,6 +24,11 @@ export class Gram extends ClientSDK {
     return (this._auth ??= new Auth(this._options));
   }
 
+  private _chat?: Chat;
+  get chat(): Chat {
+    return (this._chat ??= new Chat(this._options));
+  }
+
   private _deployments?: Deployments;
   get deployments(): Deployments {
     return (this._deployments ??= new Deployments(this._options));
@@ -36,6 +37,11 @@ export class Gram extends ClientSDK {
   private _environments?: Environments;
   get environments(): Environments {
     return (this._environments ??= new Environments(this._options));
+  }
+
+  private _instances?: Instances;
+  get instances(): Instances {
+    return (this._instances ??= new Instances(this._options));
   }
 
   private _keys?: Keys;

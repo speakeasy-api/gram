@@ -15,6 +15,7 @@ import { MCPScope, mcpScopes } from "./scopes.js";
 import { createRegisterTool } from "./tools.js";
 import { tool$assetsAssetsNumberUploadOpenAPIv3 } from "./tools/assetsAssetsNumberUploadOpenAPIv3.js";
 import { tool$authAuthNumberCallback } from "./tools/authAuthNumberCallback.js";
+import { tool$chatChatNumberCompletion } from "./tools/chatChatNumberCompletion.js";
 import { tool$deploymentsDeploymentsNumberCreateDeployment } from "./tools/deploymentsDeploymentsNumberCreateDeployment.js";
 import { tool$deploymentsDeploymentsNumberGetDeployment } from "./tools/deploymentsDeploymentsNumberGetDeployment.js";
 import { tool$deploymentsDeploymentsNumberListDeployments } from "./tools/deploymentsDeploymentsNumberListDeployments.js";
@@ -22,7 +23,6 @@ import { tool$environmentsEnvironmentsNumberCreateEnvironment } from "./tools/en
 import { tool$environmentsEnvironmentsNumberDeleteEnvironment } from "./tools/environmentsEnvironmentsNumberDeleteEnvironment.js";
 import { tool$environmentsEnvironmentsNumberListEnvironments } from "./tools/environmentsEnvironmentsNumberListEnvironments.js";
 import { tool$environmentsEnvironmentsNumberUpdateEnvironment } from "./tools/environmentsEnvironmentsNumberUpdateEnvironment.js";
-import { tool$systemSystemNumberHealthCheck } from "./tools/systemSystemNumberHealthCheck.js";
 import { tool$toolsetsToolsetsNumberCreateToolset } from "./tools/toolsetsToolsetsNumberCreateToolset.js";
 import { tool$toolsetsToolsetsNumberDeleteToolset } from "./tools/toolsetsToolsetsNumberDeleteToolset.js";
 import { tool$toolsetsToolsetsNumberGetToolsetDetails } from "./tools/toolsetsToolsetsNumberGetToolsetDetails.js";
@@ -40,7 +40,7 @@ export function createMCPServer(deps: {
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.3.2",
+    version: "0.4.1",
   });
 
   const client = new GramCore({
@@ -70,9 +70,9 @@ export function createMCPServer(deps: {
   const register = { tool, resource, resourceTemplate, prompt };
   void register; // suppress unused warnings
 
-  tool(tool$systemSystemNumberHealthCheck);
   tool(tool$assetsAssetsNumberUploadOpenAPIv3);
   tool(tool$authAuthNumberCallback);
+  tool(tool$chatChatNumberCompletion);
   tool(tool$deploymentsDeploymentsNumberCreateDeployment);
   tool(tool$deploymentsDeploymentsNumberGetDeployment);
   tool(tool$deploymentsDeploymentsNumberListDeployments);

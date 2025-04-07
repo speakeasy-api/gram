@@ -8,8 +8,8 @@ import { ListDeploymentResult } from "@gram/sdk/models/components";
 let value: ListDeploymentResult = {
   items: [
     {
-      assetCount: 978619,
-      createdAt: new Date("2025-05-25T21:04:00.744Z"),
+      assetCount: 711355,
+      createdAt: new Date("2025-12-13T12:32:14.714Z"),
       id: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
       userId: "<id>",
     },

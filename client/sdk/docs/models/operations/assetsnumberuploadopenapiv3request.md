@@ -6,7 +6,7 @@
 import { AssetsNumberUploadOpenAPIv3Request } from "@gram/sdk/models/operations";
 
 let value: AssetsNumberUploadOpenAPIv3Request = {
-  contentLength: 729991,
+  contentLength: 342484,
 };
 ```
 

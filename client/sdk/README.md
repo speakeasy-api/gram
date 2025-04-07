@@ -200,7 +200,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.system.systemNumberHealthCheck();
+  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+    contentLength: 924456,
+  });
 
   // Handle the result
   console.log(result);
@@ -237,7 +239,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.system.systemNumberHealthCheck();
+  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+    contentLength: 924456,
+  });
 
   // Handle the result
   console.log(result);
@@ -259,8 +263,6 @@ async function run() {
   const result = await gram.auth.authNumberInfo({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
       ?? "",
-  }, {
-    gramSession: "Consequuntur error suscipit optio sunt eum.",
   });
 
   // Handle the result
@@ -289,6 +291,10 @@ run();
 * [authNumberLogout](docs/sdks/auth/README.md#authnumberlogout) - logout auth
 * [authNumberSwitchScopes](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
 
+### [chat](docs/sdks/chat/README.md)
+
+* [chatNumberCompletion](docs/sdks/chat/README.md#chatnumbercompletion) - completion chat
+
 ### [deployments](docs/sdks/deployments/README.md)
 
 * [deploymentsNumberCreateDeployment](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
@@ -303,15 +309,15 @@ run();
 * [environmentsNumberUpdateEnvironment](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
 
 
+### [instances](docs/sdks/instances/README.md)
+
+* [instancesNumberLoadInstance](docs/sdks/instances/README.md#instancesnumberloadinstance) - loadInstance instances
+
 ### [keys](docs/sdks/keys/README.md)
 
 * [keysNumberCreateKey](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
 * [keysNumberListKeys](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
 * [keysNumberRevokeKey](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
-
-### [system](docs/sdks/system/README.md)
-
-* [systemNumberHealthCheck](docs/sdks/system/README.md#systemnumberhealthcheck) - healthCheck system
 
 ### [tools](docs/sdks/tools/README.md)
 
@@ -348,6 +354,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authAuthNumberInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
 - [`authAuthNumberLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
 - [`authAuthNumberSwitchScopes`](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
+- [`chatChatNumberCompletion`](docs/sdks/chat/README.md#chatnumbercompletion) - completion chat
 - [`deploymentsDeploymentsNumberCreateDeployment`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
 - [`deploymentsDeploymentsNumberGetDeployment`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 - [`deploymentsDeploymentsNumberListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
@@ -355,10 +362,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsEnvironmentsNumberDeleteEnvironment`](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
 - [`environmentsEnvironmentsNumberListEnvironments`](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
 - [`environmentsEnvironmentsNumberUpdateEnvironment`](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
+- [`instancesInstancesNumberLoadInstance`](docs/sdks/instances/README.md#instancesnumberloadinstance) - loadInstance instances
 - [`keysKeysNumberCreateKey`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
 - [`keysKeysNumberListKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
 - [`keysKeysNumberRevokeKey`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
-- [`systemSystemNumberHealthCheck`](docs/sdks/system/README.md#systemnumberhealthcheck) - healthCheck system
 - [`toolsetsToolsetsNumberCreateToolset`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
 - [`toolsetsToolsetsNumberDeleteToolset`](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
 - [`toolsetsToolsetsNumberGetToolsetDetails`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
@@ -391,18 +398,20 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
+- [`useChatCompletionMutation`](docs/sdks/chat/README.md#chatnumbercompletion) - completion chat
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
-- [`useDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
+- [`useDeployment`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 - [`useListAPIKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
 - [`useListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
 - [`useListTools`](docs/sdks/tools/README.md#toolsnumberlisttools) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
+- [`useLoadInstance`](docs/sdks/instances/README.md#instancesnumberloadinstance) - loadInstance instances
 - [`useLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
 - [`useSessionInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
@@ -434,7 +443,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.system.systemNumberHealthCheck({
+  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+    contentLength: 924456,
+  }, {
     retries: {
       strategy: "backoff",
       backoff: {
@@ -479,7 +490,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.system.systemNumberHealthCheck();
+  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+    contentLength: 924456,
+  });
 
   // Handle the result
   console.log(result);
@@ -515,7 +528,9 @@ const gram = new Gram({
 async function run() {
   let result;
   try {
-    result = await gram.system.systemNumberHealthCheck();
+    result = await gram.assets.assetsNumberUploadOpenAPIv3({
+      contentLength: 924456,
+    });
 
     // Handle the result
     console.log(result);
@@ -582,7 +597,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.system.systemNumberHealthCheck();
+  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+    contentLength: 924456,
+  });
 
   // Handle the result
   console.log(result);

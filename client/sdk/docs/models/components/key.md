@@ -6,7 +6,7 @@
 import { Key } from "@gram/sdk/models/components";
 
 let value: Key = {
-  createdAt: new Date("2023-01-21T14:14:48.878Z"),
+  createdAt: new Date("2025-10-29T20:25:41.722Z"),
   createdByUserId: "<id>",
   id: "<id>",
   name: "<value>",
@@ -15,7 +15,7 @@ let value: Key = {
     "<value>",
   ],
   token: "<value>",
-  updatedAt: new Date("2024-11-07T22:17:02.814Z"),
+  updatedAt: new Date("2025-11-12T04:40:01.714Z"),
 };
 ```
 

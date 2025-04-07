@@ -53,10 +53,12 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useSystemSystemNumberHealthCheck } from "@gram/sdk/react-query/systemSystemNumberHealthCheck.js";
+import { useAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
 
 export function Example() {
-  const { data, error, status } = useSystemSystemNumberHealthCheck();
+  const { data, error, status } = useAuthAuthNumberCallback({
+    sharedToken: "<value>",
+  });
 
   // Render the UI here...
 }
@@ -69,11 +71,14 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useSystemSystemNumberHealthCheck } from "@gram/sdk/react-query/systemSystemNumberHealthCheck.js";
+import { useAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useSystemSystemNumberHealthCheck(
+  const { data, error, status } = useAuthAuthNumberCallback(
+    {
+      sharedToken: "<value>",
+    },
     {
       // TanStack Query options:
       enabled,
@@ -123,9 +128,7 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          contentLength: 7818005087342603000,
-          gramProject: "Consequuntur non dolor iure dolor iste voluptas.",
-          gramSession: "Qui est quas veritatis rerum et.",
+          contentLength: 924456,
         });
       }}
     >
@@ -177,7 +180,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateSystemSystemNumberHealthCheck, invalidateAllSystemSystemNumberHealthCheck } from "@gram/sdk/react-query/systemSystemNumberHealthCheck.js";
+import { invalidateAuthAuthNumberCallback, invalidateAllAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/sdk/react-query/example.js";
 
@@ -195,9 +198,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateSystemSystemNumberHealthCheck(queryClient, /* ... arguments ... */);
+            invalidateAuthAuthNumberCallback(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllSystemSystemNumberHealthCheck(queryClient);
+            invalidateAllAuthAuthNumberCallback(queryClient);
           },
         });
       }}
@@ -225,7 +228,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/sdk";
 import { GramProvider } from "@gram/sdk/react-query";
-import { useSystemSystemNumberHealthCheckSuspense } from "@gram/sdk/react-query/systemSystemNumberHealthCheck.js";
+import { useAuthAuthNumberCallbackSuspense } from "@gram/sdk/react-query/authAuthNumberCallback.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
@@ -263,7 +266,9 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useSystemSystemNumberHealthCheckSuspense();
+  const { data } = useAuthAuthNumberCallbackSuspense({
+    sharedToken: "<value>",
+  });
 
   // Render the UI here...
 }
@@ -283,7 +288,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/sdk";
-import { prefetchSystemSystemNumberHealthCheck } from "@gram/sdk/react-query/systemSystemNumberHealthCheck.js";
+import { prefetchAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
@@ -294,7 +299,9 @@ export default async function Page() {
     },
   });
 
-  await prefetchSystemSystemNumberHealthCheck(gram);
+  await prefetchAuthAuthNumberCallback(queryClient, gram, {
+    sharedToken: "<value>",
+  });
 
   return (
     // HydrationBoundary is a Client Component, so hydration will happen there.

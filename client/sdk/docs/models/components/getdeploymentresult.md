@@ -6,7 +6,7 @@
 import { GetDeploymentResult } from "@gram/sdk/models/components";
 
 let value: GetDeploymentResult = {
-  createdAt: new Date("2025-08-11T12:47:58.371Z"),
+  createdAt: new Date("2023-09-03T15:00:04.554Z"),
   externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
   githubPr: "1234",
   githubRepo: "speakeasyapi/gram",
@@ -23,6 +23,7 @@ let value: GetDeploymentResult = {
   ],
   organizationId: "<id>",
   projectId: "<id>",
+  status: "<value>",
   userId: "<id>",
 };
 ```
@@ -42,4 +43,5 @@ let value: GetDeploymentResult = {
 | `openapiv3Assets`                                                                                                                     | [components.OpenAPIv3DeploymentAsset](../../models/components/openapiv3deploymentasset.md)[]                                          | :heavy_check_mark:                                                                                                                    | The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions. |                                                                                                                                       |
 | `organizationId`                                                                                                                      | *string*                                                                                                                              | :heavy_check_mark:                                                                                                                    | The ID of the organization that the deployment belongs to.                                                                            |                                                                                                                                       |
 | `projectId`                                                                                                                           | *string*                                                                                                                              | :heavy_check_mark:                                                                                                                    | The ID of the project that the deployment belongs to.                                                                                 |                                                                                                                                       |
+| `status`                                                                                                                              | *string*                                                                                                                              | :heavy_check_mark:                                                                                                                    | The status of the deployment.                                                                                                         |                                                                                                                                       |
 | `userId`                                                                                                                              | *string*                                                                                                                              | :heavy_check_mark:                                                                                                                    | The ID of the user that created the deployment.                                                                                       |                                                                                                                                       |

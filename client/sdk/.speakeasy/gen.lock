@@ -1,18 +1,20 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 54640c4e5459be9c9c6fafbe977ea5c9
+  docChecksum: 31e6e616eb4d48269a75ac064e9537dc
   docVersion: 0.0.1
-  speakeasyVersion: 1.527.1
-  generationVersion: 2.564.5
-  releaseVersion: 0.3.2
-  configChecksum: 9b61fd51ca96fac2bf078fc4691963fa
+  speakeasyVersion: 1.529.1
+  generationVersion: 2.566.5
+  releaseVersion: 0.4.1
+  configChecksum: ac6d8a772d2ffe970807830eae423e82
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.4
+    constsAndDefaults: 0.1.11
+    core: 3.21.5
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
+    downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurity: 2.82.13
@@ -37,6 +39,7 @@ generatedFiles:
   - USAGE.md
   - docs/lib/utils/retryconfig.md
   - docs/models/components/asset.md
+  - docs/models/components/createcompletionrequest.md
   - docs/models/components/createdeploymentrequestbody.md
   - docs/models/components/createdeploymentresult.md
   - docs/models/components/createenvironmentform.md
@@ -48,9 +51,9 @@ generatedFiles:
   - docs/models/components/environmententry.md
   - docs/models/components/environmententryinput.md
   - docs/models/components/getdeploymentresult.md
-  - docs/models/components/healthcheckresult.md
   - docs/models/components/httptooldefinition.md
   - docs/models/components/inforesponsebody.md
+  - docs/models/components/instanceresult.md
   - docs/models/components/key.md
   - docs/models/components/kind.md
   - docs/models/components/listdeploymentresult.md
@@ -80,6 +83,7 @@ generatedFiles:
   - docs/models/operations/authnumberswitchscopesrequest.md
   - docs/models/operations/authnumberswitchscopesresponse.md
   - docs/models/operations/authnumberswitchscopessecurity.md
+  - docs/models/operations/chatnumbercompletionrequest.md
   - docs/models/operations/deploymentsnumbercreatedeploymentrequest.md
   - docs/models/operations/deploymentsnumbergetdeploymentrequest.md
   - docs/models/operations/deploymentsnumberlistdeploymentsrequest.md
@@ -87,6 +91,10 @@ generatedFiles:
   - docs/models/operations/environmentsnumberdeleteenvironmentrequest.md
   - docs/models/operations/environmentsnumberlistenvironmentsrequest.md
   - docs/models/operations/environmentsnumberupdateenvironmentrequest.md
+  - docs/models/operations/instancesnumberloadinstancerequest.md
+  - docs/models/operations/instancesnumberloadinstancesecurity.md
+  - docs/models/operations/instancesnumberloadinstancesecurityoption1.md
+  - docs/models/operations/instancesnumberloadinstancesecurityoption2.md
   - docs/models/operations/keysnumbercreatekeyrequest.md
   - docs/models/operations/keysnumbercreatekeysecurity.md
   - docs/models/operations/keysnumberlistkeysrequest.md
@@ -101,11 +109,12 @@ generatedFiles:
   - docs/models/operations/toolsnumberlisttoolsrequest.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
+  - docs/sdks/chat/README.md
   - docs/sdks/deployments/README.md
   - docs/sdks/environments/README.md
   - docs/sdks/gram/README.md
+  - docs/sdks/instances/README.md
   - docs/sdks/keys/README.md
-  - docs/sdks/system/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
   - eslint.config.mjs
@@ -117,6 +126,7 @@ generatedFiles:
   - src/funcs/authAuthNumberInfo.ts
   - src/funcs/authAuthNumberLogout.ts
   - src/funcs/authAuthNumberSwitchScopes.ts
+  - src/funcs/chatChatNumberCompletion.ts
   - src/funcs/deploymentsDeploymentsNumberCreateDeployment.ts
   - src/funcs/deploymentsDeploymentsNumberGetDeployment.ts
   - src/funcs/deploymentsDeploymentsNumberListDeployments.ts
@@ -124,10 +134,10 @@ generatedFiles:
   - src/funcs/environmentsEnvironmentsNumberDeleteEnvironment.ts
   - src/funcs/environmentsEnvironmentsNumberListEnvironments.ts
   - src/funcs/environmentsEnvironmentsNumberUpdateEnvironment.ts
+  - src/funcs/instancesInstancesNumberLoadInstance.ts
   - src/funcs/keysKeysNumberCreateKey.ts
   - src/funcs/keysKeysNumberListKeys.ts
   - src/funcs/keysKeysNumberRevokeKey.ts
-  - src/funcs/systemSystemNumberHealthCheck.ts
   - src/funcs/toolsToolsNumberListTools.ts
   - src/funcs/toolsetsToolsetsNumberCreateToolset.ts
   - src/funcs/toolsetsToolsetsNumberDeleteToolset.ts
@@ -169,6 +179,7 @@ generatedFiles:
   - src/mcp-server/tools.ts
   - src/mcp-server/tools/assetsAssetsNumberUploadOpenAPIv3.ts
   - src/mcp-server/tools/authAuthNumberCallback.ts
+  - src/mcp-server/tools/chatChatNumberCompletion.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberCreateDeployment.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberGetDeployment.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberListDeployments.ts
@@ -176,7 +187,6 @@ generatedFiles:
   - src/mcp-server/tools/environmentsEnvironmentsNumberDeleteEnvironment.ts
   - src/mcp-server/tools/environmentsEnvironmentsNumberListEnvironments.ts
   - src/mcp-server/tools/environmentsEnvironmentsNumberUpdateEnvironment.ts
-  - src/mcp-server/tools/systemSystemNumberHealthCheck.ts
   - src/mcp-server/tools/toolsToolsNumberListTools.ts
   - src/mcp-server/tools/toolsetsToolsetsNumberCreateToolset.ts
   - src/mcp-server/tools/toolsetsToolsetsNumberDeleteToolset.ts
@@ -184,6 +194,7 @@ generatedFiles:
   - src/mcp-server/tools/toolsetsToolsetsNumberListToolsets.ts
   - src/mcp-server/tools/toolsetsToolsetsNumberUpdateToolset.ts
   - src/models/components/asset.ts
+  - src/models/components/createcompletionrequest.ts
   - src/models/components/createdeploymentrequestbody.ts
   - src/models/components/createdeploymentresult.ts
   - src/models/components/createenvironmentform.ts
@@ -195,10 +206,10 @@ generatedFiles:
   - src/models/components/environmententry.ts
   - src/models/components/environmententryinput.ts
   - src/models/components/getdeploymentresult.ts
-  - src/models/components/healthcheckresult.ts
   - src/models/components/httptooldefinition.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
+  - src/models/components/instanceresult.ts
   - src/models/components/key.ts
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
@@ -224,6 +235,7 @@ generatedFiles:
   - src/models/operations/authnumberinfo.ts
   - src/models/operations/authnumberlogout.ts
   - src/models/operations/authnumberswitchscopes.ts
+  - src/models/operations/chatnumbercompletion.ts
   - src/models/operations/deploymentsnumbercreatedeployment.ts
   - src/models/operations/deploymentsnumbergetdeployment.ts
   - src/models/operations/deploymentsnumberlistdeployments.ts
@@ -232,6 +244,7 @@ generatedFiles:
   - src/models/operations/environmentsnumberlistenvironments.ts
   - src/models/operations/environmentsnumberupdateenvironment.ts
   - src/models/operations/index.ts
+  - src/models/operations/instancesnumberloadinstance.ts
   - src/models/operations/keysnumbercreatekey.ts
   - src/models/operations/keysnumberlistkeys.ts
   - src/models/operations/keysnumberrevokekey.ts
@@ -243,6 +256,7 @@ generatedFiles:
   - src/models/operations/toolsnumberlisttools.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
+  - src/react-query/chatCompletion.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
@@ -256,6 +270,7 @@ generatedFiles:
   - src/react-query/listEnvironments.ts
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
+  - src/react-query/loadInstance.ts
   - src/react-query/logout.ts
   - src/react-query/revokeAPIKey.ts
   - src/react-query/sessionInfo.ts
@@ -266,12 +281,13 @@ generatedFiles:
   - src/react-query/uploadOpenAPIv3.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
+  - src/sdk/chat.ts
   - src/sdk/deployments.ts
   - src/sdk/environments.ts
   - src/sdk/index.ts
+  - src/sdk/instances.ts
   - src/sdk/keys.ts
   - src/sdk/sdk.ts
-  - src/sdk/system.ts
   - src/sdk/tools.ts
   - src/sdk/toolsets.ts
   - src/types/async.ts
@@ -285,101 +301,47 @@ generatedFiles:
   - src/types/streams.ts
   - tsconfig.json
 examples:
-  system#healthCheck:
-    "":
-      responses:
-        "200":
-          application/json: {"status": "Natus amet."}
-    speakeasy-default-system#health-check:
-      responses:
-        "200":
-          application/json: {"status": "<value>"}
   assets#uploadOpenAPIv3:
-    "":
-      parameters:
-        header:
-          Content-Length: 7818005087342603000
-          Gram-Project-ID: "Et ratione et in."
-          X-Gram-Session: "Et repellat sed ipsam ipsam saepe."
-          Gram-Project: "Consequuntur non dolor iure dolor iste voluptas."
-          Gram-Session: "Qui est quas veritatis rerum et."
-      responses:
-        "200":
-          application/json: {"asset": {"content_length": 975581659921114100, "content_type": "Facere accusamus illum quibusdam deleniti.", "created_at": "2007-10-04T10:14:19Z", "id": "Ut voluptatibus soluta velit.", "kind": "openapiv3", "sha256": "Laborum quam.", "updated_at": "1982-06-10T21:47:30Z", "url": "Beatae aut veniam voluptas at."}}
     speakeasy-default-assets#upload-open-AP-iv3:
       parameters:
         header:
           Content-Length: 924456
-          Gram-Project: "<value>"
       responses:
         "200":
           application/json: {"asset": {"content_length": 309292, "content_type": "<value>", "created_at": "2025-08-06T08:52:40.387Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-07T16:19:35.673Z", "url": "https://deafening-loaf.name"}}
   auth#callback:
-    "":
-      parameters:
-        query:
-          shared_token: "Occaecati autem est itaque in veniam."
     speakeasy-default-auth#callback:
       parameters:
         query:
           shared_token: "<value>"
   auth#info:
-    "":
-      parameters:
-        header:
-          X-Gram-Session: "Recusandae et soluta ex."
-          Gram-Session: "Consequuntur error suscipit optio sunt eum."
-      responses:
-        "200":
-          application/json: {"active_organization_id": "Et ut velit iure.", "organizations": [{"account_type": "Doloribus ut quaerat aut.", "organization_id": "Aut provident incidunt suscipit et.", "organization_name": "Ea est optio consequatur deserunt sequi maxime.", "organization_slug": "Assumenda quas dolor mollitia laboriosam voluptatem.", "projects": [{"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}]}, {"account_type": "Doloribus ut quaerat aut.", "organization_id": "Aut provident incidunt suscipit et.", "organization_name": "Ea est optio consequatur deserunt sequi maxime.", "organization_slug": "Assumenda quas dolor mollitia laboriosam voluptatem.", "projects": [{"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}]}, {"account_type": "Doloribus ut quaerat aut.", "organization_id": "Aut provident incidunt suscipit et.", "organization_name": "Ea est optio consequatur deserunt sequi maxime.", "organization_slug": "Assumenda quas dolor mollitia laboriosam voluptatem.", "projects": [{"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}]}, {"account_type": "Doloribus ut quaerat aut.", "organization_id": "Aut provident incidunt suscipit et.", "organization_name": "Ea est optio consequatur deserunt sequi maxime.", "organization_slug": "Assumenda quas dolor mollitia laboriosam voluptatem.", "projects": [{"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}, {"project_id": "Id ea et esse.", "project_name": "Error et enim nostrum doloremque.", "project_slug": "Maxime error voluptatum dolore debitis."}]}], "user_email": "Assumenda ut.", "user_id": "Doloribus magnam nostrum aut sunt itaque."}
     speakeasy-default-auth#info:
       responses:
         "200":
           application/json: {"active_organization_id": "<id>", "organizations": [{"account_type": "<value>", "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "projects": [{"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}, {"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}, {"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}]}], "user_email": "<value>", "user_id": "<id>"}
-  auth#logout:
-    "":
-      parameters:
-        header:
-          X-Gram-Session: "A atque voluptatum non velit iste possimus."
-          Gram-Session: "Quibusdam quia ea consequuntur."
-  auth#switchScopes:
-    "":
-      parameters:
-        query:
-          organization_id: "Beatae in dolor aut illo."
-          project_id: "Incidunt natus exercitationem est."
-        header:
-          X-Gram-Session: "Molestiae mollitia voluptatem."
-          Gram-Session: "Eveniet numquam sint quam."
+  auth#logout: {}
+  auth#switchScopes: {}
+  chat#completion:
+    speakeasy-default-chat#completion:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: "<value>"
+          text/event-stream: "x-file: example.file"
+        "101":
+          application/json: "<value>"
   deployments#createDeployment:
     "":
       parameters:
         header:
-          X-Gram-Session: "Sint autem aut."
-          Gram-Session: "Rerum laborum voluptatum in qui culpa sed."
           Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
       requestBody:
-        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_url": "Corrupti voluptas corporis dolor nisi.", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
+        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
       responses:
         "200":
-          application/json: {}
-    speakeasy-default-deployments#create-deployment:
-      requestBody:
-        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m"}
-      responses:
-        "200":
-          application/json: {"deployment": {"created_at": "2024-01-18T04:57:23.652Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_asset_ids": [], "organization_id": "<id>", "project_id": "<id>", "user_id": "<id>"}}
+          application/json: {"deployment": {"created_at": "2024-01-18T04:57:23.652Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
   deployments#getDeployment:
-    "":
-      parameters:
-        query:
-          id: "Dolor minima qui enim aliquam quia."
-        header:
-          X-Gram-Session: "Reiciendis quibusdam."
-          Gram-Session: "Nihil error quia aut et sit possimus."
-      responses:
-        "200":
-          application/json: {"created_at": "2010-05-10T05:07:05Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_url": "Illum et.", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_asset_ids": ["Vel voluptatem iste id suscipit corrupti.", "Et quaerat ut voluptates."], "organization_id": "Reprehenderit quia doloribus pariatur minus laudantium.", "project_id": "Cum dignissimos quis modi velit maiores.", "user_id": "Ab dolorum repellendus aspernatur voluptatem aspernatur."}
     speakeasy-default-deployments#get-deployment:
       parameters:
         query:
@@ -387,160 +349,14 @@ examples:
         header: {}
       responses:
         "200":
-          application/json: {"created_at": "2025-04-28T00:14:36.618Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "user_id": "<id>"}
+          application/json: {"created_at": "2025-04-28T00:14:36.618Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
   deployments#listDeployments:
-    "":
-      parameters:
-        query:
-          cursor: "Animi ut nulla aliquam ut."
-          limit: 46
-        header:
-          X-Gram-Session: "Tempore voluptatum sunt quo."
-          Gram-Session: "Odio itaque nemo."
-      responses:
-        "200":
-          application/json: {"items": [{"created_at": "2009-11-30T07:29:52Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_url": "Quia deserunt et at et.", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_asset_ids": ["Perferendis dolorum ut rem a culpa.", "Tenetur quibusdam et aut consequatur provident animi.", "Et aut consequatur.", "Accusantium occaecati eum in voluptatum nemo mollitia."], "organization_id": "Non consectetur.", "project_id": "Velit aspernatur qui.", "user_id": "Praesentium voluptas dolor magnam voluptates est."}, {"created_at": "2009-11-30T07:29:52Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_url": "Quia deserunt et at et.", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_asset_ids": ["Perferendis dolorum ut rem a culpa.", "Tenetur quibusdam et aut consequatur provident animi.", "Et aut consequatur.", "Accusantium occaecati eum in voluptatum nemo mollitia."], "organization_id": "Non consectetur.", "project_id": "Velit aspernatur qui.", "user_id": "Praesentium voluptas dolor magnam voluptates est."}, {"created_at": "2009-11-30T07:29:52Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_url": "Quia deserunt et at et.", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_asset_ids": ["Perferendis dolorum ut rem a culpa.", "Tenetur quibusdam et aut consequatur provident animi.", "Et aut consequatur.", "Accusantium occaecati eum in voluptatum nemo mollitia."], "organization_id": "Non consectetur.", "project_id": "Velit aspernatur qui.", "user_id": "Praesentium voluptas dolor magnam voluptates est."}, {"created_at": "2009-11-30T07:29:52Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_url": "Quia deserunt et at et.", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_asset_ids": ["Perferendis dolorum ut rem a culpa.", "Tenetur quibusdam et aut consequatur provident animi.", "Et aut consequatur.", "Accusantium occaecati eum in voluptatum nemo mollitia."], "organization_id": "Non consectetur.", "project_id": "Velit aspernatur qui.", "user_id": "Praesentium voluptas dolor magnam voluptates est."}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
     speakeasy-default-deployments#list-deployments:
-      parameters:
-        query:
-          limit: 10
-        header: {}
       responses:
         "200":
-          application/json: {"items": [{"asset_count": 385258, "created_at": "2024-05-15T04:55:55.301Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
-  toolsets#createToolset:
-    "":
-      parameters:
-        header:
-          X-Gram-Session: "Earum dolorum ipsam enim temporibus aut omnis."
-          Gram-Session: "Quis numquam exercitationem earum vel eveniet culpa."
-          Gram-Project: "Nam dolorem ipsum."
-      requestBody:
-        application/json: {"description": "Blanditiis qui mollitia molestias iste mollitia consequatur.", "http_tool_ids": ["Ipsa minus quo nihil.", "Et veritatis totam."], "name": "Optio est."}
-      responses:
-        "200":
-          application/json: {"created_at": "1977-01-19T08:55:10Z", "description": "Perferendis alias alias iure.", "http_tool_ids": ["Dolorum libero nobis velit aperiam.", "Quae et alias ut totam necessitatibus debitis.", "Neque odit vero."], "id": "Optio ut veritatis praesentium et consequuntur quidem.", "name": "Asperiores reiciendis et.", "organization_id": "Vitae ut voluptatum quia.", "project_id": "Libero accusantium.", "slug": "Eligendi facilis.", "updated_at": "1974-09-20T09:09:47Z"}
-    speakeasy-default-toolsets#create-toolset:
-      parameters:
-        header:
-          Gram-Project: "<value>"
-      requestBody:
-        application/json: {"name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-01-31T23:54:16.910Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-05-12T22:32:30.196Z"}
-  toolsets#getToolsetDetails:
-    "":
-      parameters:
-        path:
-          id: "Dolor veniam quae sed labore et."
-        header:
-          X-Gram-Session: "Optio qui quo."
-          Gram-Session: "Rerum rem ducimus."
-          Gram-Project: "Est molestiae omnis ducimus ut et delectus."
-      responses:
-        "200":
-          application/json: {"created_at": "1996-09-29T12:31:05Z", "description": "Aut eligendi minus saepe.", "http_tools": [{"apikey_env_var": "Quae iste et ex vero dolores voluptatem.", "bearer_env_var": "Excepturi sunt reiciendis aspernatur voluptas.", "body_schema": "Et voluptatem atque accusantium dolores minima.", "description": "Quis praesentium quae repellendus molestiae.", "headers_schema": "Velit ipsa sit.", "http_method": "Perferendis hic expedita.", "id": "Pariatur rerum nihil.", "name": "Eos illo veritatis tempora quae.", "password_env_var": "Voluptates autem nulla quo perferendis dolorum odit.", "path": "Qui aliquid qui.", "pathparams_schema": "Expedita ipsa similique doloribus.", "queries_schema": "Molestias nulla quis.", "security_type": "Est culpa enim corporis error.", "server_env_var": "Quia nisi velit sed fugiat.", "username_env_var": "Harum quae."}, {"apikey_env_var": "Quae iste et ex vero dolores voluptatem.", "bearer_env_var": "Excepturi sunt reiciendis aspernatur voluptas.", "body_schema": "Et voluptatem atque accusantium dolores minima.", "description": "Quis praesentium quae repellendus molestiae.", "headers_schema": "Velit ipsa sit.", "http_method": "Perferendis hic expedita.", "id": "Pariatur rerum nihil.", "name": "Eos illo veritatis tempora quae.", "password_env_var": "Voluptates autem nulla quo perferendis dolorum odit.", "path": "Qui aliquid qui.", "pathparams_schema": "Expedita ipsa similique doloribus.", "queries_schema": "Molestias nulla quis.", "security_type": "Est culpa enim corporis error.", "server_env_var": "Quia nisi velit sed fugiat.", "username_env_var": "Harum quae."}], "id": "Ab et et quod sint doloremque.", "name": "Et id voluptas voluptas.", "organization_id": "Omnis reiciendis velit vel.", "project_id": "Vero suscipit excepturi.", "slug": "Eum vitae voluptatum sint animi eos omnis.", "updated_at": "1973-09-29T11:33:37Z"}
-    speakeasy-default-toolsets#get-toolset-details:
-      parameters:
-        path:
-          id: "<id>"
-          slug: "<value>"
-        header:
-          Gram-Project: "<value>"
-      responses:
-        "200":
-          application/json: {"created_at": "2024-04-05T12:22:08.877Z", "http_tools": [{"created_at": "2024-04-05T12:22:08.877Z", "description": "hoot archaeology near in pack eek beautifully fibre fooey", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "security_type": "<value>", "server_env_var": "<value>", "tags": ["<value>"], "updated_at": "2025-06-30T15:43:44.156Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-08-24T19:59:52.837Z"}
-  toolsets#listToolsets:
-    "":
-      parameters:
-        query:
-          project_id: "Quos neque voluptatum rerum veniam commodi."
-        header:
-          X-Gram-Session: "Atque fuga."
-          Gram-Session: "Alias totam non aliquam maxime."
-          Gram-Project: "Consequatur recusandae non tenetur rem."
-      responses:
-        "200":
-          application/json: {"toolsets": [{"created_at": "2002-04-11T00:51:41Z", "description": "Dolore est.", "http_tool_ids": ["Deserunt ad.", "Et laudantium vel."], "id": "Nesciunt consequuntur porro maiores.", "name": "Laborum at.", "organization_id": "Enim fugiat reiciendis nisi ad excepturi.", "project_id": "Ut officia.", "slug": "Et a sit voluptas ut.", "updated_at": "2009-03-18T16:22:57Z"}, {"created_at": "2002-04-11T00:51:41Z", "description": "Dolore est.", "http_tool_ids": ["Deserunt ad.", "Et laudantium vel."], "id": "Nesciunt consequuntur porro maiores.", "name": "Laborum at.", "organization_id": "Enim fugiat reiciendis nisi ad excepturi.", "project_id": "Ut officia.", "slug": "Et a sit voluptas ut.", "updated_at": "2009-03-18T16:22:57Z"}, {"created_at": "2002-04-11T00:51:41Z", "description": "Dolore est.", "http_tool_ids": ["Deserunt ad.", "Et laudantium vel."], "id": "Nesciunt consequuntur porro maiores.", "name": "Laborum at.", "organization_id": "Enim fugiat reiciendis nisi ad excepturi.", "project_id": "Ut officia.", "slug": "Et a sit voluptas ut.", "updated_at": "2009-03-18T16:22:57Z"}]}
-    speakeasy-default-toolsets#list-toolsets:
-      parameters:
-        header:
-          Gram-Project: "<value>"
-      responses:
-        "200":
-          application/json: {"toolsets": []}
-  toolsets#updateToolset:
-    "":
-      parameters:
-        path:
-          id: "Voluptatem alias in suscipit voluptates unde similique."
-        header:
-          X-Gram-Session: "Aut nam labore quidem."
-          Gram-Session: "Omnis reprehenderit."
-          Gram-Project: "Veritatis quaerat sit et."
-      requestBody:
-        application/json: {"description": "Iste optio ullam.", "http_tool_ids_to_add": ["Animi tenetur nesciunt et est et.", "Nam quis."], "http_tool_ids_to_remove": ["Animi sequi.", "Amet sapiente."], "name": "Soluta fuga."}
-      responses:
-        "200":
-          application/json: {"created_at": "1976-11-13T14:16:41Z", "description": "Consequatur nihil nihil dolores.", "http_tool_ids": ["Voluptatum odio.", "Voluptas aut aliquid laudantium rem omnis.", "Quisquam magnam.", "Non maxime tempora."], "id": "Et quia ipsum voluptate dolor quaerat.", "name": "Illum eos dolores expedita illum consequuntur nobis.", "organization_id": "Eius alias sint et.", "project_id": "Sunt suscipit voluptatibus dolores.", "slug": "Consectetur deserunt blanditiis voluptas minus sit.", "updated_at": "1974-02-13T12:54:30Z"}
-    speakeasy-default-toolsets#update-toolset:
-      parameters:
-        path:
-          id: "<id>"
-          slug: "<value>"
-        header:
-          Gram-Project: "<value>"
-      requestBody:
-        application/json: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2023-10-11T13:18:21.498Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-20T02:33:46.900Z"}
-  keys#createKey:
-    "":
-      parameters:
-        header:
-          Gram-Session: "Esse est omnis fuga illum expedita corporis."
-      requestBody:
-        application/json: {"name": "At expedita magni perferendis amet unde."}
-      responses:
-        "200":
-          application/json: {"created_at": "1986-08-19T19:01:15Z", "created_by_user_id": "Unde sint nemo rerum recusandae harum.", "id": "Et deleniti quia aut repellendus.", "name": "Sapiente aliquam sit aperiam.", "organization_id": "Sed totam quis unde sit rerum.", "project_id": "Perspiciatis nostrum minus repellendus dolore qui.", "scopes": ["Debitis culpa molestiae.", "Perferendis illo."], "token": "Nobis enim quas dolorem et inventore.", "updated_at": "1975-03-28T11:40:59Z"}
-    speakeasy-default-keys#create-key:
-      requestBody:
-        application/json: {"name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2023-02-04T15:44:05.452Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2025-10-26T04:54:37.718Z"}
-  keys#listKeys:
-    "":
-      parameters:
-        header:
-          Gram-Session: "Vitae sed doloremque et perspiciatis."
-      responses:
-        "200":
-          application/json: {"keys": [{"created_at": "1982-03-13T21:26:33Z", "created_by_user_id": "Mollitia reiciendis magnam.", "id": "Eaque dolorum.", "name": "Odit ipsa quidem tempora rerum.", "organization_id": "Molestias voluptatem eum cumque.", "project_id": "Odio impedit aut aut atque ducimus.", "scopes": ["Dolores voluptatem sapiente molestiae quia ipsum.", "Voluptatem aut minima eos.", "Omnis quisquam distinctio eos ut neque."], "token": "Sint ut.", "updated_at": "1985-09-29T14:38:35Z"}, {"created_at": "1982-03-13T21:26:33Z", "created_by_user_id": "Mollitia reiciendis magnam.", "id": "Eaque dolorum.", "name": "Odit ipsa quidem tempora rerum.", "organization_id": "Molestias voluptatem eum cumque.", "project_id": "Odio impedit aut aut atque ducimus.", "scopes": ["Dolores voluptatem sapiente molestiae quia ipsum.", "Voluptatem aut minima eos.", "Omnis quisquam distinctio eos ut neque."], "token": "Sint ut.", "updated_at": "1985-09-29T14:38:35Z"}]}
-    speakeasy-default-keys#list-keys:
-      responses:
-        "200":
-          application/json: {"keys": [{"created_at": "2025-01-16T17:32:25.648Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>", "<value>"], "token": "<value>", "updated_at": "2023-04-03T20:02:04.409Z"}]}
-  keys#revokeKey:
-    "":
-      parameters:
-        path:
-          id: "Enim accusantium nisi est enim."
-        header:
-          Gram-Session: "Itaque facilis."
-    speakeasy-default-keys#revoke-key:
-      parameters:
-        path:
-          id: "<id>"
-        header: {}
+          application/json: {"items": [{"asset_count": 456392, "created_at": "2025-06-24T06:00:13.351Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
   environments#createEnvironment:
     speakeasy-default-environments#create-environment:
-      parameters:
-        header:
-          Gram-Project: "<value>"
       requestBody:
         application/json: {"entries": [], "name": "<value>", "organization_id": "<id>"}
       responses:
@@ -550,15 +366,10 @@ examples:
     speakeasy-default-environments#delete-environment:
       parameters:
         path:
-          id: "<id>"
           slug: "<value>"
-        header:
-          Gram-Project: "<value>"
+        header: {}
   environments#listEnvironments:
     speakeasy-default-environments#list-environments:
-      parameters:
-        header:
-          Gram-Project: "<value>"
       responses:
         "200":
           application/json: {"environments": [{"created_at": "2023-04-09T09:12:47.380Z", "entries": [{"created_at": "2025-10-02T09:18:08.014Z", "name": "<value>", "updated_at": "2024-02-21T19:19:10.126Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-07T04:05:23.413Z"}]}
@@ -566,27 +377,82 @@ examples:
     speakeasy-default-environments#update-environment:
       parameters:
         path:
-          id: "<id>"
           slug: "<value>"
-        header:
-          Gram-Project: "<value>"
+        header: {}
       requestBody:
         application/json: {"entries_to_remove": ["<value>"], "entries_to_update": []}
       responses:
         "200":
           application/json: {"created_at": "2023-08-07T22:29:01.687Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-05-25T04:22:07.250Z"}
-  toolsets#deleteToolset:
-    speakeasy-default-toolsets#delete-toolset:
+  instances#loadInstance:
+    speakeasy-default-instances#load-instance:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"environment": {"created_at": "2023-07-31T19:02:18.027Z", "entries": [{"created_at": "2024-06-04T14:37:25.747Z", "name": "<value>", "updated_at": "2023-08-10T06:48:28.182Z", "value": "<value>"}, {"created_at": "2024-05-13T08:19:13.014Z", "name": "<value>", "updated_at": "2024-04-23T11:43:05.947Z", "value": "<value>"}, {"created_at": "2023-12-20T05:46:23.123Z", "name": "<value>", "updated_at": "2024-08-03T16:29:36.656Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-25T14:32:40.435Z"}, "tools": [{"created_at": "2025-06-14T23:33:47.853Z", "description": "whopping pro victoriously provided zowie confound habit", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "security_type": "<value>", "server_env_var": "<value>", "tags": [], "updated_at": "2024-10-22T20:00:15.335Z"}, {"created_at": "2023-07-08T16:52:36.181Z", "description": "powerless modulo happily violently gah provided daily", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/srv", "security_type": "<value>", "server_env_var": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-06-22T07:26:27.262Z"}]}
+  keys#createKey:
+    speakeasy-default-keys#create-key:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-02-04T15:44:05.452Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2025-10-26T04:54:37.718Z"}
+  keys#listKeys:
+    speakeasy-default-keys#list-keys:
+      responses:
+        "200":
+          application/json: {"keys": [{"created_at": "2025-01-16T17:32:25.648Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>", "<value>"], "token": "<value>", "updated_at": "2023-04-03T20:02:04.409Z"}]}
+  keys#revokeKey:
+    speakeasy-default-keys#revoke-key:
       parameters:
         path:
           id: "<id>"
-          slug: "<value>"
-        header:
-          Gram-Project: "<value>"
+        header: {}
   tools#listTools:
     speakeasy-default-tools#list-tools:
       responses:
         "200":
           application/json: {"tools": [{"created_at": "2023-06-14T22:04:15.509Z", "description": "rubric while smoothly unless yeast", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "security_type": "<value>", "server_env_var": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-29T20:57:29.586Z"}]}
-examplesVersion: 1.0.0
+  toolsets#createToolset:
+    speakeasy-default-toolsets#create-toolset:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-01-31T23:54:16.910Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-05-12T22:32:30.196Z"}
+  toolsets#deleteToolset:
+    speakeasy-default-toolsets#delete-toolset:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+  toolsets#getToolsetDetails:
+    speakeasy-default-toolsets#get-toolset-details:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-04-05T12:22:08.877Z", "http_tools": [{"created_at": "2025-06-30T15:43:44.156Z", "description": "cook jellyfish perspire until embossing er offensively as uselessly", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/share", "security_type": "<value>", "server_env_var": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-12-06T23:51:20.681Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-26T16:46:42.146Z"}
+  toolsets#listToolsets:
+    speakeasy-default-toolsets#list-toolsets:
+      responses:
+        "200":
+          application/json: {"toolsets": []}
+  toolsets#updateToolset:
+    speakeasy-default-toolsets#update-toolset:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-10-11T13:18:21.498Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-20T02:33:46.900Z"}
+examplesVersion: 1.0.1
 generatedTests: {}

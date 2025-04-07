@@ -30,7 +30,6 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.environments.environmentsNumberCreateEnvironment({
-    gramProject: "<value>",
     createEnvironmentForm: {
       entries: [
 
@@ -66,7 +65,6 @@ const gram = new GramCore({
 
 async function run() {
   const res = await environmentsEnvironmentsNumberCreateEnvironment(gram, {
-    gramProject: "<value>",
     createEnvironmentForm: {
       entries: [
   
@@ -144,7 +142,6 @@ const gram = new Gram({
 async function run() {
   await gram.environments.environmentsNumberDeleteEnvironment({
     slug: "<value>",
-    gramProject: "<value>",
   });
 
 
@@ -173,7 +170,6 @@ const gram = new GramCore({
 async function run() {
   const res = await environmentsEnvironmentsNumberDeleteEnvironment(gram, {
     slug: "<value>",
-    gramProject: "<value>",
   });
 
   if (!res.ok) {
@@ -241,9 +237,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.environments.environmentsNumberListEnvironments({
-    gramProject: "<value>",
-  });
+  const result = await gram.environments.environmentsNumberListEnvironments();
 
   // Handle the result
   console.log(result);
@@ -270,9 +264,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await environmentsEnvironmentsNumberListEnvironments(gram, {
-    gramProject: "<value>",
-  });
+  const res = await environmentsEnvironmentsNumberListEnvironments(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -353,7 +345,6 @@ const gram = new Gram({
 async function run() {
   const result = await gram.environments.environmentsNumberUpdateEnvironment({
     slug: "<value>",
-    gramProject: "<value>",
     updateEnvironmentRequestBody: {
       entriesToRemove: [
         "<value>",
@@ -391,7 +382,6 @@ const gram = new GramCore({
 async function run() {
   const res = await environmentsEnvironmentsNumberUpdateEnvironment(gram, {
     slug: "<value>",
-    gramProject: "<value>",
     updateEnvironmentRequestBody: {
       entriesToRemove: [
         "<value>",

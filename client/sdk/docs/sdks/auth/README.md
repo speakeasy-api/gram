@@ -30,7 +30,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.auth.authNumberCallback({
-    sharedToken: "Occaecati autem est itaque in veniam.",
+    sharedToken: "<value>",
   });
 
   // Handle the result
@@ -59,7 +59,7 @@ const gram = new GramCore({
 
 async function run() {
   const res = await authAuthNumberCallback(gram, {
-    sharedToken: "Occaecati autem est itaque in veniam.",
+    sharedToken: "<value>",
   });
 
   if (!res.ok) {
@@ -108,8 +108,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.auth.authNumberInfo({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
-    gramSession: "Consequuntur error suscipit optio sunt eum.",
   });
 
   // Handle the result
@@ -134,8 +132,6 @@ const gram = new GramCore();
 async function run() {
   const res = await authAuthNumberInfo(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
-    gramSession: "Consequuntur error suscipit optio sunt eum.",
   });
 
   if (!res.ok) {
@@ -213,8 +209,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.auth.authNumberLogout({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
-    gramSession: "Quibusdam quia ea consequuntur.",
   });
 
   // Handle the result
@@ -239,8 +233,6 @@ const gram = new GramCore();
 async function run() {
   const res = await authAuthNumberLogout(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
-    gramSession: "Quibusdam quia ea consequuntur.",
   });
 
   if (!res.ok) {
@@ -318,10 +310,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.auth.authNumberSwitchScopes({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
-    organizationId: "Beatae in dolor aut illo.",
-    projectId: "Incidunt natus exercitationem est.",
-    gramSession: "Eveniet numquam sint quam.",
   });
 
   // Handle the result
@@ -346,10 +334,6 @@ const gram = new GramCore();
 async function run() {
   const res = await authAuthNumberSwitchScopes(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
-    organizationId: "Beatae in dolor aut illo.",
-    projectId: "Incidunt natus exercitationem est.",
-    gramSession: "Eveniet numquam sint quam.",
   });
 
   if (!res.ok) {

@@ -6,18 +6,19 @@
 import { HTTPToolDefinition } from "@gram/sdk/models/components";
 
 let value: HTTPToolDefinition = {
-  createdAt: new Date("2025-06-27T12:26:18.703Z"),
-  description: "supposing friendly serpentine",
+  createdAt: new Date("2025-03-04T09:26:20.697Z"),
+  description:
+    "winding oh burly lest notwithstanding viciously curiously swathe a atop",
   httpMethod: "<value>",
   id: "<id>",
   name: "<value>",
-  path: "/proc",
+  path: "/opt/share",
   securityType: "<value>",
   serverEnvVar: "<value>",
   tags: [
     "<value>",
   ],
-  updatedAt: new Date("2025-11-13T20:49:26.140Z"),
+  updatedAt: new Date("2023-01-25T17:59:41.729Z"),
 };
 ```
 

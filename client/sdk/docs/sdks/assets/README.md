@@ -27,9 +27,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.assetsNumberUploadOpenAPIv3({
-    contentLength: 7818005087342603000,
-    gramProject: "Consequuntur non dolor iure dolor iste voluptas.",
-    gramSession: "Qui est quas veritatis rerum et.",
+    contentLength: 924456,
   });
 
   // Handle the result
@@ -58,9 +56,7 @@ const gram = new GramCore({
 
 async function run() {
   const res = await assetsAssetsNumberUploadOpenAPIv3(gram, {
-    contentLength: 7818005087342603000,
-    gramProject: "Consequuntur non dolor iure dolor iste voluptas.",
-    gramSession: "Qui est quas veritatis rerum et.",
+    contentLength: 924456,
   });
 
   if (!res.ok) {

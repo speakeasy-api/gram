@@ -3,6 +3,7 @@
  */
 
 export * from "./asset.js";
+export * from "./createcompletionrequest.js";
 export * from "./createdeploymentrequestbody.js";
 export * from "./createdeploymentresult.js";
 export * from "./createenvironmentform.js";
@@ -14,9 +15,9 @@ export * from "./environment.js";
 export * from "./environmententry.js";
 export * from "./environmententryinput.js";
 export * from "./getdeploymentresult.js";
-export * from "./healthcheckresult.js";
 export * from "./httptooldefinition.js";
 export * from "./inforesponsebody.js";
+export * from "./instanceresult.js";
 export * from "./key.js";
 export * from "./listdeploymentresult.js";
 export * from "./listenvironmentsresult.js";

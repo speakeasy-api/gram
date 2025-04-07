@@ -6,21 +6,21 @@
 import { ToolsetDetails } from "@gram/sdk/models/components";
 
 let value: ToolsetDetails = {
-  createdAt: new Date("2024-10-26T14:34:01.576Z"),
+  createdAt: new Date("2023-10-28T12:00:22.380Z"),
   httpTools: [
     {
-      createdAt: new Date("2023-01-22T00:51:28.398Z"),
-      description: "outfit hidden remand whether seriously",
+      createdAt: new Date("2025-06-27T11:17:43.078Z"),
+      description: "so pessimistic woefully gloom",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/usr/sbin",
+      path: "/dev",
       securityType: "<value>",
       serverEnvVar: "<value>",
       tags: [
         "<value>",
       ],
-      updatedAt: new Date("2025-12-05T04:07:03.604Z"),
+      updatedAt: new Date("2025-02-28T16:45:40.183Z"),
     },
   ],
   id: "<id>",
@@ -28,7 +28,7 @@ let value: ToolsetDetails = {
   organizationId: "<id>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2025-07-26T23:03:04.026Z"),
+  updatedAt: new Date("2025-04-23T00:35:17.003Z"),
 };
 ```
 

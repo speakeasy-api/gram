@@ -50,7 +50,9 @@ export const useOrganization = () => {
 
 // Create a separate component for the suspended content
 const AuthContent = ({ children }: { children: React.ReactNode }) => {
-  const session = useSessionInfoSuspense();
+  const session = useSessionInfoSuspense({
+    sessionHeaderGramSession: "" // We are using cookies instead, so this won't get set
+  });
 
   return (
     <SessionContext.Provider value={session.data.result}>

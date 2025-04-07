@@ -29,11 +29,10 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.deployments.deploymentsNumberCreateDeployment({
-    gramSession: "Rerum laborum voluptatum in qui culpa sed.",
     idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
     createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      externalUrl: "Corrupti voluptas corporis dolor nisi.",
+      githubPr: "1234",
       githubRepo: "speakeasyapi/gram",
       githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
     },
@@ -65,11 +64,10 @@ const gram = new GramCore({
 
 async function run() {
   const res = await deploymentsDeploymentsNumberCreateDeployment(gram, {
-    gramSession: "Rerum laborum voluptatum in qui culpa sed.",
     idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
     createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      externalUrl: "Corrupti voluptas corporis dolor nisi.",
+      githubPr: "1234",
       githubRepo: "speakeasyapi/gram",
       githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
     },
@@ -142,8 +140,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.deployments.deploymentsNumberGetDeployment({
-    id: "Dolor minima qui enim aliquam quia.",
-    gramSession: "Nihil error quia aut et sit possimus.",
+    id: "<id>",
   });
 
   // Handle the result
@@ -172,8 +169,7 @@ const gram = new GramCore({
 
 async function run() {
   const res = await deploymentsDeploymentsNumberGetDeployment(gram, {
-    id: "Dolor minima qui enim aliquam quia.",
-    gramSession: "Nihil error quia aut et sit possimus.",
+    id: "<id>",
   });
 
   if (!res.ok) {
@@ -201,8 +197,19 @@ associated utilities.
 
 ```tsx
 import {
-  // Mutation hook for triggering the API call.
-  useDeploymentMutation
+  // Query hooks for fetching data.
+  useDeployment,
+  useDeploymentSuspense,
+
+  // Utility for prefetching data during server-side rendering and in React
+  // Server Components that will be immediately available to client components
+  // using the hooks.
+  prefetchDeployment,
+  
+  // Utilities to invalidate the query cache for this query in response to
+  // mutations and other user actions.
+  invalidateDeployment,
+  invalidateAllDeployment,
 } from "@gram/sdk/react-query/deploymentsDeploymentsNumberGetDeployment.js";
 ```
 
@@ -242,10 +249,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.deployments.deploymentsNumberListDeployments({
-    cursor: "Animi ut nulla aliquam ut.",
-    gramSession: "Odio itaque nemo.",
-  });
+  const result = await gram.deployments.deploymentsNumberListDeployments();
 
   // Handle the result
   console.log(result);
@@ -272,10 +276,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await deploymentsDeploymentsNumberListDeployments(gram, {
-    cursor: "Animi ut nulla aliquam ut.",
-    gramSession: "Odio itaque nemo.",
-  });
+  const res = await deploymentsDeploymentsNumberListDeployments(gram);
 
   if (!res.ok) {
     throw res.error;

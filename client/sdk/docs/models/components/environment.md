@@ -8,12 +8,12 @@ Model representing an environment
 import { Environment } from "@gram/sdk/models/components";
 
 let value: Environment = {
-  createdAt: new Date("2023-05-10T15:05:25.793Z"),
+  createdAt: new Date("2024-12-03T14:12:16.809Z"),
   entries: [
     {
-      createdAt: new Date("2024-12-02T08:28:57.162Z"),
+      createdAt: new Date("2023-07-04T13:38:25.319Z"),
       name: "<value>",
-      updatedAt: new Date("2023-06-07T02:45:53.539Z"),
+      updatedAt: new Date("2023-09-16T02:48:31.195Z"),
       value: "<value>",
     },
   ],
@@ -22,7 +22,7 @@ let value: Environment = {
   organizationId: "<id>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2025-11-01T08:34:16.299Z"),
+  updatedAt: new Date("2025-12-18T14:47:07.379Z"),
 };
 ```
 

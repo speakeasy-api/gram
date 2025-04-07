@@ -7,14 +7,14 @@ import { UploadOpenAPIv3Result } from "@gram/sdk/models/components";
 
 let value: UploadOpenAPIv3Result = {
   asset: {
-    contentLength: 548814,
+    contentLength: 742982,
     contentType: "<value>",
-    createdAt: new Date("2025-02-22T20:20:27.935Z"),
+    createdAt: new Date("2025-07-18T05:10:44.635Z"),
     id: "<id>",
     kind: "unknown",
     sha256: "<value>",
-    updatedAt: new Date("2024-08-20T04:36:26.084Z"),
-    url: "https://punctual-humor.org/",
+    updatedAt: new Date("2023-11-05T23:49:28.974Z"),
+    url: "https://scented-safe.com/",
   },
 };
 ```

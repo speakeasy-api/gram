@@ -5,7 +5,7 @@
 ```typescript
 import { Kind } from "@gram/sdk/models/components";
 
-let value: Kind = "unknown";
+let value: Kind = "openapiv3";
 ```
 
 ## Values

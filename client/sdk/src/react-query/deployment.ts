@@ -3,9 +3,14 @@
  */
 
 import {
-  MutationKey,
-  useMutation,
-  UseMutationResult,
+  InvalidateQueryFilters,
+  QueryClient,
+  QueryFunctionContext,
+  QueryKey,
+  useQuery,
+  UseQueryResult,
+  useSuspenseQuery,
+  UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
 import { deploymentsDeploymentsNumberGetDeployment } from "../funcs/deploymentsDeploymentsNumberGetDeployment.js";
@@ -15,14 +20,13 @@ import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import { MutationHookOptions } from "./_types.js";
+import {
+  QueryHookOptions,
+  SuspenseQueryHookOptions,
+  TupleToPrefixes,
+} from "./_types.js";
 
-export type DeploymentMutationVariables = {
-  request: operations.DeploymentsNumberGetDeploymentRequest;
-  options?: RequestOptions;
-};
-
-export type DeploymentMutationData = components.GetDeploymentResult;
+export type DeploymentQueryData = components.GetDeploymentResult;
 
 /**
  * getDeployment deployments
@@ -30,55 +34,126 @@ export type DeploymentMutationData = components.GetDeploymentResult;
  * @remarks
  * Create a deployment to load tool definitions.
  */
-export function useDeploymentMutation(
-  options?: MutationHookOptions<
-    DeploymentMutationData,
-    Error,
-    DeploymentMutationVariables
-  >,
-): UseMutationResult<
-  DeploymentMutationData,
-  Error,
-  DeploymentMutationVariables
-> {
+export function useDeployment(
+  request: operations.DeploymentsNumberGetDeploymentRequest,
+  options?: QueryHookOptions<DeploymentQueryData>,
+): UseQueryResult<DeploymentQueryData, Error> {
   const client = useGramContext();
-  return useMutation({
-    ...buildDeploymentMutation(client, options),
+  return useQuery({
+    ...buildDeploymentQuery(
+      client,
+      request,
+      options,
+    ),
     ...options,
   });
 }
 
-export function mutationKeyDeployment(): MutationKey {
-  return ["@gram/sdk", "deployments", "deploymentsNumberGetDeployment"];
-}
-
-export function buildDeploymentMutation(
-  client$: GramCore,
-  hookOptions?: RequestOptions,
-): {
-  mutationKey: MutationKey;
-  mutationFn: (
-    variables: DeploymentMutationVariables,
-  ) => Promise<DeploymentMutationData>;
-} {
-  return {
-    mutationKey: mutationKeyDeployment(),
-    mutationFn: function deploymentMutationFn({
+/**
+ * getDeployment deployments
+ *
+ * @remarks
+ * Create a deployment to load tool definitions.
+ */
+export function useDeploymentSuspense(
+  request: operations.DeploymentsNumberGetDeploymentRequest,
+  options?: SuspenseQueryHookOptions<DeploymentQueryData>,
+): UseSuspenseQueryResult<DeploymentQueryData, Error> {
+  const client = useGramContext();
+  return useSuspenseQuery({
+    ...buildDeploymentQuery(
+      client,
       request,
       options,
-    }): Promise<DeploymentMutationData> {
+    ),
+    ...options,
+  });
+}
+
+export function prefetchDeployment(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request: operations.DeploymentsNumberGetDeploymentRequest,
+): Promise<void> {
+  return queryClient.prefetchQuery({
+    ...buildDeploymentQuery(
+      client$,
+      request,
+    ),
+  });
+}
+
+export function setDeploymentData(
+  client: QueryClient,
+  queryKeyBase: [
+    parameters: {
+      id: string;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    },
+  ],
+  data: DeploymentQueryData,
+): DeploymentQueryData | undefined {
+  const key = queryKeyDeployment(...queryKeyBase);
+
+  return client.setQueryData<DeploymentQueryData>(key, data);
+}
+
+export function invalidateDeployment(
+  client: QueryClient,
+  queryKeyBase: TupleToPrefixes<
+    [parameters: {
+      id: string;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
+  >,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: [
+      "@gram/sdk",
+      "deployments",
+      "deploymentsNumberGetDeployment",
+      ...queryKeyBase,
+    ],
+  });
+}
+
+export function invalidateAllDeployment(
+  client: QueryClient,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: ["@gram/sdk", "deployments", "deploymentsNumberGetDeployment"],
+  });
+}
+
+export function buildDeploymentQuery(
+  client$: GramCore,
+  request: operations.DeploymentsNumberGetDeploymentRequest,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (context: QueryFunctionContext) => Promise<DeploymentQueryData>;
+} {
+  return {
+    queryKey: queryKeyDeployment({
+      id: request.id,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function deploymentQueryFn(
+      ctx,
+    ): Promise<DeploymentQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
       const mergedOptions = {
-        ...hookOptions,
         ...options,
-        fetchOptions: {
-          ...hookOptions?.fetchOptions,
-          ...options?.fetchOptions,
-          signal: combineSignals(
-            hookOptions?.fetchOptions?.signal,
-            options?.fetchOptions?.signal,
-          ),
-        },
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
+
       return unwrapAsync(deploymentsDeploymentsNumberGetDeployment(
         client$,
         request,
@@ -86,4 +161,19 @@ export function buildDeploymentMutation(
       ));
     },
   };
+}
+
+export function queryKeyDeployment(
+  parameters: {
+    id: string;
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
+): QueryKey {
+  return [
+    "@gram/sdk",
+    "deployments",
+    "deploymentsNumberGetDeployment",
+    parameters,
+  ];
 }

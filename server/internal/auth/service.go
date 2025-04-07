@@ -111,6 +111,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	}
 	return &gen.LogoutResult{SessionCookie: ""}, nil
 }
+
 func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.InfoResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {

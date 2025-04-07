@@ -12,7 +12,9 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.system.systemNumberHealthCheck();
+  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+    contentLength: 924456,
+  });
 
   // Handle the result
   console.log(result);

@@ -31,15 +31,8 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.toolsets.toolsetsNumberCreateToolset({
-    gramSession: "Quis numquam exercitationem earum vel eveniet culpa.",
-    gramProject: "Nam dolorem ipsum.",
     createToolsetRequestBody: {
-      description: "Blanditiis qui mollitia molestias iste mollitia consequatur.",
-      httpToolIds: [
-        "Ipsa minus quo nihil.",
-        "Et veritatis totam.",
-      ],
-      name: "Optio est.",
+      name: "<value>",
     },
   });
 
@@ -69,15 +62,8 @@ const gram = new GramCore({
 
 async function run() {
   const res = await toolsetsToolsetsNumberCreateToolset(gram, {
-    gramSession: "Quis numquam exercitationem earum vel eveniet culpa.",
-    gramProject: "Nam dolorem ipsum.",
     createToolsetRequestBody: {
-      description: "Blanditiis qui mollitia molestias iste mollitia consequatur.",
-      httpToolIds: [
-        "Ipsa minus quo nihil.",
-        "Et veritatis totam.",
-      ],
-      name: "Optio est.",
+      name: "<value>",
     },
   });
 
@@ -149,7 +135,6 @@ const gram = new Gram({
 async function run() {
   await gram.toolsets.toolsetsNumberDeleteToolset({
     slug: "<value>",
-    gramProject: "<value>",
   });
 
 
@@ -178,7 +163,6 @@ const gram = new GramCore({
 async function run() {
   const res = await toolsetsToolsetsNumberDeleteToolset(gram, {
     slug: "<value>",
-    gramProject: "<value>",
   });
 
   if (!res.ok) {
@@ -248,8 +232,6 @@ const gram = new Gram({
 async function run() {
   const result = await gram.toolsets.toolsetsNumberGetToolsetDetails({
     slug: "<value>",
-    gramSession: "Rerum rem ducimus.",
-    gramProject: "Est molestiae omnis ducimus ut et delectus.",
   });
 
   // Handle the result
@@ -279,8 +261,6 @@ const gram = new GramCore({
 async function run() {
   const res = await toolsetsToolsetsNumberGetToolsetDetails(gram, {
     slug: "<value>",
-    gramSession: "Rerum rem ducimus.",
-    gramProject: "Est molestiae omnis ducimus ut et delectus.",
   });
 
   if (!res.ok) {
@@ -360,10 +340,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.toolsets.toolsetsNumberListToolsets({
-    gramSession: "Alias totam non aliquam maxime.",
-    gramProject: "Consequatur recusandae non tenetur rem.",
-  });
+  const result = await gram.toolsets.toolsetsNumberListToolsets();
 
   // Handle the result
   console.log(result);
@@ -390,10 +367,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await toolsetsToolsetsNumberListToolsets(gram, {
-    gramSession: "Alias totam non aliquam maxime.",
-    gramProject: "Consequatur recusandae non tenetur rem.",
-  });
+  const res = await toolsetsToolsetsNumberListToolsets(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -474,20 +448,7 @@ const gram = new Gram({
 async function run() {
   const result = await gram.toolsets.toolsetsNumberUpdateToolset({
     slug: "<value>",
-    gramSession: "Omnis reprehenderit.",
-    gramProject: "Veritatis quaerat sit et.",
-    updateToolsetRequestBody: {
-      description: "Iste optio ullam.",
-      httpToolIdsToAdd: [
-        "Animi tenetur nesciunt et est et.",
-        "Nam quis.",
-      ],
-      httpToolIdsToRemove: [
-        "Animi sequi.",
-        "Amet sapiente.",
-      ],
-      name: "Soluta fuga.",
-    },
+    updateToolsetRequestBody: {},
   });
 
   // Handle the result
@@ -517,20 +478,7 @@ const gram = new GramCore({
 async function run() {
   const res = await toolsetsToolsetsNumberUpdateToolset(gram, {
     slug: "<value>",
-    gramSession: "Omnis reprehenderit.",
-    gramProject: "Veritatis quaerat sit et.",
-    updateToolsetRequestBody: {
-      description: "Iste optio ullam.",
-      httpToolIdsToAdd: [
-        "Animi tenetur nesciunt et est et.",
-        "Nam quis.",
-      ],
-      httpToolIdsToRemove: [
-        "Animi sequi.",
-        "Amet sapiente.",
-      ],
-      name: "Soluta fuga.",
-    },
+    updateToolsetRequestBody: {},
   });
 
   if (!res.ok) {

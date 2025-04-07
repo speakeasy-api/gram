@@ -20,7 +20,7 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/sdk/core.js";
-import { systemSystemNumberHealthCheck } from "@gram/sdk/funcs/systemSystemNumberHealthCheck.js";
+import { assetsAssetsNumberUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsAssetsNumberUploadOpenAPIv3.js";
 import { SDKValidationError } from "@gram/sdk/models/errors/sdkvalidationerror.js";
 
 // Use `GramCore` for best tree-shaking performance.
@@ -33,7 +33,9 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await systemSystemNumberHealthCheck(gram);
+  const res = await assetsAssetsNumberUploadOpenAPIv3(gram, {
+    contentLength: 924456,
+  });
 
   switch (true) {
     case res.ok:

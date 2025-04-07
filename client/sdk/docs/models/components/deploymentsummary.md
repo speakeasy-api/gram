@@ -6,8 +6,8 @@
 import { DeploymentSummary } from "@gram/sdk/models/components";
 
 let value: DeploymentSummary = {
-  assetCount: 461479,
-  createdAt: new Date("2025-05-05T11:02:22.031Z"),
+  assetCount: 986195,
+  createdAt: new Date("2024-10-20T13:37:09.806Z"),
   id: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
   userId: "<id>",
 };

@@ -60,6 +60,10 @@ export type GetDeploymentResult = {
    */
   projectId: string;
   /**
+   * The status of the deployment.
+   */
+  status: string;
+  /**
    * The ID of the user that created the deployment.
    */
   userId: string;
@@ -82,6 +86,7 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
   openapiv3_assets: z.array(OpenAPIv3DeploymentAsset$inboundSchema),
   organization_id: z.string(),
   project_id: z.string(),
+  status: z.string(),
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -112,6 +117,7 @@ export type GetDeploymentResult$Outbound = {
   openapiv3_assets: Array<OpenAPIv3DeploymentAsset$Outbound>;
   organization_id: string;
   project_id: string;
+  status: string;
   user_id: string;
 };
 
@@ -132,6 +138,7 @@ export const GetDeploymentResult$outboundSchema: z.ZodType<
   openapiv3Assets: z.array(OpenAPIv3DeploymentAsset$outboundSchema),
   organizationId: z.string(),
   projectId: z.string(),
+  status: z.string(),
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
