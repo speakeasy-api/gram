@@ -323,17 +323,9 @@ func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, d
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *gen.Deployment) (string, error) {
 	span := trace.SpanFromContext(ctx)
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return "", oops.E(err, "unexpected database error", "failed to begin database transaction").Log(ctx, logger)
-	}
-	defer dbtx.Rollback(ctx)
-
-	tx := s.repo.WithTx(dbtx)
-
 	status := ""
-	if err := s.processDeployment(ctx, tx, dep); err != nil {
-		if _, err := tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+	if err := s.processDeployment(ctx, dep); err != nil {
+		if _, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
 			DeploymentID: deploymentID,
 			ProjectID:    projectID,
 			Status:       "failed",
@@ -346,7 +338,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 		span.AddEvent("deployment_failed")
 		status = "failed"
 	} else {
-		if _, err := tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+		if _, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
 			DeploymentID: deploymentID,
 			ProjectID:    projectID,
 			Status:       "completed",
@@ -360,14 +352,10 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 		status = "completed"
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return "", oops.E(err, "unexpected database error", "failed to commit database transaction").Log(ctx, logger)
-	}
-
 	return status, nil
 }
 
-func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deployment *gen.Deployment) error {
+func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deployment) error {
 	logger := s.logger.With(
 		slog.String("deployment_id", deployment.ID),
 		slog.String("project_id", deployment.ProjectID),
@@ -383,7 +371,7 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 		return oops.E(err, "error parsing project id", "failed to parse project id").Log(ctx, logger)
 	}
 
-	_, err = tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+	_, err = s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
 		DeploymentID: deploymentID,
 		ProjectID:    projectID,
 		Status:       "pending",
@@ -394,19 +382,19 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 		return oops.E(err, "error logging deployment event", "failed to mark deployment as created").Log(ctx, logger)
 	}
 
-	workers := pool.NewWithResults[[]repo.CreateOpenAPIv3ToolDefinitionParams]().WithErrors()
-	for _, a := range deployment.Openapiv3Assets {
+	workers := pool.New().WithErrors().WithMaxGoroutines(2)
+	for _, docInfo := range deployment.Openapiv3Assets {
 		logger = s.logger.With(
-			slog.String("openapi_id", a.ID),
-			slog.String("asset_id", a.AssetID),
+			slog.String("openapi_id", docInfo.ID),
+			slog.String("asset_id", docInfo.AssetID),
 		)
 
-		openapiDocID, err := uuid.Parse(a.ID)
+		openapiDocID, err := uuid.Parse(docInfo.ID)
 		if err != nil {
 			return oops.E(err, "error parsing openapi document id", "failed to parse openapi document id").Log(ctx, logger)
 		}
 
-		assetID, err := uuid.Parse(a.AssetID)
+		assetID, err := uuid.Parse(docInfo.AssetID)
 		if err != nil {
 			return oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, logger)
 		}
@@ -424,29 +412,33 @@ func (s *Service) processDeployment(ctx context.Context, tx *repo.Queries, deplo
 			return oops.E(err, "error parsing asset URL", "failed to parse asset URL").Log(ctx, logger)
 		}
 
-		workers.Go(func() ([]repo.CreateOpenAPIv3ToolDefinitionParams, error) {
-			val, err := s.processOpenAPIv3Document(ctx, logger, tx, projectID, deploymentID, openapiDocID, u, a)
-			if err == nil {
-				trace.SpanFromContext(ctx).AddEvent("openapiv3_processed", trace.WithAttributes(attribute.Int("tools", len(val))))
+		workers.Go(func() error {
+			dbtx, err := s.db.Begin(ctx)
+			if err != nil {
+				return oops.E(err, "unexpected database error", "failed to begin database transaction").Log(ctx, logger)
 			}
-			return val, err
+			defer dbtx.Rollback(ctx)
+
+			tx := s.repo.WithTx(dbtx)
+
+			processErr := s.processOpenAPIv3Document(ctx, logger, tx, openapiV3Task{
+				projectID:    projectID,
+				deploymentID: deploymentID,
+				openapiDocID: openapiDocID,
+				docInfo:      docInfo,
+				docURL:       u,
+			})
+
+			if err := dbtx.Commit(ctx); err != nil {
+				return oops.E(err, "unexpected database error", "failed to commit database transaction").Log(ctx, logger)
+			}
+
+			if processErr == nil {
+				trace.SpanFromContext(ctx).AddEvent("openapiv3_processed")
+			}
+			return processErr
 		})
 	}
 
-	results, err := workers.Wait()
-	if err != nil {
-		return err
-	}
-
-	total := 0
-	for _, r := range results {
-		total += len(r)
-		for _, params := range r {
-			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, params); err != nil {
-				return oops.E(err, "error creating openapi v3 tool definition", "failed to create openapi v3 tool definition").Log(ctx, logger)
-			}
-		}
-	}
-
-	return nil
+	return workers.Wait()
 }

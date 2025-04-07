@@ -127,6 +127,7 @@ INSERT INTO http_tool_definitions (
   , summary
   , description
   , tags
+  , security
   , http_method
   , path
   , schema_version
@@ -140,6 +141,7 @@ INSERT INTO http_tool_definitions (
   , @summary
   , @description
   , @tags
+  , @security
   , @http_method
   , @path
   , @schema_version

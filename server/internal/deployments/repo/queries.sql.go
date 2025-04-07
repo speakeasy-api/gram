@@ -181,6 +181,7 @@ INSERT INTO http_tool_definitions (
   , summary
   , description
   , tags
+  , security
   , http_method
   , path
   , schema_version
@@ -198,6 +199,7 @@ INSERT INTO http_tool_definitions (
   , $10
   , $11
   , $12
+  , $13
 )
 RETURNING id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
 `
@@ -211,6 +213,7 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	Summary             string
 	Description         string
 	Tags                []string
+	Security            []byte
 	HttpMethod          string
 	Path                string
 	SchemaVersion       string
@@ -227,6 +230,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.Summary,
 		arg.Description,
 		arg.Tags,
+		arg.Security,
 		arg.HttpMethod,
 		arg.Path,
 		arg.SchemaVersion,

@@ -57,7 +57,6 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 				Description:         def.Description,
 				Openapiv3Operation:  conv.FromPGText(def.Openapiv3Operation),
 				Tags:                def.Tags,
-				ServerEnvVar:        conv.FromPGText(def.ServerEnvVar),
 				Security:            conv.FromBytes(def.Security),
 				HTTPMethod:          def.HttpMethod,
 				Path:                def.Path,

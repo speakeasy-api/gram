@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -26,7 +27,7 @@ func TraceMethods(tracer trace.Tracer) func(goa.Endpoint) goa.Endpoint {
 
 			val, err := next(ctx, req)
 			if err != nil {
-				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return nil, err
 			}
 

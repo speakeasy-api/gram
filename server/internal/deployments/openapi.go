@@ -12,17 +12,20 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"gopkg.in/yaml.v3"
+
 	gen "github.com/speakeasy-api/gram/gen/deployments"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/orderedmap"
 	"github.com/speakeasy-api/gram/internal/tools"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -34,18 +37,41 @@ var (
 	}
 )
 
-func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Logger, tx *repo.Queries, projectID uuid.UUID, deploymentID uuid.UUID, openapiDocID uuid.UUID, docURL *url.URL, docInfo *gen.OpenAPIv3DeploymentAsset) ([]repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+type openapiV3Task struct {
+	projectID    uuid.UUID
+	deploymentID uuid.UUID
+	openapiDocID uuid.UUID
+	docInfo      *gen.OpenAPIv3DeploymentAsset
+	docURL       *url.URL
+}
+
+func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Logger, tx *repo.Queries, task openapiV3Task) error {
+	docURL := task.docURL
+	projectID := task.projectID
+	deploymentID := task.deploymentID
+	openapiDocID := task.openapiDocID
+	docInfo := task.docInfo
+	if err := inv.Check("processOpenAPIv3Document",
+		"doc url set", docURL != nil,
+		"project id set", projectID != uuid.Nil,
+		"deployment id set", deploymentID != uuid.Nil,
+		"openapi doc id set", openapiDocID != uuid.Nil,
+		"doc info set", docInfo != nil && docInfo.Name != "" && docInfo.Slug != "",
+	); err != nil {
+		return err
+	}
+
 	rc, err := s.assetStorage.Read(ctx, docURL.Path)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to fetch openapi document", slog.String("error", err.Error()))
-		return nil, s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error fetching openapi document")
+		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error fetching openapi document")
 	}
 	defer rc.Close()
 
 	doc, err := io.ReadAll(rc)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to read openapi document", slog.String("error", err.Error()))
-		return nil, s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error reading openapi document")
+		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error reading openapi document")
 	}
 
 	document, err := libopenapi.NewDocumentWithConfiguration(doc, &datamodel.DocumentConfiguration{
@@ -56,15 +82,58 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to open openapi document", slog.String("error", err.Error()))
-		return nil, s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error opening openapi document")
+		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error opening openapi document")
 	}
 
 	v3Model, errs := document.BuildV3Model()
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("OpenAPI v3 document %s had %d errors: %s", docInfo.Name, len(errs), errors.Join(errs...))
+		return fmt.Errorf("OpenAPI v3 document '%s' had %d errors: %s", docInfo.Name, len(errs), errors.Join(errs...))
 	}
 
-	defs := []repo.CreateOpenAPIv3ToolDefinitionParams{}
+	globalSecurity, err := serializeSecurity(v3Model.Model.Security)
+	if err != nil {
+		return fmt.Errorf("error serializing global security: %w", err)
+	}
+
+	securitySchemesParams, errs := securitySchemesFromOpenAPIv3(ctx, logger, v3Model.Model, task)
+	if len(errs) > 0 {
+		for _, err := range errs {
+			if logErr := s.logDeploymentError(
+				ctx,
+				logger,
+				tx,
+				projectID,
+				deploymentID,
+				fmt.Sprintf("%s: error parsing security schemes: %s", docInfo.Name, err.Error()),
+			); logErr != nil {
+				logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
+			}
+		}
+	}
+
+	var writeErrCount int
+	var writeErr error
+	securitySchemes := make(map[string]repo.HttpSecurity, len(securitySchemesParams))
+	for key, scheme := range securitySchemesParams {
+		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
+		if err != nil {
+			if logErr := s.logDeploymentError(
+				ctx,
+				logger,
+				tx,
+				projectID,
+				deploymentID,
+				fmt.Sprintf("%s: error parsing security scheme: %s", docInfo.Name, err.Error()),
+			); logErr != nil {
+				logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
+			}
+
+			return fmt.Errorf("%s: error saving security scheme: %w", docInfo.Name, err)
+		}
+
+		securitySchemes[key] = sec
+	}
+
 	for path, pitem := range v3Model.Model.Paths.PathItems.FromOldest() {
 		ops := []openapiV3Operation{
 			{method: "GET", operation: pitem.Get},
@@ -82,7 +151,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 				continue
 			}
 
-			def, err := toolDefFromOpenAPIv3(ctx, logger, tx, op.method, path, op.operation, sharedParameters, projectID, deploymentID, openapiDocID, docInfo)
+			def, err := toolDefFromOpenAPIv3(ctx, logger, tx, op.method, path, op.operation, globalSecurity, sharedParameters, task)
 			if err != nil {
 				if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
 					DeploymentID: deploymentID,
@@ -96,11 +165,18 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 				continue
 			}
 
-			defs = append(defs, def)
+			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, def); err != nil {
+				writeErr = err
+				writeErrCount++
+			}
 		}
 	}
 
-	return defs, nil
+	if writeErrCount > 0 {
+		return fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr)
+	}
+
+	return nil
 }
 
 type openapiV3Operation struct {
@@ -109,16 +185,17 @@ type openapiV3Operation struct {
 	operation *v3.Operation
 }
 
-func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, method string, path string, op *v3.Operation, sharedParameters []*v3.Parameter, projectID uuid.UUID, deploymentID uuid.UUID, openapiDocID uuid.UUID, docInfo *gen.OpenAPIv3DeploymentAsset) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, method string, path string, op *v3.Operation, globalSecurity []byte, sharedParameters []*v3.Parameter, task openapiV3Task) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+	projectID := task.projectID
+	deploymentID := task.deploymentID
+	openapiDocID := task.openapiDocID
+	docInfo := task.docInfo
+
 	switch {
 	case op.OperationId == "":
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("operation id is required [line: %d]", op.GoLow().KeyNode.Line)
 	case len(op.Servers) > 0:
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("per-operation servers are not currently supported [line: %d]", op.GoLow().Servers.NodeLineNumber())
-	// case len(op.Security) == 1 && op.Security[0].Requirements.Len() == 1 && op.Security[0].ContainsEmptyRequirement:
-	// 	// This operation is public so we can allow it
-	// case len(op.Security) > 0:
-	// 	return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("per-operation security is not currently supported [line: %d]", op.GoLow().Security.NodeLineNumber())
 	case op.Deprecated != nil && *op.Deprecated:
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("operation is deprecated [line: %d]", op.GoLow().Deprecated.NodeLineNumber())
 	}
@@ -189,10 +266,26 @@ func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Que
 		}
 	}
 
+	security, err := serializeSecurity(op.Security)
+	if err != nil {
+		low := op.GoLow()
+		loc := "-"
+		if low.Security.KeyNode != nil {
+			loc = fmt.Sprintf("%d:%d", low.Security.KeyNode.Line, low.Security.KeyNode.Column)
+		}
+
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error serializing operation security [%s]: %w", loc, err)
+	}
+
+	if len(security) == 0 {
+		security = globalSecurity
+	}
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
 		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+		Security:            security,
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),
 		Openapiv3Operation:  conv.ToPGText(op.OperationId),
@@ -355,6 +448,77 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 	}
 
 	return &obj, spec, nil
+}
+
+func serializeSecurity(security []*base.SecurityRequirement) ([]byte, error) {
+	if len(security) == 0 {
+		return nil, nil
+	}
+
+	acc := make([]map[string][]string, 0, len(security))
+	for _, group := range security {
+		if group.ContainsEmptyRequirement {
+			acc = append(acc, make(map[string][]string))
+			continue
+		}
+
+		req := make(map[string][]string, group.Requirements.Len())
+		for key, val := range group.Requirements.FromOldest() {
+			req[key] = append([]string{}, val...)
+		}
+
+		acc = append(acc, req)
+	}
+
+	return json.Marshal(acc)
+}
+
+func securitySchemesFromOpenAPIv3(ctx context.Context, logger *slog.Logger, doc v3.Document, task openapiV3Task) (map[string]*repo.CreateHTTPSecurityParams, []error) {
+	slug := task.docInfo.Slug
+	if doc.Components == nil || doc.Components.SecuritySchemes == nil || doc.Components.SecuritySchemes.Len() == 0 {
+		return nil, nil
+	}
+
+	var errs []error
+
+	res := make(map[string]*repo.CreateHTTPSecurityParams)
+	for key, sec := range doc.Components.SecuritySchemes.FromOldest() {
+		low := sec.GoLow()
+		line, col := low.KeyNode.Line, low.KeyNode.Column
+		var envvars []string
+
+		switch sec.Type {
+		case "apiKey":
+			envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key))
+		case "http":
+			switch sec.Scheme {
+			case "bearer":
+				envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key))
+			case "basic":
+				envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_USERNAME"))
+				envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_PASSWORD"))
+			default:
+				errs = append(errs, fmt.Errorf("%s (%d:%d) unsupported http security scheme: %s", key, line, col, sec.Scheme))
+				continue
+			}
+		default:
+			errs = append(errs, fmt.Errorf("%s (%d:%d) unsupported security scheme type: %s", key, line, col, sec.Type))
+			continue
+		}
+
+		res[key] = &repo.CreateHTTPSecurityParams{
+			Key:          key,
+			DeploymentID: task.deploymentID,
+			Type:         sec.Type,
+			Name:         key,
+			InPlacement:  sec.In,
+			Scheme:       conv.ToPGText(sec.Scheme),
+			BearerFormat: conv.ToPGText(sec.BearerFormat),
+			EnvVariables: envvars,
+		}
+	}
+
+	return res, errs
 }
 
 func extractJSONSchemaFromYaml(name string, schemaProxy *base.SchemaProxy) ([]byte, error) {

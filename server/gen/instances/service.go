@@ -95,9 +95,7 @@ type HTTPToolDefinition struct {
 	Openapiv3Operation *string
 	// The tags list for this http tool
 	Tags []string
-	// Environment variable for the server URL
-	ServerEnvVar *string
-	// Security configuration in JSON format
+	// Security requirements for the underlying HTTP endpoint
 	Security *string
 	// HTTP method for the request
 	HTTPMethod string

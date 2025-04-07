@@ -47,9 +47,7 @@ type HTTPToolDefinitionResponseBody struct {
 	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
 	// The tags list for this http tool
 	Tags []string `form:"tags" json:"tags" xml:"tags"`
-	// Environment variable for the server URL
-	ServerEnvVar *string `form:"server_env_var,omitempty" json:"server_env_var,omitempty" xml:"server_env_var,omitempty"`
-	// Security configuration in JSON format
+	// Security requirements for the underlying HTTP endpoint
 	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
 	// HTTP method for the request
 	HTTPMethod string `form:"http_method" json:"http_method" xml:"http_method"`

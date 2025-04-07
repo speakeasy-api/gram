@@ -881,7 +881,7 @@ load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances load-instance --toolset-slug "Nam odio veniam nisi." --environment-slug "Harum id." --session-token "Sunt non et dolores qui facere necessitatibus." --project-slug "Nam ut." --apikey-token "Et quod eligendi omnis voluptate laboriosam porro."
+    %[1]s instances load-instance --toolset-slug "Quis inventore cumque cupiditate." --environment-slug "Veritatis consectetur nam odio veniam nisi perspiciatis." --session-token "Id impedit sunt non et dolores." --project-slug "Facere necessitatibus aut." --apikey-token "Ut quidem."
 `, os.Args[0])
 }
 
@@ -912,14 +912,14 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_id": "Et asperiores.",
-      "description": "Voluptates dignissimos quis sequi distinctio veritatis.",
+      "default_environment_id": "Nulla corrupti voluptas.",
+      "description": "Voluptatem hic distinctio consectetur commodi eos soluta.",
       "http_tool_names": [
-         "Hic distinctio consectetur commodi.",
-         "Soluta pariatur excepturi."
+         "Nostrum et asperiores.",
+         "Est harum animi esse unde molestiae iure."
       ],
-      "name": "Soluta nobis."
-   }' --session-token "Est harum animi esse unde molestiae iure." --project-slug "Nulla corrupti voluptas."
+      "name": "Voluptates dignissimos quis sequi distinctio veritatis."
+   }' --session-token "Optio et delectus consectetur." --project-slug "Illo enim."
 `, os.Args[0])
 }
 
@@ -931,7 +931,7 @@ List all toolsets for a project
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Exercitationem in." --project-slug "Dicta doloribus eius nostrum rerum."
+    %[1]s toolsets list-toolsets --session-token "Hic est excepturi quasi libero mollitia." --project-slug "Autem ut et voluptatem corrupti sequi."
 `, os.Args[0])
 }
 
@@ -946,21 +946,21 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "default_environment_id": "Quo unde sed distinctio aliquam aut.",
-      "description": "Eaque magni vitae.",
+      "default_environment_id": "Reprehenderit fugiat temporibus reprehenderit.",
+      "description": "Placeat aut nam nostrum alias.",
       "http_tool_names_to_add": [
-         "Mollitia perspiciatis totam.",
-         "Placeat aut nam nostrum alias.",
-         "Reprehenderit fugiat temporibus reprehenderit."
-      ],
-      "http_tool_names_to_remove": [
          "Dolores sit laboriosam et.",
          "Rerum ea.",
          "Nihil omnis a dignissimos rerum nostrum non.",
          "Voluptas quo vitae amet voluptatum illum aut."
       ],
-      "name": "Ut et nam dolorum commodi consectetur."
-   }' --slug "Dolorem officiis quaerat voluptatem recusandae." --session-token "Similique dolor dolorum." --project-slug "Praesentium nemo in quos quasi."
+      "http_tool_names_to_remove": [
+         "Officiis quaerat voluptatem recusandae ut similique dolor.",
+         "Sint praesentium nemo in quos quasi.",
+         "Asperiores eaque aut minus."
+      ],
+      "name": "Aliquam aut vero dolore mollitia perspiciatis totam."
+   }' --slug "Hic tempora." --session-token "Veniam architecto dolorem accusamus non et provident." --project-slug "Sit aut sapiente ipsam."
 `, os.Args[0])
 }
 
@@ -973,7 +973,7 @@ Delete a toolset by its ID
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "Officia ipsa." --session-token "Placeat maiores et eos." --project-slug "Et sit ut debitis eum rerum."
+    %[1]s toolsets delete-toolset --slug "Facere assumenda." --session-token "Soluta distinctio ut maiores nihil ut." --project-slug "Culpa architecto debitis hic recusandae officiis voluptatem."
 `, os.Args[0])
 }
 
@@ -986,6 +986,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --slug "Non nam." --session-token "Aut corporis ratione quibusdam." --project-slug "Assumenda sed soluta distinctio ut maiores."
+    %[1]s toolsets get-toolset-details --slug "Laborum sed sit distinctio quam." --session-token "Molestiae eveniet recusandae sapiente non." --project-slug "Hic illum ea repudiandae eius harum libero."
 `, os.Args[0])
 }

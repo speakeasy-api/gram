@@ -124,7 +124,6 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 			Description:         tool.Description,
 			Openapiv3Operation:  tool.Openapiv3Operation,
 			Tags:                tool.Tags,
-			ServerEnvVar:        tool.ServerEnvVar,
 			Security:            tool.Security,
 			HTTPMethod:          tool.HTTPMethod,
 			Path:                tool.Path,

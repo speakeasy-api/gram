@@ -1327,10 +1327,7 @@ components:
                     description: Version of the schema
                 security:
                     type: string
-                    description: Security configuration in JSON format
-                server_env_var:
-                    type: string
-                    description: Environment variable for the server URL
+                    description: Security requirements for the underlying HTTP endpoint
                 summary:
                     type: string
                     description: Summary of the tool

@@ -14,6 +14,7 @@ require (
 	cloud.google.com/go/storage v1.51.0
 	github.com/KimMachineGun/automemlimit v0.7.1
 	github.com/charmbracelet/log v0.4.0
+	github.com/ettle/strcase v0.2.0
 	github.com/go-redis/cache/v9 v9.0.0
 	github.com/pb33f/libopenapi v0.21.8
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10

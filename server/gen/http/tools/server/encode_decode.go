@@ -82,7 +82,6 @@ func marshalToolsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *tools.HTT
 		Summary:             v.Summary,
 		Description:         v.Description,
 		Openapiv3Operation:  v.Openapiv3Operation,
-		ServerEnvVar:        v.ServerEnvVar,
 		Security:            v.Security,
 		HTTPMethod:          v.HTTPMethod,
 		Path:                v.Path,
