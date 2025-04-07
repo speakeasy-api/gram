@@ -174,13 +174,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   server_env_var text,
-  security_type text CHECK (
-    security_type IN ('http:bearer', 'http:basic', 'apikey')
-  ),
-  bearer_env_var text,
-  apikey_env_var text,
-  username_env_var text,
-  password_env_var text,
+  security jsonb,
 
   http_method text NOT NULL,
   path text NOT NULL,
