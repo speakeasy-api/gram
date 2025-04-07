@@ -35,6 +35,7 @@ type Service struct {
 	repo            *repo.Queries
 	environmentRepo *environments_repo.Queries
 	auth            *auth.Auth
+	toolsets        *Toolsets
 }
 
 var _ gen.Service = &Service{}
@@ -47,6 +48,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client
 		repo:            repo.New(db),
 		auth:            auth.New(logger, db, redisClient),
 		environmentRepo: environments_repo.New(db),
+		toolsets:        NewToolsets(db),
 	}
 }
 
@@ -264,58 +266,7 @@ func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolset
 		return nil, errors.New("project ID not found in context")
 	}
 
-	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
-		Slug:      payload.Slug,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var httpTools []*gen.HTTPToolDefinition
-	if len(toolset.HttpToolNames) > 0 {
-		definitions, err := s.repo.GetHTTPToolDefinitionsForToolset(ctx, repo.GetHTTPToolDefinitionsForToolsetParams{
-			ProjectID: *authCtx.ProjectID,
-			Names:     toolset.HttpToolNames,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		httpTools = make([]*gen.HTTPToolDefinition, len(definitions))
-		for i, def := range definitions {
-			httpTools[i] = &gen.HTTPToolDefinition{
-				ID:             def.ID.String(),
-				Name:           def.Name,
-				Description:    def.Description,
-				Tags:           def.Tags,
-				ServerEnvVar:   conv.FromPGText(def.ServerEnvVar),
-				SecurityType:   conv.FromPGText(def.SecurityType),
-				BearerEnvVar:   conv.FromPGText(def.BearerEnvVar),
-				ApikeyEnvVar:   conv.FromPGText(def.ApikeyEnvVar),
-				UsernameEnvVar: conv.FromPGText(def.UsernameEnvVar),
-				PasswordEnvVar: conv.FromPGText(def.PasswordEnvVar),
-				HTTPMethod:     def.HttpMethod,
-				Path:           def.Path,
-				Schema:         conv.FromBytes(def.Schema),
-				CreatedAt:      def.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:      def.UpdatedAt.Time.Format(time.RFC3339),
-			}
-		}
-	}
-
-	return &gen.ToolsetDetails{
-		ID:                   toolset.ID.String(),
-		OrganizationID:       toolset.OrganizationID,
-		ProjectID:            toolset.ProjectID.String(),
-		Name:                 toolset.Name,
-		Slug:                 toolset.Slug,
-		DefaultEnvironmentID: conv.FromNullableUUID(toolset.DefaultEnvironmentID),
-		Description:          conv.FromPGText(toolset.Description),
-		HTTPTools:            httpTools,
-		CreatedAt:            toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            toolset.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	return s.toolsets.LoadToolsetDetails(ctx, payload.Slug, *authCtx.ProjectID)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

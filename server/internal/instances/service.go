@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -20,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
-	toolsets_repo "github.com/speakeasy-api/gram/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
 type Service struct {
@@ -28,7 +29,7 @@ type Service struct {
 	logger           *slog.Logger
 	db               *pgxpool.Pool
 	auth             *auth.Auth
-	toolsetsRepo     *toolsets_repo.Queries
+	toolset          *toolsets.Toolsets
 	environmentsRepo *environments_repo.Queries
 }
 
@@ -40,7 +41,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client
 		logger:           logger,
 		db:               db,
 		auth:             auth.New(logger, db, redisClient),
-		toolsetsRepo:     toolsets_repo.New(db),
+		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: environments_repo.New(db),
 	}
 }
@@ -59,15 +60,12 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 		return nil, errors.New("project ID is required")
 	}
 
-	toolset, err := s.toolsetsRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      payload.ToolsetSlug,
-	})
+	toolset, err := s.toolset.LoadToolsetDetails(ctx, payload.ToolsetSlug, *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
-	if !toolset.DefaultEnvironmentID.Valid && payload.EnvironmentSlug != nil {
+	if toolset.DefaultEnvironmentID == nil && payload.EnvironmentSlug == nil {
 		return nil, errors.New("an environment must be provided to use this toolset")
 	}
 
@@ -80,7 +78,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 	} else {
 		envModel, err = s.environmentsRepo.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
 			ProjectID: *authCtx.ProjectID,
-			ID:        toolset.DefaultEnvironmentID.UUID,
+			ID:        uuid.MustParse(*toolset.DefaultEnvironmentID),
 		})
 	}
 	if err != nil {
@@ -96,7 +94,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 	for i, entry := range environmentEntries {
 		genEntries[i] = &gen.EnvironmentEntry{
 			Name:      entry.Name,
-			Value:     entry.Value,
+			Value:     "", // We don't respond with the actual security value on load
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -114,32 +112,24 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 		UpdatedAt:      envModel.UpdatedAt.Time.Format(time.RFC3339),
 	}
 
-	definitions, err := s.toolsetsRepo.GetHTTPToolDefinitionsForToolset(ctx, toolsets_repo.GetHTTPToolDefinitionsForToolsetParams{
-		ProjectID: *authCtx.ProjectID,
-		Names:     toolset.HttpToolNames,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	httpTools := make([]*gen.HTTPToolDefinition, len(definitions))
-	for i, def := range definitions {
+	httpTools := make([]*gen.HTTPToolDefinition, len(toolset.HTTPTools))
+	for i, tool := range toolset.HTTPTools {
 		httpTools[i] = &gen.HTTPToolDefinition{
-			ID:             def.ID.String(),
-			Name:           def.Name,
-			Description:    def.Description,
-			Tags:           def.Tags,
-			ServerEnvVar:   conv.FromPGText(def.ServerEnvVar),
-			SecurityType:   conv.FromPGText(def.SecurityType),
-			BearerEnvVar:   conv.FromPGText(def.BearerEnvVar),
-			ApikeyEnvVar:   conv.FromPGText(def.ApikeyEnvVar),
-			UsernameEnvVar: conv.FromPGText(def.UsernameEnvVar),
-			PasswordEnvVar: conv.FromPGText(def.PasswordEnvVar),
-			HTTPMethod:     def.HttpMethod,
-			Path:           def.Path,
-			Schema:         conv.FromBytes(def.Schema),
-			CreatedAt:      def.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      def.UpdatedAt.Time.Format(time.RFC3339),
+			ID:             tool.ID,
+			Name:           tool.Name,
+			Description:    tool.Description,
+			Tags:           tool.Tags,
+			ServerEnvVar:   tool.ServerEnvVar,
+			SecurityType:   tool.SecurityType,
+			BearerEnvVar:   tool.BearerEnvVar,
+			ApikeyEnvVar:   tool.ApikeyEnvVar,
+			UsernameEnvVar: tool.UsernameEnvVar,
+			PasswordEnvVar: tool.PasswordEnvVar,
+			HTTPMethod:     tool.HTTPMethod,
+			Path:           tool.Path,
+			Schema:         tool.Schema,
+			CreatedAt:      tool.CreatedAt,
+			UpdatedAt:      tool.UpdatedAt,
 		}
 	}
 
