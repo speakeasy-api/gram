@@ -114,7 +114,10 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 		UpdatedAt:      envModel.UpdatedAt.Time.Format(time.RFC3339),
 	}
 
-	definitions, err := s.toolsetsRepo.GetHTTPToolDefinitions(ctx, toolset.HttpToolIds)
+	definitions, err := s.toolsetsRepo.GetHTTPToolDefinitionsForToolset(ctx, toolsets_repo.GetHTTPToolDefinitionsForToolsetParams{
+		ProjectID: *authCtx.ProjectID,
+		Names:     toolset.HttpToolNames,
+	})
 	if err != nil {
 		return nil, err
 	}

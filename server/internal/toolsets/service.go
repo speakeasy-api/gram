@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
@@ -88,14 +87,10 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		createToolParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
-	if len(payload.HTTPToolIds) > 0 {
-		createToolParams.HttpToolIds = make([]uuid.UUID, len(payload.HTTPToolIds))
-		for i, id := range payload.HTTPToolIds {
-			toolID, err := uuid.Parse(id)
-			if err != nil {
-				return nil, err
-			}
-			createToolParams.HttpToolIds[i] = toolID
+	if len(payload.HTTPToolNames) > 0 {
+		createToolParams.HttpToolNames = make([]string, len(payload.HTTPToolNames))
+		for i, name := range payload.HTTPToolNames {
+			createToolParams.HttpToolNames[i] = name
 		}
 	}
 
@@ -108,9 +103,9 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, err
 	}
 
-	httpToolIds := make([]string, len(createdToolset.HttpToolIds))
-	for i, id := range createdToolset.HttpToolIds {
-		httpToolIds[i] = id.String()
+	httpToolNames := make([]string, len(createdToolset.HttpToolNames))
+	for i, name := range createdToolset.HttpToolNames {
+		httpToolNames[i] = name
 	}
 
 	return &gen.Toolset{
@@ -121,7 +116,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		Slug:                 createdToolset.Slug,
 		DefaultEnvironmentID: conv.FromNullableUUID(createdToolset.DefaultEnvironmentID),
 		Description:          conv.FromPGText(createdToolset.Description),
-		HTTPToolIds:          httpToolIds,
+		HTTPToolNames:        httpToolNames,
 		CreatedAt:            createdToolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            createdToolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
@@ -140,9 +135,9 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 
 	result := make([]*gen.Toolset, len(toolsets))
 	for i, toolset := range toolsets {
-		httpToolIds := make([]string, len(toolset.HttpToolIds))
-		for j, id := range toolset.HttpToolIds {
-			httpToolIds[j] = id.String()
+		httpToolNames := make([]string, len(toolset.HttpToolNames))
+		for j, name := range toolset.HttpToolNames {
+			httpToolNames[j] = name
 		}
 		result[i] = &gen.Toolset{
 			ID:                   toolset.ID.String(),
@@ -152,7 +147,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 			Slug:                 toolset.Slug,
 			DefaultEnvironmentID: conv.FromNullableUUID(toolset.DefaultEnvironmentID),
 			Description:          conv.FromPGText(toolset.Description),
-			HTTPToolIds:          httpToolIds,
+			HTTPToolNames:        httpToolNames,
 			CreatedAt:            toolset.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            toolset.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -204,28 +199,26 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.DefaultEnvironmentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DefaultEnvironmentID), Valid: true}
 	}
 
-	toolIDSet := make(map[uuid.UUID]bool, len(existingToolset.HttpToolIds))
-	for _, id := range existingToolset.HttpToolIds {
-		toolIDSet[id] = true
+	toolNameSet := make(map[string]bool, len(existingToolset.HttpToolNames))
+	for _, name := range existingToolset.HttpToolNames {
+		toolNameSet[name] = true
 	}
 
 	// Add new tools
-	for _, idStr := range payload.HTTPToolIdsToAdd {
-		id := must.Value(uuid.Parse(idStr))
-		toolIDSet[id] = true
+	for _, name := range payload.HTTPToolNamesToAdd {
+		toolNameSet[name] = true
 	}
 
 	// Remove tools
-	for _, idStr := range payload.HTTPToolIdsToRemove {
-		id := must.Value(uuid.Parse(idStr))
-		delete(toolIDSet, id)
+	for _, name := range payload.HTTPToolNamesToRemove {
+		delete(toolNameSet, name)
 	}
 
 	// Convert set back to slice
-	if len(toolIDSet) > 0 {
-		updateParams.HttpToolIds = make([]uuid.UUID, 0, len(toolIDSet))
-		for id := range toolIDSet {
-			updateParams.HttpToolIds = append(updateParams.HttpToolIds, id)
+	if len(toolNameSet) > 0 {
+		updateParams.HttpToolNames = make([]string, 0, len(toolNameSet))
+		for name := range toolNameSet {
+			updateParams.HttpToolNames = append(updateParams.HttpToolNames, name)
 		}
 	}
 
@@ -234,9 +227,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(err, "error updating toolset", "failed to update toolset in database").Log(ctx, s.logger)
 	}
 
-	httpToolIds := make([]string, len(updatedToolset.HttpToolIds))
-	for i, id := range updatedToolset.HttpToolIds {
-		httpToolIds[i] = id.String()
+	httpToolNames := make([]string, len(updatedToolset.HttpToolNames))
+	for i, name := range updatedToolset.HttpToolNames {
+		httpToolNames[i] = name
 	}
 
 	return &gen.Toolset{
@@ -247,7 +240,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		Slug:                 updatedToolset.Slug,
 		DefaultEnvironmentID: conv.FromNullableUUID(updatedToolset.DefaultEnvironmentID),
 		Description:          conv.FromPGText(updatedToolset.Description),
-		HTTPToolIds:          httpToolIds,
+		HTTPToolNames:        httpToolNames,
 		CreatedAt:            updatedToolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            updatedToolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
@@ -280,8 +273,11 @@ func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolset
 	}
 
 	var httpTools []*gen.HTTPToolDefinition
-	if len(toolset.HttpToolIds) > 0 {
-		definitions, err := s.repo.GetHTTPToolDefinitions(ctx, toolset.HttpToolIds)
+	if len(toolset.HttpToolNames) > 0 {
+		definitions, err := s.repo.GetHTTPToolDefinitionsForToolset(ctx, repo.GetHTTPToolDefinitionsForToolsetParams{
+			ProjectID: *authCtx.ProjectID,
+			Names:     toolset.HttpToolNames,
+		})
 		if err != nil {
 			return nil, err
 		}

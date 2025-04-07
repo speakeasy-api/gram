@@ -241,7 +241,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   slug text NOT NULL,
   description text,
   default_environment_id uuid,
-  http_tool_ids uuid[],
+  http_tool_names text[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

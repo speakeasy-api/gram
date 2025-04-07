@@ -940,7 +940,7 @@ Example:
     %[1]s toolsets create-toolset --body '{
       "default_environment_id": "Ut quidem.",
       "description": "Consectetur nam odio veniam nisi.",
-      "http_tool_ids": [
+      "http_tool_names": [
          "Id impedit sunt non et dolores.",
          "Facere necessitatibus aut."
       ],
@@ -974,13 +974,13 @@ Example:
     %[1]s toolsets update-toolset --body '{
       "default_environment_id": "Possimus praesentium nam.",
       "description": "Accusantium eaque aut alias repellendus.",
-      "http_tool_ids_to_add": [
+      "http_tool_names_to_add": [
          "Quia et.",
          "Et consequatur molestiae dicta quidem est.",
          "Quibusdam et.",
          "Facilis occaecati aut esse recusandae ut et."
       ],
-      "http_tool_ids_to_remove": [
+      "http_tool_names_to_remove": [
          "Commodi consectetur odio eaque magni vitae.",
          "Quo unde sed distinctio aliquam aut.",
          "Dolore mollitia perspiciatis totam autem."

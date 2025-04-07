@@ -9,32 +9,68 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const listHttpToolDefinitions = `-- name: ListHttpToolDefinitions :many
-SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+const listAllHttpToolDefinitions = `-- name: ListAllHttpToolDefinitions :many
+WITH latest_deployment AS (
+    SELECT id, max(seq)
+    FROM deployments
+    WHERE project_id = $1
+    GROUP BY id
+)
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
 FROM http_tool_definitions
-WHERE project_id = $1 
-  AND deleted IS FALSE
-  AND ($2::uuid IS NULL OR id < $2)
-ORDER BY id DESC
+INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
+WHERE http_tool_definitions.project_id = $1 
+  AND http_tool_definitions.deleted IS FALSE
+  AND ($2::uuid IS NULL OR http_tool_definitions.id < $2)
+ORDER BY http_tool_definitions.id DESC
 LIMIT 100
 `
 
-type ListHttpToolDefinitionsParams struct {
+type ListAllHttpToolDefinitionsParams struct {
 	ProjectID uuid.UUID
 	Cursor    uuid.NullUUID
 }
 
-func (q *Queries) ListHttpToolDefinitions(ctx context.Context, arg ListHttpToolDefinitionsParams) ([]HttpToolDefinition, error) {
-	rows, err := q.db.Query(ctx, listHttpToolDefinitions, arg.ProjectID, arg.Cursor)
+type ListAllHttpToolDefinitionsRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.NullUUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Summary             string
+	Description         string
+	Openapiv3Operation  pgtype.Text
+	Tags                []string
+	ServerEnvVar        pgtype.Text
+	SecurityType        pgtype.Text
+	BearerEnvVar        pgtype.Text
+	ApikeyEnvVar        pgtype.Text
+	UsernameEnvVar      pgtype.Text
+	PasswordEnvVar      pgtype.Text
+	HttpMethod          string
+	Path                string
+	SchemaVersion       string
+	Schema              []byte
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	ID_2                uuid.UUID
+	Max                 interface{}
+}
+
+func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHttpToolDefinitionsParams) ([]ListAllHttpToolDefinitionsRow, error) {
+	rows, err := q.db.Query(ctx, listAllHttpToolDefinitions, arg.ProjectID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []HttpToolDefinition
+	var items []ListAllHttpToolDefinitionsRow
 	for rows.Next() {
-		var i HttpToolDefinition
+		var i ListAllHttpToolDefinitionsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -59,6 +95,8 @@ func (q *Queries) ListHttpToolDefinitions(ctx context.Context, arg ListHttpToolD
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.ID_2,
+			&i.Max,
 		); err != nil {
 			return nil, err
 		}

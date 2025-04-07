@@ -19,8 +19,8 @@ type CreateToolsetRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// List of HTTP tool IDs to include
-	HTTPToolIds []string `form:"http_tool_ids,omitempty" json:"http_tool_ids,omitempty" xml:"http_tool_ids,omitempty"`
+	// List of HTTP tool names to include
+	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 }
@@ -34,10 +34,10 @@ type UpdateToolsetRequestBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
-	// HTTP tool IDs to add to the toolset
-	HTTPToolIdsToAdd []string `form:"http_tool_ids_to_add,omitempty" json:"http_tool_ids_to_add,omitempty" xml:"http_tool_ids_to_add,omitempty"`
-	// HTTP tool IDs to remove from the toolset
-	HTTPToolIdsToRemove []string `form:"http_tool_ids_to_remove,omitempty" json:"http_tool_ids_to_remove,omitempty" xml:"http_tool_ids_to_remove,omitempty"`
+	// HTTP tool names to add to the toolset
+	HTTPToolNamesToAdd []string `form:"http_tool_names_to_add,omitempty" json:"http_tool_names_to_add,omitempty" xml:"http_tool_names_to_add,omitempty"`
+	// HTTP tool names to remove from the toolset
+	HTTPToolNamesToRemove []string `form:"http_tool_names_to_remove,omitempty" json:"http_tool_names_to_remove,omitempty" xml:"http_tool_names_to_remove,omitempty"`
 }
 
 // CreateToolsetResponseBody is the type of the "toolsets" service
@@ -57,8 +57,8 @@ type CreateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
-	// List of HTTP tool IDs included in this toolset
-	HTTPToolIds []string `form:"http_tool_ids,omitempty" json:"http_tool_ids,omitempty" xml:"http_tool_ids,omitempty"`
+	// List of HTTP tool names included in this toolset
+	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -89,8 +89,8 @@ type UpdateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
-	// List of HTTP tool IDs included in this toolset
-	HTTPToolIds []string `form:"http_tool_ids,omitempty" json:"http_tool_ids,omitempty" xml:"http_tool_ids,omitempty"`
+	// List of HTTP tool names included in this toolset
+	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -138,8 +138,8 @@ type ToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
-	// List of HTTP tool IDs included in this toolset
-	HTTPToolIds []string `form:"http_tool_ids,omitempty" json:"http_tool_ids,omitempty" xml:"http_tool_ids,omitempty"`
+	// List of HTTP tool names included in this toolset
+	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -189,10 +189,10 @@ func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolse
 		Description:          p.Description,
 		DefaultEnvironmentID: p.DefaultEnvironmentID,
 	}
-	if p.HTTPToolIds != nil {
-		body.HTTPToolIds = make([]string, len(p.HTTPToolIds))
-		for i, val := range p.HTTPToolIds {
-			body.HTTPToolIds[i] = val
+	if p.HTTPToolNames != nil {
+		body.HTTPToolNames = make([]string, len(p.HTTPToolNames))
+		for i, val := range p.HTTPToolNames {
+			body.HTTPToolNames[i] = val
 		}
 	}
 	return body
@@ -206,16 +206,16 @@ func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolse
 		Description:          p.Description,
 		DefaultEnvironmentID: p.DefaultEnvironmentID,
 	}
-	if p.HTTPToolIdsToAdd != nil {
-		body.HTTPToolIdsToAdd = make([]string, len(p.HTTPToolIdsToAdd))
-		for i, val := range p.HTTPToolIdsToAdd {
-			body.HTTPToolIdsToAdd[i] = val
+	if p.HTTPToolNamesToAdd != nil {
+		body.HTTPToolNamesToAdd = make([]string, len(p.HTTPToolNamesToAdd))
+		for i, val := range p.HTTPToolNamesToAdd {
+			body.HTTPToolNamesToAdd[i] = val
 		}
 	}
-	if p.HTTPToolIdsToRemove != nil {
-		body.HTTPToolIdsToRemove = make([]string, len(p.HTTPToolIdsToRemove))
-		for i, val := range p.HTTPToolIdsToRemove {
-			body.HTTPToolIdsToRemove[i] = val
+	if p.HTTPToolNamesToRemove != nil {
+		body.HTTPToolNamesToRemove = make([]string, len(p.HTTPToolNamesToRemove))
+		for i, val := range p.HTTPToolNamesToRemove {
+			body.HTTPToolNamesToRemove[i] = val
 		}
 	}
 	return body
@@ -235,10 +235,10 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *toolsets.Toolse
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
 	}
-	if body.HTTPToolIds != nil {
-		v.HTTPToolIds = make([]string, len(body.HTTPToolIds))
-		for i, val := range body.HTTPToolIds {
-			v.HTTPToolIds[i] = val
+	if body.HTTPToolNames != nil {
+		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
+		for i, val := range body.HTTPToolNames {
+			v.HTTPToolNames[i] = val
 		}
 	}
 
@@ -271,10 +271,10 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *toolsets.Toolse
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
 	}
-	if body.HTTPToolIds != nil {
-		v.HTTPToolIds = make([]string, len(body.HTTPToolIds))
-		for i, val := range body.HTTPToolIds {
-			v.HTTPToolIds[i] = val
+	if body.HTTPToolNames != nil {
+		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
+		for i, val := range body.HTTPToolNames {
+			v.HTTPToolNames[i] = val
 		}
 	}
 

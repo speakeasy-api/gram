@@ -148,7 +148,7 @@ type Toolset struct {
 	Slug                 string
 	Description          pgtype.Text
 	DefaultEnvironmentID uuid.NullUUID
-	HttpToolIds          []uuid.UUID
+	HttpToolNames        []string
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	DeletedAt            pgtype.Timestamptz

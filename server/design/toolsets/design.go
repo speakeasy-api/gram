@@ -119,7 +119,7 @@ var _ = Service("toolsets", func() {
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "Description of the toolset")
-	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs to include")
+	Attribute("http_tool_names", ArrayOf(String), "List of HTTP tool names to include")
 	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
 	security.ProjectPayload()
 	Required("name")
@@ -133,7 +133,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
-	Attribute("http_tool_ids", ArrayOf(String), "List of HTTP tool IDs included in this toolset")
+	Attribute("http_tool_names", ArrayOf(String), "List of HTTP tool names included in this toolset")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
 		Format(FormatDateTime)
@@ -155,8 +155,8 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("name", String, "The new name of the toolset")
 	Attribute("description", String, "The new description of the toolset")
 	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
-	Attribute("http_tool_ids_to_add", ArrayOf(String), "HTTP tool IDs to add to the toolset")
-	Attribute("http_tool_ids_to_remove", ArrayOf(String), "HTTP tool IDs to remove from the toolset")
+	Attribute("http_tool_names_to_add", ArrayOf(String), "HTTP tool names to add to the toolset")
+	Attribute("http_tool_names_to_remove", ArrayOf(String), "HTTP tool names to remove from the toolset")
 	security.ProjectPayload()
 	Required("slug")
 })

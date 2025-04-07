@@ -1025,11 +1025,11 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
-                http_tool_ids:
+                http_tool_names:
                     type: array
                     items:
                         type: string
-                    description: List of HTTP tool IDs to include
+                    description: List of HTTP tool names to include
                 name:
                     type: string
                     description: The name of the toolset
@@ -1046,11 +1046,11 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
-                http_tool_ids:
+                http_tool_names:
                     type: array
                     items:
                         type: string
-                    description: List of HTTP tool IDs to include
+                    description: List of HTTP tool names to include
                 name:
                     type: string
                     description: The name of the toolset
@@ -1565,11 +1565,11 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
-                http_tool_ids:
+                http_tool_names:
                     type: array
                     items:
                         type: string
-                    description: List of HTTP tool IDs included in this toolset
+                    description: List of HTTP tool names included in this toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -1701,16 +1701,16 @@ components:
                 description:
                     type: string
                     description: The new description of the toolset
-                http_tool_ids_to_add:
+                http_tool_names_to_add:
                     type: array
                     items:
                         type: string
-                    description: HTTP tool IDs to add to the toolset
-                http_tool_ids_to_remove:
+                    description: HTTP tool names to add to the toolset
+                http_tool_names_to_remove:
                     type: array
                     items:
                         type: string
-                    description: HTTP tool IDs to remove from the toolset
+                    description: HTTP tool names to remove from the toolset
                 name:
                     type: string
                     description: The new name of the toolset
@@ -1730,16 +1730,16 @@ components:
                 description:
                     type: string
                     description: The new description of the toolset
-                http_tool_ids_to_add:
+                http_tool_names_to_add:
                     type: array
                     items:
                         type: string
-                    description: HTTP tool IDs to add to the toolset
-                http_tool_ids_to_remove:
+                    description: HTTP tool names to add to the toolset
+                http_tool_names_to_remove:
                     type: array
                     items:
                         type: string
-                    description: HTTP tool IDs to remove from the toolset
+                    description: HTTP tool names to remove from the toolset
                 name:
                     type: string
                     description: The new name of the toolset

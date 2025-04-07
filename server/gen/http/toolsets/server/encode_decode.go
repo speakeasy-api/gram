@@ -318,10 +318,10 @@ func marshalToolsetsToolsetToToolsetResponseBody(v *toolsets.Toolset) *ToolsetRe
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
 	}
-	if v.HTTPToolIds != nil {
-		res.HTTPToolIds = make([]string, len(v.HTTPToolIds))
-		for i, val := range v.HTTPToolIds {
-			res.HTTPToolIds[i] = val
+	if v.HTTPToolNames != nil {
+		res.HTTPToolNames = make([]string, len(v.HTTPToolNames))
+		for i, val := range v.HTTPToolNames {
+			res.HTTPToolNames[i] = val
 		}
 	}
 

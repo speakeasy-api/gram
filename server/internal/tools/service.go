@@ -58,7 +58,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, errors.New("project ID is required")
 	}
 
-	params := repo.ListHttpToolDefinitionsParams{
+	params := repo.ListAllHttpToolDefinitionsParams{
 		ProjectID: *authCtx.ProjectID,
 	}
 
@@ -66,7 +66,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		params.Cursor = uuid.NullUUID{UUID: uuid.MustParse(*payload.Cursor), Valid: true}
 	}
 
-	tools, err := s.repo.ListHttpToolDefinitions(ctx, params)
+	tools, err := s.repo.ListAllHttpToolDefinitions(ctx, params)
 	if err != nil {
 		return nil, err
 	}

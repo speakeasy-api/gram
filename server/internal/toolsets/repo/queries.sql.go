@@ -19,7 +19,7 @@ INSERT INTO toolsets (
   , name
   , slug
   , description
-  , http_tool_ids
+  , http_tool_names
   , default_environment_id
 ) VALUES (
     $1
@@ -27,10 +27,10 @@ INSERT INTO toolsets (
   , $3
   , $4
   , $5
-  , NULLIF($6::uuid[], '{}'::uuid[])
+  , NULLIF($6::text[], '{}'::text[])
   , $7
 )
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_ids, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateToolsetParams struct {
@@ -39,7 +39,7 @@ type CreateToolsetParams struct {
 	Name                 string
 	Slug                 string
 	Description          pgtype.Text
-	HttpToolIds          []uuid.UUID
+	HttpToolNames        []string
 	DefaultEnvironmentID uuid.NullUUID
 }
 
@@ -50,7 +50,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		arg.Name,
 		arg.Slug,
 		arg.Description,
-		arg.HttpToolIds,
+		arg.HttpToolNames,
 		arg.DefaultEnvironmentID,
 	)
 	var i Toolset
@@ -62,7 +62,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		&i.Slug,
 		&i.Description,
 		&i.DefaultEnvironmentID,
-		&i.HttpToolIds,
+		&i.HttpToolNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -88,22 +88,61 @@ func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) er
 	return err
 }
 
-const getHTTPToolDefinitions = `-- name: GetHTTPToolDefinitions :many
-SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+const getHTTPToolDefinitionsForToolset = `-- name: GetHTTPToolDefinitionsForToolset :many
+WITH latest_deployment AS (
+    SELECT id, max(seq)
+    FROM deployments
+    WHERE project_id = $1
+    GROUP BY id
+)
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
 FROM http_tool_definitions
-WHERE id = ANY($1::uuid[])
-  AND deleted IS FALSE
+INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
+WHERE http_tool_definitions.project_id = $1 AND http_tool_definitions.name = ANY($2::text[]) AND http_tool_definitions.deleted IS FALSE
 `
 
-func (q *Queries) GetHTTPToolDefinitions(ctx context.Context, ids []uuid.UUID) ([]HttpToolDefinition, error) {
-	rows, err := q.db.Query(ctx, getHTTPToolDefinitions, ids)
+type GetHTTPToolDefinitionsForToolsetParams struct {
+	ProjectID uuid.UUID
+	Names     []string
+}
+
+type GetHTTPToolDefinitionsForToolsetRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.NullUUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Summary             string
+	Description         string
+	Openapiv3Operation  pgtype.Text
+	Tags                []string
+	ServerEnvVar        pgtype.Text
+	SecurityType        pgtype.Text
+	BearerEnvVar        pgtype.Text
+	ApikeyEnvVar        pgtype.Text
+	UsernameEnvVar      pgtype.Text
+	PasswordEnvVar      pgtype.Text
+	HttpMethod          string
+	Path                string
+	SchemaVersion       string
+	Schema              []byte
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	ID_2                uuid.UUID
+	Max                 interface{}
+}
+
+func (q *Queries) GetHTTPToolDefinitionsForToolset(ctx context.Context, arg GetHTTPToolDefinitionsForToolsetParams) ([]GetHTTPToolDefinitionsForToolsetRow, error) {
+	rows, err := q.db.Query(ctx, getHTTPToolDefinitionsForToolset, arg.ProjectID, arg.Names)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []HttpToolDefinition
+	var items []GetHTTPToolDefinitionsForToolsetRow
 	for rows.Next() {
-		var i HttpToolDefinition
+		var i GetHTTPToolDefinitionsForToolsetRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -128,6 +167,8 @@ func (q *Queries) GetHTTPToolDefinitions(ctx context.Context, ids []uuid.UUID) (
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.ID_2,
+			&i.Max,
 		); err != nil {
 			return nil, err
 		}
@@ -140,7 +181,7 @@ func (q *Queries) GetHTTPToolDefinitions(ctx context.Context, ids []uuid.UUID) (
 }
 
 const getToolset = `-- name: GetToolset :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_ids, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -161,7 +202,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 		&i.Slug,
 		&i.Description,
 		&i.DefaultEnvironmentID,
-		&i.HttpToolIds,
+		&i.HttpToolNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -171,7 +212,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 }
 
 const listToolsetsByProject = `-- name: ListToolsetsByProject :many
-SELECT id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_ids, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -195,7 +236,7 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.Slug,
 			&i.Description,
 			&i.DefaultEnvironmentID,
-			&i.HttpToolIds,
+			&i.HttpToolNames,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -216,17 +257,17 @@ UPDATE toolsets
 SET 
     name = COALESCE($1, name)
   , description = COALESCE($2, description)
-  , http_tool_ids = COALESCE(NULLIF($3::uuid[], '{}'::uuid[]), http_tool_ids)
+  , http_tool_names = COALESCE(NULLIF($3::text[], '{}'::text[]), http_tool_names)
   , default_environment_id = COALESCE($4, default_environment_id)
   , updated_at = clock_timestamp()
 WHERE slug = $5 AND project_id = $6
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_ids, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetParams struct {
 	Name                 string
 	Description          pgtype.Text
-	HttpToolIds          []uuid.UUID
+	HttpToolNames        []string
 	DefaultEnvironmentID uuid.NullUUID
 	Slug                 string
 	ProjectID            uuid.UUID
@@ -236,7 +277,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 	row := q.db.QueryRow(ctx, updateToolset,
 		arg.Name,
 		arg.Description,
-		arg.HttpToolIds,
+		arg.HttpToolNames,
 		arg.DefaultEnvironmentID,
 		arg.Slug,
 		arg.ProjectID,
@@ -250,7 +291,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		&i.Slug,
 		&i.Description,
 		&i.DefaultEnvironmentID,
-		&i.HttpToolIds,
+		&i.HttpToolNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

@@ -2222,7 +2222,7 @@ definitions:
                     - created_at: "2006-03-25T12:28:02Z"
                       default_environment_id: Ratione eligendi officia qui ut.
                       description: Laboriosam consequuntur est.
-                      http_tool_ids:
+                      http_tool_names:
                         - Excepturi quasi.
                         - Mollitia velit autem.
                       id: Corporis aut sit dolorum perspiciatis.
@@ -2234,7 +2234,7 @@ definitions:
                     - created_at: "2006-03-25T12:28:02Z"
                       default_environment_id: Ratione eligendi officia qui ut.
                       description: Laboriosam consequuntur est.
-                      http_tool_ids:
+                      http_tool_names:
                         - Excepturi quasi.
                         - Mollitia velit autem.
                       id: Corporis aut sit dolorum perspiciatis.
@@ -2248,7 +2248,7 @@ definitions:
                 - created_at: "2006-03-25T12:28:02Z"
                   default_environment_id: Ratione eligendi officia qui ut.
                   description: Laboriosam consequuntur est.
-                  http_tool_ids:
+                  http_tool_names:
                     - Excepturi quasi.
                     - Mollitia velit autem.
                   id: Corporis aut sit dolorum perspiciatis.
@@ -2260,7 +2260,7 @@ definitions:
                 - created_at: "2006-03-25T12:28:02Z"
                   default_environment_id: Ratione eligendi officia qui ut.
                   description: Laboriosam consequuntur est.
-                  http_tool_ids:
+                  http_tool_names:
                     - Excepturi quasi.
                     - Mollitia velit autem.
                   id: Corporis aut sit dolorum perspiciatis.
@@ -2272,7 +2272,7 @@ definitions:
                 - created_at: "2006-03-25T12:28:02Z"
                   default_environment_id: Ratione eligendi officia qui ut.
                   description: Laboriosam consequuntur est.
-                  http_tool_ids:
+                  http_tool_names:
                     - Excepturi quasi.
                     - Mollitia velit autem.
                   id: Corporis aut sit dolorum perspiciatis.
@@ -2429,12 +2429,12 @@ definitions:
                 type: string
                 description: Description of the toolset
                 example: Ratione voluptatem et aspernatur repellendus corrupti consectetur.
-            http_tool_ids:
+            http_tool_names:
                 type: array
                 items:
                     type: string
                     example: Necessitatibus libero eligendi aut.
-                description: List of HTTP tool IDs included in this toolset
+                description: List of HTTP tool names included in this toolset
                 example:
                     - Illum consectetur sapiente aut tempora.
                     - Mollitia voluptas dolore aut.
@@ -2468,7 +2468,7 @@ definitions:
             created_at: "1986-08-14T12:31:17Z"
             default_environment_id: Quasi voluptatem.
             description: Illo quod distinctio.
-            http_tool_ids:
+            http_tool_names:
                 - Non et excepturi omnis rem.
                 - Quo atque voluptatibus aut minima iusto.
             id: Dicta nihil perspiciatis praesentium.
@@ -2650,12 +2650,12 @@ definitions:
                 type: string
                 description: Description of the toolset
                 example: Rerum ullam velit molestiae odio.
-            http_tool_ids:
+            http_tool_names:
                 type: array
                 items:
                     type: string
                     example: Et dignissimos.
-                description: List of HTTP tool IDs to include
+                description: List of HTTP tool names to include
                 example:
                     - Fugiat cupiditate corporis laborum cum aliquam accusamus.
                     - Possimus id doloremque optio aliquam.
@@ -2668,7 +2668,7 @@ definitions:
         example:
             default_environment_id: Ea et autem et.
             description: Fugiat rem et aliquid aut.
-            http_tool_ids:
+            http_tool_names:
                 - Quibusdam qui animi illum nisi voluptatum.
                 - Architecto qui aut.
                 - Sit est ducimus voluptatem nam.
@@ -2688,23 +2688,23 @@ definitions:
                 type: string
                 description: The new description of the toolset
                 example: Suscipit dignissimos odio libero ad.
-            http_tool_ids_to_add:
+            http_tool_names_to_add:
                 type: array
                 items:
                     type: string
                     example: Asperiores temporibus.
-                description: HTTP tool IDs to add to the toolset
+                description: HTTP tool names to add to the toolset
                 example:
                     - Ut omnis perspiciatis omnis fugit.
                     - Vitae mollitia ad ut voluptas qui eligendi.
                     - In quam maiores.
                     - Impedit ipsam dolor consectetur.
-            http_tool_ids_to_remove:
+            http_tool_names_to_remove:
                 type: array
                 items:
                     type: string
                     example: Hic quidem libero voluptas earum.
-                description: HTTP tool IDs to remove from the toolset
+                description: HTTP tool names to remove from the toolset
                 example:
                     - Voluptatem saepe eum ea harum ea.
                     - Repudiandae nesciunt dolor nostrum minima provident.
@@ -2715,10 +2715,10 @@ definitions:
         example:
             default_environment_id: Velit officiis molestiae nulla aut corporis laboriosam.
             description: Et dolorem quibusdam.
-            http_tool_ids_to_add:
+            http_tool_names_to_add:
                 - Est et a autem quia qui architecto.
                 - Qui nisi aut.
-            http_tool_ids_to_remove:
+            http_tool_names_to_remove:
                 - Adipisci id ratione ut ex in fuga.
                 - Sunt tempora qui.
                 - Aliquam nam ipsam asperiores minima.
