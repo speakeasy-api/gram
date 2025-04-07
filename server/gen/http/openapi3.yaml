@@ -1288,16 +1288,13 @@ components:
         HTTPToolDefinition:
             type: object
             properties:
-                apikey_env_var:
-                    type: string
-                    description: Environment variable for API key
-                bearer_env_var:
-                    type: string
-                    description: Environment variable for bearer token
                 created_at:
                     type: string
                     description: The creation date of the tool.
                     format: date-time
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment
                 description:
                     type: string
                     description: Description of the tool
@@ -1310,21 +1307,33 @@ components:
                 name:
                     type: string
                     description: The name of the tool
-                password_env_var:
+                openapiv3_document_id:
                     type: string
-                    description: Environment variable for password
+                    description: The ID of the OpenAPI v3 document
+                openapiv3_operation:
+                    type: string
+                    description: OpenAPI v3 operation
                 path:
                     type: string
                     description: Path for the request
+                project_id:
+                    type: string
+                    description: The ID of the project
                 schema:
                     type: string
                     description: JSON schema for the request
-                security_type:
+                schema_version:
                     type: string
-                    description: Type of security (http:bearer, http:basic, apikey)
+                    description: Version of the schema
+                security:
+                    type: string
+                    description: Security configuration in JSON format
                 server_env_var:
                     type: string
                     description: Environment variable for the server URL
+                summary:
+                    type: string
+                    description: Summary of the tool
                 tags:
                     type: array
                     items:
@@ -1334,16 +1343,17 @@ components:
                     type: string
                     description: The last update date of the tool.
                     format: date-time
-                username_env_var:
-                    type: string
-                    description: Environment variable for username
             required:
                 - id
+                - project_id
+                - deployment_id
                 - name
+                - summary
                 - description
                 - tags
                 - http_method
                 - path
+                - schema
                 - created_at
                 - updated_at
         InfoResponseBody:
@@ -1367,14 +1377,26 @@ components:
         InstanceResult:
             type: object
             properties:
+                description:
+                    type: string
+                    description: The description of the toolset
                 environment:
                     $ref: '#/components/schemas/Environment'
+                name:
+                    type: string
+                    description: The name of the toolset
+                relevant_environment_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables that are relevant to the toolset
                 tools:
                     type: array
                     items:
                         $ref: '#/components/schemas/HTTPToolDefinition'
                     description: The list of tools
             required:
+                - name
                 - tools
                 - environment
         Key:
@@ -1627,6 +1649,11 @@ components:
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
+                relevant_environment_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables that are relevant to the toolset
                 slug:
                     type: string
                     description: The slug of the toolset

@@ -9,6 +9,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type HttpSecurity struct {
+	ID           uuid.UUID
+	Key          string
+	DeploymentID uuid.UUID
+	Type         string
+	Name         string
+	InPlacement  string
+	Scheme       pgtype.Text
+	BearerFormat pgtype.Text
+	EnvVariables []string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type Toolset struct {
 	ID                   uuid.UUID
 	OrganizationID       string

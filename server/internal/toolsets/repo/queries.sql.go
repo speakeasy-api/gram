@@ -88,6 +88,51 @@ func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) er
 	return err
 }
 
+const getHTTPSecurityDefinitions = `-- name: GetHTTPSecurityDefinitions :many
+SELECT id, key, deployment_id, type, name, in_placement, scheme, bearer_format, env_variables, created_at, updated_at, deleted_at, deleted
+FROM http_security
+WHERE key = ANY($1::TEXT[]) AND deployment_id = $2
+`
+
+type GetHTTPSecurityDefinitionsParams struct {
+	SecurityKeys []string
+	DeploymentID uuid.UUID
+}
+
+func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSecurityDefinitionsParams) ([]HttpSecurity, error) {
+	rows, err := q.db.Query(ctx, getHTTPSecurityDefinitions, arg.SecurityKeys, arg.DeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []HttpSecurity
+	for rows.Next() {
+		var i HttpSecurity
+		if err := rows.Scan(
+			&i.ID,
+			&i.Key,
+			&i.DeploymentID,
+			&i.Type,
+			&i.Name,
+			&i.InPlacement,
+			&i.Scheme,
+			&i.BearerFormat,
+			&i.EnvVariables,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getHTTPToolDefinitionsForToolset = `-- name: GetHTTPToolDefinitionsForToolset :many
 WITH latest_deployment AS (
     SELECT id, max(seq)
@@ -95,7 +140,7 @@ WITH latest_deployment AS (
     WHERE project_id = $1
     GROUP BY id
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
 FROM http_tool_definitions
 INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
 WHERE http_tool_definitions.project_id = $1 AND http_tool_definitions.name = ANY($2::text[]) AND http_tool_definitions.deleted IS FALSE
@@ -109,7 +154,7 @@ type GetHTTPToolDefinitionsForToolsetParams struct {
 type GetHTTPToolDefinitionsForToolsetRow struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
-	DeploymentID        uuid.NullUUID
+	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
 	Name                string
 	Summary             string
@@ -117,11 +162,7 @@ type GetHTTPToolDefinitionsForToolsetRow struct {
 	Openapiv3Operation  pgtype.Text
 	Tags                []string
 	ServerEnvVar        pgtype.Text
-	SecurityType        pgtype.Text
-	BearerEnvVar        pgtype.Text
-	ApikeyEnvVar        pgtype.Text
-	UsernameEnvVar      pgtype.Text
-	PasswordEnvVar      pgtype.Text
+	Security            []byte
 	HttpMethod          string
 	Path                string
 	SchemaVersion       string
@@ -154,11 +195,7 @@ func (q *Queries) GetHTTPToolDefinitionsForToolset(ctx context.Context, arg GetH
 			&i.Openapiv3Operation,
 			&i.Tags,
 			&i.ServerEnvVar,
-			&i.SecurityType,
-			&i.BearerEnvVar,
-			&i.ApikeyEnvVar,
-			&i.UsernameEnvVar,
-			&i.PasswordEnvVar,
+			&i.Security,
 			&i.HttpMethod,
 			&i.Path,
 			&i.SchemaVersion,

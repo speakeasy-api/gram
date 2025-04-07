@@ -114,6 +114,8 @@ type GetToolsetDetailsResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
 	// When the toolset was created.
@@ -151,30 +153,34 @@ type ToolsetResponseBody struct {
 type HTTPToolDefinitionResponseBody struct {
 	// The ID of the HTTP tool
 	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the project
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the deployment
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// The ID of the OpenAPI v3 document
+	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
 	// The name of the tool
 	Name string `form:"name" json:"name" xml:"name"`
+	// Summary of the tool
+	Summary string `form:"summary" json:"summary" xml:"summary"`
 	// Description of the tool
 	Description string `form:"description" json:"description" xml:"description"`
+	// OpenAPI v3 operation
+	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
 	// The tags list for this http tool
 	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// Environment variable for the server URL
 	ServerEnvVar *string `form:"server_env_var,omitempty" json:"server_env_var,omitempty" xml:"server_env_var,omitempty"`
-	// Type of security (http:bearer, http:basic, apikey)
-	SecurityType *string `form:"security_type,omitempty" json:"security_type,omitempty" xml:"security_type,omitempty"`
-	// Environment variable for bearer token
-	BearerEnvVar *string `form:"bearer_env_var,omitempty" json:"bearer_env_var,omitempty" xml:"bearer_env_var,omitempty"`
-	// Environment variable for API key
-	ApikeyEnvVar *string `form:"apikey_env_var,omitempty" json:"apikey_env_var,omitempty" xml:"apikey_env_var,omitempty"`
-	// Environment variable for username
-	UsernameEnvVar *string `form:"username_env_var,omitempty" json:"username_env_var,omitempty" xml:"username_env_var,omitempty"`
-	// Environment variable for password
-	PasswordEnvVar *string `form:"password_env_var,omitempty" json:"password_env_var,omitempty" xml:"password_env_var,omitempty"`
+	// Security configuration in JSON format
+	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
 	// HTTP method for the request
 	HTTPMethod string `form:"http_method" json:"http_method" xml:"http_method"`
 	// Path for the request
 	Path string `form:"path" json:"path" xml:"path"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// JSON schema for the request
-	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	Schema string `form:"schema" json:"schema" xml:"schema"`
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.
@@ -255,6 +261,12 @@ func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetD
 		DefaultEnvironmentID: res.DefaultEnvironmentID,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
+	}
+	if res.RelevantEnvironmentVariables != nil {
+		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
+		for i, val := range res.RelevantEnvironmentVariables {
+			body.RelevantEnvironmentVariables[i] = val
+		}
 	}
 	if res.HTTPTools != nil {
 		body.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(res.HTTPTools))

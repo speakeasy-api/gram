@@ -199,12 +199,12 @@ INSERT INTO http_tool_definitions (
   , $11
   , $12
 )
-RETURNING id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
 	ProjectID           uuid.UUID
-	DeploymentID        uuid.NullUUID
+	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
 	Name                string
 	Openapiv3Operation  pgtype.Text
@@ -244,11 +244,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.Openapiv3Operation,
 		&i.Tags,
 		&i.ServerEnvVar,
-		&i.SecurityType,
-		&i.BearerEnvVar,
-		&i.ApikeyEnvVar,
-		&i.UsernameEnvVar,
-		&i.PasswordEnvVar,
+		&i.Security,
 		&i.HttpMethod,
 		&i.Path,
 		&i.SchemaVersion,

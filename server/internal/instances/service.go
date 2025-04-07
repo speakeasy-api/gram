@@ -115,27 +115,32 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 	httpTools := make([]*gen.HTTPToolDefinition, len(toolset.HTTPTools))
 	for i, tool := range toolset.HTTPTools {
 		httpTools[i] = &gen.HTTPToolDefinition{
-			ID:             tool.ID,
-			Name:           tool.Name,
-			Description:    tool.Description,
-			Tags:           tool.Tags,
-			ServerEnvVar:   tool.ServerEnvVar,
-			SecurityType:   tool.SecurityType,
-			BearerEnvVar:   tool.BearerEnvVar,
-			ApikeyEnvVar:   tool.ApikeyEnvVar,
-			UsernameEnvVar: tool.UsernameEnvVar,
-			PasswordEnvVar: tool.PasswordEnvVar,
-			HTTPMethod:     tool.HTTPMethod,
-			Path:           tool.Path,
-			Schema:         tool.Schema,
-			CreatedAt:      tool.CreatedAt,
-			UpdatedAt:      tool.UpdatedAt,
+			ID:                  tool.ID,
+			ProjectID:           tool.ProjectID,
+			DeploymentID:        tool.DeploymentID,
+			Openapiv3DocumentID: tool.Openapiv3DocumentID,
+			Name:                tool.Name,
+			Summary:             tool.Summary,
+			Description:         tool.Description,
+			Openapiv3Operation:  tool.Openapiv3Operation,
+			Tags:                tool.Tags,
+			ServerEnvVar:        tool.ServerEnvVar,
+			Security:            tool.Security,
+			HTTPMethod:          tool.HTTPMethod,
+			Path:                tool.Path,
+			SchemaVersion:       tool.SchemaVersion,
+			Schema:              tool.Schema,
+			CreatedAt:           tool.CreatedAt,
+			UpdatedAt:           tool.UpdatedAt,
 		}
 	}
 
 	return &gen.InstanceResult{
-		Tools:       httpTools,
-		Environment: environment,
+		Name:                         toolset.Name,
+		Description:                  toolset.Description,
+		RelevantEnvironmentVariables: toolset.RelevantEnvironmentVariables,
+		Tools:                        httpTools,
+		Environment:                  environment,
 	}, nil
 }
 

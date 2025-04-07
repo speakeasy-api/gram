@@ -26,28 +26,32 @@ type ListToolsResponseBody struct {
 type HTTPToolDefinitionResponseBody struct {
 	// The ID of the HTTP tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the project
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the deployment
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The ID of the OpenAPI v3 document
+	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
 	// The name of the tool
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Summary of the tool
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Description of the tool
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// OpenAPI v3 operation
+	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
 	// The tags list for this http tool
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Environment variable for the server URL
 	ServerEnvVar *string `form:"server_env_var,omitempty" json:"server_env_var,omitempty" xml:"server_env_var,omitempty"`
-	// Type of security (http:bearer, http:basic, apikey)
-	SecurityType *string `form:"security_type,omitempty" json:"security_type,omitempty" xml:"security_type,omitempty"`
-	// Environment variable for bearer token
-	BearerEnvVar *string `form:"bearer_env_var,omitempty" json:"bearer_env_var,omitempty" xml:"bearer_env_var,omitempty"`
-	// Environment variable for API key
-	ApikeyEnvVar *string `form:"apikey_env_var,omitempty" json:"apikey_env_var,omitempty" xml:"apikey_env_var,omitempty"`
-	// Environment variable for username
-	UsernameEnvVar *string `form:"username_env_var,omitempty" json:"username_env_var,omitempty" xml:"username_env_var,omitempty"`
-	// Environment variable for password
-	PasswordEnvVar *string `form:"password_env_var,omitempty" json:"password_env_var,omitempty" xml:"password_env_var,omitempty"`
+	// Security configuration in JSON format
+	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
 	// HTTP method for the request
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Path for the request
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// JSON schema for the request
 	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
 	// The creation date of the tool.
@@ -92,8 +96,17 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.DeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
@@ -106,6 +119,9 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.Path == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

@@ -191,7 +191,7 @@ func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Que
 
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
-		DeploymentID:        uuid.NullUUID{UUID: deploymentID, Valid: deploymentID != uuid.Nil},
+		DeploymentID:        deploymentID,
 		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),

@@ -43,7 +43,10 @@ var _ = Service("instances", func() {
 })
 
 var InstanceResult = Type("InstanceResult", func() {
+	Attribute("name", String, "The name of the toolset")
+	Attribute("description", String, "The description of the toolset")
 	Attribute("tools", ArrayOf(tools.HTTPToolDefinition), "The list of tools")
+	Attribute("relevant_environment_variables", ArrayOf(String), "The environment variables that are relevant to the toolset")
 	Attribute("environment", environments.Environment, "The environment")
-	Required("tools", "environment")
+	Required("name", "tools", "environment")
 })

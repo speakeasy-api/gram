@@ -19,7 +19,7 @@ WITH latest_deployment AS (
     WHERE project_id = $1
     GROUP BY id
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security_type, bearer_env_var, apikey_env_var, username_env_var, password_env_var, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
 FROM http_tool_definitions
 INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
 WHERE http_tool_definitions.project_id = $1 
@@ -37,7 +37,7 @@ type ListAllHttpToolDefinitionsParams struct {
 type ListAllHttpToolDefinitionsRow struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
-	DeploymentID        uuid.NullUUID
+	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
 	Name                string
 	Summary             string
@@ -45,11 +45,7 @@ type ListAllHttpToolDefinitionsRow struct {
 	Openapiv3Operation  pgtype.Text
 	Tags                []string
 	ServerEnvVar        pgtype.Text
-	SecurityType        pgtype.Text
-	BearerEnvVar        pgtype.Text
-	ApikeyEnvVar        pgtype.Text
-	UsernameEnvVar      pgtype.Text
-	PasswordEnvVar      pgtype.Text
+	Security            []byte
 	HttpMethod          string
 	Path                string
 	SchemaVersion       string
@@ -82,11 +78,7 @@ func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHtt
 			&i.Openapiv3Operation,
 			&i.Tags,
 			&i.ServerEnvVar,
-			&i.SecurityType,
-			&i.BearerEnvVar,
-			&i.ApikeyEnvVar,
-			&i.UsernameEnvVar,
-			&i.PasswordEnvVar,
+			&i.Security,
 			&i.HttpMethod,
 			&i.Path,
 			&i.SchemaVersion,

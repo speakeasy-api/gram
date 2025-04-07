@@ -44,30 +44,34 @@ var MethodNames = [1]string{"listTools"}
 type HTTPToolDefinition struct {
 	// The ID of the HTTP tool
 	ID string
+	// The ID of the project
+	ProjectID string
+	// The ID of the deployment
+	DeploymentID string
+	// The ID of the OpenAPI v3 document
+	Openapiv3DocumentID *string
 	// The name of the tool
 	Name string
+	// Summary of the tool
+	Summary string
 	// Description of the tool
 	Description string
+	// OpenAPI v3 operation
+	Openapiv3Operation *string
 	// The tags list for this http tool
 	Tags []string
 	// Environment variable for the server URL
 	ServerEnvVar *string
-	// Type of security (http:bearer, http:basic, apikey)
-	SecurityType *string
-	// Environment variable for bearer token
-	BearerEnvVar *string
-	// Environment variable for API key
-	ApikeyEnvVar *string
-	// Environment variable for username
-	UsernameEnvVar *string
-	// Environment variable for password
-	PasswordEnvVar *string
+	// Security configuration in JSON format
+	Security *string
 	// HTTP method for the request
 	HTTPMethod string
 	// Path for the request
 	Path string
+	// Version of the schema
+	SchemaVersion *string
 	// JSON schema for the request
-	Schema *string
+	Schema string
 	// The creation date of the tool.
 	CreatedAt string
 	// The last update date of the tool.

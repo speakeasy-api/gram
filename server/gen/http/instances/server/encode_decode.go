@@ -97,20 +97,22 @@ func DecodeLoadInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 // *instances.HTTPToolDefinition.
 func marshalInstancesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *instances.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
 	res := &HTTPToolDefinitionResponseBody{
-		ID:             v.ID,
-		Name:           v.Name,
-		Description:    v.Description,
-		ServerEnvVar:   v.ServerEnvVar,
-		SecurityType:   v.SecurityType,
-		BearerEnvVar:   v.BearerEnvVar,
-		ApikeyEnvVar:   v.ApikeyEnvVar,
-		UsernameEnvVar: v.UsernameEnvVar,
-		PasswordEnvVar: v.PasswordEnvVar,
-		HTTPMethod:     v.HTTPMethod,
-		Path:           v.Path,
-		Schema:         v.Schema,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                  v.ID,
+		ProjectID:           v.ProjectID,
+		DeploymentID:        v.DeploymentID,
+		Openapiv3DocumentID: v.Openapiv3DocumentID,
+		Name:                v.Name,
+		Summary:             v.Summary,
+		Description:         v.Description,
+		Openapiv3Operation:  v.Openapiv3Operation,
+		ServerEnvVar:        v.ServerEnvVar,
+		Security:            v.Security,
+		HTTPMethod:          v.HTTPMethod,
+		Path:                v.Path,
+		SchemaVersion:       v.SchemaVersion,
+		Schema:              v.Schema,
+		CreatedAt:           v.CreatedAt,
+		UpdatedAt:           v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

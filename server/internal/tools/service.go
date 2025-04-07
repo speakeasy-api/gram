@@ -77,21 +77,23 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 	for i, tool := range tools {
 		result.Tools[i] = &gen.HTTPToolDefinition{
-			ID:             tool.ID.String(),
-			Name:           tool.Name,
-			Description:    tool.Description,
-			Tags:           tool.Tags,
-			ServerEnvVar:   conv.FromPGText(tool.ServerEnvVar),
-			SecurityType:   conv.FromPGText(tool.SecurityType),
-			BearerEnvVar:   conv.FromPGText(tool.BearerEnvVar),
-			ApikeyEnvVar:   conv.FromPGText(tool.ApikeyEnvVar),
-			UsernameEnvVar: conv.FromPGText(tool.UsernameEnvVar),
-			PasswordEnvVar: conv.FromPGText(tool.PasswordEnvVar),
-			HTTPMethod:     tool.HttpMethod,
-			Path:           tool.Path,
-			Schema:         conv.FromBytes(tool.Schema),
-			CreatedAt:      tool.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      tool.UpdatedAt.Time.Format(time.RFC3339),
+			ID:                  tool.ID.String(),
+			ProjectID:           tool.ProjectID.String(),
+			DeploymentID:        tool.DeploymentID.String(),
+			Openapiv3DocumentID: conv.FromNullableUUID(tool.Openapiv3DocumentID),
+			Name:                tool.Name,
+			Summary:             tool.Summary,
+			Description:         tool.Description,
+			Openapiv3Operation:  conv.FromPGText(tool.Openapiv3Operation),
+			Tags:                tool.Tags,
+			ServerEnvVar:        conv.FromPGText(tool.ServerEnvVar),
+			Security:            conv.FromBytes(tool.Security),
+			HTTPMethod:          tool.HttpMethod,
+			Path:                tool.Path,
+			SchemaVersion:       &tool.SchemaVersion,
+			Schema:              string(tool.Schema),
+			CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 

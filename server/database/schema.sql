@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
   project_id uuid NOT NULL,
-  deployment_id uuid,
+  deployment_id uuid NOT NULL,
 
   openapiv3_document_id uuid,
 
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT http_tool_definitions_pkey PRIMARY KEY (id),
-  CONSTRAINT http_tool_definitions_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
+  CONSTRAINT http_tool_definitions_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
   CONSTRAINT http_tool_definitions_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES deployments_openapiv3_assets (id) ON DELETE RESTRICT,
   CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );

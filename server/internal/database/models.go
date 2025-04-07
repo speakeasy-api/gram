@@ -103,10 +103,26 @@ type EnvironmentEntry struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type HttpSecurity struct {
+	ID           uuid.UUID
+	Key          string
+	DeploymentID uuid.UUID
+	Type         string
+	Name         string
+	InPlacement  string
+	Scheme       pgtype.Text
+	BearerFormat pgtype.Text
+	EnvVariables []string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type HttpToolDefinition struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
-	DeploymentID        uuid.NullUUID
+	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
 	Name                string
 	Summary             string
@@ -114,11 +130,7 @@ type HttpToolDefinition struct {
 	Openapiv3Operation  pgtype.Text
 	Tags                []string
 	ServerEnvVar        pgtype.Text
-	SecurityType        pgtype.Text
-	BearerEnvVar        pgtype.Text
-	ApikeyEnvVar        pgtype.Text
-	UsernameEnvVar      pgtype.Text
-	PasswordEnvVar      pgtype.Text
+	Security            []byte
 	HttpMethod          string
 	Path                string
 	SchemaVersion       string
