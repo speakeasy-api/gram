@@ -48,6 +48,10 @@ export type ToolsetDetails = {
    */
   projectId: string;
   /**
+   * The environment variables that are relevant to the toolset
+   */
+  relevantEnvironmentVariables?: Array<string> | undefined;
+  /**
    * The slug of the toolset
    */
   slug: string;
@@ -71,6 +75,7 @@ export const ToolsetDetails$inboundSchema: z.ZodType<
   name: z.string(),
   organization_id: z.string(),
   project_id: z.string(),
+  relevant_environment_variables: z.array(z.string()).optional(),
   slug: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
@@ -80,6 +85,7 @@ export const ToolsetDetails$inboundSchema: z.ZodType<
     "http_tools": "httpTools",
     "organization_id": "organizationId",
     "project_id": "projectId",
+    "relevant_environment_variables": "relevantEnvironmentVariables",
     "updated_at": "updatedAt",
   });
 });
@@ -94,6 +100,7 @@ export type ToolsetDetails$Outbound = {
   name: string;
   organization_id: string;
   project_id: string;
+  relevant_environment_variables?: Array<string> | undefined;
   slug: string;
   updated_at: string;
 };
@@ -112,6 +119,7 @@ export const ToolsetDetails$outboundSchema: z.ZodType<
   name: z.string(),
   organizationId: z.string(),
   projectId: z.string(),
+  relevantEnvironmentVariables: z.array(z.string()).optional(),
   slug: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
@@ -121,6 +129,7 @@ export const ToolsetDetails$outboundSchema: z.ZodType<
     httpTools: "http_tools",
     organizationId: "organization_id",
     projectId: "project_id",
+    relevantEnvironmentVariables: "relevant_environment_variables",
     updatedAt: "updated_at",
   });
 });

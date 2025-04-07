@@ -3,7 +3,6 @@
  */
 
 export * from "./asset.js";
-export * from "./createcompletionrequest.js";
 export * from "./createdeploymentrequestbody.js";
 export * from "./createdeploymentresult.js";
 export * from "./createenvironmentform.js";

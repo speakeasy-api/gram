@@ -9,13 +9,15 @@ let value: ListToolsResult = {
   tools: [
     {
       createdAt: new Date("2024-07-22T19:54:53.930Z"),
+      deploymentId: "<id>",
       description: "ack shoddy soliloquy cleaner drag catalog",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
       path: "/usr/lib",
-      securityType: "<value>",
-      serverEnvVar: "<value>",
+      projectId: "<id>",
+      schema: "<value>",
+      summary: "<value>",
       tags: [
         "<value>",
       ],

@@ -23,16 +23,19 @@ let value: InstanceResult = {
     slug: "<value>",
     updatedAt: new Date("2024-08-18T10:47:36.935Z"),
   },
+  name: "<value>",
   tools: [
     {
       createdAt: new Date("2024-04-15T03:02:21.323Z"),
+      deploymentId: "<id>",
       description: "archive since murky dependency syringe instantly",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
       path: "/usr/local/bin",
-      securityType: "<value>",
-      serverEnvVar: "<value>",
+      projectId: "<id>",
+      schema: "<value>",
+      summary: "<value>",
       tags: [
         "<value>",
       ],
@@ -46,5 +49,8 @@ let value: InstanceResult = {
 
 | Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `description`                                                                    | *string*                                                                         | :heavy_minus_sign:                                                               | The description of the toolset                                                   |
 | `environment`                                                                    | [components.Environment](../../models/components/environment.md)                 | :heavy_check_mark:                                                               | Model representing an environment                                                |
+| `name`                                                                           | *string*                                                                         | :heavy_check_mark:                                                               | The name of the toolset                                                          |
+| `relevantEnvironmentVariables`                                                   | *string*[]                                                                       | :heavy_minus_sign:                                                               | The environment variables that are relevant to the toolset                       |
 | `tools`                                                                          | [components.HTTPToolDefinition](../../models/components/httptooldefinition.md)[] | :heavy_check_mark:                                                               | The list of tools                                                                |

@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -21,9 +22,21 @@ import {
 
 export type InstanceResult = {
   /**
+   * The description of the toolset
+   */
+  description?: string | undefined;
+  /**
    * Model representing an environment
    */
   environment: Environment;
+  /**
+   * The name of the toolset
+   */
+  name: string;
+  /**
+   * The environment variables that are relevant to the toolset
+   */
+  relevantEnvironmentVariables?: Array<string> | undefined;
   /**
    * The list of tools
    */
@@ -36,13 +49,23 @@ export const InstanceResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  description: z.string().optional(),
   environment: Environment$inboundSchema,
+  name: z.string(),
+  relevant_environment_variables: z.array(z.string()).optional(),
   tools: z.array(HTTPToolDefinition$inboundSchema),
+}).transform((v) => {
+  return remap$(v, {
+    "relevant_environment_variables": "relevantEnvironmentVariables",
+  });
 });
 
 /** @internal */
 export type InstanceResult$Outbound = {
+  description?: string | undefined;
   environment: Environment$Outbound;
+  name: string;
+  relevant_environment_variables?: Array<string> | undefined;
   tools: Array<HTTPToolDefinition$Outbound>;
 };
 
@@ -52,8 +75,15 @@ export const InstanceResult$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   InstanceResult
 > = z.object({
+  description: z.string().optional(),
   environment: Environment$outboundSchema,
+  name: z.string(),
+  relevantEnvironmentVariables: z.array(z.string()).optional(),
   tools: z.array(HTTPToolDefinition$outboundSchema),
+}).transform((v) => {
+  return remap$(v, {
+    relevantEnvironmentVariables: "relevant_environment_variables",
+  });
 });
 
 /**

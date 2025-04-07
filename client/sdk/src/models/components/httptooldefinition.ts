@@ -10,29 +10,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type HTTPToolDefinition = {
   /**
-   * Environment variable for API key
-   */
-  apikeyEnvVar?: string | undefined;
-  /**
-   * Environment variable for bearer token
-   */
-  bearerEnvVar?: string | undefined;
-  /**
-   * JSON schema for request body
-   */
-  bodySchema?: string | undefined;
-  /**
    * The creation date of the tool.
    */
   createdAt: Date;
   /**
+   * The ID of the deployment
+   */
+  deploymentId: string;
+  /**
    * Description of the tool
    */
   description: string;
-  /**
-   * JSON schema for headers
-   */
-  headersSchema?: string | undefined;
   /**
    * HTTP method for the request
    */
@@ -46,29 +34,37 @@ export type HTTPToolDefinition = {
    */
   name: string;
   /**
-   * Environment variable for password
+   * The ID of the OpenAPI v3 document
    */
-  passwordEnvVar?: string | undefined;
+  openapiv3DocumentId?: string | undefined;
+  /**
+   * OpenAPI v3 operation
+   */
+  openapiv3Operation?: string | undefined;
   /**
    * Path for the request
    */
   path: string;
   /**
-   * JSON schema for path parameters
+   * The ID of the project
    */
-  pathparamsSchema?: string | undefined;
+  projectId: string;
   /**
-   * JSON schema for query parameters
+   * JSON schema for the request
    */
-  queriesSchema?: string | undefined;
+  schema: string;
   /**
-   * Type of security (http:bearer, http:basic, apikey)
+   * Version of the schema
    */
-  securityType: string;
+  schemaVersion?: string | undefined;
   /**
-   * Environment variable for the server URL
+   * Security requirements for the underlying HTTP endpoint
    */
-  serverEnvVar: string;
+  security?: string | undefined;
+  /**
+   * Summary of the tool
+   */
+  summary: string;
   /**
    * The tags list for this http tool
    */
@@ -77,10 +73,6 @@ export type HTTPToolDefinition = {
    * The last update date of the tool.
    */
   updatedAt: Date;
-  /**
-   * Environment variable for username
-   */
-  usernameEnvVar?: string | undefined;
 };
 
 /** @internal */
@@ -89,62 +81,53 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  apikey_env_var: z.string().optional(),
-  bearer_env_var: z.string().optional(),
-  body_schema: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  deployment_id: z.string(),
   description: z.string(),
-  headers_schema: z.string().optional(),
   http_method: z.string(),
   id: z.string(),
   name: z.string(),
-  password_env_var: z.string().optional(),
+  openapiv3_document_id: z.string().optional(),
+  openapiv3_operation: z.string().optional(),
   path: z.string(),
-  pathparams_schema: z.string().optional(),
-  queries_schema: z.string().optional(),
-  security_type: z.string(),
-  server_env_var: z.string(),
+  project_id: z.string(),
+  schema: z.string(),
+  schema_version: z.string().optional(),
+  security: z.string().optional(),
+  summary: z.string(),
   tags: z.array(z.string()),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
-  username_env_var: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "apikey_env_var": "apikeyEnvVar",
-    "bearer_env_var": "bearerEnvVar",
-    "body_schema": "bodySchema",
     "created_at": "createdAt",
-    "headers_schema": "headersSchema",
+    "deployment_id": "deploymentId",
     "http_method": "httpMethod",
-    "password_env_var": "passwordEnvVar",
-    "pathparams_schema": "pathparamsSchema",
-    "queries_schema": "queriesSchema",
-    "security_type": "securityType",
-    "server_env_var": "serverEnvVar",
+    "openapiv3_document_id": "openapiv3DocumentId",
+    "openapiv3_operation": "openapiv3Operation",
+    "project_id": "projectId",
+    "schema_version": "schemaVersion",
     "updated_at": "updatedAt",
-    "username_env_var": "usernameEnvVar",
   });
 });
 
 /** @internal */
 export type HTTPToolDefinition$Outbound = {
-  apikey_env_var?: string | undefined;
-  bearer_env_var?: string | undefined;
-  body_schema?: string | undefined;
   created_at: string;
+  deployment_id: string;
   description: string;
-  headers_schema?: string | undefined;
   http_method: string;
   id: string;
   name: string;
-  password_env_var?: string | undefined;
+  openapiv3_document_id?: string | undefined;
+  openapiv3_operation?: string | undefined;
   path: string;
-  pathparams_schema?: string | undefined;
-  queries_schema?: string | undefined;
-  security_type: string;
-  server_env_var: string;
+  project_id: string;
+  schema: string;
+  schema_version?: string | undefined;
+  security?: string | undefined;
+  summary: string;
   tags: Array<string>;
   updated_at: string;
-  username_env_var?: string | undefined;
 };
 
 /** @internal */
@@ -153,39 +136,32 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   HTTPToolDefinition
 > = z.object({
-  apikeyEnvVar: z.string().optional(),
-  bearerEnvVar: z.string().optional(),
-  bodySchema: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
+  deploymentId: z.string(),
   description: z.string(),
-  headersSchema: z.string().optional(),
   httpMethod: z.string(),
   id: z.string(),
   name: z.string(),
-  passwordEnvVar: z.string().optional(),
+  openapiv3DocumentId: z.string().optional(),
+  openapiv3Operation: z.string().optional(),
   path: z.string(),
-  pathparamsSchema: z.string().optional(),
-  queriesSchema: z.string().optional(),
-  securityType: z.string(),
-  serverEnvVar: z.string(),
+  projectId: z.string(),
+  schema: z.string(),
+  schemaVersion: z.string().optional(),
+  security: z.string().optional(),
+  summary: z.string(),
   tags: z.array(z.string()),
   updatedAt: z.date().transform(v => v.toISOString()),
-  usernameEnvVar: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyEnvVar: "apikey_env_var",
-    bearerEnvVar: "bearer_env_var",
-    bodySchema: "body_schema",
     createdAt: "created_at",
-    headersSchema: "headers_schema",
+    deploymentId: "deployment_id",
     httpMethod: "http_method",
-    passwordEnvVar: "password_env_var",
-    pathparamsSchema: "pathparams_schema",
-    queriesSchema: "queries_schema",
-    securityType: "security_type",
-    serverEnvVar: "server_env_var",
+    openapiv3DocumentId: "openapiv3_document_id",
+    openapiv3Operation: "openapiv3_operation",
+    projectId: "project_id",
+    schemaVersion: "schema_version",
     updatedAt: "updated_at",
-    usernameEnvVar: "username_env_var",
   });
 });
 

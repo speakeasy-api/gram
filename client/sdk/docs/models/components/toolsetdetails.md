@@ -10,13 +10,15 @@ let value: ToolsetDetails = {
   httpTools: [
     {
       createdAt: new Date("2025-06-27T11:17:43.078Z"),
+      deploymentId: "<id>",
       description: "so pessimistic woefully gloom",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
       path: "/dev",
-      securityType: "<value>",
-      serverEnvVar: "<value>",
+      projectId: "<id>",
+      schema: "<value>",
+      summary: "<value>",
       tags: [
         "<value>",
       ],
@@ -44,5 +46,6 @@ let value: ToolsetDetails = {
 | `name`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | The name of the toolset                                                                       |
 | `organizationId`                                                                              | *string*                                                                                      | :heavy_check_mark:                                                                            | The organization ID this toolset belongs to                                                   |
 | `projectId`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | The project ID this toolset belongs to                                                        |
+| `relevantEnvironmentVariables`                                                                | *string*[]                                                                                    | :heavy_minus_sign:                                                                            | The environment variables that are relevant to the toolset                                    |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | The slug of the toolset                                                                       |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the toolset was last updated.                                                            |

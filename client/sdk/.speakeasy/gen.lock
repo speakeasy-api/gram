@@ -1,20 +1,18 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 31e6e616eb4d48269a75ac064e9537dc
+  docChecksum: 91b939665238078faf182224e7f753f6
   docVersion: 0.0.1
   speakeasyVersion: 1.529.1
   generationVersion: 2.566.5
-  releaseVersion: 0.4.1
-  configChecksum: ac6d8a772d2ffe970807830eae423e82
+  releaseVersion: 0.5.0
+  configChecksum: c77239c352c107d067514411d2e746e3
 features:
   typescript:
     additionalDependencies: 0.1.0
-    constsAndDefaults: 0.1.11
     core: 3.21.5
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
-    downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurity: 2.82.13
@@ -39,7 +37,6 @@ generatedFiles:
   - USAGE.md
   - docs/lib/utils/retryconfig.md
   - docs/models/components/asset.md
-  - docs/models/components/createcompletionrequest.md
   - docs/models/components/createdeploymentrequestbody.md
   - docs/models/components/createdeploymentresult.md
   - docs/models/components/createenvironmentform.md
@@ -83,7 +80,6 @@ generatedFiles:
   - docs/models/operations/authnumberswitchscopesrequest.md
   - docs/models/operations/authnumberswitchscopesresponse.md
   - docs/models/operations/authnumberswitchscopessecurity.md
-  - docs/models/operations/chatnumbercompletionrequest.md
   - docs/models/operations/deploymentsnumbercreatedeploymentrequest.md
   - docs/models/operations/deploymentsnumbergetdeploymentrequest.md
   - docs/models/operations/deploymentsnumberlistdeploymentsrequest.md
@@ -109,7 +105,6 @@ generatedFiles:
   - docs/models/operations/toolsnumberlisttoolsrequest.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
-  - docs/sdks/chat/README.md
   - docs/sdks/deployments/README.md
   - docs/sdks/environments/README.md
   - docs/sdks/gram/README.md
@@ -126,7 +121,6 @@ generatedFiles:
   - src/funcs/authAuthNumberInfo.ts
   - src/funcs/authAuthNumberLogout.ts
   - src/funcs/authAuthNumberSwitchScopes.ts
-  - src/funcs/chatChatNumberCompletion.ts
   - src/funcs/deploymentsDeploymentsNumberCreateDeployment.ts
   - src/funcs/deploymentsDeploymentsNumberGetDeployment.ts
   - src/funcs/deploymentsDeploymentsNumberListDeployments.ts
@@ -179,7 +173,6 @@ generatedFiles:
   - src/mcp-server/tools.ts
   - src/mcp-server/tools/assetsAssetsNumberUploadOpenAPIv3.ts
   - src/mcp-server/tools/authAuthNumberCallback.ts
-  - src/mcp-server/tools/chatChatNumberCompletion.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberCreateDeployment.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberGetDeployment.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberListDeployments.ts
@@ -194,7 +187,6 @@ generatedFiles:
   - src/mcp-server/tools/toolsetsToolsetsNumberListToolsets.ts
   - src/mcp-server/tools/toolsetsToolsetsNumberUpdateToolset.ts
   - src/models/components/asset.ts
-  - src/models/components/createcompletionrequest.ts
   - src/models/components/createdeploymentrequestbody.ts
   - src/models/components/createdeploymentresult.ts
   - src/models/components/createenvironmentform.ts
@@ -235,7 +227,6 @@ generatedFiles:
   - src/models/operations/authnumberinfo.ts
   - src/models/operations/authnumberlogout.ts
   - src/models/operations/authnumberswitchscopes.ts
-  - src/models/operations/chatnumbercompletion.ts
   - src/models/operations/deploymentsnumbercreatedeployment.ts
   - src/models/operations/deploymentsnumbergetdeployment.ts
   - src/models/operations/deploymentsnumberlistdeployments.ts
@@ -256,7 +247,6 @@ generatedFiles:
   - src/models/operations/toolsnumberlisttools.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
-  - src/react-query/chatCompletion.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
@@ -281,7 +271,6 @@ generatedFiles:
   - src/react-query/uploadOpenAPIv3.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
-  - src/sdk/chat.ts
   - src/sdk/deployments.ts
   - src/sdk/environments.ts
   - src/sdk/index.ts
@@ -392,7 +381,7 @@ examples:
         header: {}
       responses:
         "200":
-          application/json: {"environment": {"created_at": "2023-07-31T19:02:18.027Z", "entries": [{"created_at": "2024-06-04T14:37:25.747Z", "name": "<value>", "updated_at": "2023-08-10T06:48:28.182Z", "value": "<value>"}, {"created_at": "2024-05-13T08:19:13.014Z", "name": "<value>", "updated_at": "2024-04-23T11:43:05.947Z", "value": "<value>"}, {"created_at": "2023-12-20T05:46:23.123Z", "name": "<value>", "updated_at": "2024-08-03T16:29:36.656Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-25T14:32:40.435Z"}, "tools": [{"created_at": "2025-06-14T23:33:47.853Z", "description": "whopping pro victoriously provided zowie confound habit", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "security_type": "<value>", "server_env_var": "<value>", "tags": [], "updated_at": "2024-10-22T20:00:15.335Z"}, {"created_at": "2023-07-08T16:52:36.181Z", "description": "powerless modulo happily violently gah provided daily", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/srv", "security_type": "<value>", "server_env_var": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-06-22T07:26:27.262Z"}]}
+          application/json: {"environment": {"created_at": "2023-07-31T19:02:18.027Z", "entries": [{"created_at": "2024-06-04T14:37:25.747Z", "name": "<value>", "updated_at": "2023-08-10T06:48:28.182Z", "value": "<value>"}, {"created_at": "2024-05-13T08:19:13.014Z", "name": "<value>", "updated_at": "2024-04-23T11:43:05.947Z", "value": "<value>"}, {"created_at": "2023-12-20T05:46:23.123Z", "name": "<value>", "updated_at": "2024-08-03T16:29:36.656Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-25T14:32:40.435Z"}, "name": "<value>", "tools": [{"created_at": "2025-06-14T23:33:47.853Z", "deployment_id": "<id>", "description": "whopping pro victoriously provided zowie confound habit", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2024-10-22T20:00:15.335Z"}, {"created_at": "2023-07-08T16:52:36.181Z", "deployment_id": "<id>", "description": "powerless modulo happily violently gah provided daily", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/srv", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-06-22T07:26:27.262Z"}]}
   keys#createKey:
     speakeasy-default-keys#create-key:
       requestBody:
@@ -415,7 +404,7 @@ examples:
     speakeasy-default-tools#list-tools:
       responses:
         "200":
-          application/json: {"tools": [{"created_at": "2023-06-14T22:04:15.509Z", "description": "rubric while smoothly unless yeast", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "security_type": "<value>", "server_env_var": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-29T20:57:29.586Z"}]}
+          application/json: {"tools": [{"created_at": "2023-06-14T22:04:15.509Z", "deployment_id": "<id>", "description": "rubric while smoothly unless yeast", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-29T20:57:29.586Z"}]}
   toolsets#createToolset:
     speakeasy-default-toolsets#create-toolset:
       requestBody:
@@ -437,7 +426,7 @@ examples:
         header: {}
       responses:
         "200":
-          application/json: {"created_at": "2024-04-05T12:22:08.877Z", "http_tools": [{"created_at": "2025-06-30T15:43:44.156Z", "description": "cook jellyfish perspire until embossing er offensively as uselessly", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/share", "security_type": "<value>", "server_env_var": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-12-06T23:51:20.681Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-26T16:46:42.146Z"}
+          application/json: {"created_at": "2024-04-05T12:22:08.877Z", "http_tools": [{"created_at": "2025-06-30T15:43:44.156Z", "deployment_id": "<id>", "description": "cook jellyfish perspire until embossing er offensively as uselessly", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/share", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-12-06T23:51:20.681Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-26T16:46:42.146Z"}
   toolsets#listToolsets:
     speakeasy-default-toolsets#list-toolsets:
       responses:

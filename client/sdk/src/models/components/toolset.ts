@@ -22,9 +22,9 @@ export type Toolset = {
    */
   description?: string | undefined;
   /**
-   * List of HTTP tool IDs included in this toolset
+   * List of HTTP tool names included in this toolset
    */
-  httpToolIds?: Array<string> | undefined;
+  httpToolNames?: Array<string> | undefined;
   /**
    * The ID of the toolset
    */
@@ -59,7 +59,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     ),
     default_environment_id: z.string().optional(),
     description: z.string().optional(),
-    http_tool_ids: z.array(z.string()).optional(),
+    http_tool_names: z.array(z.string()).optional(),
     id: z.string(),
     name: z.string(),
     organization_id: z.string(),
@@ -72,7 +72,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     return remap$(v, {
       "created_at": "createdAt",
       "default_environment_id": "defaultEnvironmentId",
-      "http_tool_ids": "httpToolIds",
+      "http_tool_names": "httpToolNames",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",
@@ -84,7 +84,7 @@ export type Toolset$Outbound = {
   created_at: string;
   default_environment_id?: string | undefined;
   description?: string | undefined;
-  http_tool_ids?: Array<string> | undefined;
+  http_tool_names?: Array<string> | undefined;
   id: string;
   name: string;
   organization_id: string;
@@ -102,7 +102,7 @@ export const Toolset$outboundSchema: z.ZodType<
   createdAt: z.date().transform(v => v.toISOString()),
   defaultEnvironmentId: z.string().optional(),
   description: z.string().optional(),
-  httpToolIds: z.array(z.string()).optional(),
+  httpToolNames: z.array(z.string()).optional(),
   id: z.string(),
   name: z.string(),
   organizationId: z.string(),
@@ -113,7 +113,7 @@ export const Toolset$outboundSchema: z.ZodType<
   return remap$(v, {
     createdAt: "created_at",
     defaultEnvironmentId: "default_environment_id",
-    httpToolIds: "http_tool_ids",
+    httpToolNames: "http_tool_names",
     organizationId: "organization_id",
     projectId: "project_id",
     updatedAt: "updated_at",
