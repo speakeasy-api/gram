@@ -33,6 +33,22 @@ type DeploymentsOpenapiv3Asset struct {
 	Slug         string
 }
 
+type HttpSecurity struct {
+	ID           uuid.UUID
+	Key          string
+	DeploymentID uuid.UUID
+	Type         string
+	Name         string
+	InPlacement  string
+	Scheme       pgtype.Text
+	BearerFormat pgtype.Text
+	EnvVariables []string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type HttpToolDefinition struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID

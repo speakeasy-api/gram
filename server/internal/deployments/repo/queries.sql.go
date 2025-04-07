@@ -107,6 +107,70 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 	)
 }
 
+const createHTTPSecurity = `-- name: CreateHTTPSecurity :one
+INSERT INTO http_security (
+    key
+  , deployment_id
+  , type
+  , name
+  , in_placement
+  , scheme
+  , bearer_format
+  , env_variables
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+RETURNING id, key, deployment_id, type, name, in_placement, scheme, bearer_format, env_variables, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateHTTPSecurityParams struct {
+	Key          string
+	DeploymentID uuid.UUID
+	Type         string
+	Name         string
+	InPlacement  string
+	Scheme       pgtype.Text
+	BearerFormat pgtype.Text
+	EnvVariables []string
+}
+
+func (q *Queries) CreateHTTPSecurity(ctx context.Context, arg CreateHTTPSecurityParams) (HttpSecurity, error) {
+	row := q.db.QueryRow(ctx, createHTTPSecurity,
+		arg.Key,
+		arg.DeploymentID,
+		arg.Type,
+		arg.Name,
+		arg.InPlacement,
+		arg.Scheme,
+		arg.BearerFormat,
+		arg.EnvVariables,
+	)
+	var i HttpSecurity
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.DeploymentID,
+		&i.Type,
+		&i.Name,
+		&i.InPlacement,
+		&i.Scheme,
+		&i.BearerFormat,
+		&i.EnvVariables,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createOpenAPIv3ToolDefinition = `-- name: CreateOpenAPIv3ToolDefinition :one
 INSERT INTO http_tool_definitions (
     project_id

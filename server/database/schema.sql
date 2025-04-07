@@ -256,3 +256,26 @@ CREATE TABLE IF NOT EXISTS toolsets (
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS http_security (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  
+  key text NOT NULL,
+  deployment_id uuid NOT NULL,
+  type text NOT NULL,
+  name text NOT NULL,
+  in_placement text NOT NULL, -- header, query, path
+  scheme text,
+  bearer_format text,
+
+  env_variables text[] DEFAULT ARRAY[]::text[],
+  
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  
+  CONSTRAINT http_security_pkey PRIMARY KEY (id),
+  CONSTRAINT http_security_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT http_security_key_unique UNIQUE (deployment_id, key)
+);

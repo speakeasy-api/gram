@@ -146,3 +146,25 @@ INSERT INTO http_tool_definitions (
   , @schema
 )
 RETURNING *;
+
+-- name: CreateHTTPSecurity :one
+INSERT INTO http_security (
+    key
+  , deployment_id
+  , type
+  , name
+  , in_placement
+  , scheme
+  , bearer_format
+  , env_variables
+) VALUES (
+    @key
+  , @deployment_id
+  , @type
+  , @name
+  , @in_placement
+  , @scheme
+  , @bearer_format
+  , @env_variables
+)
+RETURNING *;
