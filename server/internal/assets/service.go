@@ -148,9 +148,9 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	}
 
 	switch contentType {
-	case "application/yaml", "application/x-yaml":
+	case "application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml":
 		filename += ".yaml"
-	case "application/json":
+	case "application/json", "text/json":
 		filename += ".json"
 	default:
 		return nil, fmt.Errorf("unsupported content type: %s", contentType)
