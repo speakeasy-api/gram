@@ -132,6 +132,9 @@ INSERT INTO http_tool_definitions (
   , path
   , schema_version
   , schema
+  , header_settings
+  , query_settings
+  , path_settings
   , server_env_var
   , default_server_url
 ) VALUES (
@@ -148,6 +151,9 @@ INSERT INTO http_tool_definitions (
   , @path
   , @schema_version
   , @schema
+  , @header_settings
+  , @query_settings
+  , @path_settings
   , @server_env_var
   , @default_server_url
 )

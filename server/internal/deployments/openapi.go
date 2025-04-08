@@ -318,17 +318,17 @@ func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger,
 		}
 	}
 
-	headerSchema, _, err := captureParameters(slices.Collect(headerParams.Values()))
+	headerSchema, headerSettings, err := captureParameters(slices.Collect(headerParams.Values()))
 	if err != nil {
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error collecting header parameters: %w", err)
 	}
 
-	querySchema, _, err := captureParameters(slices.Collect(queryParams.Values()))
+	querySchema, querySettings, err := captureParameters(slices.Collect(queryParams.Values()))
 	if err != nil {
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error collecting query parameters: %w", err)
 	}
 
-	pathSchema, _, err := captureParameters(slices.Collect(pathParams.Values()))
+	pathSchema, pathSettings, err := captureParameters(slices.Collect(pathParams.Values()))
 	if err != nil {
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error collecting path parameters: %w", err)
 	}
@@ -389,6 +389,9 @@ func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger,
 		Schema:              schemaBytes,
 		ServerEnvVar:        serverEnvVar,
 		DefaultServerUrl:    conv.PtrToPGText(defaultServer),
+		HeaderSettings:      headerSettings,
+		QuerySettings:       querySettings,
+		PathSettings:        pathSettings,
 	}, nil
 }
 
@@ -532,6 +535,9 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 		}
 
 		clone := *proxy
+		// We don't need the schema when plucking out the serialzating settings
+		// for a parameter. It would only bloat the database so we're stripping
+		// it out before storing.
 		clone.Schema = nil
 		specs[param.Name] = &clone
 	}
