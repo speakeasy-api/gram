@@ -1,21 +1,12 @@
 import "./App.css";
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { RootLayout } from "./components/root-layout.tsx";
 import { AppRoute, ROUTES } from "./routes.ts";
 import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { ThemeContext } from "./components/ui/theme-toggle.tsx";
-import {
-  GramProvider,
-} from "@gram/sdk/react-query";
-import { GramCore } from "@gram/sdk/core.js";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./contexts/Auth.tsx";
-import { HTTPClient } from "@gram/sdk/lib/http.js";
+import { SdkProvider } from "./contexts/Sdk.tsx";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -38,46 +29,25 @@ export default function App() {
     }
   }, []);
 
-  const queryClient = new QueryClient();
-  
-  // Temporary measure to allow the dashboard to persist cookies between calls to the server
-  // If the dashboard eventually keeps track of sesssion and manually attaches or we move to a BFF model we can remove this
-  const httpClient = new HTTPClient({
-    fetcher: (request) => {
-      const newRequest = new Request(request, {
-        credentials: 'include',
-      });
-  
-      return fetch(newRequest);
-    }
-  });
-  
-  const gramClient = new GramCore({
-    serverURL: "http://localhost:8080",
-    httpClient,
-  });
-
   return (
     <ThemeContext.Provider value={{ theme, setTheme: applyTheme }}>
       <MoonshineConfigProvider themeElement={document.documentElement}>
-        <QueryClientProvider client={queryClient}>
-          <GramProvider client={gramClient}>
-            <AuthProvider>
-              <BrowserRouter>
-                <Routes>
-                  <Route path="/" element={<RootLayout />}>
-                    <Route
-                      path={ROUTES.primaryCTA.url}
-                      element={<ROUTES.primaryCTA.component />}
-                    />
-                    {routesWithSubroutes(ROUTES.navMain)}
-                    {routesWithSubroutes(ROUTES.navSecondary)}
-                  </Route>
-                </Routes>
-              </BrowserRouter>
-            </AuthProvider>
-          </GramProvider>
-        </QueryClientProvider>
+        <SdkProvider>
+          <AuthProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<RootLayout />}>
+                  <Route
+                    path={ROUTES.primaryCTA.url}
+                    element={<ROUTES.primaryCTA.component />}
+                  />
+                  {routesWithSubroutes(ROUTES.navMain)}
+                  {routesWithSubroutes(ROUTES.navSecondary)}
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </AuthProvider>
+        </SdkProvider>
       </MoonshineConfigProvider>
     </ThemeContext.Provider>
   );

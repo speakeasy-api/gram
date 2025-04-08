@@ -4,14 +4,19 @@ import { useContext } from "react";
 import { useSessionInfo, useSessionInfoSuspense } from "@gram/sdk/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 
-const emptySession: InfoResponseBody = {
+type Session = InfoResponseBody & {
+  session: string;
+}
+
+const emptySession: Session = {
   userId: "",
   userEmail: "",
   organizations: [],
   activeOrganizationId: "",
+  session: "",
 };
 
-const SessionContext = createContext<InfoResponseBody>(emptySession);
+const SessionContext = createContext<Session>(emptySession);
 
 export const useSession = () => {
   return useContext(SessionContext);
@@ -50,12 +55,21 @@ export const useOrganization = () => {
 
 // Create a separate component for the suspended content
 const AuthContent = ({ children }: { children: React.ReactNode }) => {
-  const session = useSessionInfoSuspense({
-    sessionHeaderGramSession: "" // We are using cookies instead, so this won't get set
-  });
+  const sessionResponse = useSessionInfoSuspense(
+    {
+      sessionHeaderGramSession: "", // We are using cookies instead, so this won't get set
+    },
+  );
+
+  const sessionId = sessionResponse.data.headers["gram-session"][0];
+
+  const session: Session = {
+    ...sessionResponse.data.result,
+    session: sessionId,
+  };
 
   return (
-    <SessionContext.Provider value={session.data.result}>
+    <SessionContext.Provider value={session}>
       {children}
     </SessionContext.Provider>
   );

@@ -4,12 +4,6 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-.trans {
-  transition-property: all;
-  transition-duration: 200ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -125,10 +119,13 @@
   body {
     @apply bg-sidebar text-foreground;
   }
+  button {
+    @apply cursor-pointer;
+  }
 }
 
-.transition {
+.trans {
   transition-property: all;
-  transition-duration: 500ms;
+  transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }

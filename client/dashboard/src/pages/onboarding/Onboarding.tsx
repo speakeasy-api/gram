@@ -3,17 +3,58 @@ import FileUpload from "@/components/ui/upload";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { Stack } from "@speakeasy-api/moonshine";
-import { useUploadOpenAPIv3Mutation } from "@gram/sdk/react-query";
-import { useProject } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { UploadOpenAPIv3Result } from "@gram/sdk/models/components";
+import { v4 as uuidv4 } from "uuid";
 
 export default function Onboarding() {
   const project = useProject();
-  const uploadOpenApi = useUploadOpenAPIv3Mutation();
+  const session = useSession();
+  const client = useSdkClient();
 
-  const handleUpload = (file: File) => {
-    uploadOpenApi.mutate({
-      request: { contentLength: file.size, gramProject: project.projectSlug },
-    });
+  const handleUpload = async (file: File) => {
+    try {
+      // Need to use fetch directly because the SDK doesn't support file uploads
+      const response = await fetch(
+        `http://localhost:8080/rpc/assets.uploadOpenAPIv3`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": file.type,
+            "content-length": file.size.toString(),
+            "gram-session": session.session,
+            "gram-project": project.projectSlug,
+          },
+          body: file,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Upload failed`);
+      }
+
+      const result: UploadOpenAPIv3Result = await response.json();
+      console.log("Upload successful:", result);
+
+      const deployment =
+        await client.deployments.deploymentsNumberCreateDeployment({
+          idempotencyKey: uuidv4(),
+          createDeploymentRequestBody: {
+            openapiv3Assets: [
+              {
+                assetId: result.asset.id,
+                name: file.name,
+                slug: "default", // TODO
+              },
+            ],
+          },
+        });
+
+      console.log("Deployment created:", deployment);
+    } catch (error) {
+      console.error("Upload failed:", error);
+    }
   };
 
   return (

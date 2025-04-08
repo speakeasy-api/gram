@@ -70,7 +70,7 @@ export default function FileUpload({
               drop
             </p>
             <p className="text-xs text-muted-foreground">
-              OpenAPI YAML or JSON (max 2MB)
+              OpenAPI YAML or JSON (max 8MiB)
             </p>
           </div>
           <input

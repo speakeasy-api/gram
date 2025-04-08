@@ -15,5 +15,13 @@
   "devDependencies": {
     "typescript": "catalog:",
     "zx": "^8.4.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@speakeasy-api/moonshine": "link:../moonshine"
+    }
+  },
+  "dependencies": {
+    "@speakeasy-api/moonshine": "link:../moonshine"
   }
 }

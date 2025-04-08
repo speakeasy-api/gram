@@ -141,7 +141,6 @@ export default function EnvironmentPage() {
     computeChanges().updatedEntries.length > 0 ||
     computeChanges().removedEntries.length > 0;
 
-  console.log(computeChanges());
 
   return (
     <Page>

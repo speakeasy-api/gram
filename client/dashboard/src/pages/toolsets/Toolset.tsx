@@ -5,6 +5,7 @@ import { useProject } from "@/contexts/Auth";
 import { HTTPToolDefinition } from "@gram/sdk/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
+  useListToolsSuspense,
   useUpdateToolsetMutation,
 } from "@gram/sdk/react-query";
 import { Toolset } from "@gram/sdk/models/components";
@@ -96,6 +97,34 @@ export default function ToolsetPage() {
     />
   );
 
+  const updateToolsetTools = (toolNames: string[]) => {
+    const addedEntries = toolNames.filter(
+      (tool) => !toolset.httpTools.some((t) => t.name === tool)
+    );
+    const removedEntries = toolset.httpTools
+      .filter((t) => !toolNames.includes(t.name))
+      .map((t) => t.name);
+
+    console.log(addedEntries, removedEntries);
+
+    updateToolsetMutation.mutate({
+      request: {
+        gramProject: project.projectSlug,
+        slug: toolset.slug,
+        updateToolsetRequestBody: {
+          httpToolNamesToAdd: addedEntries,
+          httpToolNamesToRemove: removedEntries,
+        },
+      },
+    }, {
+      onSuccess: () => {
+          console.log("mutated");
+          setAddToolDialogOpen(false);
+        },
+      }
+    );
+  };
+
   return (
     <Page>
       <Page.Header>
@@ -130,10 +159,7 @@ export default function ToolsetPage() {
           open={addToolDialogOpen}
           onOpenChange={setAddToolDialogOpen}
           toolset={toolset}
-          onSubmit={() => {
-            console.log("implement me");
-            setAddToolDialogOpen(false);
-          }}
+          onSubmit={updateToolsetTools}
         />
       </Page.Body>
     </Page>
@@ -168,20 +194,21 @@ function AddToolDialog({
   toolset: Toolset;
   onSubmit: (newToolIds: string[]) => void;
 }) {
-  const [selectedTools, setSelectedTools] = useState<string[]>([]);
+  const project = useProject();
+  const [selectedTools, setSelectedTools] = useState<string[]>(toolset.httpToolNames ?? []);
 
-  // TODO: hook up
-  const tools = [
-    { label: "Tool 1", value: "tool1" },
-    { label: "Tool 2", value: "tool2" },
-    { label: "Tool 3", value: "tool3" },
-    { label: "Tool 4", value: "tool4" },
-    { label: "Tool 5", value: "tool5" },
-  ];
+  const tools = useListToolsSuspense({
+    gramProject: project.projectSlug,
+  });
+
+  const options = tools.data.tools.map((tool: HTTPToolDefinition) => ({
+    label: tool.name,
+    value: tool.name,
+  }));
 
   const selector = (
     <MultiSelect
-      options={tools}
+      options={options}
       onValueChange={setSelectedTools}
       defaultValue={selectedTools}
       placeholder="Select tools"

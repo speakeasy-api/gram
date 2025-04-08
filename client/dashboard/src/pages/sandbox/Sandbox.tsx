@@ -1,12 +1,15 @@
 import { Page } from "@/components/page-layout";
 import { useChat } from "@ai-sdk/react";
 import { useCallback } from "react";
-import AIChatWindow from "@/components/ai-chat/AIChatWindow";
-import { AIChatSuggestion } from "@/components/ai-chat/types";
-import { useProject } from "@/contexts/Auth";
+import { AIChatContainer } from "@speakeasy-api/moonshine";
+import { useProject, useSession } from "@/contexts/Auth";
 import { smoothStream, streamText } from "ai";
-import { useGramContext } from "@gram/sdk/react-query";
 import { createOpenAI } from "@ai-sdk/openai";
+import {
+  useLoadInstanceSuspense,
+  useToolsetSuspense,
+} from "@gram/sdk/react-query";
+import { jsonSchema } from "ai";
 
 export default function Sandbox() {
   return (
@@ -22,23 +25,49 @@ export default function Sandbox() {
 }
 
 export function ChatWindow() {
+  const session = useSession();
   const project = useProject();
-  const client = useGramContext();
+
+  const instance = useLoadInstanceSuspense(
+    {},
+    {
+      gramProject: project.projectSlug,
+      toolsetSlug: "my-test",
+      environmentSlug: "test3",
+    }
+  );
+
+  console.log(instance);
+
+  const tools = Object.fromEntries(
+    instance.data.tools.map((tool) => [
+      tool.name,
+      {
+        id: tool.id,
+        description: tool.description,
+        parameters: jsonSchema(JSON.parse(tool.schema)),
+      },
+    ])
+  );
+
+  console.log(tools);
 
   const openai = createOpenAI({
     apiKey: "this is required",
     baseURL: "http://localhost:8080/",
+    headers: {
+      "Gram-Session": session.session,
+    },
   });
 
-  const fetch: typeof globalThis.fetch = async (input, init) => {
-    console.log("fetch", input, JSON.parse(init?.body as string));
-
+  const openaiFetch: typeof globalThis.fetch = async (_, init) => {
     const result = streamText({
       model: openai("gpt-4o"),
       messages: JSON.parse(init?.body as string).messages,
       experimental_transform: smoothStream({
         delayInMs: 20, // Looks a little smoother
       }),
+      tools,
     });
 
     return result.toDataStreamResponse();
@@ -54,25 +83,38 @@ export function ChatWindow() {
     append,
     addToolResult,
   } = useChat({
-    // api: "/chat/completions",
-    fetch,
-    initialMessages: [
-      {
-        id: "initial",
-        role: "user",
-        content: "Hello, how are you?",
-      },
-    ],
+    fetch: openaiFetch,
     onFinish: (message) => {
       console.log("Chat finished with message:", message);
     },
     onError: (error) => {
-      console.error("Chat error:", error);
+      console.error("Chat error:", error.message, error.stack);
     },
     maxSteps: 5,
     onToolCall: async ({ toolCall }) => {
-      console.log("Received tool call on client:", toolCall);
-      return undefined;
+      const tool = tools[toolCall.toolName];
+
+      console.log("Received new tool call:", toolCall);
+
+      const response = await fetch(
+        `http://localhost:8080/rpc/instances.invoke/tool?tool_id=${tool.id}&environment_slug=test3`,
+        {
+          method: "POST",
+          headers: {
+            "gram-session": session.session,
+            "gram-project": project.projectSlug,
+          },
+          body: JSON.stringify(toolCall.args),
+        }
+      )
+
+      console.log("fetched")
+
+      const result = await response.json();
+
+      console.log("result", result);
+
+      return result;
     },
   });
 
@@ -82,49 +124,16 @@ export function ChatWindow() {
         role: "user",
         content: msg,
       });
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "",
-          id: "streaming",
-          parts: [
-            {
-              type: "text",
-              text: "Thinking...",
-            },
-          ],
-          data: {
-            isStreaming: true,
-          },
-        },
-      ]);
     },
-    [append, setMessages]
-  );
-
-  const handleSuggestionClick = useCallback(
-    (suggestion: AIChatSuggestion) => {
-      void handleSend(suggestion.text);
-    },
-    [handleSend]
+    [append]
   );
 
   return (
-    <div className="max-w-4xl rounded-2xl border h-full overflow-hidden">
-      <AIChatWindow>
-        <AIChatWindow.Conversation
-          messages={messages}
-          isGenerating={status === "streaming"}
-          addToolResult={addToolResult as any}
-        />
-        <AIChatWindow.Prompt
-          onSend={handleSend}
-          disabled={status === "streaming"}
-          onSuggestionClick={handleSuggestionClick}
-        />
-      </AIChatWindow>
-    </div>
+    <AIChatContainer
+      messages={messages}
+      isLoading={status === "streaming"}
+      onSendMessage={handleSend}
+      className="max-w-4xl"
+    />
   );
 }

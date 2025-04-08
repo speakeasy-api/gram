@@ -107,8 +107,11 @@ var _ = Service("auth", func() {
 			Attribute("user_email", String)
 			Attribute("active_organization_id", String)
 			Attribute("organizations", ArrayOf("Organization")) // <-- here too
+
+			// Response headers
 			Attribute("session_token", String, "The authentication session")
 			Attribute("session_cookie", String, "The authentication session")
+
 			Required("user_id", "user_email", "active_organization_id", "organizations", "session_token", "session_cookie")
 		})
 
