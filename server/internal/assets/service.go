@@ -148,7 +148,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	}
 
 	switch contentType {
-	case "application/yaml":
+	case "application/yaml", "application/x-yaml":
 		filename += ".yaml"
 	case "application/json":
 		filename += ".json"
