@@ -233,13 +233,13 @@ func newStartCommand() *cli.Command {
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
-					logger.ErrorContext(ctx, "failed to shutdown development server", slog.String("err", err.Error()))
+					logger.ErrorContext(ctx, "failed to shutdown development server", slog.String("error", err.Error()))
 				}
 			}()
 
 			logger.InfoContext(ctx, "server started", slog.String("address", c.String("address")))
 			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.ErrorContext(ctx, "server error", slog.String("err", err.Error()))
+				logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))
 			}
 
 			return nil
@@ -260,7 +260,7 @@ func newStartCommand() *cli.Command {
 				go func(shutdown func(context.Context) error) {
 					defer wg.Done()
 					if err := shutdown(ctx); err != nil {
-						logger.ErrorContext(ctx, "failed to shutdown component", slog.String("err", err.Error()))
+						logger.ErrorContext(ctx, "failed to shutdown component", slog.String("error", err.Error()))
 					}
 				}(shutdown)
 			}

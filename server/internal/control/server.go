@@ -48,7 +48,7 @@ func (s *Server) Start(ctx context.Context, healthCheck http.Handler) (shutdown 
 	go func() {
 		s.Logger.InfoContext(ctx, "control server started", slog.String("address", s.Address))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.Logger.ErrorContext(ctx, "control server error", slog.String("err", err.Error()))
+			s.Logger.ErrorContext(ctx, "control server error", slog.String("error", err.Error()))
 		}
 	}()
 

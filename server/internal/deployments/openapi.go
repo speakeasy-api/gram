@@ -61,7 +61,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		return err
 	}
 
-	rc, err := s.assetStorage.Read(ctx, docURL.Path)
+	rc, err := s.assetStorage.Read(ctx, docURL)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to fetch openapi document", slog.String("error", err.Error()))
 		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error fetching openapi document")
@@ -507,14 +507,22 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 	specs := make(map[string]*openapiV3ParameterProxy, len(params))
 
 	for _, param := range params {
-		s := param.Schema.Schema()
-		if s.Description == "" && param.Description != "" {
-			s.Description = param.Description
-		}
+		var schemaBytes []byte
 
-		schemaBytes, err := extractJSONSchemaFromYaml(param.Name, param.Schema)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to extract json schema: %w", err)
+		if param.Schema == nil {
+			schemaBytes = []byte(`{"type":"string"}`)
+		} else {
+			s := param.Schema.Schema()
+			if s != nil && s.Description == "" && param.Description != "" {
+				s.Description = param.Description
+			}
+
+			sb, err := extractJSONSchemaFromYaml(param.Name, param.Schema)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to extract json schema: %w", err)
+			}
+
+			schemaBytes = sb
 		}
 
 		proxy := &openapiV3ParameterProxy{

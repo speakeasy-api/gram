@@ -67,9 +67,9 @@ func (e *ShareableError) LogValue() slog.Value {
 func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...any) *ShareableError {
 	trace.SpanFromContext(ctx).SetStatus(codes.Error, e.String())
 	if len(args) > 0 {
-		logger.ErrorContext(ctx, e.public, append(args, slog.String("err", e.String()))...)
+		logger.ErrorContext(ctx, e.public, append(args, slog.String("error", e.String()))...)
 	} else {
-		logger.ErrorContext(ctx, e.public, slog.String("err", e.String()))
+		logger.ErrorContext(ctx, e.public, slog.String("error", e.String()))
 	}
 	return e
 }

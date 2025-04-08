@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net/url"
 	"os"
 	"path"
 	"time"
@@ -117,27 +118,30 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		return nil, fmt.Errorf("find project asset by sha256: %w", err)
 	}
 	if asset.ID != uuid.Nil {
-		exists, err := s.storage.Exists(ctx, asset.Url)
-		switch {
-		case err != nil:
-			s.logger.ErrorContext(ctx, "failed to check if asset exists", slog.String("url", asset.Url), slog.String("error", err.Error()))
-		case exists:
-			return &gen.UploadOpenAPIv3Result{
-				Asset: &gen.Asset{
-					ID:            asset.ID.String(),
-					URL:           asset.Url,
-					Kind:          asset.Kind,
-					Sha256:        asset.Sha256,
-					ContentType:   asset.ContentType,
-					ContentLength: asset.ContentLength,
-					CreatedAt:     asset.CreatedAt.Time.Format(time.RFC3339),
-					UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
-				},
-			}, nil
-		default:
-			// it doesn't exist, carry on to create it
+		if assetURL, err := url.Parse(asset.Url); err == nil {
+			exists, err := s.storage.Exists(ctx, assetURL)
+			switch {
+			case err != nil:
+				s.logger.ErrorContext(ctx, "failed to check if asset exists", slog.String("url", asset.Url), slog.String("error", err.Error()))
+			case exists:
+				return &gen.UploadOpenAPIv3Result{
+					Asset: &gen.Asset{
+						ID:            asset.ID.String(),
+						URL:           asset.Url,
+						Kind:          asset.Kind,
+						Sha256:        asset.Sha256,
+						ContentType:   asset.ContentType,
+						ContentLength: asset.ContentLength,
+						CreatedAt:     asset.CreatedAt.Time.Format(time.RFC3339),
+						UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
+					},
+				}, nil
+			default:
+				// it doesn't exist, carry on to create it
+			}
+		} else {
+			s.logger.ErrorContext(ctx, "failed to parse asset url", slog.String("url", asset.Url), slog.String("error", err.Error()))
 		}
-
 	}
 
 	filename := fmt.Sprintf("openapi-%s", sha)
