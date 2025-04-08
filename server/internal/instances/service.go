@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
+
+const tooldIdQueryParam = "tool_id"
+const environmentSlugQueryParam = "environment_slug"
 
 type Service struct {
 	tracer           trace.Tracer
@@ -52,6 +56,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	mux.Handle("POST", "/rpc/instances.invoke/tool", func(w http.ResponseWriter, r *http.Request) {
+		service.ExecuteInstanceTool(w, r)
+	})
 }
 
 func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePayload) (res *gen.InstanceResult, err error) {
@@ -141,6 +148,77 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 		Tools:                        httpTools,
 		Environment:                  environment,
 	}, nil
+}
+
+func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
+	// TODO: Handling security, we can probably factor this out into something smarter
+	sc := security.APIKeyScheme{
+		Name:           auth.SessionSecurityScheme,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	}
+	ctx, err := s.auth.Authorize(r.Context(), r.Header.Get(auth.SessionHeader), &sc)
+	if err != nil {
+		sc := security.APIKeyScheme{
+			Name:           auth.KeySecurityScheme,
+			RequiredScopes: []string{"consumer"},
+		}
+		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+	}
+	sc = security.APIKeyScheme{
+		Name: auth.ProjectSlugSecuritySchema,
+	}
+	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.ProjectID == nil {
+		http.Error(w, "project ID is required", http.StatusUnauthorized)
+		return
+	}
+
+	toolID := r.URL.Query().Get(tooldIdQueryParam)
+	if toolID == "" {
+		http.Error(w, "tool_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	environmentSlug := r.URL.Query().Get(environmentSlugQueryParam)
+	if environmentSlug == "" {
+		http.Error(w, "environment_slug query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      environmentSlug,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	environmentEntries, err := s.environmentsRepo.ListEnvironmentEntries(ctx, envModel.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	executionInfo, err := s.toolset.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	InstanceToolProxy(ctx, s.logger, w, r, environmentEntries, executionInfo)
+	return
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

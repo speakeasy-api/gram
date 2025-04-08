@@ -12,6 +12,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getHTTPToolDefinitionByID = `-- name: GetHTTPToolDefinitionByID :one
+SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+FROM http_tool_definitions
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetHTTPToolDefinitionByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPToolDefinitionByIDParams) (HttpToolDefinition, error) {
+	row := q.db.QueryRow(ctx, getHTTPToolDefinitionByID, arg.ID, arg.ProjectID)
+	var i HttpToolDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.Openapiv3DocumentID,
+		&i.Name,
+		&i.Summary,
+		&i.Description,
+		&i.Openapiv3Operation,
+		&i.Tags,
+		&i.ServerEnvVar,
+		&i.Security,
+		&i.HttpMethod,
+		&i.Path,
+		&i.SchemaVersion,
+		&i.Schema,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listAllHttpToolDefinitions = `-- name: ListAllHttpToolDefinitions :many
 WITH latest_deployment AS (
     SELECT id, max(seq)

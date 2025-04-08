@@ -13,3 +13,10 @@ WHERE http_tool_definitions.project_id = @project_id
   AND (sqlc.narg(cursor)::uuid IS NULL OR http_tool_definitions.id < sqlc.narg(cursor))
 ORDER BY http_tool_definitions.id DESC
 LIMIT 100;
+
+-- name: GetHTTPToolDefinitionByID :one
+SELECT *
+FROM http_tool_definitions
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

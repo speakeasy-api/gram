@@ -10,18 +10,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
 	"github.com/speakeasy-api/gram/internal/conv"
+	tools_repo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/tools/security"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
 
 // Shared service for aggregating toolset details
 type Toolsets struct {
-	repo *repo.Queries
+	repo     *repo.Queries
+	toolRepo *tools_repo.Queries
 }
 
 func NewToolsets(db *pgxpool.Pool) *Toolsets {
 	return &Toolsets{
-		repo: repo.New(db),
+		repo:     repo.New(db),
+		toolRepo: tools_repo.New(db),
 	}
 }
 
@@ -122,4 +125,38 @@ func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []
 	// TODO: We are holding off on handling server env vars until more worked out
 
 	return slices.Collect(maps.Keys(relevantEnvVarsMap)), nil
+}
+
+type HTTPToolExecutionInfo struct {
+	Tool     tools_repo.HttpToolDefinition
+	Security []repo.HttpSecurity
+}
+
+func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
+	tool, err := t.toolRepo.GetHTTPToolDefinitionByID(ctx, tools_repo.GetHTTPToolDefinitionByIDParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	relevantSecurityKeysMap := make(map[string]bool)
+	securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.Security)
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range securityKeys {
+		relevantSecurityKeysMap[key] = true
+	}
+
+	securityEntries, err := t.repo.GetHTTPSecurityDefinitions(ctx, repo.GetHTTPSecurityDefinitionsParams{
+		SecurityKeys: slices.Collect(maps.Keys(relevantSecurityKeysMap)),
+		DeploymentID: tool.DeploymentID,
+	})
+
+	return &HTTPToolExecutionInfo{
+		Tool:     tool,
+		Security: securityEntries,
+	}, nil
 }

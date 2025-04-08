@@ -3,3 +3,30 @@
 //   sqlc v1.28.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type HttpToolDefinition struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.UUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Summary             string
+	Description         string
+	Openapiv3Operation  pgtype.Text
+	Tags                []string
+	ServerEnvVar        pgtype.Text
+	Security            []byte
+	HttpMethod          string
+	Path                string
+	SchemaVersion       string
+	Schema              []byte
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
