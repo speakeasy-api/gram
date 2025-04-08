@@ -203,8 +203,9 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
 
+			chatService := chat.NewService(logger.With("component", "chat"), db, redisClient)
 			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-				chat.HandleCompletion(w, r)
+				chatService.HandleCompletion(w, r)
 			})
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))

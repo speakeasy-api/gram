@@ -151,7 +151,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 }
 
 func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
-	// TODO: Handling security, we can probably factor this out into something smarter
+	// TODO: Handling security, we can probably factor this out into something smarter like a proxy
 	sc := security.APIKeyScheme{
 		Name:           auth.SessionSecurityScheme,
 		Scopes:         []string{},
