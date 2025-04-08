@@ -96,6 +96,7 @@ func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []
 	}
 
 	relevantSecurityKeysMap := make(map[string]bool)
+	serverEnvVarsMap := make(map[string]bool)
 	for _, tool := range tools {
 		securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 		if err != nil {
@@ -104,6 +105,10 @@ func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []
 
 		for _, key := range securityKeys {
 			relevantSecurityKeysMap[key] = true
+		}
+
+		if tool.ServerEnvVar != "" {
+			serverEnvVarsMap[tool.ServerEnvVar] = true
 		}
 	}
 
@@ -122,7 +127,9 @@ func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []
 		}
 	}
 
-	// TODO: We are holding off on handling server env vars until more worked out
+	for key := range serverEnvVarsMap {
+		relevantEnvVarsMap[key] = true
+	}
 
 	return slices.Collect(maps.Keys(relevantEnvVarsMap)), nil
 }
