@@ -4,18 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	"log/slog"
 
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/serialization"
 	"github.com/speakeasy-api/gram/internal/toolsets"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type ToolCallBody struct {
@@ -25,7 +29,7 @@ type ToolCallBody struct {
 	Body            json.RawMessage `json:"body"`
 }
 
-func InstanceToolProxy(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, environmentEntries []environments_repo.EnvironmentEntry, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) {
+func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, r *http.Request, environmentEntries []environments_repo.EnvironmentEntry, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) {
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(r.Body).Decode(&toolCallBody); err != nil {
 		logger.ErrorContext(ctx, "invalid request body", slog.String("error", err.Error()))
@@ -78,10 +82,9 @@ func InstanceToolProxy(ctx context.Context, logger *slog.Logger, w http.Response
 		return
 	}
 
-	newReqCtx := r.Context()
 	// Create a new request
 	req, err := http.NewRequestWithContext(
-		newReqCtx,
+		r.Context(),
 		toolExecutionInfo.Tool.HttpMethod,
 		strings.TrimRight(serverURL, "/")+"/"+strings.TrimLeft(requestPath, "/"),
 		bytes.NewReader(toolCallBody.Body),
@@ -124,6 +127,13 @@ func InstanceToolProxy(ctx context.Context, logger *slog.Logger, w http.Response
 
 	processSecurity(ctx, logger, req, toolExecutionInfo, envVars)
 
+	reverseProxyRequest(ctx, tracer, logger, toolExecutionInfo.Tool.Name, w, req)
+}
+
+func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, toolName string, w http.ResponseWriter, req *http.Request) {
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", toolName))
+	defer span.End()
+
 	// TODO: This is temporary while in development
 	bodyBytes, _ := io.ReadAll(req.Body)
 	// Restore the body so it can be read again in the actual request
@@ -135,14 +145,25 @@ func InstanceToolProxy(ctx context.Context, logger *slog.Logger, w http.Response
 		slog.Any("headers", req.Header),
 		slog.String("body", string(bodyBytes)))
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		logger.ErrorContext(ctx, "failed to execute request", slog.String("error", err.Error()))
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
+
+	if len(resp.Trailer) > 0 {
+		var trailerKeys []string
+		for key := range resp.Trailer {
+			trailerKeys = append(trailerKeys, key)
+		}
+		w.Header().Set("Trailer", strings.Join(trailerKeys, ", "))
+	}
 
 	// Copy response headers
 	for key, values := range resp.Header {
@@ -159,13 +180,41 @@ func InstanceToolProxy(ctx context.Context, logger *slog.Logger, w http.Response
 	// Copy status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Copy the response body
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
-		// Can't write headers or body at this point since we've already started the response
-		return
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		// Streaming mode: flush after each chunk
+		logger.InfoContext(ctx, "streaming with flush", slog.String("content-type", resp.Header.Get("Content-Type")))
+
+		buf := make([]byte, 32*1024)
+		flusher, canFlush := w.(http.Flusher)
+
+		for {
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+					logger.ErrorContext(ctx, "client write failed", slog.String("error", writeErr.Error()))
+					break
+				}
+				if canFlush {
+					flusher.Flush()
+				}
+			}
+			if err != nil {
+				if err != io.EOF {
+					span.SetStatus(codes.Error, err.Error())
+					logger.ErrorContext(ctx, "upstream read failed", slog.String("error", err.Error()))
+				}
+				break
+			}
+		}
+	} else {
+		// Normal response copy
+		if _, err := io.Copy(w, resp.Body); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
+		}
 	}
 }
+
 func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars map[string]string) string {
 	if toolExecutionInfo.Tool.ServerEnvVar != "" {
 		envVar := envVars[toolExecutionInfo.Tool.ServerEnvVar]

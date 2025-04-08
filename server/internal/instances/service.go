@@ -217,7 +217,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	InstanceToolProxy(ctx, s.logger, w, r, environmentEntries, executionInfo)
+	InstanceToolProxy(ctx, s.tracer, s.logger, w, r, environmentEntries, executionInfo)
 	return
 }
 
