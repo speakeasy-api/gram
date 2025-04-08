@@ -19,7 +19,7 @@ WITH latest_deployment AS (
     WHERE project_id = $1
     GROUP BY id
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
 FROM http_tool_definitions
 INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
 WHERE http_tool_definitions.project_id = $1 
@@ -44,7 +44,8 @@ type ListAllHttpToolDefinitionsRow struct {
 	Description         string
 	Openapiv3Operation  pgtype.Text
 	Tags                []string
-	ServerEnvVar        pgtype.Text
+	ServerEnvVar        string
+	DefaultServerUrl    pgtype.Text
 	Security            []byte
 	HttpMethod          string
 	Path                string
@@ -78,6 +79,7 @@ func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHtt
 			&i.Openapiv3Operation,
 			&i.Tags,
 			&i.ServerEnvVar,
+			&i.DefaultServerUrl,
 			&i.Security,
 			&i.HttpMethod,
 			&i.Path,

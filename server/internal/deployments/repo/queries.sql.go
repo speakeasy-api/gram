@@ -186,6 +186,8 @@ INSERT INTO http_tool_definitions (
   , path
   , schema_version
   , schema
+  , server_env_var
+  , default_server_url
 ) VALUES (
     $1
   , $2
@@ -200,8 +202,10 @@ INSERT INTO http_tool_definitions (
   , $11
   , $12
   , $13
+  , $14
+  , $15
 )
-RETURNING id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -218,6 +222,8 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	Path                string
 	SchemaVersion       string
 	Schema              []byte
+	ServerEnvVar        string
+	DefaultServerUrl    pgtype.Text
 }
 
 func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateOpenAPIv3ToolDefinitionParams) (HttpToolDefinition, error) {
@@ -235,6 +241,8 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.Path,
 		arg.SchemaVersion,
 		arg.Schema,
+		arg.ServerEnvVar,
+		arg.DefaultServerUrl,
 	)
 	var i HttpToolDefinition
 	err := row.Scan(
@@ -248,6 +256,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.Openapiv3Operation,
 		&i.Tags,
 		&i.ServerEnvVar,
+		&i.DefaultServerUrl,
 		&i.Security,
 		&i.HttpMethod,
 		&i.Path,

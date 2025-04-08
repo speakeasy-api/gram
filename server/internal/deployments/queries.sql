@@ -132,6 +132,8 @@ INSERT INTO http_tool_definitions (
   , path
   , schema_version
   , schema
+  , server_env_var
+  , default_server_url
 ) VALUES (
     @project_id
   , @deployment_id
@@ -146,6 +148,8 @@ INSERT INTO http_tool_definitions (
   , @path
   , @schema_version
   , @schema
+  , @server_env_var
+  , @default_server_url
 )
 RETURNING *;
 

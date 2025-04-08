@@ -173,7 +173,8 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   openapiv3_operation text,
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
-  server_env_var text,
+  server_env_var text NOT NULL,
+  default_server_url text,
   security jsonb,
 
   http_method text NOT NULL,

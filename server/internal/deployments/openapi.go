@@ -95,7 +95,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		return fmt.Errorf("error serializing global security: %w", err)
 	}
 
-	securitySchemesParams, errs := securitySchemesFromOpenAPIv3(ctx, logger, v3Model.Model, task)
+	securitySchemesParams, errs := securitySchemesFromOpenAPIv3(v3Model.Model, task)
 	if len(errs) > 0 {
 		for _, err := range errs {
 			if logErr := s.logDeploymentError(
@@ -134,24 +134,39 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		securitySchemes[key] = sec
 	}
 
-	for path, pitem := range v3Model.Model.Paths.PathItems.FromOldest() {
+	globalServerEnvVar := strcase.ToSNAKE(docInfo.Slug + "_SERVER_URL")
+	globalDefaultServer := s.extractDefaultServer(ctx, logger, tx, projectID, deploymentID, docInfo, v3Model.Model.Servers)
+
+	for path, pathItem := range v3Model.Model.Paths.PathItems.FromOldest() {
 		ops := []openapiV3Operation{
-			{method: "GET", operation: pitem.Get},
-			{method: "POST", operation: pitem.Post},
-			{method: "PUT", operation: pitem.Put},
-			{method: "DELETE", operation: pitem.Delete},
-			{method: "HEAD", operation: pitem.Head},
-			{method: "PATCH", operation: pitem.Patch},
+			{method: "GET", operation: pathItem.Get},
+			{method: "POST", operation: pathItem.Post},
+			{method: "PUT", operation: pathItem.Put},
+			{method: "DELETE", operation: pathItem.Delete},
+			{method: "HEAD", operation: pathItem.Head},
+			{method: "PATCH", operation: pathItem.Patch},
 		}
 
-		sharedParameters := pitem.Parameters
+		sharedParameters := pathItem.Parameters
 
 		for _, op := range ops {
 			if op.operation == nil {
 				continue
 			}
 
-			def, err := toolDefFromOpenAPIv3(ctx, logger, tx, op.method, path, op.operation, globalSecurity, sharedParameters, task)
+			// TODO: Currently ignoring servers at path item level until we
+			// figure out how to name env variable
+
+			def, err := s.toolDefFromOpenAPIv3(ctx, logger, tx, openapiV3OperationTask{
+				openapiV3Task:    task,
+				method:           op.method,
+				path:             path,
+				operation:        op.operation,
+				sharedParameters: sharedParameters,
+				globalSecurity:   globalSecurity,
+				serverEnvVar:     globalServerEnvVar,
+				defaultServer:    globalDefaultServer,
+			})
 			if err != nil {
 				if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
 					DeploymentID: deploymentID,
@@ -179,17 +194,89 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 	return nil
 }
 
+func (s *Service) extractDefaultServer(ctx context.Context, logger *slog.Logger, tx *repo.Queries, projectID, deploymentID uuid.UUID, docInfo *gen.OpenAPIv3DeploymentAsset, servers []*v3.Server) *string {
+	for _, server := range servers {
+		low := server.GoLow()
+		line, col := low.KeyNode.Line, low.KeyNode.Column
+
+		if server.Variables == nil || server.Variables.Len() == 0 {
+			u, err := url.Parse(server.URL)
+			if err != nil {
+				if logErr := s.logDeploymentError(
+					ctx,
+					logger,
+					tx,
+					projectID,
+					deploymentID,
+					fmt.Sprintf("%s: %s: skipping server due to malformed url [%d:%d]: %s", docInfo.Name, server.URL, line, col, err.Error()),
+				); logErr != nil {
+					logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
+				}
+				continue
+			}
+
+			if u.Scheme != "https" {
+				if logErr := s.logDeploymentError(
+					ctx,
+					logger,
+					tx,
+					projectID,
+					deploymentID,
+					fmt.Sprintf("%s: %s: skipping non-https server url [%d:%d]", docInfo.Name, server.URL, line, col),
+				); logErr != nil {
+					logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
+				}
+				continue
+			}
+
+			return &server.URL
+		}
+	}
+
+	return nil
+}
+
+type openapiV3OperationTask struct {
+	openapiV3Task    openapiV3Task
+	method           string
+	path             string
+	operation        *v3.Operation
+	sharedParameters []*v3.Parameter
+	globalSecurity   []byte
+	serverEnvVar     string
+	defaultServer    *string
+}
+
 type openapiV3Operation struct {
 	method    string
 	path      string
 	operation *v3.Operation
 }
 
-func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, method string, path string, op *v3.Operation, globalSecurity []byte, sharedParameters []*v3.Parameter, task openapiV3Task) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
-	projectID := task.projectID
-	deploymentID := task.deploymentID
-	openapiDocID := task.openapiDocID
-	docInfo := task.docInfo
+func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, task openapiV3OperationTask) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+	projectID := task.openapiV3Task.projectID
+	deploymentID := task.openapiV3Task.deploymentID
+	openapiDocID := task.openapiV3Task.openapiDocID
+	docInfo := task.openapiV3Task.docInfo
+	method := task.method
+	path := task.path
+	op := task.operation
+	sharedParameters := task.sharedParameters
+	globalSecurity := task.globalSecurity
+	serverEnvVar := task.serverEnvVar
+	defaultServer := task.defaultServer
+	if err := inv.Check("toolDefFromOpenAPIv3",
+		"project id set", projectID != uuid.Nil,
+		"deployment id set", deploymentID != uuid.Nil,
+		"openapi doc id set", openapiDocID != uuid.Nil,
+		"doc info set", docInfo != nil && docInfo.Name != "" && docInfo.Slug != "",
+		"method set", method != "",
+		"path set", path != "",
+		"operation set", op != nil,
+		"server env var set", serverEnvVar != "",
+	); err != nil {
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, err
+	}
 
 	switch {
 	case op.OperationId == "":
@@ -281,6 +368,11 @@ func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Que
 		security = globalSecurity
 	}
 
+	if len(op.Servers) > 0 {
+		serverEnvVar = strcase.ToSNAKE(fmt.Sprintf("%s_%s_SERVER_URL", docInfo.Slug, op.OperationId))
+		defaultServer = s.extractDefaultServer(ctx, logger, tx, projectID, deploymentID, docInfo, op.Servers)
+	}
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
@@ -295,6 +387,8 @@ func toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Que
 		Description:         op.Description,
 		SchemaVersion:       "1.0.0",
 		Schema:              schemaBytes,
+		ServerEnvVar:        serverEnvVar,
+		DefaultServerUrl:    conv.PtrToPGText(defaultServer),
 	}, nil
 }
 
@@ -473,7 +567,7 @@ func serializeSecurity(security []*base.SecurityRequirement) ([]byte, error) {
 	return json.Marshal(acc)
 }
 
-func securitySchemesFromOpenAPIv3(ctx context.Context, logger *slog.Logger, doc v3.Document, task openapiV3Task) (map[string]*repo.CreateHTTPSecurityParams, []error) {
+func securitySchemesFromOpenAPIv3(doc v3.Document, task openapiV3Task) (map[string]*repo.CreateHTTPSecurityParams, []error) {
 	slug := task.docInfo.Slug
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil || doc.Components.SecuritySchemes.Len() == 0 {
 		return nil, nil
