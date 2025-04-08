@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"cloud.google.com/go/storage"
 )
@@ -19,14 +20,21 @@ type BlobStore interface {
 }
 
 type FSBlobStore struct {
+	mut  sync.Mutex
 	Root *os.Root
 }
 
 func (fbs *FSBlobStore) Read(ctx context.Context, path string) (io.ReadCloser, error) {
+	fbs.mut.Lock()
+	defer fbs.mut.Unlock()
+
 	return fbs.Root.Open(path)
 }
 
 func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, src io.Reader, contentType string) (io.WriteCloser, *url.URL, error) {
+	fbs.mut.Lock()
+	defer fbs.mut.Unlock()
+
 	fspath := filepath.Join(strings.Split(pathname, "/")...)
 	if err := fbs.mkdirAll(fspath); err != nil {
 		return nil, nil, err

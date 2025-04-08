@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -125,6 +126,7 @@ func newStartCommand() *cli.Command {
 				assetsURI := c.String("assets-uri")
 				switch assetsBackend {
 				case "fs":
+					assetsURI = filepath.Clean(assetsURI)
 					if err := os.MkdirAll(assetsURI, 0755); err != nil && !errors.Is(err, fs.ErrExist) {
 						return err
 					}
@@ -201,10 +203,9 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
 
-			mux.Handle("POST", "/chat/completions", func (w http.ResponseWriter, r *http.Request) {
+			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 				chat.HandleCompletion(w, r)
 			})
-			
 			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
 			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient, assetStorage))
