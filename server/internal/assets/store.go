@@ -2,6 +2,7 @@ package assets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 )
 
 type BlobStore interface {
+	Exists(ctx context.Context, subpath string) (bool, error)
 	Read(ctx context.Context, subpath string) (io.ReadCloser, error)
 	Write(ctx context.Context, subpath string, src io.Reader, contentType string) (io.WriteCloser, *url.URL, error)
 }
@@ -24,6 +26,20 @@ type FSBlobStore struct {
 	Root *os.Root
 }
 
+func (fbs *FSBlobStore) Exists(ctx context.Context, path string) (bool, error) {
+	fbs.mut.Lock()
+	defer fbs.mut.Unlock()
+
+	stat, err := fbs.Root.Stat(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("stat file: %w", err)
+	default:
+		return stat.Mode().IsRegular(), nil
+	}
+}
 func (fbs *FSBlobStore) Read(ctx context.Context, path string) (io.ReadCloser, error) {
 	fbs.mut.Lock()
 	defer fbs.mut.Unlock()
@@ -111,6 +127,24 @@ func (gbs *GCSBlobStore) getBucketURI(subpath string) (*url.URL, error) {
 	}
 
 	return u, nil
+}
+
+func (gbs *GCSBlobStore) Exists(ctx context.Context, subpath string) (bool, error) {
+	uri, err := gbs.getBucketURI(subpath)
+	if err != nil {
+		return false, fmt.Errorf("generate asset path: %w", err)
+	}
+
+	obj := gbs.bucket.Object(strings.TrimPrefix(uri.Path, "/"))
+	_, err = obj.Attrs(ctx)
+	switch {
+	case errors.Is(err, storage.ErrObjectNotExist):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("get object attrs: %w", err)
+	default:
+		return true, nil
+	}
 }
 
 func (gbs *GCSBlobStore) Read(ctx context.Context, subpath string) (io.ReadCloser, error) {

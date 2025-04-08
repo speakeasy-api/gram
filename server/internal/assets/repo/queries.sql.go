@@ -31,6 +31,7 @@ INSERT INTO assets (
 )
 ON CONFLICT (project_id, sha256) DO UPDATE SET
     deleted_at = NULL,
+    url = $2,
     updated_at = clock_timestamp()
 RETURNING id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
 `

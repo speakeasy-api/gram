@@ -18,6 +18,7 @@ INSERT INTO assets (
 )
 ON CONFLICT (project_id, sha256) DO UPDATE SET
     deleted_at = NULL,
+    url = @url,
     updated_at = clock_timestamp()
 RETURNING *;
 
