@@ -94,6 +94,9 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		return
 	}
 
+	// TODO: Eventually we need to get this from tool definition
+	req.Header.Set("Content-Type", "application/json")
+
 	if toolCallBody.QueryParameters != nil {
 		values := url.Values{}
 		for name, value := range toolCallBody.QueryParameters {
