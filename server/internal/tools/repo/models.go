@@ -19,7 +19,8 @@ type HttpToolDefinition struct {
 	Description         string
 	Openapiv3Operation  pgtype.Text
 	Tags                []string
-	ServerEnvVar        pgtype.Text
+	ServerEnvVar        string
+	DefaultServerUrl    pgtype.Text
 	Security            []byte
 	HttpMethod          string
 	Path                string

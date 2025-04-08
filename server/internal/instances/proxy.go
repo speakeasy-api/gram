@@ -18,8 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
-const ServerURL = "https://example.com" // TODO: Server URLs are not yet implemented
-
 type ToolCallBody struct {
 	PathParameters  map[string]any  `json:"pathParameters"`
 	QueryParameters map[string]any  `json:"queryParameters"`
@@ -64,12 +62,28 @@ func InstanceToolProxy(ctx context.Context, logger *slog.Logger, w http.Response
 		requestPath = parsedURL.String()
 	}
 
+	// Get the server URL from the tool definition
+	var serverURL string
+	if toolExecutionInfo.Tool.DefaultServerUrl.Valid {
+		serverURL = toolExecutionInfo.Tool.DefaultServerUrl.String
+	}
+
+	if envServerURL := processServerEnvVars(ctx, logger, toolExecutionInfo, envVars); envServerURL != "" {
+		serverURL = envServerURL
+	}
+
+	if serverURL == "" {
+		logger.ErrorContext(ctx, "no server URL provided for tool", slog.String("tool", toolExecutionInfo.Tool.Name))
+		http.Error(w, "No server URL provided for tool", http.StatusInternalServerError)
+		return
+	}
+
 	newReqCtx := r.Context()
 	// Create a new request
 	req, err := http.NewRequestWithContext(
 		newReqCtx,
 		toolExecutionInfo.Tool.HttpMethod,
-		strings.TrimRight(ServerURL, "/")+"/"+strings.TrimLeft(requestPath, "/"),
+		strings.TrimRight(serverURL, "/")+"/"+strings.TrimLeft(requestPath, "/"),
 		bytes.NewReader(toolCallBody.Body),
 	)
 	if err != nil {
@@ -151,6 +165,17 @@ func InstanceToolProxy(ctx context.Context, logger *slog.Logger, w http.Response
 		// Can't write headers or body at this point since we've already started the response
 		return
 	}
+}
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars map[string]string) string {
+	if toolExecutionInfo.Tool.ServerEnvVar != "" {
+		envVar := envVars[toolExecutionInfo.Tool.ServerEnvVar]
+		if envVar != "" {
+			return envVar
+		} else {
+			logger.WarnContext(ctx, "environment variable for server not found", slog.String("envVar", toolExecutionInfo.Tool.ServerEnvVar))
+		}
+	}
+	return ""
 }
 
 func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars map[string]string) {

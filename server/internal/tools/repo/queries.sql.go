@@ -13,7 +13,7 @@ import (
 )
 
 const getHTTPToolDefinitionByID = `-- name: GetHTTPToolDefinitionByID :one
-SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE id = $1
   AND project_id = $2
@@ -39,6 +39,7 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 		&i.Openapiv3Operation,
 		&i.Tags,
 		&i.ServerEnvVar,
+		&i.DefaultServerUrl,
 		&i.Security,
 		&i.HttpMethod,
 		&i.Path,
