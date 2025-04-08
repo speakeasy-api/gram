@@ -13,7 +13,7 @@ import (
 )
 
 const getHTTPToolDefinitionByID = `-- name: GetHTTPToolDefinitionByID :one
-SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE id = $1
   AND project_id = $2
@@ -45,6 +45,9 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 		&i.Path,
 		&i.SchemaVersion,
 		&i.Schema,
+		&i.HeaderSettings,
+		&i.QuerySettings,
+		&i.PathSettings,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -60,7 +63,7 @@ WITH latest_deployment AS (
     WHERE project_id = $1
     GROUP BY id
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
 FROM http_tool_definitions
 INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
 WHERE http_tool_definitions.project_id = $1 
@@ -92,6 +95,9 @@ type ListAllHttpToolDefinitionsRow struct {
 	Path                string
 	SchemaVersion       string
 	Schema              []byte
+	HeaderSettings      []byte
+	QuerySettings       []byte
+	PathSettings        []byte
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -126,6 +132,9 @@ func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHtt
 			&i.Path,
 			&i.SchemaVersion,
 			&i.Schema,
+			&i.HeaderSettings,
+			&i.QuerySettings,
+			&i.PathSettings,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

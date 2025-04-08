@@ -181,6 +181,9 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   path text NOT NULL,
   schema_version text NOT NULL,
   schema JSONB,
+  header_settings JSONB,
+  query_settings JSONB,
+  path_settings JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -136,6 +136,9 @@ type HttpToolDefinition struct {
 	Path                string
 	SchemaVersion       string
 	Schema              []byte
+	HeaderSettings      []byte
+	QuerySettings       []byte
+	PathSettings        []byte
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
