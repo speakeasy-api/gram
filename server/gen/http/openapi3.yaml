@@ -1080,9 +1080,9 @@ components:
         CreateToolsetForm:
             type: object
             properties:
-                default_environment_id:
+                default_environment_slug:
                     type: string
-                    description: The ID of the environment to use as the default for the toolset
+                    description: The slug of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -1101,9 +1101,9 @@ components:
         CreateToolsetRequestBody:
             type: object
             properties:
-                default_environment_id:
+                default_environment_slug:
                     type: string
-                    description: The ID of the environment to use as the default for the toolset
+                    description: The slug of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -1639,9 +1639,9 @@ components:
                     type: string
                     description: When the toolset was created.
                     format: date-time
-                default_environment_id:
+                default_environment_slug:
                     type: string
-                    description: The ID of the environment to use as the default for the toolset
+                    description: The slug of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -1684,9 +1684,9 @@ components:
                     type: string
                     description: When the toolset was created.
                     format: date-time
-                default_environment_id:
+                default_environment_slug:
                     type: string
-                    description: The ID of the environment to use as the default for the toolset
+                    description: The slug of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: Description of the toolset
@@ -1780,9 +1780,9 @@ components:
         UpdateToolsetForm:
             type: object
             properties:
-                default_environment_id:
+                default_environment_slug:
                     type: string
-                    description: The ID of the environment to use as the default for the toolset
+                    description: The slug of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: The new description of the toolset
@@ -1804,9 +1804,9 @@ components:
         UpdateToolsetRequestBody:
             type: object
             properties:
-                default_environment_id:
+                default_environment_slug:
                     type: string
-                    description: The ID of the environment to use as the default for the toolset
+                    description: The slug of the environment to use as the default for the toolset
                 description:
                     type: string
                     description: The new description of the toolset

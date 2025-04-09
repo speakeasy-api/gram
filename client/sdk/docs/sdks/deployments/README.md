@@ -7,9 +7,117 @@ Manages deployments of tools from upstream sources.
 
 ### Available Operations
 
+* [deploymentsNumberAddOpenAPIv3Source](#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
 * [deploymentsNumberCreateDeployment](#deploymentsnumbercreatedeployment) - createDeployment deployments
 * [deploymentsNumberGetDeployment](#deploymentsnumbergetdeployment) - getDeployment deployments
 * [deploymentsNumberListDeployments](#deploymentsnumberlistdeployments) - listDeployments deployments
+
+## deploymentsNumberAddOpenAPIv3Source
+
+Create a new deployment with an additional OpenAPI 3.x document.
+
+### Example Usage
+
+```typescript
+import { Gram } from "@gram/sdk";
+
+const gram = new Gram({
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
+});
+
+async function run() {
+  const result = await gram.deployments.deploymentsNumberAddOpenAPIv3Source({
+    openAPIv3DeploymentAssetForm: {
+      assetId: "<id>",
+      name: "<value>",
+      slug: "<value>",
+    },
+  });
+
+  // Handle the result
+  console.log(result);
+}
+
+run();
+```
+
+### Standalone function
+
+The standalone function version of this method:
+
+```typescript
+import { GramCore } from "@gram/sdk/core.js";
+import { deploymentsDeploymentsNumberAddOpenAPIv3Source } from "@gram/sdk/funcs/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
+
+// Use `GramCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const gram = new GramCore({
+  security: {
+    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  },
+});
+
+async function run() {
+  const res = await deploymentsDeploymentsNumberAddOpenAPIv3Source(gram, {
+    openAPIv3DeploymentAssetForm: {
+      assetId: "<id>",
+      name: "<value>",
+      slug: "<value>",
+    },
+  });
+
+  if (!res.ok) {
+    throw res.error;
+  }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
+}
+
+run();
+```
+
+### React hooks and utilities
+
+This method can be used in React components through the following hooks and
+associated utilities.
+
+> Check out [this guide][hook-guide] for information about each of the utilities
+> below and how to get started using React hooks.
+
+[hook-guide]: ../../../REACT_QUERY.md
+
+```tsx
+import {
+  // Mutation hook for triggering the API call.
+  useAddOpenAPIv3SourceMutation
+} from "@gram/sdk/react-query/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
+```
+
+### Parameters
+
+| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                                                                                                                                                                      | [operations.DeploymentsNumberAddOpenAPIv3SourceRequest](../../models/operations/deploymentsnumberaddopenapiv3sourcerequest.md)                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+
+### Response
+
+**Promise\<[components.AddOpenAPIv3SourceResult](../../models/components/addopenapiv3sourceresult.md)\>**
+
+### Errors
+
+| Error Type      | Status Code     | Content Type    |
+| --------------- | --------------- | --------------- |
+| errors.APIError | 4XX, 5XX        | \*/\*           |
 
 ## deploymentsNumberCreateDeployment
 

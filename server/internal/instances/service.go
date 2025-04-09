@@ -72,7 +72,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 		return nil, err
 	}
 
-	if toolset.DefaultEnvironmentID == nil && payload.EnvironmentSlug == nil {
+	if toolset.DefaultEnvironmentSlug == nil && payload.EnvironmentSlug == nil {
 		return nil, errors.New("an environment must be provided to use this toolset")
 	}
 
@@ -83,9 +83,9 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 			Slug:      *payload.EnvironmentSlug,
 		})
 	} else {
-		envModel, err = s.environmentsRepo.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
+		envModel, err = s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 			ProjectID: *authCtx.ProjectID,
-			ID:        uuid.MustParse(*toolset.DefaultEnvironmentID),
+			Slug:      *toolset.DefaultEnvironmentSlug,
 		})
 	}
 	if err != nil {

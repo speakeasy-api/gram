@@ -26,16 +26,16 @@ type HttpSecurity struct {
 }
 
 type Toolset struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	Name                 string
-	Slug                 string
-	Description          pgtype.Text
-	DefaultEnvironmentID uuid.NullUUID
-	HttpToolNames        []string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	HttpToolNames          []string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }

@@ -956,7 +956,7 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_id": "Ut minus sed iusto ea provident voluptatem.",
+      "default_environment_slug": "Ut minus sed iusto ea provident voluptatem.",
       "description": "Officiis impedit eos.",
       "http_tool_names": [
          "Consequatur atque dolor odit quia facilis.",
@@ -992,7 +992,7 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "default_environment_id": "Ducimus et voluptatem et aut ut.",
+      "default_environment_slug": "Ducimus et voluptatem et aut ut.",
       "description": "Sed quasi aut quo quam.",
       "http_tool_names": [
          "Repellat ut.",

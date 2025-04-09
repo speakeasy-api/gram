@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 7f857ef12ebea34595f6b0d2d2e32c27
+  docChecksum: 5849e08378c98b894c9ebba69b7a6a5c
   docVersion: 0.0.1
   speakeasyVersion: 1.531.0
   generationVersion: 2.568.2
-  releaseVersion: 0.5.1
-  configChecksum: d34d190ebeb660e29621f11da6ac3425
+  releaseVersion: 0.5.2
+  configChecksum: 40f6b1bca7c524e68efc974abdb6b04b
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -36,6 +36,7 @@ generatedFiles:
   - RUNTIMES.md
   - USAGE.md
   - docs/lib/utils/retryconfig.md
+  - docs/models/components/addopenapiv3sourceresult.md
   - docs/models/components/asset.md
   - docs/models/components/createdeploymentrequestbody.md
   - docs/models/components/createdeploymentresult.md
@@ -80,6 +81,7 @@ generatedFiles:
   - docs/models/operations/authnumberswitchscopesrequest.md
   - docs/models/operations/authnumberswitchscopesresponse.md
   - docs/models/operations/authnumberswitchscopessecurity.md
+  - docs/models/operations/deploymentsnumberaddopenapiv3sourcerequest.md
   - docs/models/operations/deploymentsnumbercreatedeploymentrequest.md
   - docs/models/operations/deploymentsnumbergetdeploymentrequest.md
   - docs/models/operations/deploymentsnumberlistdeploymentsrequest.md
@@ -121,6 +123,7 @@ generatedFiles:
   - src/funcs/authAuthNumberInfo.ts
   - src/funcs/authAuthNumberLogout.ts
   - src/funcs/authAuthNumberSwitchScopes.ts
+  - src/funcs/deploymentsDeploymentsNumberAddOpenAPIv3Source.ts
   - src/funcs/deploymentsDeploymentsNumberCreateDeployment.ts
   - src/funcs/deploymentsDeploymentsNumberGetDeployment.ts
   - src/funcs/deploymentsDeploymentsNumberListDeployments.ts
@@ -173,6 +176,7 @@ generatedFiles:
   - src/mcp-server/tools.ts
   - src/mcp-server/tools/assetsAssetsNumberUploadOpenAPIv3.ts
   - src/mcp-server/tools/authAuthNumberCallback.ts
+  - src/mcp-server/tools/deploymentsDeploymentsNumberAddOpenAPIv3Source.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberCreateDeployment.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberGetDeployment.ts
   - src/mcp-server/tools/deploymentsDeploymentsNumberListDeployments.ts
@@ -186,6 +190,7 @@ generatedFiles:
   - src/mcp-server/tools/toolsetsToolsetsNumberGetToolsetDetails.ts
   - src/mcp-server/tools/toolsetsToolsetsNumberListToolsets.ts
   - src/mcp-server/tools/toolsetsToolsetsNumberUpdateToolset.ts
+  - src/models/components/addopenapiv3sourceresult.ts
   - src/models/components/asset.ts
   - src/models/components/createdeploymentrequestbody.ts
   - src/models/components/createdeploymentresult.ts
@@ -227,6 +232,7 @@ generatedFiles:
   - src/models/operations/authnumberinfo.ts
   - src/models/operations/authnumberlogout.ts
   - src/models/operations/authnumberswitchscopes.ts
+  - src/models/operations/deploymentsnumberaddopenapiv3source.ts
   - src/models/operations/deploymentsnumbercreatedeployment.ts
   - src/models/operations/deploymentsnumbergetdeployment.ts
   - src/models/operations/deploymentsnumberlistdeployments.ts
@@ -247,6 +253,7 @@ generatedFiles:
   - src/models/operations/toolsnumberlisttools.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
+  - src/react-query/addOpenAPIv3Source.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
@@ -443,5 +450,12 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2023-10-11T13:18:21.498Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-20T02:33:46.900Z"}
+  deployments#addOpenAPIv3Source:
+    speakeasy-default-deployments#add-open-AP-iv3-source:
+      requestBody:
+        application/json: {"asset_id": "<id>", "name": "<value>", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2025-06-05T00:59:43.463Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
 examplesVersion: 1.0.1
 generatedTests: {}

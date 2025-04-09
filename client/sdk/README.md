@@ -293,6 +293,7 @@ run();
 
 ### [deployments](docs/sdks/deployments/README.md)
 
+* [deploymentsNumberAddOpenAPIv3Source](docs/sdks/deployments/README.md#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
 * [deploymentsNumberCreateDeployment](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
 * [deploymentsNumberGetDeployment](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 * [deploymentsNumberListDeployments](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
@@ -350,6 +351,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authAuthNumberInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
 - [`authAuthNumberLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
 - [`authAuthNumberSwitchScopes`](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
+- [`deploymentsDeploymentsNumberAddOpenAPIv3Source`](docs/sdks/deployments/README.md#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
 - [`deploymentsDeploymentsNumberCreateDeployment`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
 - [`deploymentsDeploymentsNumberGetDeployment`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
 - [`deploymentsDeploymentsNumberListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
@@ -393,6 +395,7 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
+- [`useAddOpenAPIv3SourceMutation`](docs/sdks/deployments/README.md#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments

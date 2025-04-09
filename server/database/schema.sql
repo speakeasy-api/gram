@@ -239,7 +239,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   name text NOT NULL,
   slug text NOT NULL,
   description text,
-  default_environment_id uuid,
+  default_environment_slug TEXT,
   http_tool_names text[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -248,8 +248,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
-  CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_default_environment_id_fkey FOREIGN key (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
+  CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key

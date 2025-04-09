@@ -10,9 +10,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type UpdateToolsetRequestBody = {
   /**
-   * The ID of the environment to use as the default for the toolset
+   * The slug of the environment to use as the default for the toolset
    */
-  defaultEnvironmentId?: string | undefined;
+  defaultEnvironmentSlug?: string | undefined;
   /**
    * The new description of the toolset
    */
@@ -33,20 +33,20 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  default_environment_id: z.string().optional(),
+  default_environment_slug: z.string().optional(),
   description: z.string().optional(),
   http_tool_names: z.array(z.string()).optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "default_environment_id": "defaultEnvironmentId",
+    "default_environment_slug": "defaultEnvironmentSlug",
     "http_tool_names": "httpToolNames",
   });
 });
 
 /** @internal */
 export type UpdateToolsetRequestBody$Outbound = {
-  default_environment_id?: string | undefined;
+  default_environment_slug?: string | undefined;
   description?: string | undefined;
   http_tool_names?: Array<string> | undefined;
   name?: string | undefined;
@@ -58,13 +58,13 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   UpdateToolsetRequestBody
 > = z.object({
-  defaultEnvironmentId: z.string().optional(),
+  defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   httpToolNames: z.array(z.string()).optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    defaultEnvironmentId: "default_environment_id",
+    defaultEnvironmentSlug: "default_environment_slug",
     httpToolNames: "http_tool_names",
   });
 });

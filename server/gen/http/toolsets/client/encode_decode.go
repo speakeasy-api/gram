@@ -422,15 +422,15 @@ func DecodeGetToolsetDetailsResponse(decoder func(*http.Response) goahttp.Decode
 // *toolsets.Toolset from a value of type *ToolsetResponseBody.
 func unmarshalToolsetResponseBodyToToolsetsToolset(v *ToolsetResponseBody) *toolsets.Toolset {
 	res := &toolsets.Toolset{
-		ID:                   *v.ID,
-		ProjectID:            *v.ProjectID,
-		OrganizationID:       *v.OrganizationID,
-		Name:                 *v.Name,
-		Slug:                 *v.Slug,
-		Description:          v.Description,
-		DefaultEnvironmentID: v.DefaultEnvironmentID,
-		CreatedAt:            *v.CreatedAt,
-		UpdatedAt:            *v.UpdatedAt,
+		ID:                     *v.ID,
+		ProjectID:              *v.ProjectID,
+		OrganizationID:         *v.OrganizationID,
+		Name:                   *v.Name,
+		Slug:                   *v.Slug,
+		Description:            v.Description,
+		DefaultEnvironmentSlug: v.DefaultEnvironmentSlug,
+		CreatedAt:              *v.CreatedAt,
+		UpdatedAt:              *v.UpdatedAt,
 	}
 	if v.HTTPToolNames != nil {
 		res.HTTPToolNames = make([]string, len(v.HTTPToolNames))

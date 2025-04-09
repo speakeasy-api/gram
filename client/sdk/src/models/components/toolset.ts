@@ -14,9 +14,9 @@ export type Toolset = {
    */
   createdAt: Date;
   /**
-   * The ID of the environment to use as the default for the toolset
+   * The slug of the environment to use as the default for the toolset
    */
-  defaultEnvironmentId?: string | undefined;
+  defaultEnvironmentSlug?: string | undefined;
   /**
    * Description of the toolset
    */
@@ -57,7 +57,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     created_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
-    default_environment_id: z.string().optional(),
+    default_environment_slug: z.string().optional(),
     description: z.string().optional(),
     http_tool_names: z.array(z.string()).optional(),
     id: z.string(),
@@ -71,7 +71,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
   }).transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
-      "default_environment_id": "defaultEnvironmentId",
+      "default_environment_slug": "defaultEnvironmentSlug",
       "http_tool_names": "httpToolNames",
       "organization_id": "organizationId",
       "project_id": "projectId",
@@ -82,7 +82,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
 /** @internal */
 export type Toolset$Outbound = {
   created_at: string;
-  default_environment_id?: string | undefined;
+  default_environment_slug?: string | undefined;
   description?: string | undefined;
   http_tool_names?: Array<string> | undefined;
   id: string;
@@ -100,7 +100,7 @@ export const Toolset$outboundSchema: z.ZodType<
   Toolset
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
-  defaultEnvironmentId: z.string().optional(),
+  defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   httpToolNames: z.array(z.string()).optional(),
   id: z.string(),
@@ -112,7 +112,7 @@ export const Toolset$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
-    defaultEnvironmentId: "default_environment_id",
+    defaultEnvironmentSlug: "default_environment_slug",
     httpToolNames: "http_tool_names",
     organizationId: "organization_id",
     projectId: "project_id",

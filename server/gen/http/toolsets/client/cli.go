@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Ut minus sed iusto ea provident voluptatem.\",\n      \"description\": \"Officiis impedit eos.\",\n      \"http_tool_names\": [\n         \"Consequatur atque dolor odit quia facilis.\",\n         \"Rerum ab eaque.\",\n         \"Labore sapiente neque deleniti hic.\",\n         \"Iusto quia.\"\n      ],\n      \"name\": \"Quia occaecati quae voluptatum fugiat labore.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Ut minus sed iusto ea provident voluptatem.\",\n      \"description\": \"Officiis impedit eos.\",\n      \"http_tool_names\": [\n         \"Consequatur atque dolor odit quia facilis.\",\n         \"Rerum ab eaque.\",\n         \"Labore sapiente neque deleniti hic.\",\n         \"Iusto quia.\"\n      ],\n      \"name\": \"Quia occaecati quae voluptatum fugiat labore.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -38,9 +38,9 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 		}
 	}
 	v := &toolsets.CreateToolsetPayload{
-		Name:                 body.Name,
-		Description:          body.Description,
-		DefaultEnvironmentID: body.DefaultEnvironmentID,
+		Name:                   body.Name,
+		Description:            body.Description,
+		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
@@ -84,7 +84,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Ducimus et voluptatem et aut ut.\",\n      \"description\": \"Sed quasi aut quo quam.\",\n      \"http_tool_names\": [\n         \"Repellat ut.\",\n         \"Expedita qui voluptatem dolorum.\",\n         \"Suscipit voluptates nihil soluta nulla debitis illo.\",\n         \"Accusantium voluptas consequatur quasi quae iste.\"\n      ],\n      \"name\": \"Impedit amet id veritatis.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Ducimus et voluptatem et aut ut.\",\n      \"description\": \"Sed quasi aut quo quam.\",\n      \"http_tool_names\": [\n         \"Repellat ut.\",\n         \"Expedita qui voluptatem dolorum.\",\n         \"Suscipit voluptates nihil soluta nulla debitis illo.\",\n         \"Accusantium voluptas consequatur quasi quae iste.\"\n      ],\n      \"name\": \"Impedit amet id veritatis.\"\n   }'")
 		}
 	}
 	var slug string
@@ -104,9 +104,9 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		}
 	}
 	v := &toolsets.UpdateToolsetPayload{
-		Name:                 body.Name,
-		Description:          body.Description,
-		DefaultEnvironmentID: body.DefaultEnvironmentID,
+		Name:                   body.Name,
+		Description:            body.Description,
+		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))

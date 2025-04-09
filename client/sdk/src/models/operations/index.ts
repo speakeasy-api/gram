@@ -7,6 +7,7 @@ export * from "./authnumbercallback.js";
 export * from "./authnumberinfo.js";
 export * from "./authnumberlogout.js";
 export * from "./authnumberswitchscopes.js";
+export * from "./deploymentsnumberaddopenapiv3source.js";
 export * from "./deploymentsnumbercreatedeployment.js";
 export * from "./deploymentsnumbergetdeployment.js";
 export * from "./deploymentsnumberlistdeployments.js";

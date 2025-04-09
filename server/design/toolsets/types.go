@@ -12,7 +12,7 @@ var ToolsetDetails = Type("ToolsetDetails", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
-	Attribute("default_environment_id", String, "The ID of the environment to use as the default for the toolset")
+	Attribute("default_environment_slug", String, "The slug of the environment to use as the default for the toolset")
 	Attribute("relevant_environment_variables", ArrayOf(String), "The environment variables that are relevant to the toolset")
 	Attribute("http_tools", ArrayOf(tools.HTTPToolDefinition), "The HTTP tools in this toolset")
 	Attribute("created_at", String, func() {

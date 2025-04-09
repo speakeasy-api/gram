@@ -20,7 +20,7 @@ INSERT INTO toolsets (
   , slug
   , description
   , http_tool_names
-  , default_environment_id
+  , default_environment_slug
 ) VALUES (
     $1
   , $2
@@ -30,17 +30,17 @@ INSERT INTO toolsets (
   , NULLIF($6::text[], '{}'::text[])
   , $7
 )
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateToolsetParams struct {
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	Name                 string
-	Slug                 string
-	Description          pgtype.Text
-	HttpToolNames        []string
-	DefaultEnvironmentID uuid.NullUUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	HttpToolNames          []string
+	DefaultEnvironmentSlug pgtype.Text
 }
 
 func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (Toolset, error) {
@@ -51,7 +51,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		arg.Slug,
 		arg.Description,
 		arg.HttpToolNames,
-		arg.DefaultEnvironmentID,
+		arg.DefaultEnvironmentSlug,
 	)
 	var i Toolset
 	err := row.Scan(
@@ -61,7 +61,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		&i.Name,
 		&i.Slug,
 		&i.Description,
-		&i.DefaultEnvironmentID,
+		&i.DefaultEnvironmentSlug,
 		&i.HttpToolNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -226,7 +226,7 @@ func (q *Queries) GetHTTPToolDefinitionsForToolset(ctx context.Context, arg GetH
 }
 
 const getToolset = `-- name: GetToolset :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -246,7 +246,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 		&i.Name,
 		&i.Slug,
 		&i.Description,
-		&i.DefaultEnvironmentID,
+		&i.DefaultEnvironmentSlug,
 		&i.HttpToolNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -257,7 +257,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 }
 
 const listToolsetsByProject = `-- name: ListToolsetsByProject :many
-SELECT id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -280,7 +280,7 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.Name,
 			&i.Slug,
 			&i.Description,
-			&i.DefaultEnvironmentID,
+			&i.DefaultEnvironmentSlug,
 			&i.HttpToolNames,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -303,19 +303,19 @@ SET
     name = COALESCE($1, name)
   , description = COALESCE($2, description)
   , http_tool_names = COALESCE(NULLIF($3::text[], '{}'::text[]), http_tool_names)
-  , default_environment_id = COALESCE($4, default_environment_id)
+  , default_environment_slug = COALESCE($4, default_environment_slug)
   , updated_at = clock_timestamp()
 WHERE slug = $5 AND project_id = $6
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_id, http_tool_names, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetParams struct {
-	Name                 string
-	Description          pgtype.Text
-	HttpToolNames        []string
-	DefaultEnvironmentID uuid.NullUUID
-	Slug                 string
-	ProjectID            uuid.UUID
+	Name                   string
+	Description            pgtype.Text
+	HttpToolNames          []string
+	DefaultEnvironmentSlug pgtype.Text
+	Slug                   string
+	ProjectID              uuid.UUID
 }
 
 func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (Toolset, error) {
@@ -323,7 +323,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		arg.Name,
 		arg.Description,
 		arg.HttpToolNames,
-		arg.DefaultEnvironmentID,
+		arg.DefaultEnvironmentSlug,
 		arg.Slug,
 		arg.ProjectID,
 	)
@@ -335,7 +335,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		&i.Name,
 		&i.Slug,
 		&i.Description,
-		&i.DefaultEnvironmentID,
+		&i.DefaultEnvironmentSlug,
 		&i.HttpToolNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,

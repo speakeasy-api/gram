@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -74,15 +73,15 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		Slug:           conv.ToSlug(payload.Name),
 	}
 
-	if payload.DefaultEnvironmentID != nil {
-		_, err := s.environmentRepo.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
-			ID:        uuid.MustParse(*payload.DefaultEnvironmentID),
+	if payload.DefaultEnvironmentSlug != nil {
+		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
+			Slug:      *payload.DefaultEnvironmentSlug,
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to find environment: %w", err)
 		}
-		createToolParams.DefaultEnvironmentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DefaultEnvironmentID), Valid: true}
+		createToolParams.DefaultEnvironmentSlug = conv.ToPGText(*payload.DefaultEnvironmentSlug)
 	} else {
 		environments, err := s.environmentRepo.ListEnvironments(ctx, *authCtx.ProjectID)
 		if err != nil {
@@ -90,7 +89,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		}
 		for _, environment := range environments {
 			if environment.Slug == "default" { // We will autofill the default environment if one is available
-				createToolParams.DefaultEnvironmentID = uuid.NullUUID{UUID: environment.ID, Valid: true}
+				createToolParams.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
 				break
 			}
 		}
@@ -122,16 +121,16 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	return &gen.Toolset{
-		ID:                   createdToolset.ID.String(),
-		OrganizationID:       createdToolset.OrganizationID,
-		ProjectID:            createdToolset.ProjectID.String(),
-		Name:                 createdToolset.Name,
-		Slug:                 createdToolset.Slug,
-		DefaultEnvironmentID: conv.FromNullableUUID(createdToolset.DefaultEnvironmentID),
-		Description:          conv.FromPGText(createdToolset.Description),
-		HTTPToolNames:        httpToolNames,
-		CreatedAt:            createdToolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            createdToolset.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                     createdToolset.ID.String(),
+		OrganizationID:         createdToolset.OrganizationID,
+		ProjectID:              createdToolset.ProjectID.String(),
+		Name:                   createdToolset.Name,
+		Slug:                   createdToolset.Slug,
+		DefaultEnvironmentSlug: conv.FromPGText(createdToolset.DefaultEnvironmentSlug),
+		Description:            conv.FromPGText(createdToolset.Description),
+		HTTPToolNames:          httpToolNames,
+		CreatedAt:              createdToolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              createdToolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -153,16 +152,16 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 			httpToolNames[j] = name
 		}
 		result[i] = &gen.Toolset{
-			ID:                   toolset.ID.String(),
-			OrganizationID:       toolset.OrganizationID,
-			ProjectID:            toolset.ProjectID.String(),
-			Name:                 toolset.Name,
-			Slug:                 toolset.Slug,
-			DefaultEnvironmentID: conv.FromNullableUUID(toolset.DefaultEnvironmentID),
-			Description:          conv.FromPGText(toolset.Description),
-			HTTPToolNames:        httpToolNames,
-			CreatedAt:            toolset.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:            toolset.UpdatedAt.Time.Format(time.RFC3339),
+			ID:                     toolset.ID.String(),
+			OrganizationID:         toolset.OrganizationID,
+			ProjectID:              toolset.ProjectID.String(),
+			Name:                   toolset.Name,
+			Slug:                   toolset.Slug,
+			DefaultEnvironmentSlug: conv.FromPGText(toolset.DefaultEnvironmentSlug),
+			Description:            conv.FromPGText(toolset.Description),
+			HTTPToolNames:          httpToolNames,
+			CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 
@@ -188,11 +187,11 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	// Convert update params
 	updateParams := repo.UpdateToolsetParams{
-		Slug:                 payload.Slug,
-		Description:          existingToolset.Description,
-		Name:                 existingToolset.Name,
-		DefaultEnvironmentID: existingToolset.DefaultEnvironmentID,
-		ProjectID:            *authCtx.ProjectID,
+		Slug:                   payload.Slug,
+		Description:            existingToolset.Description,
+		Name:                   existingToolset.Name,
+		DefaultEnvironmentSlug: existingToolset.DefaultEnvironmentSlug,
+		ProjectID:              *authCtx.ProjectID,
 	}
 	if payload.Name != nil {
 		updateParams.Name = *payload.Name
@@ -201,15 +200,15 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
-	if payload.DefaultEnvironmentID != nil {
-		_, err := s.environmentRepo.GetEnvironmentByID(ctx, environments_repo.GetEnvironmentByIDParams{
-			ID:        uuid.MustParse(*payload.DefaultEnvironmentID),
+	if payload.DefaultEnvironmentSlug != nil {
+		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
+			Slug:      *payload.DefaultEnvironmentSlug,
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to find environment: %w", err)
 		}
-		updateParams.DefaultEnvironmentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DefaultEnvironmentID), Valid: true}
+		updateParams.DefaultEnvironmentSlug = conv.ToPGText(*payload.DefaultEnvironmentSlug)
 	}
 
 	// Convert set back to slice
@@ -233,16 +232,16 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	return &gen.Toolset{
-		ID:                   updatedToolset.ID.String(),
-		OrganizationID:       updatedToolset.OrganizationID,
-		ProjectID:            updatedToolset.ProjectID.String(),
-		Name:                 updatedToolset.Name,
-		Slug:                 updatedToolset.Slug,
-		DefaultEnvironmentID: conv.FromNullableUUID(updatedToolset.DefaultEnvironmentID),
-		Description:          conv.FromPGText(updatedToolset.Description),
-		HTTPToolNames:        httpToolNames,
-		CreatedAt:            updatedToolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            updatedToolset.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                     updatedToolset.ID.String(),
+		OrganizationID:         updatedToolset.OrganizationID,
+		ProjectID:              updatedToolset.ProjectID.String(),
+		Name:                   updatedToolset.Name,
+		Slug:                   updatedToolset.Slug,
+		DefaultEnvironmentSlug: conv.FromPGText(updatedToolset.DefaultEnvironmentSlug),
+		Description:            conv.FromPGText(updatedToolset.Description),
+		HTTPToolNames:          httpToolNames,
+		CreatedAt:              updatedToolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              updatedToolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 

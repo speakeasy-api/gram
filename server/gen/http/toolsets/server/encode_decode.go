@@ -308,15 +308,15 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 // *ToolsetResponseBody from a value of type *toolsets.Toolset.
 func marshalToolsetsToolsetToToolsetResponseBody(v *toolsets.Toolset) *ToolsetResponseBody {
 	res := &ToolsetResponseBody{
-		ID:                   v.ID,
-		ProjectID:            v.ProjectID,
-		OrganizationID:       v.OrganizationID,
-		Name:                 v.Name,
-		Slug:                 v.Slug,
-		Description:          v.Description,
-		DefaultEnvironmentID: v.DefaultEnvironmentID,
-		CreatedAt:            v.CreatedAt,
-		UpdatedAt:            v.UpdatedAt,
+		ID:                     v.ID,
+		ProjectID:              v.ProjectID,
+		OrganizationID:         v.OrganizationID,
+		Name:                   v.Name,
+		Slug:                   v.Slug,
+		Description:            v.Description,
+		DefaultEnvironmentSlug: v.DefaultEnvironmentSlug,
+		CreatedAt:              v.CreatedAt,
+		UpdatedAt:              v.UpdatedAt,
 	}
 	if v.HTTPToolNames != nil {
 		res.HTTPToolNames = make([]string, len(v.HTTPToolNames))

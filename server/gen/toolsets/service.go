@@ -59,9 +59,9 @@ type CreateToolsetPayload struct {
 	Description *string
 	// List of HTTP tool names to include
 	HTTPToolNames []string
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string
-	ProjectSlugInput     *string
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string
+	ProjectSlugInput       *string
 }
 
 // DeleteToolsetPayload is the payload type of the toolsets service
@@ -145,8 +145,8 @@ type Toolset struct {
 	Slug string
 	// Description of the toolset
 	Description *string
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string
 	// List of HTTP tool names included in this toolset
 	HTTPToolNames []string
 	// When the toolset was created.
@@ -170,8 +170,8 @@ type ToolsetDetails struct {
 	Slug string
 	// Description of the toolset
 	Description *string
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string
 	// The environment variables that are relevant to the toolset
 	RelevantEnvironmentVariables []string
 	// The HTTP tools in this toolset
@@ -192,8 +192,8 @@ type UpdateToolsetPayload struct {
 	Name *string
 	// The new description of the toolset
 	Description *string
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string
 	// List of HTTP tool names to include
 	HTTPToolNames    []string
 	ProjectSlugInput *string

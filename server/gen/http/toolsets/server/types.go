@@ -21,8 +21,8 @@ type CreateToolsetRequestBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of HTTP tool names to include
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 }
 
 // UpdateToolsetRequestBody is the type of the "toolsets" service
@@ -32,8 +32,8 @@ type UpdateToolsetRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The new description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// List of HTTP tool names to include
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 }
@@ -53,8 +53,8 @@ type CreateToolsetResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// List of HTTP tool names included in this toolset
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
@@ -85,8 +85,8 @@ type UpdateToolsetResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// List of HTTP tool names included in this toolset
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
@@ -110,8 +110,8 @@ type GetToolsetDetailsResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// The environment variables that are relevant to the toolset
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
@@ -136,8 +136,8 @@ type ToolsetResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The ID of the environment to use as the default for the toolset
-	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// List of HTTP tool names included in this toolset
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
@@ -187,15 +187,15 @@ type HTTPToolDefinitionResponseBody struct {
 // of the "createToolset" endpoint of the "toolsets" service.
 func NewCreateToolsetResponseBody(res *toolsets.Toolset) *CreateToolsetResponseBody {
 	body := &CreateToolsetResponseBody{
-		ID:                   res.ID,
-		ProjectID:            res.ProjectID,
-		OrganizationID:       res.OrganizationID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		Description:          res.Description,
-		DefaultEnvironmentID: res.DefaultEnvironmentID,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		OrganizationID:         res.OrganizationID,
+		Name:                   res.Name,
+		Slug:                   res.Slug,
+		Description:            res.Description,
+		DefaultEnvironmentSlug: res.DefaultEnvironmentSlug,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.HTTPToolNames != nil {
 		body.HTTPToolNames = make([]string, len(res.HTTPToolNames))
@@ -225,15 +225,15 @@ func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsets
 // of the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetResponseBody(res *toolsets.Toolset) *UpdateToolsetResponseBody {
 	body := &UpdateToolsetResponseBody{
-		ID:                   res.ID,
-		ProjectID:            res.ProjectID,
-		OrganizationID:       res.OrganizationID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		Description:          res.Description,
-		DefaultEnvironmentID: res.DefaultEnvironmentID,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		OrganizationID:         res.OrganizationID,
+		Name:                   res.Name,
+		Slug:                   res.Slug,
+		Description:            res.Description,
+		DefaultEnvironmentSlug: res.DefaultEnvironmentSlug,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.HTTPToolNames != nil {
 		body.HTTPToolNames = make([]string, len(res.HTTPToolNames))
@@ -248,15 +248,15 @@ func NewUpdateToolsetResponseBody(res *toolsets.Toolset) *UpdateToolsetResponseB
 // result of the "getToolsetDetails" endpoint of the "toolsets" service.
 func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetDetailsResponseBody {
 	body := &GetToolsetDetailsResponseBody{
-		ID:                   res.ID,
-		ProjectID:            res.ProjectID,
-		OrganizationID:       res.OrganizationID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		Description:          res.Description,
-		DefaultEnvironmentID: res.DefaultEnvironmentID,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		OrganizationID:         res.OrganizationID,
+		Name:                   res.Name,
+		Slug:                   res.Slug,
+		Description:            res.Description,
+		DefaultEnvironmentSlug: res.DefaultEnvironmentSlug,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
@@ -279,9 +279,9 @@ func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetD
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
 	v := &toolsets.CreateToolsetPayload{
-		Name:                 *body.Name,
-		Description:          body.Description,
-		DefaultEnvironmentID: body.DefaultEnvironmentID,
+		Name:                   *body.Name,
+		Description:            body.Description,
+		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
@@ -309,9 +309,9 @@ func NewListToolsetsPayload(sessionToken *string, projectSlugInput *string) *too
 // payload.
 func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessionToken *string, projectSlugInput *string) *toolsets.UpdateToolsetPayload {
 	v := &toolsets.UpdateToolsetPayload{
-		Name:                 body.Name,
-		Description:          body.Description,
-		DefaultEnvironmentID: body.DefaultEnvironmentID,
+		Name:                   body.Name,
+		Description:            body.Description,
+		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))

@@ -15,6 +15,7 @@ import { MCPScope } from "./scopes.js";
 import { createRegisterTool } from "./tools.js";
 import { tool$assetsAssetsNumberUploadOpenAPIv3 } from "./tools/assetsAssetsNumberUploadOpenAPIv3.js";
 import { tool$authAuthNumberCallback } from "./tools/authAuthNumberCallback.js";
+import { tool$deploymentsDeploymentsNumberAddOpenAPIv3Source } from "./tools/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
 import { tool$deploymentsDeploymentsNumberCreateDeployment } from "./tools/deploymentsDeploymentsNumberCreateDeployment.js";
 import { tool$deploymentsDeploymentsNumberGetDeployment } from "./tools/deploymentsDeploymentsNumberGetDeployment.js";
 import { tool$deploymentsDeploymentsNumberListDeployments } from "./tools/deploymentsDeploymentsNumberListDeployments.js";
@@ -39,7 +40,7 @@ export function createMCPServer(deps: {
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.5.1",
+    version: "0.5.2",
   });
 
   const client = new GramCore({
@@ -71,6 +72,7 @@ export function createMCPServer(deps: {
 
   tool(tool$assetsAssetsNumberUploadOpenAPIv3);
   tool(tool$authAuthNumberCallback);
+  tool(tool$deploymentsDeploymentsNumberAddOpenAPIv3Source);
   tool(tool$deploymentsDeploymentsNumberCreateDeployment);
   tool(tool$deploymentsDeploymentsNumberGetDeployment);
   tool(tool$deploymentsDeploymentsNumberListDeployments);

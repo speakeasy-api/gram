@@ -2420,7 +2420,7 @@ definitions:
                 description: The list of toolsets
                 example:
                     - created_at: "1990-08-16T18:42:21Z"
-                      default_environment_id: Velit eius esse veniam molestiae magni.
+                      default_environment_slug: Velit eius esse veniam molestiae magni.
                       description: Dolores est officia ducimus doloribus temporibus consectetur.
                       http_tool_names:
                         - Quidem totam est.
@@ -2432,7 +2432,7 @@ definitions:
                       slug: Est illum.
                       updated_at: "1990-03-22T02:34:58Z"
                     - created_at: "1990-08-16T18:42:21Z"
-                      default_environment_id: Velit eius esse veniam molestiae magni.
+                      default_environment_slug: Velit eius esse veniam molestiae magni.
                       description: Dolores est officia ducimus doloribus temporibus consectetur.
                       http_tool_names:
                         - Quidem totam est.
@@ -2446,7 +2446,7 @@ definitions:
         example:
             toolsets:
                 - created_at: "1990-08-16T18:42:21Z"
-                  default_environment_id: Velit eius esse veniam molestiae magni.
+                  default_environment_slug: Velit eius esse veniam molestiae magni.
                   description: Dolores est officia ducimus doloribus temporibus consectetur.
                   http_tool_names:
                     - Quidem totam est.
@@ -2458,7 +2458,7 @@ definitions:
                   slug: Est illum.
                   updated_at: "1990-03-22T02:34:58Z"
                 - created_at: "1990-08-16T18:42:21Z"
-                  default_environment_id: Velit eius esse veniam molestiae magni.
+                  default_environment_slug: Velit eius esse veniam molestiae magni.
                   description: Dolores est officia ducimus doloribus temporibus consectetur.
                   http_tool_names:
                     - Quidem totam est.
@@ -2470,7 +2470,7 @@ definitions:
                   slug: Est illum.
                   updated_at: "1990-03-22T02:34:58Z"
                 - created_at: "1990-08-16T18:42:21Z"
-                  default_environment_id: Velit eius esse veniam molestiae magni.
+                  default_environment_slug: Velit eius esse veniam molestiae magni.
                   description: Dolores est officia ducimus doloribus temporibus consectetur.
                   http_tool_names:
                     - Quidem totam est.
@@ -2612,9 +2612,9 @@ definitions:
                 description: When the toolset was created.
                 example: "1975-01-18T16:31:44Z"
                 format: date-time
-            default_environment_id:
+            default_environment_slug:
                 type: string
-                description: The ID of the environment to use as the default for the toolset
+                description: The slug of the environment to use as the default for the toolset
                 example: Laudantium distinctio qui veritatis earum culpa rem.
             description:
                 type: string
@@ -2656,7 +2656,7 @@ definitions:
                 format: date-time
         example:
             created_at: "1993-12-26T13:26:57Z"
-            default_environment_id: Ab nulla asperiores temporibus sint rem.
+            default_environment_slug: Ab nulla asperiores temporibus sint rem.
             description: Libero ad fugiat ad veniam mollitia.
             http_tool_names:
                 - Perspiciatis omnis fugit vitae vitae.
@@ -2684,9 +2684,9 @@ definitions:
                 description: When the toolset was created.
                 example: "1990-01-11T11:30:20Z"
                 format: date-time
-            default_environment_id:
+            default_environment_slug:
                 type: string
-                description: The ID of the environment to use as the default for the toolset
+                description: The slug of the environment to use as the default for the toolset
                 example: Enim quae animi saepe ex possimus.
             description:
                 type: string
@@ -2790,7 +2790,7 @@ definitions:
                 format: date-time
         example:
             created_at: "1970-08-19T15:16:53Z"
-            default_environment_id: Veritatis rerum et qui sunt distinctio quidem.
+            default_environment_slug: Veritatis rerum et qui sunt distinctio quidem.
             description: Sed laudantium voluptatum qui est.
             http_tools:
                 - created_at: "1997-03-01T22:29:25Z"
@@ -2851,9 +2851,9 @@ definitions:
         title: ToolsetsCreateToolsetRequestBody
         type: object
         properties:
-            default_environment_id:
+            default_environment_slug:
                 type: string
-                description: The ID of the environment to use as the default for the toolset
+                description: The slug of the environment to use as the default for the toolset
                 example: Iusto corrupti officia.
             description:
                 type: string
@@ -2874,7 +2874,7 @@ definitions:
                 description: The name of the toolset
                 example: Molestiae rerum error velit.
         example:
-            default_environment_id: Nam placeat quis.
+            default_environment_slug: Nam placeat quis.
             description: Labore nemo soluta ipsam provident.
             http_tool_names:
                 - In dolorem ducimus tempore.
@@ -2888,9 +2888,9 @@ definitions:
         title: ToolsetsUpdateToolsetRequestBody
         type: object
         properties:
-            default_environment_id:
+            default_environment_slug:
                 type: string
-                description: The ID of the environment to use as the default for the toolset
+                description: The slug of the environment to use as the default for the toolset
                 example: Sapiente qui cumque eius voluptatem qui dolorem.
             description:
                 type: string
@@ -2910,7 +2910,7 @@ definitions:
                 description: The new name of the toolset
                 example: Nihil et ipsa tempore.
         example:
-            default_environment_id: Aliquam harum beatae quia repellat dolor non.
+            default_environment_slug: Aliquam harum beatae quia repellat dolor non.
             description: Unde esse sequi velit minima.
             http_tool_names:
                 - Eos fuga natus.

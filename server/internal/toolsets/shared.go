@@ -81,7 +81,7 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 		ProjectID:                    toolset.ProjectID.String(),
 		Name:                         toolset.Name,
 		Slug:                         toolset.Slug,
-		DefaultEnvironmentID:         conv.FromNullableUUID(toolset.DefaultEnvironmentID),
+		DefaultEnvironmentSlug:       conv.FromPGText(toolset.DefaultEnvironmentSlug),
 		RelevantEnvironmentVariables: relevantEnvVars,
 		Description:                  conv.FromPGText(toolset.Description),
 		HTTPTools:                    httpTools,
