@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Nulla corrupti voluptas.\",\n      \"description\": \"Voluptatem hic distinctio consectetur commodi eos soluta.\",\n      \"http_tool_names\": [\n         \"Nostrum et asperiores.\",\n         \"Est harum animi esse unde molestiae iure.\"\n      ],\n      \"name\": \"Voluptates dignissimos quis sequi distinctio veritatis.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Ut minus sed iusto ea provident voluptatem.\",\n      \"description\": \"Officiis impedit eos.\",\n      \"http_tool_names\": [\n         \"Consequatur atque dolor odit quia facilis.\",\n         \"Rerum ab eaque.\",\n         \"Labore sapiente neque deleniti hic.\",\n         \"Iusto quia.\"\n      ],\n      \"name\": \"Quia occaecati quae voluptatum fugiat labore.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -84,7 +84,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Reprehenderit fugiat temporibus reprehenderit.\",\n      \"description\": \"Placeat aut nam nostrum alias.\",\n      \"http_tool_names\": [\n         \"Dolores sit laboriosam et.\",\n         \"Rerum ea.\",\n         \"Nihil omnis a dignissimos rerum nostrum non.\",\n         \"Voluptas quo vitae amet voluptatum illum aut.\"\n      ],\n      \"name\": \"Aliquam aut vero dolore mollitia perspiciatis totam.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Ducimus et voluptatem et aut ut.\",\n      \"description\": \"Sed quasi aut quo quam.\",\n      \"http_tool_names\": [\n         \"Repellat ut.\",\n         \"Expedita qui voluptatem dolorum.\",\n         \"Suscipit voluptates nihil soluta nulla debitis illo.\",\n         \"Accusantium voluptas consequatur quasi quae iste.\"\n      ],\n      \"name\": \"Impedit amet id veritatis.\"\n   }'")
 		}
 	}
 	var slug string

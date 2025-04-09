@@ -45,6 +45,7 @@ type Deployment struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	IdempotencyKey string
+	ClonedFrom     uuid.NullUUID
 	GithubRepo     pgtype.Text
 	GithubPr       pgtype.Text
 	GithubSha      pgtype.Text

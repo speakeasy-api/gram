@@ -30,6 +30,17 @@ type CreateDeploymentRequestBody struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetFormRequestBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
 }
 
+// AddOpenAPIv3SourceRequestBody is the type of the "deployments" service
+// "addOpenAPIv3Source" endpoint HTTP request body.
+type AddOpenAPIv3SourceRequestBody struct {
+	// The ID of the uploaded asset.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The name to give the document as it will be displayed in UIs.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug to give the document as it will be displayed in URLs.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
 // GetDeploymentResponseBody is the type of the "deployments" service
 // "getDeployment" endpoint HTTP response body.
 type GetDeploymentResponseBody struct {
@@ -67,6 +78,13 @@ type GetDeploymentResponseBody struct {
 // CreateDeploymentResponseBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP response body.
 type CreateDeploymentResponseBody struct {
+	// A deployment that was successfully created.
+	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
+}
+
+// AddOpenAPIv3SourceResponseBody is the type of the "deployments" service
+// "addOpenAPIv3Source" endpoint HTTP response body.
+type AddOpenAPIv3SourceResponseBody struct {
 	// A deployment that was successfully created.
 	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
 }
@@ -188,6 +206,16 @@ func NewCreateDeploymentResponseBody(res *deployments.CreateDeploymentResult) *C
 	return body
 }
 
+// NewAddOpenAPIv3SourceResponseBody builds the HTTP response body from the
+// result of the "addOpenAPIv3Source" endpoint of the "deployments" service.
+func NewAddOpenAPIv3SourceResponseBody(res *deployments.AddOpenAPIv3SourceResult) *AddOpenAPIv3SourceResponseBody {
+	body := &AddOpenAPIv3SourceResponseBody{}
+	if res.Deployment != nil {
+		body.Deployment = marshalDeploymentsDeploymentToDeploymentResponseBody(res.Deployment)
+	}
+	return body
+}
+
 // NewListDeploymentsResponseBody builds the HTTP response body from the result
 // of the "listDeployments" endpoint of the "deployments" service.
 func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *ListDeploymentsResponseBody {
@@ -239,6 +267,20 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 	return v
 }
 
+// NewAddOpenAPIv3SourcePayload builds a deployments service addOpenAPIv3Source
+// endpoint payload.
+func NewAddOpenAPIv3SourcePayload(body *AddOpenAPIv3SourceRequestBody, sessionToken *string, projectSlugInput *string) *deployments.AddOpenAPIv3SourcePayload {
+	v := &deployments.AddOpenAPIv3SourcePayload{
+		AssetID: *body.AssetID,
+		Name:    *body.Name,
+		Slug:    *body.Slug,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
 func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
@@ -259,6 +301,21 @@ func ValidateCreateDeploymentRequestBody(body *CreateDeploymentRequestBody) (err
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateAddOpenAPIv3SourceRequestBody runs the validations defined on
+// AddOpenAPIv3SourceRequestBody
+func ValidateAddOpenAPIv3SourceRequestBody(body *AddOpenAPIv3SourceRequestBody) (err error) {
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	return
 }

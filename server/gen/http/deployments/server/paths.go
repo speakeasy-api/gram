@@ -17,6 +17,11 @@ func CreateDeploymentDeploymentsPath() string {
 	return "/rpc/deployments.create"
 }
 
+// AddOpenAPIv3SourceDeploymentsPath returns the URL path to the deployments service addOpenAPIv3Source HTTP endpoint.
+func AddOpenAPIv3SourceDeploymentsPath() string {
+	return "/rpc/deployments.addOpenAPIv3Source"
+}
+
 // ListDeploymentsDeploymentsPath returns the URL path to the deployments service listDeployments HTTP endpoint.
 func ListDeploymentsDeploymentsPath() string {
 	return "/rpc/deployments.list"

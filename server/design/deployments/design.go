@@ -54,6 +54,27 @@ var _ = Service("deployments", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateDeployment"}`)
 	})
 
+	Method("addOpenAPIv3Source", func() {
+		Description("Create a new deployment with an additional OpenAPI 3.x document.")
+
+		Payload(func() {
+			Extend(AddOpenAPIv3SourceForm)
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(AddOpenAPIv3SourceResult)
+
+		HTTP(func() {
+			POST("/rpc/deployments.addOpenAPIv3Source")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOpenAPIv3Source"}`)
+	})
+
 	Method("listDeployments", func() {
 		Description("List all deployments in descending order of creation.")
 
@@ -236,4 +257,15 @@ var GetDeploymentForm = Type("GetDeploymentForm", func() {
 
 var GetDeploymentResult = Type("GetDeploymentResult", func() {
 	Extend(Deployment)
+})
+
+var AddOpenAPIv3SourceForm = Type("AddOpenAPIv3SourceForm", func() {
+	Extend(OpenAPIv3DeploymentAssetForm)
+})
+
+var AddOpenAPIv3SourceResult = Type("AddOpenAPIv3SourceResult", func() {
+	Attribute("deployment", Deployment, func() {
+		Description("A deployment that was successfully created.")
+		Meta("openapi:example", "false")
+	})
 })

@@ -179,6 +179,86 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildAddOpenAPIv3SourceRequest instantiates a HTTP request object with
+// method and path set to call the "deployments" service "addOpenAPIv3Source"
+// endpoint
+func (c *Client) BuildAddOpenAPIv3SourceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AddOpenAPIv3SourceDeploymentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("deployments", "addOpenAPIv3Source", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAddOpenAPIv3SourceRequest returns an encoder for requests sent to the
+// deployments addOpenAPIv3Source server.
+func EncodeAddOpenAPIv3SourceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*deployments.AddOpenAPIv3SourcePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("deployments", "addOpenAPIv3Source", "*deployments.AddOpenAPIv3SourcePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewAddOpenAPIv3SourceRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("deployments", "addOpenAPIv3Source", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAddOpenAPIv3SourceResponse returns a decoder for responses returned by
+// the deployments addOpenAPIv3Source endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+func DecodeAddOpenAPIv3SourceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AddOpenAPIv3SourceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "addOpenAPIv3Source", err)
+			}
+			err = ValidateAddOpenAPIv3SourceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "addOpenAPIv3Source", err)
+			}
+			res := NewAddOpenAPIv3SourceResultOK(&body)
+			return res, nil
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("deployments", "addOpenAPIv3Source", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListDeploymentsRequest instantiates a HTTP request object with method
 // and path set to call the "deployments" service "listDeployments" endpoint
 func (c *Client) BuildListDeploymentsRequest(ctx context.Context, v any) (*http.Request, error) {

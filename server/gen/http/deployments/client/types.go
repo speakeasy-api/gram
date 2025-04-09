@@ -30,6 +30,17 @@ type CreateDeploymentRequestBody struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetFormRequestBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
 }
 
+// AddOpenAPIv3SourceRequestBody is the type of the "deployments" service
+// "addOpenAPIv3Source" endpoint HTTP request body.
+type AddOpenAPIv3SourceRequestBody struct {
+	// The ID of the uploaded asset.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The name to give the document as it will be displayed in UIs.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug to give the document as it will be displayed in URLs.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
 // GetDeploymentResponseBody is the type of the "deployments" service
 // "getDeployment" endpoint HTTP response body.
 type GetDeploymentResponseBody struct {
@@ -67,6 +78,13 @@ type GetDeploymentResponseBody struct {
 // CreateDeploymentResponseBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP response body.
 type CreateDeploymentResponseBody struct {
+	// A deployment that was successfully created.
+	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
+}
+
+// AddOpenAPIv3SourceResponseBody is the type of the "deployments" service
+// "addOpenAPIv3Source" endpoint HTTP response body.
+type AddOpenAPIv3SourceResponseBody struct {
 	// A deployment that was successfully created.
 	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
 }
@@ -169,6 +187,17 @@ func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *Cre
 	return body
 }
 
+// NewAddOpenAPIv3SourceRequestBody builds the HTTP request body from the
+// payload of the "addOpenAPIv3Source" endpoint of the "deployments" service.
+func NewAddOpenAPIv3SourceRequestBody(p *deployments.AddOpenAPIv3SourcePayload) *AddOpenAPIv3SourceRequestBody {
+	body := &AddOpenAPIv3SourceRequestBody{
+		AssetID: p.AssetID,
+		Name:    p.Name,
+		Slug:    p.Slug,
+	}
+	return body
+}
+
 // NewGetDeploymentResultOK builds a "deployments" service "getDeployment"
 // endpoint result from a HTTP "OK" response.
 func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetDeploymentResult {
@@ -198,6 +227,17 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 // "createDeployment" endpoint result from a HTTP "OK" response.
 func NewCreateDeploymentResultOK(body *CreateDeploymentResponseBody) *deployments.CreateDeploymentResult {
 	v := &deployments.CreateDeploymentResult{}
+	if body.Deployment != nil {
+		v.Deployment = unmarshalDeploymentResponseBodyToDeploymentsDeployment(body.Deployment)
+	}
+
+	return v
+}
+
+// NewAddOpenAPIv3SourceResultOK builds a "deployments" service
+// "addOpenAPIv3Source" endpoint result from a HTTP "OK" response.
+func NewAddOpenAPIv3SourceResultOK(body *AddOpenAPIv3SourceResponseBody) *deployments.AddOpenAPIv3SourceResult {
+	v := &deployments.AddOpenAPIv3SourceResult{}
 	if body.Deployment != nil {
 		v.Deployment = unmarshalDeploymentResponseBodyToDeploymentsDeployment(body.Deployment)
 	}
@@ -259,6 +299,17 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 // ValidateCreateDeploymentResponseBody runs the validations defined on
 // CreateDeploymentResponseBody
 func ValidateCreateDeploymentResponseBody(body *CreateDeploymentResponseBody) (err error) {
+	if body.Deployment != nil {
+		if err2 := ValidateDeploymentResponseBody(body.Deployment); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAddOpenAPIv3SourceResponseBody runs the validations defined on
+// AddOpenAPIv3SourceResponseBody
+func ValidateAddOpenAPIv3SourceResponseBody(body *AddOpenAPIv3SourceResponseBody) (err error) {
 	if body.Deployment != nil {
 		if err2 := ValidateDeploymentResponseBody(body.Deployment); err2 != nil {
 			err = goa.MergeErrors(err, err2)

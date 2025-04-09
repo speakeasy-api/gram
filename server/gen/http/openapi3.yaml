@@ -203,6 +203,46 @@ paths:
                 - auth
             x-speakeasy-react-hook:
                 name: SwitchScopes
+    /rpc/deployments.addOpenAPIv3Source:
+        post:
+            description: Create a new deployment with an additional OpenAPI 3.x document.
+            operationId: deployments#addOpenAPIv3Source
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/OpenAPIv3DeploymentAssetForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AddOpenAPIv3SourceResult'
+                    description: OK response.
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: addOpenAPIv3Source deployments
+            tags:
+                - deployments
+            x-speakeasy-react-hook:
+                name: AddOpenAPIv3Source
     /rpc/deployments.create:
         post:
             description: Create a deployment to load tool definitions.
@@ -881,6 +921,27 @@ paths:
                 name: UpdateToolset
 components:
     schemas:
+        AddOpenAPIv3SourceForm:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the uploaded asset.
+                name:
+                    type: string
+                    description: The name to give the document as it will be displayed in UIs.
+                slug:
+                    type: string
+                    description: The slug to give the document as it will be displayed in URLs.
+            required:
+                - asset_id
+                - name
+                - slug
+        AddOpenAPIv3SourceResult:
+            type: object
+            properties:
+                deployment:
+                    $ref: '#/components/schemas/Deployment'
         Asset:
             type: object
             properties:

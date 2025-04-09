@@ -15,17 +15,19 @@ import (
 
 // Client is the "deployments" service client.
 type Client struct {
-	GetDeploymentEndpoint    goa.Endpoint
-	CreateDeploymentEndpoint goa.Endpoint
-	ListDeploymentsEndpoint  goa.Endpoint
+	GetDeploymentEndpoint      goa.Endpoint
+	CreateDeploymentEndpoint   goa.Endpoint
+	AddOpenAPIv3SourceEndpoint goa.Endpoint
+	ListDeploymentsEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "deployments" service client given the endpoints.
-func NewClient(getDeployment, createDeployment, listDeployments goa.Endpoint) *Client {
+func NewClient(getDeployment, createDeployment, addOpenAPIv3Source, listDeployments goa.Endpoint) *Client {
 	return &Client{
-		GetDeploymentEndpoint:    getDeployment,
-		CreateDeploymentEndpoint: createDeployment,
-		ListDeploymentsEndpoint:  listDeployments,
+		GetDeploymentEndpoint:      getDeployment,
+		CreateDeploymentEndpoint:   createDeployment,
+		AddOpenAPIv3SourceEndpoint: addOpenAPIv3Source,
+		ListDeploymentsEndpoint:    listDeployments,
 	}
 }
 
@@ -49,6 +51,17 @@ func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayloa
 		return
 	}
 	return ires.(*CreateDeploymentResult), nil
+}
+
+// AddOpenAPIv3Source calls the "addOpenAPIv3Source" endpoint of the
+// "deployments" service.
+func (c *Client) AddOpenAPIv3Source(ctx context.Context, p *AddOpenAPIv3SourcePayload) (res *AddOpenAPIv3SourceResult, err error) {
+	var ires any
+	ires, err = c.AddOpenAPIv3SourceEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AddOpenAPIv3SourceResult), nil
 }
 
 // ListDeployments calls the "listDeployments" endpoint of the "deployments"

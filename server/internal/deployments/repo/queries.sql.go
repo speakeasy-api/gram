@@ -60,6 +60,87 @@ func (q *Queries) AddDeploymentOpenAPIv3Asset(ctx context.Context, arg AddDeploy
 	return i, err
 }
 
+const cloneDeployment = `-- name: CloneDeployment :one
+INSERT INTO deployments (
+  cloned_from
+  , idempotency_key
+  , user_id
+  , organization_id
+  , project_id
+  , github_repo
+  , github_pr
+  , external_id
+  , external_url
+)
+SELECT 
+  current.id
+  , gen_random_uuid()
+  , current.user_id
+  , current.organization_id
+  , current.project_id
+  , current.github_repo
+  , current.github_pr
+  , current.external_id
+  , current.external_url
+FROM deployments as current
+WHERE current.id = $1 AND current.project_id = $2
+RETURNING id
+`
+
+type CloneDeploymentParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, cloneDeployment, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const cloneDeploymentOpenAPIv3Assets = `-- name: CloneDeploymentOpenAPIv3Assets :many
+INSERT INTO deployments_openapiv3_assets (
+  deployment_id
+  , asset_id
+  , name
+  , slug
+)
+SELECT 
+  $1
+  , current.asset_id
+  , current.name
+  , current.slug
+FROM deployments_openapiv3_assets as current
+WHERE current.deployment_id = $2
+RETURNING id
+`
+
+type CloneDeploymentOpenAPIv3AssetsParams struct {
+	CloneDeploymentID    uuid.UUID
+	OriginalDeploymentID uuid.UUID
+}
+
+func (q *Queries) CloneDeploymentOpenAPIv3Assets(ctx context.Context, arg CloneDeploymentOpenAPIv3AssetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, cloneDeploymentOpenAPIv3Assets, arg.CloneDeploymentID, arg.OriginalDeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createDeployment = `-- name: CreateDeployment :execresult
 INSERT INTO deployments (
   idempotency_key
@@ -293,7 +374,7 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, coalesce(latest_status.status, 'unknown') as status
+SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, coalesce(latest_status.status, 'unknown') as status
 FROM deployments
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE deployments.id = $1 AND deployments.project_id = $2
@@ -319,6 +400,7 @@ func (q *Queries) GetDeployment(ctx context.Context, arg GetDeploymentParams) (G
 		&i.Deployment.ProjectID,
 		&i.Deployment.OrganizationID,
 		&i.Deployment.IdempotencyKey,
+		&i.Deployment.ClonedFrom,
 		&i.Deployment.GithubRepo,
 		&i.Deployment.GithubPr,
 		&i.Deployment.GithubSha,
@@ -339,7 +421,7 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, coalesce(latest_status.status, 'unknown') as status
+SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, coalesce(latest_status.status, 'unknown') as status
 FROM deployments
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE idempotency_key = $1
@@ -367,6 +449,7 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 		&i.Deployment.ProjectID,
 		&i.Deployment.OrganizationID,
 		&i.Deployment.IdempotencyKey,
+		&i.Deployment.ClonedFrom,
 		&i.Deployment.GithubRepo,
 		&i.Deployment.GithubPr,
 		&i.Deployment.GithubSha,
@@ -419,7 +502,7 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug, coalesce(latest_status.status, 'unknown') as status
+SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug, coalesce(latest_status.status, 'unknown') as status
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
@@ -453,6 +536,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.Deployment.ProjectID,
 			&i.Deployment.OrganizationID,
 			&i.Deployment.IdempotencyKey,
+			&i.Deployment.ClonedFrom,
 			&i.Deployment.GithubRepo,
 			&i.Deployment.GithubPr,
 			&i.Deployment.GithubSha,
@@ -475,6 +559,21 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 		return nil, err
 	}
 	return items, nil
+}
+
+const getLatestDeploymentID = `-- name: GetLatestDeploymentID :one
+SELECT id
+FROM deployments
+WHERE project_id = $1
+ORDER BY id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLatestDeploymentID, projectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listDeployments = `-- name: ListDeployments :many

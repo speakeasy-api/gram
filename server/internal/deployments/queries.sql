@@ -43,6 +43,13 @@ LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
+-- name: GetLatestDeploymentID :one
+SELECT id
+FROM deployments
+WHERE project_id = @project_id
+ORDER BY id DESC
+LIMIT 1;
+
 -- name: GetDeploymentByIdempotencyKey :one
 WITH latest_status as (
     SELECT deployment_id, status
@@ -83,6 +90,48 @@ INSERT INTO deployments (
   , @external_url
 )
 ON CONFLICT (project_id, idempotency_key) DO NOTHING;
+
+-- name: CloneDeployment :one
+INSERT INTO deployments (
+  cloned_from
+  , idempotency_key
+  , user_id
+  , organization_id
+  , project_id
+  , github_repo
+  , github_pr
+  , external_id
+  , external_url
+)
+SELECT 
+  current.id
+  , gen_random_uuid()
+  , current.user_id
+  , current.organization_id
+  , current.project_id
+  , current.github_repo
+  , current.github_pr
+  , current.external_id
+  , current.external_url
+FROM deployments as current
+WHERE current.id = @id AND current.project_id = @project_id
+RETURNING id;
+
+-- name: CloneDeploymentOpenAPIv3Assets :many
+INSERT INTO deployments_openapiv3_assets (
+  deployment_id
+  , asset_id
+  , name
+  , slug
+)
+SELECT 
+  @clone_deployment_id
+  , current.asset_id
+  , current.name
+  , current.slug
+FROM deployments_openapiv3_assets as current
+WHERE current.deployment_id = @original_deployment_id
+RETURNING id;
 
 -- name: TransitionDeployment :one
 WITH status AS (

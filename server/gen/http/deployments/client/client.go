@@ -25,6 +25,10 @@ type Client struct {
 	// createDeployment endpoint.
 	CreateDeploymentDoer goahttp.Doer
 
+	// AddOpenAPIv3Source Doer is the HTTP client used to make requests to the
+	// addOpenAPIv3Source endpoint.
+	AddOpenAPIv3SourceDoer goahttp.Doer
+
 	// ListDeployments Doer is the HTTP client used to make requests to the
 	// listDeployments endpoint.
 	ListDeploymentsDoer goahttp.Doer
@@ -49,14 +53,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDeploymentDoer:    doer,
-		CreateDeploymentDoer: doer,
-		ListDeploymentsDoer:  doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		GetDeploymentDoer:      doer,
+		CreateDeploymentDoer:   doer,
+		AddOpenAPIv3SourceDoer: doer,
+		ListDeploymentsDoer:    doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -103,6 +108,30 @@ func (c *Client) CreateDeployment() goa.Endpoint {
 		resp, err := c.CreateDeploymentDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deployments", "createDeployment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AddOpenAPIv3Source returns an endpoint that makes HTTP requests to the
+// deployments service addOpenAPIv3Source server.
+func (c *Client) AddOpenAPIv3Source() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAddOpenAPIv3SourceRequest(c.encoder)
+		decodeResponse = DecodeAddOpenAPIv3SourceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAddOpenAPIv3SourceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AddOpenAPIv3SourceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "addOpenAPIv3Source", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -49,7 +49,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Rerum ut.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Repudiandae quia rerum consequatur non eligendi.\",\n            \"name\": \"Voluptatem modi omnis voluptas reiciendis assumenda.\",\n            \"slug\": \"Sequi doloribus aperiam.\"\n         },\n         {\n            \"asset_id\": \"Repudiandae quia rerum consequatur non eligendi.\",\n            \"name\": \"Voluptatem modi omnis voluptas reiciendis assumenda.\",\n            \"slug\": \"Sequi doloribus aperiam.\"\n         },\n         {\n            \"asset_id\": \"Repudiandae quia rerum consequatur non eligendi.\",\n            \"name\": \"Voluptatem modi omnis voluptas reiciendis assumenda.\",\n            \"slug\": \"Sequi doloribus aperiam.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Ut reiciendis dolore est alias adipisci deserunt.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Et laudantium vel.\",\n            \"name\": \"Odit doloribus.\",\n            \"slug\": \"Quia qui nisi aliquid.\"\n         },\n         {\n            \"asset_id\": \"Et laudantium vel.\",\n            \"name\": \"Odit doloribus.\",\n            \"slug\": \"Quia qui nisi aliquid.\"\n         },\n         {\n            \"asset_id\": \"Et laudantium vel.\",\n            \"name\": \"Odit doloribus.\",\n            \"slug\": \"Quia qui nisi aliquid.\"\n         },\n         {\n            \"asset_id\": \"Et laudantium vel.\",\n            \"name\": \"Odit doloribus.\",\n            \"slug\": \"Quia qui nisi aliquid.\"\n         }\n      ]\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -84,6 +84,40 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
+
+	return v, nil
+}
+
+// BuildAddOpenAPIv3SourcePayload builds the payload for the deployments
+// addOpenAPIv3Source endpoint from CLI flags.
+func BuildAddOpenAPIv3SourcePayload(deploymentsAddOpenAPIv3SourceBody string, deploymentsAddOpenAPIv3SourceSessionToken string, deploymentsAddOpenAPIv3SourceProjectSlugInput string) (*deployments.AddOpenAPIv3SourcePayload, error) {
+	var err error
+	var body AddOpenAPIv3SourceRequestBody
+	{
+		err = json.Unmarshal([]byte(deploymentsAddOpenAPIv3SourceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Esse vel.\",\n      \"name\": \"Autem quasi porro accusantium velit accusamus.\",\n      \"slug\": \"Quis similique culpa.\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if deploymentsAddOpenAPIv3SourceSessionToken != "" {
+			sessionToken = &deploymentsAddOpenAPIv3SourceSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if deploymentsAddOpenAPIv3SourceProjectSlugInput != "" {
+			projectSlugInput = &deploymentsAddOpenAPIv3SourceProjectSlugInput
+		}
+	}
+	v := &deployments.AddOpenAPIv3SourcePayload{
+		AssetID: body.AssetID,
+		Name:    body.Name,
+		Slug:    body.Slug,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

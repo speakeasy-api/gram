@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "deployments" service endpoints.
 type Endpoints struct {
-	GetDeployment    goa.Endpoint
-	CreateDeployment goa.Endpoint
-	ListDeployments  goa.Endpoint
+	GetDeployment      goa.Endpoint
+	CreateDeployment   goa.Endpoint
+	AddOpenAPIv3Source goa.Endpoint
+	ListDeployments    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "deployments" service with endpoints.
@@ -26,9 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetDeployment:    NewGetDeploymentEndpoint(s, a.APIKeyAuth),
-		CreateDeployment: NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
-		ListDeployments:  NewListDeploymentsEndpoint(s, a.APIKeyAuth),
+		GetDeployment:      NewGetDeploymentEndpoint(s, a.APIKeyAuth),
+		CreateDeployment:   NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
+		AddOpenAPIv3Source: NewAddOpenAPIv3SourceEndpoint(s, a.APIKeyAuth),
+		ListDeployments:    NewListDeploymentsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -36,6 +38,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetDeployment = m(e.GetDeployment)
 	e.CreateDeployment = m(e.CreateDeployment)
+	e.AddOpenAPIv3Source = m(e.AddOpenAPIv3Source)
 	e.ListDeployments = m(e.ListDeployments)
 }
 
@@ -106,6 +109,41 @@ func NewCreateDeploymentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.CreateDeployment(ctx, p)
+	}
+}
+
+// NewAddOpenAPIv3SourceEndpoint returns an endpoint function that calls the
+// method "addOpenAPIv3Source" of service "deployments".
+func NewAddOpenAPIv3SourceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AddOpenAPIv3SourcePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.AddOpenAPIv3Source(ctx, p)
 	}
 }
 

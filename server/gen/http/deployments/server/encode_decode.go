@@ -152,6 +152,74 @@ func DecodeCreateDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request
 	}
 }
 
+// EncodeAddOpenAPIv3SourceResponse returns an encoder for responses returned
+// by the deployments addOpenAPIv3Source endpoint.
+func EncodeAddOpenAPIv3SourceResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*deployments.AddOpenAPIv3SourceResult)
+		enc := encoder(ctx, w)
+		body := NewAddOpenAPIv3SourceResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeAddOpenAPIv3SourceRequest returns a decoder for requests sent to the
+// deployments addOpenAPIv3Source endpoint.
+func DecodeAddOpenAPIv3SourceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+	return func(r *http.Request) (any, error) {
+		var (
+			body AddOpenAPIv3SourceRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if err == io.EOF {
+				return nil, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return nil, gerr
+			}
+			return nil, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateAddOpenAPIv3SourceRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload := NewAddOpenAPIv3SourcePayload(&body, sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
 // EncodeListDeploymentsResponse returns an encoder for responses returned by
 // the deployments listDeployments endpoint.
 func EncodeListDeploymentsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {

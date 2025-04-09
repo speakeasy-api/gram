@@ -19,6 +19,8 @@ type Service interface {
 	GetDeployment(context.Context, *GetDeploymentPayload) (res *GetDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
 	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
+	// Create a new deployment with an additional OpenAPI 3.x document.
+	AddOpenAPIv3Source(context.Context, *AddOpenAPIv3SourcePayload) (res *AddOpenAPIv3SourceResult, err error)
 	// List all deployments in descending order of creation.
 	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
 }
@@ -43,7 +45,27 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"getDeployment", "createDeployment", "listDeployments"}
+var MethodNames = [4]string{"getDeployment", "createDeployment", "addOpenAPIv3Source", "listDeployments"}
+
+// AddOpenAPIv3SourcePayload is the payload type of the deployments service
+// addOpenAPIv3Source method.
+type AddOpenAPIv3SourcePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the uploaded asset.
+	AssetID string
+	// The name to give the document as it will be displayed in UIs.
+	Name string
+	// The slug to give the document as it will be displayed in URLs.
+	Slug string
+}
+
+// AddOpenAPIv3SourceResult is the result type of the deployments service
+// addOpenAPIv3Source method.
+type AddOpenAPIv3SourceResult struct {
+	// A deployment that was successfully created.
+	Deployment *Deployment
+}
 
 // CreateDeploymentPayload is the payload type of the deployments service
 // createDeployment method.

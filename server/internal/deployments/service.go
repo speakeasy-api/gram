@@ -63,6 +63,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
 func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayload) (res *gen.GetDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -223,8 +227,6 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	)
 
 	if created {
-		span.AddEvent("deployment_created")
-
 		stat, err := tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
 			DeploymentID: deployment.ID,
 			ProjectID:    *authCtx.ProjectID,
@@ -235,6 +237,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		if err != nil {
 			return nil, oops.E(err, "error logging deployment creation", "failed to mark deployment as created").Log(ctx, logger)
 		}
+		span.AddEvent("deployment_created")
 
 		status = stat.Status
 	} else {
@@ -280,10 +283,6 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	return &gen.CreateDeploymentResult{
 		Deployment: dep,
 	}, nil
-}
-
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, deploymentID uuid.UUID, assets []*gen.OpenAPIv3DeploymentAssetForm) ([]*gen.OpenAPIv3DeploymentAsset, error) {
@@ -441,4 +440,188 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 	}
 
 	return workers.Wait()
+}
+
+func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3SourcePayload) (*gen.AddOpenAPIv3SourceResult, error) {
+	span := trace.SpanFromContext(ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("authorization check failed")
+	}
+
+	projectID := *authCtx.ProjectID
+
+	assetID, err := uuid.Parse(form.AssetID)
+	if err != nil {
+		return nil, oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		slog.String("project_id", projectID.String()),
+	)
+	span.SetAttributes(
+		attribute.String("project_id", projectID.String()),
+	)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
+	}
+	defer dbtx.Rollback(ctx)
+
+	tx := s.repo.WithTx(dbtx)
+
+	var cloneID uuid.UUID
+
+	latestDeploymentID, err := tx.GetLatestDeploymentID(ctx, projectID)
+	switch {
+	// 1️⃣ Project has no deployments, we need to create an initial one instead of cloning
+	case errors.Is(err, sql.ErrNoRows), latestDeploymentID == uuid.Nil:
+		key := uuid.New().String()
+		_, err := tx.CreateDeployment(ctx, repo.CreateDeploymentParams{
+			ProjectID:      projectID,
+			UserID:         authCtx.UserID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			IdempotencyKey: key,
+		})
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("no deployment created")
+		}
+		if err != nil {
+			return nil, oops.E(err, "error creating initial deployment", "failed to create initial deployment").Log(ctx, logger)
+		}
+
+		d, err := tx.GetDeploymentByIdempotencyKey(ctx, repo.GetDeploymentByIdempotencyKeyParams{
+			IdempotencyKey: key,
+			ProjectID:      projectID,
+		})
+		if err != nil {
+			return nil, oops.E(err, "error reading initial deployment", "failed to read laatest deployment").Log(ctx, logger)
+		}
+
+		logger = s.logger.With(
+			slog.String("deployment_id", d.Deployment.ID.String()),
+		)
+		span.SetAttributes(
+			attribute.String("deployment_id", d.Deployment.ID.String()),
+		)
+
+		_, err = tx.AddDeploymentOpenAPIv3Asset(ctx, repo.AddDeploymentOpenAPIv3AssetParams{
+			DeploymentID: d.Deployment.ID,
+			AssetID:      assetID,
+			Name:         form.Name,
+			Slug:         form.Slug,
+		})
+		if err != nil {
+			return nil, oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
+		}
+
+		cloneID = d.Deployment.ID
+
+		span.AddEvent("initial_deployment_created")
+	// 2️⃣ Something went wrong querying for the latest deployment
+	case err != nil:
+		return nil, oops.E(err, "error getting latest deployment", "failed to get latest deployment").Log(ctx, logger)
+	// 3️⃣ We found a latest deployment, we need to clone it
+	default:
+		newID, err := tx.CloneDeployment(ctx, repo.CloneDeploymentParams{
+			ID:        latestDeploymentID,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			return nil, oops.E(err, "error cloning deployment", "failed to clone deployment").Log(ctx, logger)
+		}
+
+		logger = s.logger.With(
+			slog.String("deployment_id", newID.String()),
+		)
+		span.SetAttributes(
+			attribute.String("deployment_id", newID.String()),
+		)
+
+		_, err = tx.CloneDeploymentOpenAPIv3Assets(ctx, repo.CloneDeploymentOpenAPIv3AssetsParams{
+			OriginalDeploymentID: latestDeploymentID,
+			CloneDeploymentID:    newID,
+		})
+		if err != nil {
+			return nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
+		}
+
+		_, err = tx.AddDeploymentOpenAPIv3Asset(ctx, repo.AddDeploymentOpenAPIv3AssetParams{
+			DeploymentID: newID,
+			AssetID:      assetID,
+			Name:         form.Name,
+			Slug:         form.Slug,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
+		}
+
+		cloneID = newID
+
+		span.AddEvent("deployment_cloned")
+	}
+
+	stat, err := tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+		DeploymentID: cloneID,
+		ProjectID:    projectID,
+		Status:       "created",
+		Event:        "deployment:created",
+		Message:      "Deployment created",
+	})
+	if err != nil {
+		return nil, oops.E(err, "error logging deployment creation", "failed to mark deployment as created").Log(ctx, logger)
+	}
+
+	rows, err := tx.GetDeploymentWithAssets(ctx, repo.GetDeploymentWithAssetsParams{
+		ID:        cloneID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(err, "error getting deployment with assets", "failed to get deployment with assets").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(err, "error saving deployment", "failed to commit database transaction").Log(ctx, logger)
+	}
+
+	deployment := rows[0].Deployment
+	assets := make([]*gen.OpenAPIv3DeploymentAsset, 0, len(rows))
+	for _, r := range rows {
+		assets = append(assets, &gen.OpenAPIv3DeploymentAsset{
+			ID:      r.DeploymentsOpenapiv3Asset.ID.String(),
+			AssetID: r.DeploymentsOpenapiv3Asset.AssetID.String(),
+			Name:    r.DeploymentsOpenapiv3Asset.Name,
+			Slug:    r.DeploymentsOpenapiv3Asset.Slug,
+		})
+	}
+
+	dep := &gen.Deployment{
+		ID:              deployment.ID.String(),
+		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
+		OrganizationID:  deployment.OrganizationID,
+		ProjectID:       deployment.ProjectID.String(),
+		UserID:          deployment.UserID,
+		Status:          stat.Status,
+		ExternalID:      conv.FromPGText(deployment.ExternalID),
+		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
+		GithubSha:       conv.FromPGText(deployment.GithubSha),
+		GithubPr:        conv.FromPGText(deployment.GithubPr),
+		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
+		Openapiv3Assets: assets,
+	}
+
+	status, err := s.startDeployment(ctx, logger, projectID, deployment.ID, dep)
+	if err != nil {
+		return nil, err
+	}
+	if status == "" {
+		return nil, errors.New("unable to resolve deployment status")
+	}
+
+	dep.Status = status
+
+	return &gen.AddOpenAPIv3SourceResult{
+		Deployment: dep,
+	}, nil
 }
