@@ -29,7 +29,7 @@ export function EditableText({
         containerRef.current &&
         !containerRef.current.contains(event.target as Node)
       ) {
-        handleSubmit();
+        onSubmit(editedValue);
       }
     };
 
