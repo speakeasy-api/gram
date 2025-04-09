@@ -8,7 +8,6 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { SanboxIcon } from "@/routes";
 import {
   useCreateToolsetMutation,
-  useDeleteToolsetMutation,
   useListToolsetsSuspense,
   useToolsetSuspense,
 } from "@gram/sdk/react-query";
@@ -176,7 +175,14 @@ function ToolsetCard({ toolset }: { toolset: Toolset }) {
           <Link to={`/toolsets/${toolset.slug}`} className="hover:underline">
             <Card.Title>{toolset.name}</Card.Title>
           </Link>
-          <Badge>{toolset.httpToolNames?.length || "No"} Tools</Badge>
+          <div className="flex gap-2 items-center">
+            {toolset.defaultEnvironmentSlug && (
+              <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
+                <Badge className="h-6 flex items-center">Default Env</Badge>
+              </Link>
+            )}
+            <Badge className="h-6 flex items-center">{toolset.httpToolNames?.length || "No"} Tools</Badge>
+          </div>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           <Card.Description className="max-w-2/3">
