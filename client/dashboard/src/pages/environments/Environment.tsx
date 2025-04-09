@@ -155,7 +155,7 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
           <DialogTitle>Fill for Toolset</DialogTitle>
           <DialogDescription>
             Select a list toolsets you would like to  prefill environment variables for.
-            Env variables will be filled is as empty values, set the variable you wish to and remove those you don't need.
+            All possible env variables will be filled in as empty values, set any relevant variables and remove uneeded ones.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">

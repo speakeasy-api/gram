@@ -25,7 +25,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, AlertTriangle, Check } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useEnvironments } from "../environments/Environments";
+import { Environment } from "@gram/sdk/models/components";
 
 export function useToolsets() {
   const project = useProject();
@@ -56,6 +64,7 @@ export default function Toolsets() {
   const project = useProject();
   const navigate = useNavigate();
   const toolsets = useToolsets();
+  const environments = useEnvironments();
 
   const [createToolsetDialogOpen, setCreateToolsetDialogOpen] = useState(false);
   const [toolsetName, setToolsetName] = useState("");
@@ -102,7 +111,7 @@ export default function Toolsets() {
       </Page.Header>
       <Page.Body>
         {toolsets.map((toolset) => (
-          <ToolsetCard key={toolset.id} toolset={toolset} />
+          <ToolsetCard key={toolset.id} toolset={toolset} environments={environments} />
         ))}
         <CreateThingCard onClick={() => setCreateToolsetDialogOpen(true)}>
           + New Toolset
@@ -167,7 +176,8 @@ export function CreateThingCard({
   );
 }
 
-function ToolsetCard({ toolset }: { toolset: Toolset }) {
+function ToolsetCard({ toolset, environments }: { toolset: Toolset; environments: Environment[] }) {
+  const defaultEnvironment = environments.find(env => env.slug === toolset.defaultEnvironmentSlug);
   return (
     <Card>
       <Card.Header>
@@ -180,7 +190,27 @@ function ToolsetCard({ toolset }: { toolset: Toolset }) {
           <div className="flex gap-2 items-center">
             {toolset.defaultEnvironmentSlug && (
               <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
-                <Badge variant="outline" className="h-6 flex items-center">Default Env</Badge>
+                <Badge variant="outline" className="h-6 flex items-center gap-1">
+                  {defaultEnvironment && (
+                    defaultEnvironment.entries.length === 0 ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div>
+                              <AlertTriangle className="w-3 h-3 text-orange-500 cursor-pointer" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>You have not set environment variables for this toolset. Navigate to the environment and use fill for toolset.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <Check className="w-3 h-3 text-green-500" />
+                    )
+                  )}
+                  Default Env
+                </Badge>
               </Link>
             )}
             <Badge className="h-6 flex items-center">{toolset.httpToolNames?.length || "No"} Tools</Badge>
