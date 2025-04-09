@@ -64,10 +64,10 @@ export function ChatWindow() {
     const result = streamText({
       model: openai("gpt-4o"),
       messages: JSON.parse(init?.body as string).messages,
+      tools,
       experimental_transform: smoothStream({
         delayInMs: 20, // Looks a little smoother
       }),
-      tools,
     });
 
     return result.toDataStreamResponse();
@@ -108,11 +108,9 @@ export function ChatWindow() {
         }
       )
 
-      console.log("fetched")
-
       const result = await response.json();
 
-      console.log("result", result);
+      console.log("tool result", result);
 
       return result;
     },

@@ -1,4 +1,6 @@
-import "./App.css";
+import "@speakeasy-api/moonshine/moonshine.css";
+import "./App.css"; // Import this second to override certain values in moonshine.css
+
 import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { RootLayout } from "./components/root-layout.tsx";

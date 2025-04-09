@@ -41,6 +41,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --header-height: 3rem;
+  --sidebar-width: 16rem;
 }
 
 :root {
