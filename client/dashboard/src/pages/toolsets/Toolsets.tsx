@@ -176,7 +176,7 @@ function ToolsetCard({ toolset }: { toolset: Toolset }) {
           <Link to={`/toolsets/${toolset.slug}`} className="hover:underline">
             <Card.Title>{toolset.name}</Card.Title>
           </Link>
-          <Badge>{toolset.httpToolIds?.length || "No"} Tools</Badge>
+          <Badge>{toolset.httpToolNames?.length || "No"} Tools</Badge>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           <Card.Description className="max-w-2/3">
