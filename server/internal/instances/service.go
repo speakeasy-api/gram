@@ -101,7 +101,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 	for i, entry := range environmentEntries {
 		genEntries[i] = &gen.EnvironmentEntry{
 			Name:      entry.Name,
-			Value:     "", // We don't respond with the actual security value on load
+			Value:     conv.RedactedEnvironment(entry.Value),
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}

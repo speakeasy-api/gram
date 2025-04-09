@@ -68,7 +68,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	// The name of the environment variable
 	Name string
-	// The value of the environment variable
+	// Redacted values of the environment variable
 	Value string
 	// The creation date of the environment entry
 	CreatedAt string

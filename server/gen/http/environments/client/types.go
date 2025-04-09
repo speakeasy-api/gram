@@ -103,7 +103,7 @@ type EnvironmentEntryInputRequestBody struct {
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The value of the environment variable
+	// Redacted values of the environment variable
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 	// The creation date of the environment entry
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`

@@ -4,17 +4,114 @@ import {
   useDeleteEnvironmentMutation,
   useUpdateEnvironmentMutation,
 } from "@gram/sdk/react-query";
-import { Environment, EnvironmentEntry } from "@gram/sdk/models/components";
+import { EnvironmentEntry } from "@gram/sdk/models/components";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
 import { useEnvironments } from "./Environments";
 import { Stack } from "@speakeasy-api/moonshine";
-import { EditableText } from "@/components/ui/editable-text";
 import { Type } from "@/components/ui/type";
 import { useEffect, useState } from "react";
 import { DeleteButton } from "@/components/delete-button";
-import { Separator } from "@/components/ui/separator";
+import { PencilIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
+interface EntryDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (entry: { name: string; value: string }) => void;
+  validateName?: (name: string) => boolean;
+  initialEntry?: EnvironmentEntry;
+}
+
+function EntryDialog({ open, onOpenChange, onSubmit, validateName, initialEntry }: EntryDialogProps) {
+  const [name, setName] = useState(initialEntry?.name ?? "");
+  const [value, setValue] = useState("");
+
+  useEffect(() => {
+    if (initialEntry) {
+      setName(initialEntry.name);
+    }
+  }, [initialEntry]);
+
+  const handleClose = () => {
+    onOpenChange(false);
+    setName("");
+    setValue("");
+  };
+
+  const handleSubmit = () => {
+    onSubmit({ name, value });
+    handleClose();
+  };
+
+  const isValid = initialEntry 
+    ? value.length > 0 
+    : (validateName?.(name) ?? true) && value.length > 0;
+
+  const preventSelect = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.preventDefault();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {initialEntry ? 'Update Environment Entry' : 'New Variable'}
+          </DialogTitle>
+          <DialogDescription>
+            {initialEntry 
+              ? 'Update the environment variable value.'
+              : 'Add a new environment variable.'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Type>Name</Type>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={!!initialEntry}
+              onFocus={preventSelect}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Type>Value</Type>
+            <Input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onFocus={preventSelect}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={handleClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!isValid}
+          >
+            {initialEntry ? 'Update' : 'Add'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function useEnvironment() {
   const { environmentSlug } = useParams();
@@ -33,6 +130,15 @@ export default function EnvironmentPage() {
   const environment = useEnvironment();
   const navigate = useNavigate();
   const project = useProject();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<EnvironmentEntry | undefined>(undefined);
+
+  const deleteEnvironmentMutation = useDeleteEnvironmentMutation({
+    onSuccess: () => {
+      environment!.refetch();
+      navigate("/environments");
+    },
+  });
 
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
     onSuccess: () => {
@@ -64,6 +170,7 @@ export default function EnvironmentPage() {
   const updateEntry = (entry: EnvironmentEntry) => {
     setEntries({ ...entries, [entry.name]: entry });
   };
+
   const removeEntry = (entry: EnvironmentEntry) => {
     const newEntries = { ...entries };
     delete newEntries[entry.name];
@@ -99,13 +206,6 @@ export default function EnvironmentPage() {
     });
   };
 
-  const deleteEnvironmentMutation = useDeleteEnvironmentMutation({
-    onSuccess: () => {
-      environment!.refetch();
-      navigate("/environments");
-    },
-  });
-
   const deleteButton = (
     <DeleteButton
       tooltip="Delete Environment"
@@ -118,7 +218,7 @@ export default function EnvironmentPage() {
           deleteEnvironmentMutation.mutate({
             request: {
               gramProject: project.projectSlug,
-              slug: environment!.slug,
+              slug: environment.slug,
             },
           });
         }
@@ -137,54 +237,85 @@ export default function EnvironmentPage() {
   const discardChanges = () => {
     setEntries(entriesFromArray(environment.entries));
   };
+
   const hasChanges =
     computeChanges().updatedEntries.length > 0 ||
     computeChanges().removedEntries.length > 0;
 
+  const handleEntrySubmit = ({ name, value }: { name: string; value: string }) => {
+    const entry = editingEntry ? {
+      ...editingEntry,
+      value,
+    } : {
+      name,
+      value,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    updateEntry(entry);
+    setEditingEntry(undefined);
+  };
 
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>{environment && deleteButton}</Page.Header.Actions>
+        <Page.Header.Actions>{deleteButton}</Page.Header.Actions>
       </Page.Header>
       <Page.Body>
         <Stack direction="horizontal" gap={6}>
           <Heading variant="h2">{environment.name}</Heading>
-          {hasChanges && (
-            <Stack direction="horizontal" gap={1}>
-              <Button onClick={commitUpdates}>Save</Button>
-              <Button variant="ghost" onClick={discardChanges}>
-                Discard
+          <Stack direction="horizontal" gap={1}>
+            {hasChanges ? (
+              <>
+                <Button onClick={commitUpdates}>Save</Button>
+                <Button variant="ghost" onClick={discardChanges}>
+                  Discard
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => {
+                  setEditingEntry(undefined);
+                  setDialogOpen(true);
+                }}
+              >
+                New Variable
               </Button>
-            </Stack>
-          )}
+            )}
+          </Stack>
         </Stack>
-        {Object.values(entries).map((entry) => (
-          <>
-            <EntryItem
-              key={entry.name}
-              entry={entry}
-              updateEntry={updateEntry}
-              removeEntry={removeEntry}
-              validateEntryName={validateEntryName}
-            />
-            <Separator
-              key={entry.name + "separator"}
-              className="max-w-[400px]"
-            />
-          </>
-        ))}
-        <EntryItem
-          entry={{
-            name: "NEW_ENTRY",
-            value: "NEW_VALUE",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          }}
-          updateEntry={updateEntry}
-          validateEntryName={validateEntryName}
-          isNew
+
+        {Object.keys(entries).length > 0 && (
+          <div className="mt-6 rounded-md border">
+            <div className="grid grid-cols-2 bg-muted px-4 py-2">
+              <Type className="font-medium">Name</Type>
+              <Type className="font-medium">Value</Type>
+            </div>
+            <div className="divide-y">
+              {Object.values(entries).map((entry) => (
+                <div key={entry.name} className="px-4">
+                  <EntryItem
+                    entry={entry}
+                    onEdit={() => {
+                      setEditingEntry(entry);
+                      setDialogOpen(true);
+                    }}
+                    removeEntry={removeEntry}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <EntryDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onSubmit={handleEntrySubmit}
+          validateName={validateEntryName}
+          initialEntry={editingEntry}
         />
       </Page.Body>
     </Page>
@@ -193,47 +324,42 @@ export default function EnvironmentPage() {
 
 function EntryItem({
   entry,
-  updateEntry,
-  validateEntryName,
+  onEdit,
   removeEntry,
   isNew,
 }: {
   entry: EnvironmentEntry;
-  updateEntry: (entry: EnvironmentEntry) => void;
-  validateEntryName: (name: string) => boolean;
+  onEdit: () => void;
   removeEntry?: (entry: EnvironmentEntry) => void;
   isNew?: boolean;
 }) {
   return (
-    <Stack direction="horizontal" gap={2} className="group/entry h-[25px]">
-      <div className="w-[200px]">
-        <EditableText
-          value={entry.name}
-          onSubmit={(newValue) => updateEntry({ ...entry, name: newValue })}
-          renderDisplay={(value) => (
-            <Type className={isNew ? "text-muted-foreground" : ""}>
-              {value}
-            </Type>
-          )}
-          inputClassName="text-base mb-2 px-1 border w-full"
-          validate={validateEntryName}
-        />
+    <div className="grid grid-cols-2 items-center py-3 group/entry">
+      <div className="pr-4">
+        <Type className={cn("truncate", isNew && "text-muted-foreground")}>
+          {entry.name}
+        </Type>
       </div>
-      <EditableText
-        value={entry.value}
-        onSubmit={(newValue) => updateEntry({ ...entry, value: newValue })}
-        renderDisplay={(value) => (
-          <Type className={isNew ? "text-muted-foreground" : ""}>{value}</Type>
+      <div className="flex items-center gap-2 pr-4">
+        <Type className={cn("truncate flex-1", isNew && "text-muted-foreground")}>
+          {entry.value}
+        </Type>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-4 w-4 p-0 opacity-0 group-hover/entry:opacity-100"
+          onClick={onEdit}
+        >
+          <PencilIcon className="h-3 w-3" />
+        </Button>
+        {removeEntry && (
+          <DeleteButton
+            tooltip="Remove Entry"
+            onClick={() => removeEntry(entry)}
+            className="opacity-0 group-hover/entry:opacity-100"
+          />
         )}
-        inputClassName="text-base mb-2 px-1 border w-full"
-      />
-      {removeEntry && (
-        <DeleteButton
-          tooltip="Remove Entry"
-          onClick={() => removeEntry(entry)}
-          className="opacity-0 group-hover/entry:opacity-100"
-        />
-      )}
-    </Stack>
+      </div>
+    </div>
   );
 }

@@ -1198,7 +1198,7 @@ components:
                     format: date-time
                 value:
                     type: string
-                    description: The value of the environment variable
+                    description: Redacted values of the environment variable
             description: A single environment entry
             required:
                 - name

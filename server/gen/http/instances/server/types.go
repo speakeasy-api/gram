@@ -89,7 +89,7 @@ type EnvironmentResponseBody struct {
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
 	Name string `form:"name" json:"name" xml:"name"`
-	// The value of the environment variable
+	// Redacted values of the environment variable
 	Value string `form:"value" json:"value" xml:"value"`
 	// The creation date of the environment entry
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`

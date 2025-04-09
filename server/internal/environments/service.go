@@ -96,7 +96,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 	for i, entry := range payload.Entries {
 		entries[i] = &gen.EnvironmentEntry{
 			Name:  entry.Name,
-			Value: entry.Value,
+			Value: conv.RedactedEnvironment(entry.Value),
 		}
 	}
 
@@ -135,7 +135,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 		for _, entry := range entries {
 			genEntries = append(genEntries, &gen.EnvironmentEntry{
 				Name:      entry.Name,
-				Value:     entry.Value,
+				Value:     conv.RedactedEnvironment(entry.Value),
 				CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 			})
@@ -200,7 +200,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		if _, err := s.repo.UpsertEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
 			Name:          updatedEntry.Name,
-			Value:         updatedEntry.Value,
+			Value:         updatedEntry.Value, // This is the actual environment value to update too, do not redact it
 		}); err != nil {
 			return nil, err
 		}
@@ -223,7 +223,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	for i, entry := range entries {
 		genEntries[i] = &gen.EnvironmentEntry{
 			Name:      entry.Name,
-			Value:     entry.Value,
+			Value:     conv.RedactedEnvironment(entry.Value),
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
