@@ -177,6 +177,16 @@ export function CreateThingCard({
 
 function ToolsetCard({ toolset, environments }: { toolset: ToolsetDetails; environments: Environment[] }) {
   const defaultEnvironment = environments.find(env => env.slug === toolset.defaultEnvironmentSlug);
+  
+  // We consider a toolset to need env vars if it has relevant environment variables and the default environment is set
+  // The environment does not have any variables from the toolset's relevant environment variables set
+  const needsEnvVars = defaultEnvironment && 
+    toolset.relevantEnvironmentVariables &&
+    toolset.relevantEnvironmentVariables.length > 0 &&
+    !toolset.relevantEnvironmentVariables.some(varName => 
+      defaultEnvironment.entries.some(entry => entry.name === varName && entry.value !== "" && entry.value !== "<EMPTY>")
+    );
+
   return (
     <Card>
       <Card.Header>
@@ -191,7 +201,7 @@ function ToolsetCard({ toolset, environments }: { toolset: ToolsetDetails; envir
               <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
                 <Badge variant="outline" className="h-6 flex items-center gap-1">
                   {defaultEnvironment && (
-                    defaultEnvironment.entries.length === 0 ? (
+                    needsEnvVars ? (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
