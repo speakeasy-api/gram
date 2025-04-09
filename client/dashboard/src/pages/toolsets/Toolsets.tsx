@@ -173,12 +173,14 @@ function ToolsetCard({ toolset }: { toolset: Toolset }) {
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
           <Link to={`/toolsets/${toolset.slug}`} className="hover:underline">
-            <Card.Title>{toolset.name}</Card.Title>
+            <Card.Title>
+              {toolset.name} <span className="text-muted-foreground">({toolset.slug})</span>
+            </Card.Title>
           </Link>
           <div className="flex gap-2 items-center">
             {toolset.defaultEnvironmentSlug && (
               <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
-                <Badge className="h-6 flex items-center">Default Env</Badge>
+                <Badge variant="outline" className="h-6 flex items-center">Default Env</Badge>
               </Link>
             )}
             <Badge className="h-6 flex items-center">{toolset.httpToolNames?.length || "No"} Tools</Badge>
