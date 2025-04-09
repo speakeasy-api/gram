@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS deployments (
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
+  cloned_from uuid,
 
   github_repo TEXT,
   github_pr TEXT,
