@@ -60,6 +60,9 @@ func ToSlug(s string) string {
 }
 
 func RedactedEnvironment(val string) string {
+	if val == "" {
+		return "<EMPTY>"
+	}
 	if len(val) <= 3 {
 		return strings.Repeat("*", 5)
 	}
