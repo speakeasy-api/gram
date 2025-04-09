@@ -46,7 +46,6 @@ export default function ToolsetPage() {
   }
 
   const updateToolset = (changes: Partial<ToolsetDetails>) => {
-    console.log("WE ARE HERE");
     // Immediately update in-memory toolset
     toolset = { ...toolset, ...changes };
     updateToolsetMutation.mutate({
