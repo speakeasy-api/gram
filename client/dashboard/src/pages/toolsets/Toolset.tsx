@@ -132,14 +132,18 @@ export default function ToolsetPage() {
           renderDisplay={(value) => <Heading variant="h2">{value}</Heading>}
           inputClassName="text-2xl font-semibold mb-2 px-1 border rounded"
         />
-        <EditableText
-          value={toolset.description || ""}
-          onSubmit={(newValue) => updateToolset({ description: newValue })}
-          renderDisplay={(value) => (
-            <Type variant="subheading">{value || "Add a description..."}</Type>
-          )}
-          inputClassName="text-base mb-2 px-1 border rounded w-full"
-        />
+        <div className="w-full overflow-visible">
+          <EditableText
+            value={toolset.description || ""}
+            onSubmit={(newValue) => updateToolset({ description: newValue })}
+            renderDisplay={(value) => (
+              <Type variant="subheading" className="whitespace-nowrap">
+                {value || "Add a description..."}
+              </Type>
+            )}
+            inputClassName="text-base mb-2 px-1 border rounded whitespace-nowrap"
+          />
+        </div>
         {toolset.httpTools.map((tool) => (
           <ToolCard key={tool.id} tool={tool} />
         ))}
