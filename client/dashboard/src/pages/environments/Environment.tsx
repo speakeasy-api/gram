@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useListToolsets, useToolset } from "@gram/sdk/react-query";
 
 interface EntryDialogProps {
   open: boolean;
@@ -113,6 +114,80 @@ function EntryDialog({ open, onOpenChange, onSubmit, validateName, initialEntry 
   );
 }
 
+interface ToolsetDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (toolsetSlug: string) => void;
+}
+
+function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
+  const project = useProject();
+  const { data: toolsetsData } = useListToolsets({
+    gramProject: project.projectSlug,
+  });
+  const [selectedToolset, setSelectedToolset] = useState<string>("");
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedToolset("");
+    }
+  }, [open]);
+
+  const handleClose = () => {
+    onOpenChange(false);
+    setSelectedToolset("");
+  };
+
+  const handleSubmit = () => {
+    onSubmit(selectedToolset);
+    handleClose();
+  };
+
+  const options = toolsetsData?.toolsets.map((toolset) => ({
+    label: toolset.name,
+    value: toolset.slug,
+  })) || [];
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Fill for Toolset</DialogTitle>
+          <DialogDescription>
+            Select a list toolsets you would like to  prefill environment variables for.
+            Env variables will be filled is as empty values, set the variable you wish to and remove those you don't need.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Type>Toolset</Type>
+            <select
+              value={selectedToolset}
+              onChange={(e) => setSelectedToolset(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">Select a toolset</option>
+              {options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={!selectedToolset}>
+            Fill Variables
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function useEnvironment() {
   const { environmentSlug } = useParams();
   const environments = useEnvironments();
@@ -131,7 +206,9 @@ export default function EnvironmentPage() {
   const navigate = useNavigate();
   const project = useProject();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<EnvironmentEntry | undefined>(undefined);
+  const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
 
   const deleteEnvironmentMutation = useDeleteEnvironmentMutation({
     onSuccess: () => {
@@ -162,6 +239,34 @@ export default function EnvironmentPage() {
       setEntries(entriesFromArray(environment.entries));
     }
   }, [environment]);
+
+  const { data: selectedToolset } = useToolset(
+    {
+      gramProject: project.projectSlug,
+      slug: selectedToolsetSlug,
+    },
+    {
+      enabled: !!selectedToolsetSlug,
+    }
+  );
+
+  useEffect(() => {
+    if (selectedToolset && selectedToolset.relevantEnvironmentVariables) {
+      const newEntries = { ...entries };
+      selectedToolset.relevantEnvironmentVariables.forEach((varName) => {
+        if (!entries[varName]) {
+          newEntries[varName] = {
+            name: varName,
+            value: "",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        }
+      });
+      setEntries(newEntries);
+      setSelectedToolsetSlug("");
+    }
+  }, [selectedToolset, entries]);
 
   if (!environment) {
     return <div>Environment not found</div>;
@@ -257,6 +362,10 @@ export default function EnvironmentPage() {
     setEditingEntry(undefined);
   };
 
+  const handleToolsetSubmit = (toolsetSlug: string) => {
+    setSelectedToolsetSlug(toolsetSlug);
+  };
+
   return (
     <Page>
       <Page.Header>
@@ -275,14 +384,24 @@ export default function EnvironmentPage() {
                 </Button>
               </>
             ) : (
-              <Button
-                onClick={() => {
-                  setEditingEntry(undefined);
-                  setDialogOpen(true);
-                }}
-              >
-                New Variable
-              </Button>
+              <>
+                <Button
+                  onClick={() => {
+                    setEditingEntry(undefined);
+                    setDialogOpen(true);
+                  }}
+                >
+                  New Variable
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setToolsetDialogOpen(true);
+                  }}
+                >
+                  Fill for Toolset
+                </Button>
+              </>
             )}
           </Stack>
         </Stack>
@@ -316,6 +435,12 @@ export default function EnvironmentPage() {
           onSubmit={handleEntrySubmit}
           validateName={validateEntryName}
           initialEntry={editingEntry}
+        />
+
+        <ToolsetDialog
+          open={toolsetDialogOpen}
+          onOpenChange={setToolsetDialogOpen}
+          onSubmit={handleToolsetSubmit}
         />
       </Page.Body>
     </Page>
