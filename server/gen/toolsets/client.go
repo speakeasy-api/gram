@@ -34,13 +34,13 @@ func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToo
 }
 
 // CreateToolset calls the "createToolset" endpoint of the "toolsets" service.
-func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (res *Toolset, err error) {
+func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
 	ires, err = c.CreateToolsetEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*Toolset), nil
+	return ires.(*ToolsetDetails), nil
 }
 
 // ListToolsets calls the "listToolsets" endpoint of the "toolsets" service.
@@ -54,13 +54,13 @@ func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res 
 }
 
 // UpdateToolset calls the "updateToolset" endpoint of the "toolsets" service.
-func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (res *Toolset, err error) {
+func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
 	ires, err = c.UpdateToolsetEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*Toolset), nil
+	return ires.(*ToolsetDetails), nil
 }
 
 // DeleteToolset calls the "deleteToolset" endpoint of the "toolsets" service.

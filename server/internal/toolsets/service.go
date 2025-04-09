@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,7 +59,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*gen.Toolset, error) {
+func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*gen.ToolsetDetails, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("project ID not found in context")
@@ -120,18 +119,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		httpToolNames[i] = name
 	}
 
-	return &gen.Toolset{
-		ID:                     createdToolset.ID.String(),
-		OrganizationID:         createdToolset.OrganizationID,
-		ProjectID:              createdToolset.ProjectID.String(),
-		Name:                   createdToolset.Name,
-		Slug:                   createdToolset.Slug,
-		DefaultEnvironmentSlug: conv.FromPGText(createdToolset.DefaultEnvironmentSlug),
-		Description:            conv.FromPGText(createdToolset.Description),
-		HTTPToolNames:          httpToolNames,
-		CreatedAt:              createdToolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              createdToolset.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, createdToolset.Slug, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toolsetDetails, nil
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
@@ -145,24 +138,13 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		return nil, err
 	}
 
-	result := make([]*gen.Toolset, len(toolsets))
+	result := make([]*gen.ToolsetDetails, len(toolsets))
 	for i, toolset := range toolsets {
-		httpToolNames := make([]string, len(toolset.HttpToolNames))
-		for j, name := range toolset.HttpToolNames {
-			httpToolNames[j] = name
+		toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, toolset.Slug, *authCtx.ProjectID)
+		if err != nil {
+			return nil, err
 		}
-		result[i] = &gen.Toolset{
-			ID:                     toolset.ID.String(),
-			OrganizationID:         toolset.OrganizationID,
-			ProjectID:              toolset.ProjectID.String(),
-			Name:                   toolset.Name,
-			Slug:                   toolset.Slug,
-			DefaultEnvironmentSlug: conv.FromPGText(toolset.DefaultEnvironmentSlug),
-			Description:            conv.FromPGText(toolset.Description),
-			HTTPToolNames:          httpToolNames,
-			CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
-		}
+		result[i] = toolsetDetails
 	}
 
 	return &gen.ListToolsetsResult{
@@ -170,7 +152,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 	}, nil
 }
 
-func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.Toolset, error) {
+func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.ToolsetDetails, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("project ID not found in context")
@@ -231,18 +213,12 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		httpToolNames[i] = name
 	}
 
-	return &gen.Toolset{
-		ID:                     updatedToolset.ID.String(),
-		OrganizationID:         updatedToolset.OrganizationID,
-		ProjectID:              updatedToolset.ProjectID.String(),
-		Name:                   updatedToolset.Name,
-		Slug:                   updatedToolset.Slug,
-		DefaultEnvironmentSlug: conv.FromPGText(updatedToolset.DefaultEnvironmentSlug),
-		Description:            conv.FromPGText(updatedToolset.Description),
-		HTTPToolNames:          httpToolNames,
-		CreatedAt:              updatedToolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              updatedToolset.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, updatedToolset.Slug, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toolsetDetails, nil
 }
 
 func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetPayload) (err error) {

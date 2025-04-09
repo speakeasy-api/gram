@@ -22,7 +22,7 @@ export class Toolsets extends ClientSDK {
   async toolsetsNumberCreateToolset(
     request: operations.ToolsetsNumberCreateToolsetRequest,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<components.ToolsetDetails> {
     return unwrapAsync(toolsetsToolsetsNumberCreateToolset(
       this,
       request,
@@ -90,7 +90,7 @@ export class Toolsets extends ClientSDK {
   async toolsetsNumberUpdateToolset(
     request: operations.ToolsetsNumberUpdateToolsetRequest,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<components.ToolsetDetails> {
     return unwrapAsync(toolsetsToolsetsNumberUpdateToolset(
       this,
       request,

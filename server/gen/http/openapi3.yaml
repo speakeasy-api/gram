@@ -750,7 +750,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Toolset'
+                                $ref: '#/components/schemas/ToolsetDetails'
                     description: OK response.
             security:
                 - project_slug_header_Gram-Project: []
@@ -909,7 +909,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Toolset'
+                                $ref: '#/components/schemas/ToolsetDetails'
                     description: OK response.
             security:
                 - project_slug_header_Gram-Project: []
@@ -1558,7 +1558,7 @@ components:
                 toolsets:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Toolset'
+                        $ref: '#/components/schemas/ToolsetDetails'
                     description: The list of toolsets
             required:
                 - toolsets
@@ -1632,51 +1632,6 @@ components:
                 - project_id
                 - project_name
                 - project_slug
-        Toolset:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: When the toolset was created.
-                    format: date-time
-                default_environment_slug:
-                    type: string
-                    description: The slug of the environment to use as the default for the toolset
-                description:
-                    type: string
-                    description: Description of the toolset
-                http_tool_names:
-                    type: array
-                    items:
-                        type: string
-                    description: List of HTTP tool names included in this toolset
-                id:
-                    type: string
-                    description: The ID of the toolset
-                name:
-                    type: string
-                    description: The name of the toolset
-                organization_id:
-                    type: string
-                    description: The organization ID this toolset belongs to
-                project_id:
-                    type: string
-                    description: The project ID this toolset belongs to
-                slug:
-                    type: string
-                    description: The slug of the toolset
-                updated_at:
-                    type: string
-                    description: When the toolset was last updated.
-                    format: date-time
-            required:
-                - id
-                - project_id
-                - organization_id
-                - name
-                - slug
-                - created_at
-                - updated_at
         ToolsetDetails:
             type: object
             properties:

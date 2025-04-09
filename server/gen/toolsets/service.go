@@ -16,11 +16,11 @@ import (
 // Managed toolsets for gram AI consumers.
 type Service interface {
 	// Create a new toolset with associated tools
-	CreateToolset(context.Context, *CreateToolsetPayload) (res *Toolset, err error)
+	CreateToolset(context.Context, *CreateToolsetPayload) (res *ToolsetDetails, err error)
 	// List all toolsets for a project
 	ListToolsets(context.Context, *ListToolsetsPayload) (res *ListToolsetsResult, err error)
 	// Update a toolset's properties including name, description, and HTTP tools
-	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *Toolset, err error)
+	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *ToolsetDetails, err error)
 	// Delete a toolset by its ID
 	DeleteToolset(context.Context, *DeleteToolsetPayload) (err error)
 	// Get detailed information about a toolset including full HTTP tool definitions
@@ -128,34 +128,10 @@ type ListToolsetsPayload struct {
 // method.
 type ListToolsetsResult struct {
 	// The list of toolsets
-	Toolsets []*Toolset
+	Toolsets []*ToolsetDetails
 }
 
-// Toolset is the result type of the toolsets service createToolset method.
-type Toolset struct {
-	// The ID of the toolset
-	ID string
-	// The project ID this toolset belongs to
-	ProjectID string
-	// The organization ID this toolset belongs to
-	OrganizationID string
-	// The name of the toolset
-	Name string
-	// The slug of the toolset
-	Slug string
-	// Description of the toolset
-	Description *string
-	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string
-	// List of HTTP tool names included in this toolset
-	HTTPToolNames []string
-	// When the toolset was created.
-	CreatedAt string
-	// When the toolset was last updated.
-	UpdatedAt string
-}
-
-// ToolsetDetails is the result type of the toolsets service getToolsetDetails
+// ToolsetDetails is the result type of the toolsets service createToolset
 // method.
 type ToolsetDetails struct {
 	// The ID of the toolset

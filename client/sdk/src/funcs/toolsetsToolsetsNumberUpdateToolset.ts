@@ -36,7 +36,7 @@ export function toolsetsToolsetsNumberUpdateToolset(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.Toolset,
+    components.ToolsetDetails,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -60,7 +60,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      components.Toolset,
+      components.ToolsetDetails,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -151,7 +151,7 @@ async function $do(
   const response = doResult.value;
 
   const [result] = await M.match<
-    components.Toolset,
+    components.ToolsetDetails,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -160,7 +160,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.json(200, components.Toolset$inboundSchema),
+    M.json(200, components.ToolsetDetails$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response);

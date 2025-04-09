@@ -22,7 +22,7 @@ export type UpdateToolsetMutationVariables = {
   options?: RequestOptions;
 };
 
-export type UpdateToolsetMutationData = components.Toolset;
+export type UpdateToolsetMutationData = components.ToolsetDetails;
 
 /**
  * updateToolset toolsets

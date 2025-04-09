@@ -17,7 +17,7 @@ var _ = Service("toolsets", func() {
 			security.SessionPayload()
 		})
 
-		Result(Toolset)
+		Result(ToolsetDetails)
 
 		HTTP(func() {
 			POST("/rpc/toolsets.create")
@@ -57,7 +57,7 @@ var _ = Service("toolsets", func() {
 			security.SessionPayload()
 		})
 
-		Result(Toolset)
+		Result(ToolsetDetails)
 
 		HTTP(func() {
 			Param("slug")
@@ -124,28 +124,8 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Required("name")
 })
 
-var Toolset = Type("Toolset", func() {
-	Attribute("id", String, "The ID of the toolset")
-	Attribute("project_id", String, "The project ID this toolset belongs to")
-	Attribute("organization_id", String, "The organization ID this toolset belongs to")
-	Attribute("name", String, "The name of the toolset")
-	Attribute("slug", String, "The slug of the toolset")
-	Attribute("description", String, "Description of the toolset")
-	Attribute("default_environment_slug", String, "The slug of the environment to use as the default for the toolset")
-	Attribute("http_tool_names", ArrayOf(String), "List of HTTP tool names included in this toolset")
-	Attribute("created_at", String, func() {
-		Description("When the toolset was created.")
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Description("When the toolset was last updated.")
-		Format(FormatDateTime)
-	})
-	Required("id", "project_id", "organization_id", "name", "slug", "created_at", "updated_at")
-})
-
 var ListToolsetsResult = Type("ListToolsetsResult", func() {
-	Attribute("toolsets", ArrayOf(Toolset), "The list of toolsets")
+	Attribute("toolsets", ArrayOf(ToolsetDetails), "The list of toolsets")
 	Required("toolsets")
 })
 

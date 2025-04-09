@@ -108,7 +108,7 @@ import {
 
 ### Response
 
-**Promise\<[components.Toolset](../../models/components/toolset.md)\>**
+**Promise\<[components.ToolsetDetails](../../models/components/toolsetdetails.md)\>**
 
 ### Errors
 
@@ -522,7 +522,7 @@ import {
 
 ### Response
 
-**Promise\<[components.Toolset](../../models/components/toolset.md)\>**
+**Promise\<[components.ToolsetDetails](../../models/components/toolsetdetails.md)\>**
 
 ### Errors
 

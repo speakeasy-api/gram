@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 5849e08378c98b894c9ebba69b7a6a5c
+  docChecksum: 6c0b790e31f768e7e17d73b9c6ec6a14
   docVersion: 0.0.1
   speakeasyVersion: 1.531.0
   generationVersion: 2.568.2
-  releaseVersion: 0.5.2
-  configChecksum: 40f6b1bca7c524e68efc974abdb6b04b
+  releaseVersion: 0.5.3
+  configChecksum: 44db860561587adfd62f63a8dc588ed6
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -64,7 +64,6 @@ generatedFiles:
   - docs/models/components/organization.md
   - docs/models/components/project.md
   - docs/models/components/security.md
-  - docs/models/components/toolset.md
   - docs/models/components/toolsetdetails.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
@@ -218,7 +217,6 @@ generatedFiles:
   - src/models/components/organization.ts
   - src/models/components/project.ts
   - src/models/components/security.ts
-  - src/models/components/toolset.ts
   - src/models/components/toolsetdetails.ts
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatetoolsetrequestbody.ts
@@ -418,7 +416,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-01-31T23:54:16.910Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-05-12T22:32:30.196Z"}
+          application/json: {"created_at": "2025-01-31T23:54:16.910Z", "http_tools": [{"created_at": "2023-05-12T22:32:30.196Z", "deployment_id": "<id>", "description": "ornery carefully absent lest scarper acidly diver wherever", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/mnt", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-12-18T05:31:07.194Z"}, {"created_at": "2023-04-05T18:27:05.366Z", "deployment_id": "<id>", "description": "esteemed as zowie beneath ugh questionable heartache indeed aware", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/selinux", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2025-05-14T19:12:29.885Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-05-12T22:32:30.196Z"}
   toolsets#deleteToolset:
     speakeasy-default-toolsets#delete-toolset:
       parameters:
@@ -449,7 +447,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"created_at": "2023-10-11T13:18:21.498Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-20T02:33:46.900Z"}
+          application/json: {"created_at": "2023-10-11T13:18:21.498Z", "http_tools": [{"created_at": "2024-03-20T02:33:46.900Z", "deployment_id": "<id>", "description": "dishonor affect gee scorn furthermore", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Users", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-10-18T15:16:29.481Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-20T02:33:46.900Z"}
   deployments#addOpenAPIv3Source:
     speakeasy-default-deployments#add-open-AP-iv3-source:
       requestBody:

@@ -55,8 +55,10 @@ type CreateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// List of HTTP tool names included in this toolset
-	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The HTTP tools in this toolset
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -67,7 +69,7 @@ type CreateToolsetResponseBody struct {
 // "listToolsets" endpoint HTTP response body.
 type ListToolsetsResponseBody struct {
 	// The list of toolsets
-	Toolsets []*ToolsetResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	Toolsets []*ToolsetDetailsResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -87,8 +89,10 @@ type UpdateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// List of HTTP tool names included in this toolset
-	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The HTTP tools in this toolset
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -116,30 +120,6 @@ type GetToolsetDetailsResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// When the toolset was created.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the toolset was last updated.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// ToolsetResponseBody is used to define fields on response body types.
-type ToolsetResponseBody struct {
-	// The ID of the toolset
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The project ID this toolset belongs to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The organization ID this toolset belongs to
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The name of the toolset
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The slug of the toolset
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// Description of the toolset
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// List of HTTP tool names included in this toolset
-	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -183,6 +163,32 @@ type HTTPToolDefinitionResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// ToolsetDetailsResponseBody is used to define fields on response body types.
+type ToolsetDetailsResponseBody struct {
+	// The ID of the toolset
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this toolset belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The organization ID this toolset belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The name of the toolset
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The HTTP tools in this toolset
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
+	// When the toolset was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the toolset was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // NewCreateToolsetRequestBody builds the HTTP request body from the payload of
 // the "createToolset" endpoint of the "toolsets" service.
 func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolsetRequestBody {
@@ -217,10 +223,10 @@ func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolse
 	return body
 }
 
-// NewCreateToolsetToolsetOK builds a "toolsets" service "createToolset"
+// NewCreateToolsetToolsetDetailsOK builds a "toolsets" service "createToolset"
 // endpoint result from a HTTP "OK" response.
-func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *toolsets.Toolset {
-	v := &toolsets.Toolset{
+func NewCreateToolsetToolsetDetailsOK(body *CreateToolsetResponseBody) *toolsets.ToolsetDetails {
+	v := &toolsets.ToolsetDetails{
 		ID:                     *body.ID,
 		ProjectID:              *body.ProjectID,
 		OrganizationID:         *body.OrganizationID,
@@ -231,11 +237,15 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *toolsets.Toolse
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
 	}
-	if body.HTTPToolNames != nil {
-		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
-		for i, val := range body.HTTPToolNames {
-			v.HTTPToolNames[i] = val
+	if body.RelevantEnvironmentVariables != nil {
+		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
+		for i, val := range body.RelevantEnvironmentVariables {
+			v.RelevantEnvironmentVariables[i] = val
 		}
+	}
+	v.HTTPTools = make([]*toolsets.HTTPToolDefinition, len(body.HTTPTools))
+	for i, val := range body.HTTPTools {
+		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(val)
 	}
 
 	return v
@@ -245,18 +255,18 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *toolsets.Toolse
 // result from a HTTP "OK" response.
 func NewListToolsetsResultOK(body *ListToolsetsResponseBody) *toolsets.ListToolsetsResult {
 	v := &toolsets.ListToolsetsResult{}
-	v.Toolsets = make([]*toolsets.Toolset, len(body.Toolsets))
+	v.Toolsets = make([]*toolsets.ToolsetDetails, len(body.Toolsets))
 	for i, val := range body.Toolsets {
-		v.Toolsets[i] = unmarshalToolsetResponseBodyToToolsetsToolset(val)
+		v.Toolsets[i] = unmarshalToolsetDetailsResponseBodyToToolsetsToolsetDetails(val)
 	}
 
 	return v
 }
 
-// NewUpdateToolsetToolsetOK builds a "toolsets" service "updateToolset"
+// NewUpdateToolsetToolsetDetailsOK builds a "toolsets" service "updateToolset"
 // endpoint result from a HTTP "OK" response.
-func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *toolsets.Toolset {
-	v := &toolsets.Toolset{
+func NewUpdateToolsetToolsetDetailsOK(body *UpdateToolsetResponseBody) *toolsets.ToolsetDetails {
+	v := &toolsets.ToolsetDetails{
 		ID:                     *body.ID,
 		ProjectID:              *body.ProjectID,
 		OrganizationID:         *body.OrganizationID,
@@ -267,11 +277,15 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *toolsets.Toolse
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
 	}
-	if body.HTTPToolNames != nil {
-		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
-		for i, val := range body.HTTPToolNames {
-			v.HTTPToolNames[i] = val
+	if body.RelevantEnvironmentVariables != nil {
+		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
+		for i, val := range body.RelevantEnvironmentVariables {
+			v.RelevantEnvironmentVariables[i] = val
 		}
+	}
+	v.HTTPTools = make([]*toolsets.HTTPToolDefinition, len(body.HTTPTools))
+	for i, val := range body.HTTPTools {
+		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(val)
 	}
 
 	return v
@@ -323,11 +337,21 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
+	if body.HTTPTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	for _, e := range body.HTTPTools {
+		if e != nil {
+			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -346,7 +370,7 @@ func ValidateListToolsetsResponseBody(body *ListToolsetsResponseBody) (err error
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
-			if err2 := ValidateToolsetResponseBody(e); err2 != nil {
+			if err2 := ValidateToolsetDetailsResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -372,11 +396,21 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
+	if body.HTTPTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	for _, e := range body.HTTPTools {
+		if e != nil {
+			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -430,39 +464,6 @@ func ValidateGetToolsetDetailsResponseBody(body *GetToolsetDetailsResponseBody) 
 	return
 }
 
-// ValidateToolsetResponseBody runs the validations defined on
-// ToolsetResponseBody
-func ValidateToolsetResponseBody(body *ToolsetResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
 // ValidateHTTPToolDefinitionResponseBody runs the validations defined on
 // HTTPToolDefinitionResponseBody
 func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody) (err error) {
@@ -501,6 +502,49 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateToolsetDetailsResponseBody runs the validations defined on
+// ToolsetDetailsResponseBody
+func ValidateToolsetDetailsResponseBody(body *ToolsetDetailsResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.HTTPTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	for _, e := range body.HTTPTools {
+		if e != nil {
+			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

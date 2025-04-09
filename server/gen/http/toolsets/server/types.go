@@ -55,8 +55,10 @@ type CreateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// List of HTTP tool names included in this toolset
-	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The HTTP tools in this toolset
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -67,7 +69,7 @@ type CreateToolsetResponseBody struct {
 // "listToolsets" endpoint HTTP response body.
 type ListToolsetsResponseBody struct {
 	// The list of toolsets
-	Toolsets []*ToolsetResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	Toolsets []*ToolsetDetailsResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -87,8 +89,10 @@ type UpdateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// List of HTTP tool names included in this toolset
-	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The HTTP tools in this toolset
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -116,30 +120,6 @@ type GetToolsetDetailsResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
-	// When the toolset was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the toolset was last updated.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// ToolsetResponseBody is used to define fields on response body types.
-type ToolsetResponseBody struct {
-	// The ID of the toolset
-	ID string `form:"id" json:"id" xml:"id"`
-	// The project ID this toolset belongs to
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The organization ID this toolset belongs to
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The name of the toolset
-	Name string `form:"name" json:"name" xml:"name"`
-	// The slug of the toolset
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Description of the toolset
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// List of HTTP tool names included in this toolset
-	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -183,9 +163,35 @@ type HTTPToolDefinitionResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ToolsetDetailsResponseBody is used to define fields on response body types.
+type ToolsetDetailsResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The HTTP tools in this toolset
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // NewCreateToolsetResponseBody builds the HTTP response body from the result
 // of the "createToolset" endpoint of the "toolsets" service.
-func NewCreateToolsetResponseBody(res *toolsets.Toolset) *CreateToolsetResponseBody {
+func NewCreateToolsetResponseBody(res *toolsets.ToolsetDetails) *CreateToolsetResponseBody {
 	body := &CreateToolsetResponseBody{
 		ID:                     res.ID,
 		ProjectID:              res.ProjectID,
@@ -197,11 +203,19 @@ func NewCreateToolsetResponseBody(res *toolsets.Toolset) *CreateToolsetResponseB
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
 	}
-	if res.HTTPToolNames != nil {
-		body.HTTPToolNames = make([]string, len(res.HTTPToolNames))
-		for i, val := range res.HTTPToolNames {
-			body.HTTPToolNames[i] = val
+	if res.RelevantEnvironmentVariables != nil {
+		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
+		for i, val := range res.RelevantEnvironmentVariables {
+			body.RelevantEnvironmentVariables[i] = val
 		}
+	}
+	if res.HTTPTools != nil {
+		body.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(res.HTTPTools))
+		for i, val := range res.HTTPTools {
+			body.HTTPTools[i] = marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+		}
+	} else {
+		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
 	}
 	return body
 }
@@ -211,19 +225,19 @@ func NewCreateToolsetResponseBody(res *toolsets.Toolset) *CreateToolsetResponseB
 func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsetsResponseBody {
 	body := &ListToolsetsResponseBody{}
 	if res.Toolsets != nil {
-		body.Toolsets = make([]*ToolsetResponseBody, len(res.Toolsets))
+		body.Toolsets = make([]*ToolsetDetailsResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
-			body.Toolsets[i] = marshalToolsetsToolsetToToolsetResponseBody(val)
+			body.Toolsets[i] = marshalToolsetsToolsetDetailsToToolsetDetailsResponseBody(val)
 		}
 	} else {
-		body.Toolsets = []*ToolsetResponseBody{}
+		body.Toolsets = []*ToolsetDetailsResponseBody{}
 	}
 	return body
 }
 
 // NewUpdateToolsetResponseBody builds the HTTP response body from the result
 // of the "updateToolset" endpoint of the "toolsets" service.
-func NewUpdateToolsetResponseBody(res *toolsets.Toolset) *UpdateToolsetResponseBody {
+func NewUpdateToolsetResponseBody(res *toolsets.ToolsetDetails) *UpdateToolsetResponseBody {
 	body := &UpdateToolsetResponseBody{
 		ID:                     res.ID,
 		ProjectID:              res.ProjectID,
@@ -235,11 +249,19 @@ func NewUpdateToolsetResponseBody(res *toolsets.Toolset) *UpdateToolsetResponseB
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
 	}
-	if res.HTTPToolNames != nil {
-		body.HTTPToolNames = make([]string, len(res.HTTPToolNames))
-		for i, val := range res.HTTPToolNames {
-			body.HTTPToolNames[i] = val
+	if res.RelevantEnvironmentVariables != nil {
+		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
+		for i, val := range res.RelevantEnvironmentVariables {
+			body.RelevantEnvironmentVariables[i] = val
 		}
+	}
+	if res.HTTPTools != nil {
+		body.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(res.HTTPTools))
+		for i, val := range res.HTTPTools {
+			body.HTTPTools[i] = marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+		}
+	} else {
+		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
 	}
 	return body
 }
