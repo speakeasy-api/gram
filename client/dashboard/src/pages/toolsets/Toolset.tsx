@@ -8,7 +8,7 @@ import {
   useListToolsSuspense,
   useUpdateToolsetMutation,
 } from "@gram/sdk/react-query";
-import { Toolset } from "@gram/sdk/models/components";
+import { ToolsetDetails } from "@gram/sdk/models/components";
 import { EditableText } from "@/components/ui/editable-text";
 import { CreateThingCard, useToolset, useToolsets } from "./Toolsets";
 import { useNavigate } from "react-router-dom";
@@ -23,7 +23,7 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Dialog } from "@/components/ui/dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { DeleteButton } from "@/components/delete-button";
 
@@ -45,7 +45,7 @@ export default function ToolsetPage() {
     return <div>Toolset not found</div>;
   }
 
-  const updateToolset = (changes: Partial<Toolset>) => {
+  const updateToolset = (changes: Partial<ToolsetDetails>) => {
     // Immediately update in-memory toolset
     toolset = { ...toolset, ...changes };
     updateToolsetMutation.mutate({
@@ -186,11 +186,18 @@ function AddToolDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  toolset: Toolset;
+  toolset: ToolsetDetails;
   onSubmit: (newToolIds: string[]) => void;
 }) {
   const project = useProject();
-  const [selectedTools, setSelectedTools] = useState<string[]>(toolset.httpToolNames ?? []);
+  const [selectedTools, setSelectedTools] = useState<string[]>(toolset.httpTools.map(tool => tool.name));
+
+  // Reset selected tools when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setSelectedTools(toolset.httpTools.map(tool => tool.name));
+    }
+  }, [open, toolset.httpTools]);
 
   const tools = useListToolsSuspense({
     gramProject: project.projectSlug,
