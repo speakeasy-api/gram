@@ -948,19 +948,14 @@ Example:
     %[1]s toolsets update-toolset --body '{
       "default_environment_id": "Reprehenderit fugiat temporibus reprehenderit.",
       "description": "Placeat aut nam nostrum alias.",
-      "http_tool_names_to_add": [
+      "http_tool_names": [
          "Dolores sit laboriosam et.",
          "Rerum ea.",
          "Nihil omnis a dignissimos rerum nostrum non.",
          "Voluptas quo vitae amet voluptatum illum aut."
       ],
-      "http_tool_names_to_remove": [
-         "Officiis quaerat voluptatem recusandae ut similique dolor.",
-         "Sint praesentium nemo in quos quasi.",
-         "Asperiores eaque aut minus."
-      ],
       "name": "Aliquam aut vero dolore mollitia perspiciatis totam."
-   }' --slug "Hic tempora." --session-token "Veniam architecto dolorem accusamus non et provident." --project-slug-input "Sit aut sapiente ipsam."
+   }' --slug "Dolorem officiis quaerat voluptatem recusandae." --session-token "Similique dolor dolorum." --project-slug-input "Praesentium nemo in quos quasi."
 `, os.Args[0])
 }
 
@@ -973,7 +968,7 @@ Delete a toolset by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "Facere assumenda." --session-token "Soluta distinctio ut maiores nihil ut." --project-slug-input "Culpa architecto debitis hic recusandae officiis voluptatem."
+    %[1]s toolsets delete-toolset --slug "Officia ipsa." --session-token "Placeat maiores et eos." --project-slug-input "Et sit ut debitis eum rerum."
 `, os.Args[0])
 }
 
@@ -986,6 +981,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --slug "Laborum sed sit distinctio quam." --session-token "Molestiae eveniet recusandae sapiente non." --project-slug-input "Hic illum ea repudiandae eius harum libero."
+    %[1]s toolsets get-toolset-details --slug "Non nam." --session-token "Aut corporis ratione quibusdam." --project-slug-input "Assumenda sed soluta distinctio ut maiores."
 `, os.Args[0])
 }

@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 91b939665238078faf182224e7f753f6
+  docChecksum: 7f857ef12ebea34595f6b0d2d2e32c27
   docVersion: 0.0.1
-  speakeasyVersion: 1.529.1
-  generationVersion: 2.566.5
-  releaseVersion: 0.5.0
-  configChecksum: c77239c352c107d067514411d2e746e3
+  speakeasyVersion: 1.531.0
+  generationVersion: 2.568.2
+  releaseVersion: 0.5.1
+  configChecksum: d34d190ebeb660e29621f11da6ac3425
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -18,7 +18,7 @@ features:
     globalSecurity: 2.82.13
     globalSecurityCallbacks: 0.1.0
     globalServerURLs: 2.82.4
-    mcpServer: 0.9.0
+    mcpServer: 0.9.1
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     reactQueryHooks: 0.2.3

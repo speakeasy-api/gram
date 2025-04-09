@@ -25,7 +25,7 @@ export type EnvironmentEntry = {
    */
   updatedAt: Date;
   /**
-   * The value of the environment variable
+   * Redacted values of the environment variable
    */
   value: string;
 };

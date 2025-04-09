@@ -194,9 +194,7 @@ type UpdateToolsetPayload struct {
 	Description *string
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string
-	// HTTP tool names to add to the toolset
-	HTTPToolNamesToAdd []string
-	// HTTP tool names to remove from the toolset
-	HTTPToolNamesToRemove []string
-	ProjectSlugInput      *string
+	// List of HTTP tool names to include
+	HTTPToolNames    []string
+	ProjectSlugInput *string
 }

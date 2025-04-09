@@ -34,10 +34,8 @@ type UpdateToolsetRequestBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The ID of the environment to use as the default for the toolset
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
-	// HTTP tool names to add to the toolset
-	HTTPToolNamesToAdd []string `form:"http_tool_names_to_add,omitempty" json:"http_tool_names_to_add,omitempty" xml:"http_tool_names_to_add,omitempty"`
-	// HTTP tool names to remove from the toolset
-	HTTPToolNamesToRemove []string `form:"http_tool_names_to_remove,omitempty" json:"http_tool_names_to_remove,omitempty" xml:"http_tool_names_to_remove,omitempty"`
+	// List of HTTP tool names to include
+	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 }
 
 // CreateToolsetResponseBody is the type of the "toolsets" service
@@ -210,16 +208,10 @@ func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolse
 		Description:          p.Description,
 		DefaultEnvironmentID: p.DefaultEnvironmentID,
 	}
-	if p.HTTPToolNamesToAdd != nil {
-		body.HTTPToolNamesToAdd = make([]string, len(p.HTTPToolNamesToAdd))
-		for i, val := range p.HTTPToolNamesToAdd {
-			body.HTTPToolNamesToAdd[i] = val
-		}
-	}
-	if p.HTTPToolNamesToRemove != nil {
-		body.HTTPToolNamesToRemove = make([]string, len(p.HTTPToolNamesToRemove))
-		for i, val := range p.HTTPToolNamesToRemove {
-			body.HTTPToolNamesToRemove[i] = val
+	if p.HTTPToolNames != nil {
+		body.HTTPToolNames = make([]string, len(p.HTTPToolNames))
+		for i, val := range p.HTTPToolNames {
+			body.HTTPToolNames[i] = val
 		}
 	}
 	return body

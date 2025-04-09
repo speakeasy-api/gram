@@ -98,22 +98,13 @@ export default function ToolsetPage() {
   );
 
   const updateToolsetTools = (toolNames: string[]) => {
-    const addedEntries = toolNames.filter(
-      (tool) => !toolset.httpTools.some((t) => t.name === tool)
-    );
-    const removedEntries = toolset.httpTools
-      .filter((t) => !toolNames.includes(t.name))
-      .map((t) => t.name);
-
-    console.log(addedEntries, removedEntries);
 
     updateToolsetMutation.mutate({
       request: {
         gramProject: project.projectSlug,
         slug: toolset.slug,
         updateToolsetRequestBody: {
-          httpToolNamesToAdd: addedEntries,
-          httpToolNamesToRemove: removedEntries,
+          httpToolNames: toolNames,
         },
       },
     }, {

@@ -83,6 +83,17 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 			return nil, fmt.Errorf("failed to find environment: %w", err)
 		}
 		createToolParams.DefaultEnvironmentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DefaultEnvironmentID), Valid: true}
+	} else {
+		environments, err := s.environmentRepo.ListEnvironments(ctx, *authCtx.ProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list environments: %w", err)
+		}
+		for _, environment := range environments {
+			if environment.Slug == "default" { // We will autofill the default environment if one is available
+				createToolParams.DefaultEnvironmentID = uuid.NullUUID{UUID: environment.ID, Valid: true}
+				break
+			}
+		}
 	}
 
 	if payload.Description != nil {
@@ -201,27 +212,14 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.DefaultEnvironmentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DefaultEnvironmentID), Valid: true}
 	}
 
-	toolNameSet := make(map[string]bool, len(existingToolset.HttpToolNames))
-	for _, name := range existingToolset.HttpToolNames {
-		toolNameSet[name] = true
-	}
-
-	// Add new tools
-	for _, name := range payload.HTTPToolNamesToAdd {
-		toolNameSet[name] = true
-	}
-
-	// Remove tools
-	for _, name := range payload.HTTPToolNamesToRemove {
-		delete(toolNameSet, name)
-	}
-
 	// Convert set back to slice
-	if len(toolNameSet) > 0 {
-		updateParams.HttpToolNames = make([]string, 0, len(toolNameSet))
-		for name := range toolNameSet {
+	if len(payload.HTTPToolNames) > 0 {
+		updateParams.HttpToolNames = make([]string, 0, len(payload.HTTPToolNames))
+		for _, name := range payload.HTTPToolNames {
 			updateParams.HttpToolNames = append(updateParams.HttpToolNames, name)
 		}
+	} else {
+		updateParams.HttpToolNames = existingToolset.HttpToolNames
 	}
 
 	updatedToolset, err := s.repo.UpdateToolset(ctx, updateParams)

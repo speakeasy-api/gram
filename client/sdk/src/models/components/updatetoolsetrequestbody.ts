@@ -18,13 +18,9 @@ export type UpdateToolsetRequestBody = {
    */
   description?: string | undefined;
   /**
-   * HTTP tool names to add to the toolset
+   * List of HTTP tool names to include
    */
-  httpToolNamesToAdd?: Array<string> | undefined;
-  /**
-   * HTTP tool names to remove from the toolset
-   */
-  httpToolNamesToRemove?: Array<string> | undefined;
+  httpToolNames?: Array<string> | undefined;
   /**
    * The new name of the toolset
    */
@@ -39,14 +35,12 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
 > = z.object({
   default_environment_id: z.string().optional(),
   description: z.string().optional(),
-  http_tool_names_to_add: z.array(z.string()).optional(),
-  http_tool_names_to_remove: z.array(z.string()).optional(),
+  http_tool_names: z.array(z.string()).optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "default_environment_id": "defaultEnvironmentId",
-    "http_tool_names_to_add": "httpToolNamesToAdd",
-    "http_tool_names_to_remove": "httpToolNamesToRemove",
+    "http_tool_names": "httpToolNames",
   });
 });
 
@@ -54,8 +48,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
 export type UpdateToolsetRequestBody$Outbound = {
   default_environment_id?: string | undefined;
   description?: string | undefined;
-  http_tool_names_to_add?: Array<string> | undefined;
-  http_tool_names_to_remove?: Array<string> | undefined;
+  http_tool_names?: Array<string> | undefined;
   name?: string | undefined;
 };
 
@@ -67,14 +60,12 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
 > = z.object({
   defaultEnvironmentId: z.string().optional(),
   description: z.string().optional(),
-  httpToolNamesToAdd: z.array(z.string()).optional(),
-  httpToolNamesToRemove: z.array(z.string()).optional(),
+  httpToolNames: z.array(z.string()).optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     defaultEnvironmentId: "default_environment_id",
-    httpToolNamesToAdd: "http_tool_names_to_add",
-    httpToolNamesToRemove: "http_tool_names_to_remove",
+    httpToolNames: "http_tool_names",
   });
 });
 

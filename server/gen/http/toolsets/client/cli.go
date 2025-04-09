@@ -84,7 +84,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Reprehenderit fugiat temporibus reprehenderit.\",\n      \"description\": \"Placeat aut nam nostrum alias.\",\n      \"http_tool_names_to_add\": [\n         \"Dolores sit laboriosam et.\",\n         \"Rerum ea.\",\n         \"Nihil omnis a dignissimos rerum nostrum non.\",\n         \"Voluptas quo vitae amet voluptatum illum aut.\"\n      ],\n      \"http_tool_names_to_remove\": [\n         \"Officiis quaerat voluptatem recusandae ut similique dolor.\",\n         \"Sint praesentium nemo in quos quasi.\",\n         \"Asperiores eaque aut minus.\"\n      ],\n      \"name\": \"Aliquam aut vero dolore mollitia perspiciatis totam.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"Reprehenderit fugiat temporibus reprehenderit.\",\n      \"description\": \"Placeat aut nam nostrum alias.\",\n      \"http_tool_names\": [\n         \"Dolores sit laboriosam et.\",\n         \"Rerum ea.\",\n         \"Nihil omnis a dignissimos rerum nostrum non.\",\n         \"Voluptas quo vitae amet voluptatum illum aut.\"\n      ],\n      \"name\": \"Aliquam aut vero dolore mollitia perspiciatis totam.\"\n   }'")
 		}
 	}
 	var slug string
@@ -108,16 +108,10 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		Description:          body.Description,
 		DefaultEnvironmentID: body.DefaultEnvironmentID,
 	}
-	if body.HTTPToolNamesToAdd != nil {
-		v.HTTPToolNamesToAdd = make([]string, len(body.HTTPToolNamesToAdd))
-		for i, val := range body.HTTPToolNamesToAdd {
-			v.HTTPToolNamesToAdd[i] = val
-		}
-	}
-	if body.HTTPToolNamesToRemove != nil {
-		v.HTTPToolNamesToRemove = make([]string, len(body.HTTPToolNamesToRemove))
-		for i, val := range body.HTTPToolNamesToRemove {
-			v.HTTPToolNamesToRemove[i] = val
+	if body.HTTPToolNames != nil {
+		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
+		for i, val := range body.HTTPToolNames {
+			v.HTTPToolNames[i] = val
 		}
 	}
 	v.Slug = slug

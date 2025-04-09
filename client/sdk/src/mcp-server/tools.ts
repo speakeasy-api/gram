@@ -102,12 +102,15 @@ export function createRegisterTool(
       return;
     }
 
-    const toolScopes = tool.scopes ?? [];
-    if (allowedScopes.size > 0 && toolScopes.length === 0) {
+    const scopes = tool.scopes ?? [];
+    if (allowedScopes.size > 0 && scopes.length === 0) {
       return;
     }
 
-    if (!toolScopes.every((s) => allowedScopes.has(s))) {
+    if (
+      allowedScopes.size > 0
+      && !scopes.every((s: MCPScope) => allowedScopes.has(s))
+    ) {
       return;
     }
 
