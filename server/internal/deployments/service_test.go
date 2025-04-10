@@ -21,14 +21,21 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Failed to start postgres container: %v", err)
 		os.Exit(1)
 	}
-	defer container.Terminate(context.Background())
 
 	cloneTestDatabase = cloner
 
-	os.Exit(m.Run())
+	code := m.Run()
+
+	if err := container.Terminate(context.Background()); err != nil {
+		log.Fatalf("Failed to terminate postgres container: %v", err)
+	}
+
+	os.Exit(code)
 }
 
 func TestDeploymentsService(t *testing.T) {
+	t.Parallel()
+
 	var conn *pgxpool.Pool
 	var err error
 	for range 5 {

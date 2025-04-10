@@ -9,6 +9,8 @@ import (
 )
 
 func TestRequire(t *testing.T) {
+	t.Parallel()
+
 	var err error
 	inv.Require("valid",
 		"err function", func() error { return nil },
@@ -20,6 +22,8 @@ func TestRequire(t *testing.T) {
 }
 
 func TestRequirePanic(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		id    string
 		value any

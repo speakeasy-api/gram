@@ -8,10 +8,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/o11y"
 )
 
 type localEnvFile map[string]struct {
@@ -37,15 +39,17 @@ func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suf
 		logger:        logger.With("component", "sessions"),
 		sessionCache:  cache.New[Session](logger.With("cache", "session"), redisClient, sessionCacheExpiry, cache.SuffixNone),
 		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), redisClient, userInfoCacheExpiry, cache.SuffixNone),
+		localEnvFile:  localEnvFile{},
+		unsafeLocal:   false,
 	}
 }
 
 func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Manager, error) {
-	file, err := os.Open(localEnvPath)
+	file, err := os.Open(filepath.Clean(localEnvPath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open local env file: %w", err)
 	}
-	defer file.Close()
+	defer o11y.LogDefer(context.Background(), logger, file.Close())
 
 	bs, err := io.ReadAll(file)
 	if err != nil {
@@ -98,6 +102,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		SessionID:            &session.SessionID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		UserID:               session.UserID,
+		ProjectID:            nil,
 	})
 
 	return ctx, nil

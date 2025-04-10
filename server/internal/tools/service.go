@@ -31,7 +31,7 @@ type Service struct {
 	auth   *auth.Auth
 }
 
-var _ gen.Service = &Service{}
+var _ gen.Service = &Service{} //nolint:exhaustruct
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
@@ -60,6 +60,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 	params := repo.ListAllHttpToolDefinitionsParams{
 		ProjectID: *authCtx.ProjectID,
+		Cursor:    uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 	}
 
 	if payload.Cursor != nil {
@@ -72,7 +73,8 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	result := &gen.ListToolsResult{
-		Tools: make([]*gen.HTTPToolDefinition, len(tools)),
+		Tools:      make([]*gen.HTTPToolDefinition, len(tools)),
+		NextCursor: nil,
 	}
 
 	for i, tool := range tools {

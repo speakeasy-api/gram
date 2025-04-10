@@ -21,6 +21,9 @@ importers:
         specifier: link:../moonshine
         version: link:../moonshine
     devDependencies:
+      '@types/node':
+        specifier: ^22.13.17
+        version: 22.13.17
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -1584,6 +1587,7 @@ packages:
 
   bun@1.2.8:
     resolution: {integrity: sha512-X8r9UuXAruvpE37u/JVfvJI8KRdFf9hUdTLw00DMScnBe7Xerawd/VvmFVT9Y/NrmXDAdDp0Dm6N6bulZYTGvA==}
+    cpu: [arm64, x64, aarch64]
     os: [darwin, linux, win32]
     hasBin: true
 

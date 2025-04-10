@@ -51,11 +51,18 @@ func newApp() *cli.App {
 			logger := slog.New(o11y.NewLogHandler(c.String("log-level"), c.Bool("log-pretty")))
 
 			// Sets GOMAXPROCS to match the Linux container CPU quota.
-			maxprocs.Set(maxprocs.Logger(func(s string, i ...interface{}) {
+			_, err := maxprocs.Set(maxprocs.Logger(func(s string, i ...interface{}) {
 				logger.InfoContext(c.Context, fmt.Sprintf(s, i...))
 			}))
+			if err != nil {
+				logger.Error("automaxprocs", slog.String("error", err.Error()))
+			}
+
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
-			memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(logger))
+			_, err = memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(logger))
+			if err != nil {
+				logger.Error("automemlimit", slog.String("error", err.Error()))
+			}
 
 			c.Context = PushLogger(c.Context, logger.With(slog.String("app", "gram")))
 

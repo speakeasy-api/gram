@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+
+version: "2"
+
+run:
+  relative-path-mode: wd
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - containedctx
+    - depguard
+    - durationcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - exhaustruct
+    - exptostd
+    - forcetypeassert
+    - gochecksumtype
+    - gocritic
+    - gosec
+    - iface
+    - intrange
+    - loggercheck
+    - mirror
+    - musttag
+    - paralleltest
+    - reassign
+    - sloglint #
+    - spancheck #
+    - thelper
+    - tparallel
+    - unconvert
+  settings:
+    staticcheck:
+      dot-import-whitelist:
+        - goa.design/goa/v3/dsl
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+    exhaustruct:
+      exclude:
+        - '^net\.Dialer$'
+        - '^net/url\.URL$'
+        - '^net/http\.Server$'
+        - '^net/http\.Client$'
+        - '^net/http\.Transport$'
+        - '^github.com/charmbracelet/log\.Options$'
+        - '^github.com/urfave/cli/v2\.App$'
+        - '^github.com/urfave/cli/v2\.Command$'
+        - '^github.com/urfave/cli/v2\..*Flag$'
+        - '^github.com/redis/go-redis/v9\.Options$'
+        - '^github.com/go-redis/cache/v9\.Options$'
+        - '^github.com/go-redis/cache/v9\.Item$'
+        - '^github.com/pb33f/libopenapi/datamodel\.DocumentConfiguration$'
+    exhaustive:
+      check:
+        - switch
+        - map
+      default-signifies-exhaustive: true
+    errcheck:
+      exclude-functions:
+        - "github.com/speakeasy-api/gram/internal/o11y.LogDefer"
+        - "github.com/speakeasy-api/gram/internal/o11y.NoLogDefer"
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: "math/rand$"
+              desc: use math/rand/v2
+            - pkg: "go.uber.org/zap"
+              desc: Use log/slog
+            - pkg: "github.com/jackc/pgx/v4"
+              desc: Use github.com/jackc/pgx/v5
+            - pkg: "gopkg.in/yaml.v2"
+              desc: Use gopkg.in/yaml.v3
+            - pkg: "github.com/urfave/cli/v3"
+              desc: V3 is not ready yet use github.com/urfave/cli/v2

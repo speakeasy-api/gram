@@ -31,7 +31,7 @@ type Service struct {
 	auth   *auth.Auth
 }
 
-var _ gen.Service = &Service{}
+var _ gen.Service = &Service{} //nolint:exhaustruct
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
@@ -54,7 +54,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) (*gen.Key, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("auth not found in context")
 	}
 
@@ -69,21 +69,22 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		Token:           token,
 		Scopes:          []string{string(APIKeyScopesConsumer)}, // this is the only default scopes for now
 		CreatedByUserID: authCtx.UserID,
+		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
 	return &gen.Key{
-		ID:             createdKey.ID.String(),
-		Name:           createdKey.Name,
-		OrganizationID: createdKey.OrganizationID,
-		ProjectID:      conv.FromNullableUUID(createdKey.ProjectID),
-		Token:          createdKey.Token,
-		Scopes:         createdKey.Scopes,
-		CreatedAt:      createdKey.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      createdKey.UpdatedAt.Time.Format(time.RFC3339),
+		ID:              createdKey.ID.String(),
+		Name:            createdKey.Name,
+		OrganizationID:  createdKey.OrganizationID,
+		ProjectID:       conv.FromNullableUUID(createdKey.ProjectID),
+		Token:           createdKey.Token,
+		Scopes:          createdKey.Scopes,
+		CreatedByUserID: createdKey.CreatedByUserID,
+		CreatedAt:       createdKey.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       createdKey.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -101,14 +102,15 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	var result []*gen.Key
 	for _, key := range keys {
 		result = append(result, &gen.Key{
-			ID:             key.ID.String(),
-			Name:           key.Name,
-			OrganizationID: key.OrganizationID,
-			ProjectID:      conv.FromNullableUUID(key.ProjectID),
-			Token:          key.Token,
-			Scopes:         key.Scopes,
-			CreatedAt:      key.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      key.UpdatedAt.Time.Format(time.RFC3339),
+			ID:              key.ID.String(),
+			Name:            key.Name,
+			OrganizationID:  key.OrganizationID,
+			ProjectID:       conv.FromNullableUUID(key.ProjectID),
+			Token:           key.Token,
+			Scopes:          key.Scopes,
+			CreatedByUserID: key.CreatedByUserID,
+			CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:       key.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
 

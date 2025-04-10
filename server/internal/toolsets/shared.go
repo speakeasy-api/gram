@@ -161,6 +161,9 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		SecurityKeys: slices.Collect(maps.Keys(relevantSecurityKeysMap)),
 		DeploymentID: tool.DeploymentID,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &HTTPToolExecutionInfo{
 		Tool:     tool,

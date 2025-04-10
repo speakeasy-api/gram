@@ -36,7 +36,7 @@ type Service struct {
 	toolsets        *Toolsets
 }
 
-var _ gen.Service = &Service{}
+var _ gen.Service = &Service{} //nolint:exhaustruct
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
@@ -66,10 +66,13 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	createToolParams := repo.CreateToolsetParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Name:           payload.Name,
-		Slug:           conv.ToSlug(payload.Name),
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   payload.Name,
+		Slug:                   conv.ToSlug(payload.Name),
+		Description:            conv.PtrToPGText(payload.Description),
+		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
+		HttpToolNames:          payload.HTTPToolNames,
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
@@ -94,17 +97,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		}
 	}
 
-	if payload.Description != nil {
-		createToolParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
-	}
-
-	if len(payload.HTTPToolNames) > 0 {
-		createToolParams.HttpToolNames = make([]string, len(payload.HTTPToolNames))
-		for i, name := range payload.HTTPToolNames {
-			createToolParams.HttpToolNames[i] = name
-		}
-	}
-
 	createdToolset, err := s.repo.CreateToolset(ctx, createToolParams)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique constraint") {
@@ -112,11 +104,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		}
 
 		return nil, err
-	}
-
-	httpToolNames := make([]string, len(createdToolset.HttpToolNames))
-	for i, name := range createdToolset.HttpToolNames {
-		httpToolNames[i] = name
 	}
 
 	toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, createdToolset.Slug, *authCtx.ProjectID)
@@ -174,6 +161,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		Name:                   existingToolset.Name,
 		DefaultEnvironmentSlug: existingToolset.DefaultEnvironmentSlug,
 		ProjectID:              *authCtx.ProjectID,
+		HttpToolNames:          existingToolset.HttpToolNames,
 	}
 	if payload.Name != nil {
 		updateParams.Name = *payload.Name
@@ -196,21 +184,12 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	// Convert set back to slice
 	if len(payload.HTTPToolNames) > 0 {
 		updateParams.HttpToolNames = make([]string, 0, len(payload.HTTPToolNames))
-		for _, name := range payload.HTTPToolNames {
-			updateParams.HttpToolNames = append(updateParams.HttpToolNames, name)
-		}
-	} else {
-		updateParams.HttpToolNames = existingToolset.HttpToolNames
+		updateParams.HttpToolNames = append(updateParams.HttpToolNames, payload.HTTPToolNames...)
 	}
 
 	updatedToolset, err := s.repo.UpdateToolset(ctx, updateParams)
 	if err != nil {
 		return nil, oops.E(err, "error updating toolset", "failed to update toolset in database").Log(ctx, s.logger)
-	}
-
-	httpToolNames := make([]string, len(updatedToolset.HttpToolNames))
-	for i, name := range updatedToolset.HttpToolNames {
-		httpToolNames[i] = name
 	}
 
 	toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, updatedToolset.Slug, *authCtx.ProjectID)

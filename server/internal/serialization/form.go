@@ -24,7 +24,7 @@ func ParseFormParams(paramName string, objType reflect.Type, objValue reflect.Va
 	case reflect.Struct:
 		var items []string
 
-		for i := 0; i < objType.NumField(); i++ {
+		for i := range objType.NumField() {
 			fieldType := objType.Field(i)
 			valType := objValue.Field(i)
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestDebug(t *testing.T) {
+	t.Parallel()
 	var err error
 	inv.Debug("valid",
 		"err function", func() error { return nil },
@@ -20,6 +21,8 @@ func TestDebug(t *testing.T) {
 }
 
 func TestDebugPanic(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		id    string
 		value any

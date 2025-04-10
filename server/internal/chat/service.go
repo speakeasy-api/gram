@@ -38,6 +38,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		sc := security.APIKeyScheme{
 			Name:           auth.KeySecurityScheme,
 			RequiredScopes: []string{"consumer"},
+			Scopes:         []string{},
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
 		if err != nil {
@@ -45,14 +46,18 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 	sc = security.APIKeyScheme{
-		Name: auth.ProjectSlugSecuritySchema,
+		Name:           auth.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
 	}
 	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	_ = ctx
 
 	target, _ := url.Parse("https://api.openai.com")
 	proxy := httputil.NewSingleHostReverseProxy(target)

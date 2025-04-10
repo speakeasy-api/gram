@@ -37,7 +37,7 @@ type Service struct {
 	environmentsRepo *environments_repo.Queries
 }
 
-var _ gen.Service = &Service{}
+var _ gen.Service = &Service{} //nolint:exhaustruct
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
@@ -162,6 +162,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 		sc := security.APIKeyScheme{
 			Name:           auth.KeySecurityScheme,
 			RequiredScopes: []string{"consumer"},
+			Scopes:         []string{},
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
 		if err != nil {
@@ -170,7 +171,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sc = security.APIKeyScheme{
-		Name: auth.ProjectSlugSecuritySchema,
+		Name:           auth.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
 	}
 	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
 	if err != nil {
@@ -218,7 +221,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 	}
 
 	InstanceToolProxy(ctx, s.tracer, s.logger, w, r, environmentEntries, executionInfo)
-	return
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

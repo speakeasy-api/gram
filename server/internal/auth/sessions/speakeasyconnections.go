@@ -15,7 +15,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID})
+	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, Organizations: []auth.Organization{}, Email: ""})
 }
 
 func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, error) {

@@ -36,7 +36,7 @@ func parseDelimitedArray(explode bool, objValue reflect.Value, delimiter string)
 	values := []string{}
 	items := []string{}
 
-	for i := 0; i < objValue.Len(); i++ {
+	for i := range objValue.Len() {
 		if explode {
 			values = append(values, valToString(objValue.Index(i).Interface()))
 		} else {

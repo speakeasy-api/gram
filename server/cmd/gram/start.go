@@ -23,6 +23,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/internal/assets"
@@ -140,7 +141,8 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 
 				poolcfg.ConnConfig.Tracer = &pgxotel.QueryTracer{
-					Name: "pgx",
+					Name:    "pgx",
+					Options: []trace.TracerOption{},
 				}
 			}
 
@@ -157,7 +159,7 @@ func newStartCommand() *cli.Command {
 				switch assetsBackend {
 				case "fs":
 					assetsURI = filepath.Clean(assetsURI)
-					if err := os.MkdirAll(assetsURI, 0755); err != nil && !errors.Is(err, fs.ErrExist) {
+					if err := os.MkdirAll(assetsURI, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
 						return err
 					}
 
@@ -165,7 +167,7 @@ func newStartCommand() *cli.Command {
 					if err != nil {
 						return err
 					}
-					defer root.Close()
+					defer o11y.LogDefer(ctx, logger, root.Close())
 
 					fstore := &assets.FSBlobStore{Root: root}
 					assetStorage = fstore
@@ -225,8 +227,9 @@ func newStartCommand() *cli.Command {
 
 			{
 				controlServer := control.Server{
-					Address: c.String("control-address"),
-					Logger:  logger.With(slog.String("component", "control")),
+					Address:          c.String("control-address"),
+					Logger:           logger.With(slog.String("component", "control")),
+					DisableProfiling: false,
 				}
 
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(db, redisClient))
@@ -257,8 +260,9 @@ func newStartCommand() *cli.Command {
 			instances.Attach(mux, instances.NewService(logger.With("component", "instances"), db, sessionManager))
 
 			srv := &http.Server{
-				Addr:    c.String("address"),
-				Handler: otelhttp.NewHandler(mux, "/"),
+				Addr:              c.String("address"),
+				Handler:           otelhttp.NewHandler(mux, "/"),
+				ReadHeaderTimeout: 10 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
 				},

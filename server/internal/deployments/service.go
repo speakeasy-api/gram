@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 )
 
@@ -40,7 +42,7 @@ type Service struct {
 	assetStorage assets.BlobStore
 }
 
-var _ gen.Service = &Service{}
+var _ gen.Service = &Service{} //nolint:exhaustruct
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
 	return &Service{
@@ -189,7 +191,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	if err != nil {
 		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
 	}
-	defer dbtx.Rollback(ctx)
+	defer o11y.LogDefer(ctx, logger, dbtx.Rollback(ctx))
 
 	tx := s.repo.WithTx(dbtx)
 
@@ -219,7 +221,6 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	deployment := row.Deployment
 	logger = logger.With(slog.String("deployment_id", deployment.ID.String()))
-	deploymentAssets := []*gen.OpenAPIv3DeploymentAsset{}
 	var status string
 
 	span.SetAttributes(
@@ -244,7 +245,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		status = row.Status
 	}
 
-	deploymentAssets, err = s.addOpenAPIv3Documents(ctx, tx, deployment.ID, form.Openapiv3Assets)
+	deploymentAssets, err := s.addOpenAPIv3Documents(ctx, tx, deployment.ID, form.Openapiv3Assets)
 	if err != nil {
 		return nil, oops.E(err, "error adding openapi v3 assets to deployment", "failed to add openapi v3 assets to deployment").Log(ctx, logger)
 	}
@@ -264,6 +265,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
 		GithubSha:       conv.FromPGText(deployment.GithubSha),
 		GithubPr:        conv.FromPGText(deployment.GithubPr),
+		GithubRepo:      conv.FromPGText(deployment.GithubRepo),
 		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
 		Openapiv3Assets: deploymentAssets,
 	}
@@ -416,7 +418,7 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 			if err != nil {
 				return oops.E(err, "unexpected database error", "failed to begin database transaction").Log(ctx, logger)
 			}
-			defer dbtx.Rollback(ctx)
+			defer o11y.LogDefer(ctx, logger, dbtx.Rollback(ctx))
 
 			tx := s.repo.WithTx(dbtx)
 
@@ -467,7 +469,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 	if err != nil {
 		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
 	}
-	defer dbtx.Rollback(ctx)
+	defer o11y.LogDefer(ctx, logger, dbtx.Rollback(ctx))
 
 	tx := s.repo.WithTx(dbtx)
 
@@ -483,6 +485,11 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 			UserID:         authCtx.UserID,
 			OrganizationID: authCtx.ActiveOrganizationID,
 			IdempotencyKey: key,
+
+			GithubRepo:  pgtype.Text{Valid: false, String: ""},
+			GithubPr:    pgtype.Text{Valid: false, String: ""},
+			ExternalID:  pgtype.Text{Valid: false, String: ""},
+			ExternalUrl: pgtype.Text{Valid: false, String: ""},
 		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("no deployment created")
@@ -607,6 +614,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
 		GithubSha:       conv.FromPGText(deployment.GithubSha),
 		GithubPr:        conv.FromPGText(deployment.GithubPr),
+		GithubRepo:      conv.FromPGText(deployment.GithubRepo),
 		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
 		Openapiv3Assets: assets,
 	}

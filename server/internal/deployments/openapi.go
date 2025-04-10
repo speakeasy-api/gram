@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/inv"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/orderedmap"
 	"github.com/speakeasy-api/gram/internal/tools"
 )
@@ -66,7 +67,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		logger.ErrorContext(ctx, "failed to fetch openapi document", slog.String("error", err.Error()))
 		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error fetching openapi document")
 	}
-	defer rc.Close()
+	defer o11y.LogDefer(ctx, logger, rc.Close())
 
 	doc, err := io.ReadAll(rc)
 	if err != nil {
@@ -87,7 +88,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 
 	v3Model, errs := document.BuildV3Model()
 	if len(errs) > 0 {
-		return fmt.Errorf("OpenAPI v3 document '%s' had %d errors: %s", docInfo.Name, len(errs), errors.Join(errs...))
+		return fmt.Errorf("OpenAPI v3 document '%s' had %d errors: %w", docInfo.Name, len(errs), errors.Join(errs...))
 	}
 
 	globalSecurity, err := serializeSecurity(v3Model.Model.Security)
@@ -139,12 +140,12 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 
 	for path, pathItem := range v3Model.Model.Paths.PathItems.FromOldest() {
 		ops := []openapiV3Operation{
-			{method: "GET", operation: pathItem.Get},
-			{method: "POST", operation: pathItem.Post},
-			{method: "PUT", operation: pathItem.Put},
-			{method: "DELETE", operation: pathItem.Delete},
-			{method: "HEAD", operation: pathItem.Head},
-			{method: "PATCH", operation: pathItem.Patch},
+			{method: "GET", operation: pathItem.Get, path: path},
+			{method: "POST", operation: pathItem.Post, path: path},
+			{method: "PUT", operation: pathItem.Put, path: path},
+			{method: "DELETE", operation: pathItem.Delete, path: path},
+			{method: "HEAD", operation: pathItem.Head, path: path},
+			{method: "PATCH", operation: pathItem.Patch, path: path},
 		}
 
 		sharedParameters := pathItem.Parameters
@@ -414,9 +415,10 @@ func groupJSONSchemaObjects(keyvals ...any) (*jsonSchemaObject, error) {
 	}
 
 	result := jsonSchemaObject{
-		Type:       "object",
-		Required:   make([]string, 0, len(keyvals)/2),
-		Properties: orderedmap.NewWithCapacity[string, json.RawMessage](len(keyvals) / 2),
+		Type:                 "object",
+		Required:             make([]string, 0, len(keyvals)/2),
+		Properties:           orderedmap.NewWithCapacity[string, json.RawMessage](len(keyvals) / 2),
+		AdditionalProperties: conv.Ptr(false),
 	}
 
 	for i, v := range keyvals {
@@ -424,8 +426,16 @@ func groupJSONSchemaObjects(keyvals ...any) (*jsonSchemaObject, error) {
 			continue
 		}
 
-		key := keyvals[i-1].(string)
-		schema := v.(*jsonSchemaObject)
+		key, ok := keyvals[i-1].(string)
+		if !ok {
+			panic(fmt.Sprintf("groupJSONSchemaObjects: expected string key, got %T", keyvals[i-1]))
+		}
+
+		schema, ok := v.(*jsonSchemaObject)
+		if !ok {
+			panic(fmt.Sprintf("groupJSONSchemaObjects: expected *jsonSchemaObject value, got %T", v))
+		}
+
 		if schema == nil || schema.Properties == nil || schema.Properties.Len() == 0 {
 			continue
 		}
@@ -452,8 +462,15 @@ type capturedRequestBody struct {
 }
 
 func captureRequestBody(op *v3.Operation) (capturedRequestBody, error) {
+	empty := capturedRequestBody{
+		valid:       false,
+		schema:      nil,
+		required:    false,
+		contentType: "",
+	}
+
 	if op.RequestBody == nil || op.RequestBody.Content == nil || op.RequestBody.Content.Len() == 0 {
-		return capturedRequestBody{}, nil
+		return empty, nil
 	}
 
 	required := false
@@ -476,7 +493,7 @@ func captureRequestBody(op *v3.Operation) (capturedRequestBody, error) {
 
 	if contentType == "" {
 		types := slices.Collect(op.RequestBody.Content.KeysFromOldest())
-		return capturedRequestBody{}, fmt.Errorf("no supported request body content type found: %s", strings.Join(types, ", "))
+		return empty, fmt.Errorf("no supported request body content type found: %s", strings.Join(types, ", "))
 	}
 
 	if spec == nil {
@@ -490,7 +507,7 @@ func captureRequestBody(op *v3.Operation) (capturedRequestBody, error) {
 
 	schemaBytes, err := extractJSONSchemaFromYaml("requestBody", spec.Schema)
 	if err != nil {
-		return capturedRequestBody{}, fmt.Errorf("failed to extract json schema: %w", err)
+		return empty, fmt.Errorf("failed to extract json schema: %w", err)
 	}
 
 	return capturedRequestBody{
@@ -506,11 +523,11 @@ type openapiV3ParameterProxy struct {
 	In              string          `json:"in,omitempty" yaml:"in,omitempty"`
 	Name            string          `json:"name,omitempty" yaml:"name,omitempty"`
 	Description     string          `json:"description,omitempty" yaml:"description,omitempty"`
-	Required        *bool           `json:"required,renderZero,omitempty" yaml:"required,renderZero,omitempty"`
+	Required        *bool           `json:"required,omitempty" yaml:"required,omitempty"`
 	Deprecated      bool            `json:"deprecated,omitempty" yaml:"deprecated,omitempty"`
 	AllowEmptyValue bool            `json:"allowEmptyValue,omitempty" yaml:"allowEmptyValue,omitempty"`
 	Style           string          `json:"style,omitempty" yaml:"style,omitempty"`
-	Explode         *bool           `json:"explode,renderZero,omitempty" yaml:"explode,renderZero,omitempty"`
+	Explode         *bool           `json:"explode,omitempty" yaml:"explode,omitempty"`
 }
 
 func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, spec []byte, err error) {
@@ -519,9 +536,10 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 	}
 
 	obj := jsonSchemaObject{
-		Type:       "object",
-		Required:   make([]string, 0, len(params)),
-		Properties: orderedmap.NewWithCapacity[string, json.RawMessage](len(params)),
+		Type:                 "object",
+		Required:             make([]string, 0, len(params)),
+		Properties:           orderedmap.NewWithCapacity[string, json.RawMessage](len(params)),
+		AdditionalProperties: conv.Ptr(false),
 	}
 
 	specs := make(map[string]*openapiV3ParameterProxy, len(params))

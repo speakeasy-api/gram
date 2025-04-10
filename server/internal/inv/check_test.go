@@ -9,6 +9,8 @@ import (
 )
 
 func TestCheck(t *testing.T) {
+	t.Parallel()
+
 	var nilerr error
 
 	err := inv.Check("valid",
@@ -22,6 +24,8 @@ func TestCheck(t *testing.T) {
 }
 
 func TestCheckFail(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		id    string
 		value any
@@ -46,6 +50,8 @@ type JoinedError interface {
 }
 
 func TestCheckFailMixed(t *testing.T) {
+	t.Parallel()
+
 	cerr := inv.Check("trigger values",
 		"err value", errors.New("simulated"),
 		"failing check", func() bool { return false },
@@ -63,6 +69,8 @@ func TestCheckFailMixed(t *testing.T) {
 }
 
 func TestCheckWrapsErrors(t *testing.T) {
+	t.Parallel()
+
 	simErr := errors.New("simulated")
 
 	cerr := inv.Check("wraps underlying errors", "err value", simErr)

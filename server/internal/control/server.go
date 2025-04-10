@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"time"
 )
 
 type Server struct {
@@ -34,8 +35,9 @@ func (s *Server) Start(ctx context.Context, healthCheck http.Handler) (shutdown 
 	mux.Handle("GET /livez", healthCheck)
 
 	srv := &http.Server{
-		Addr:    s.Address,
-		Handler: mux,
+		Addr:              s.Address,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext: func(net.Listener) context.Context {
 			return ctx
 		},

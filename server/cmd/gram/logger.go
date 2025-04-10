@@ -12,5 +12,10 @@ func PushLogger(ctx context.Context, logger *slog.Logger) context.Context {
 }
 
 func PullLogger(ctx context.Context) *slog.Logger {
-	return ctx.Value(loggerKey{}).(*slog.Logger)
+	logger, ok := ctx.Value(loggerKey{}).(*slog.Logger)
+	if !ok || logger == nil {
+		panic("PullLogger: logger not found in context")
+	}
+
+	return logger
 }

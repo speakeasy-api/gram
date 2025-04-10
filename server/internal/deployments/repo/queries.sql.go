@@ -422,21 +422,21 @@ const getDeploymentByIdempotencyKey = `-- name: GetDeploymentByIdempotencyKey :o
 WITH latest_status as (
     SELECT deployment_id, status
     FROM deployment_statuses
-    WHERE deployment_id = $3
-    ORDER BY seq DESC
+    INNER JOIN deployments ON deployment_statuses.deployment_id = deployments.id
+    WHERE deployments.idempotency_key = $1
+    ORDER BY deployment_statuses.seq DESC
     LIMIT 1
 )
 SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, coalesce(latest_status.status, 'unknown') as status
 FROM deployments
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
-WHERE idempotency_key = $1
- AND project_id = $2
+WHERE deployments.idempotency_key = $1
+ AND deployments.project_id = $2
 `
 
 type GetDeploymentByIdempotencyKeyParams struct {
 	IdempotencyKey string
 	ProjectID      uuid.UUID
-	ID             uuid.UUID
 }
 
 type GetDeploymentByIdempotencyKeyRow struct {
@@ -445,7 +445,7 @@ type GetDeploymentByIdempotencyKeyRow struct {
 }
 
 func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDeploymentByIdempotencyKeyParams) (GetDeploymentByIdempotencyKeyRow, error) {
-	row := q.db.QueryRow(ctx, getDeploymentByIdempotencyKey, arg.IdempotencyKey, arg.ProjectID, arg.ID)
+	row := q.db.QueryRow(ctx, getDeploymentByIdempotencyKey, arg.IdempotencyKey, arg.ProjectID)
 	var i GetDeploymentByIdempotencyKeyRow
 	err := row.Scan(
 		&i.Deployment.ID,

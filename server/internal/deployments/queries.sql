@@ -54,15 +54,16 @@ LIMIT 1;
 WITH latest_status as (
     SELECT deployment_id, status
     FROM deployment_statuses
-    WHERE deployment_id = @id
-    ORDER BY seq DESC
+    INNER JOIN deployments ON deployment_statuses.deployment_id = deployments.id
+    WHERE deployments.idempotency_key = @idempotency_key
+    ORDER BY deployment_statuses.seq DESC
     LIMIT 1
 )
 SELECT sqlc.embed(deployments), coalesce(latest_status.status, 'unknown') as status
 FROM deployments
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
-WHERE idempotency_key = @idempotency_key
- AND project_id = @project_id;
+WHERE deployments.idempotency_key = @idempotency_key
+ AND deployments.project_id = @project_id;
 
 -- name: GetDeploymentOpenAPIv3 :many
 SELECT *

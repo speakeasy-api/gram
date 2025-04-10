@@ -31,7 +31,7 @@ type Service struct {
 	auth   *auth.Auth
 }
 
-var _ gen.Service = &Service{}
+var _ gen.Service = &Service{} //nolint:exhaustruct
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
@@ -65,10 +65,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		ProjectID:      *authCtx.ProjectID,
 		Slug:           slug,
 		Name:           payload.Name,
-	}
-
-	if payload.Description != nil {
-		input.Description = pgtype.Text{String: *payload.Description, Valid: true}
+		Description:    conv.PtrToPGText(payload.Description),
 	}
 
 	environment, err := s.repo.CreateEnvironment(ctx, input)
@@ -83,7 +80,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		values[i] = entry.Value
 	}
 
-	_, err = s.repo.CreateEnvironmentEntries(ctx, repo.CreateEnvironmentEntriesParams{
+	rows, err := s.repo.CreateEnvironmentEntries(ctx, repo.CreateEnvironmentEntriesParams{
 		EnvironmentID: environment.ID,
 		Names:         names,
 		Values:        values,
@@ -93,10 +90,12 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 	}
 
 	entries := make([]*gen.EnvironmentEntry, len(payload.Entries))
-	for i, entry := range payload.Entries {
+	for i, entry := range rows {
 		entries[i] = &gen.EnvironmentEntry{
-			Name:  entry.Name,
-			Value: conv.RedactedEnvironment(entry.Value),
+			Name:      entry.Name,
+			Value:     conv.RedactedEnvironment(entry.Value),
+			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 

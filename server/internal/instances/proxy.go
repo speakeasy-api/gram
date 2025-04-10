@@ -6,20 +6,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
-	"log/slog"
-
-	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
-	"github.com/speakeasy-api/gram/internal/serialization"
-	"github.com/speakeasy-api/gram/internal/toolsets"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
+	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/serialization"
+	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
 type ToolCallBody struct {
@@ -102,7 +105,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		for name, value := range toolCallBody.QueryParameters {
 			// style: form and explode: true with , delimiter is default for query parameters
 			params := serialization.ParseFormParams(name, reflect.TypeOf(value), reflect.ValueOf(value), ",", true)
-			if params != nil && len(params) > 0 {
+			if len(params) > 0 {
 				for name, value := range params {
 					for _, vv := range value {
 						values.Add(name, vv)
@@ -148,8 +151,23 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 		slog.Any("headers", req.Header),
 		slog.String("body", string(bodyBytes)))
 
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
+	}
 	client := &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout:   60 * time.Second,
+		Transport: transport,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -158,7 +176,7 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer o11y.LogDefer(ctx, logger, resp.Body.Close())
 
 	if len(resp.Trailer) > 0 {
 		var trailerKeys []string
@@ -240,14 +258,14 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("envVar", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
 			} else {
 				key := security.EnvVariables[0]
-				// TODO: We currently aren't directly storing name for API key security schemes, is this name sufficient?
-				if security.InPlacement == "header" {
+				switch security.InPlacement {
+				case "header":
 					req.Header.Set(security.Name, envVars[key])
-				} else if security.InPlacement == "query" {
+				case "query":
 					values := req.URL.Query()
 					values.Set(security.Name, envVars[key])
 					req.URL.RawQuery = values.Encode()
-				} else {
+				default:
 					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.InPlacement))
 				}
 			}

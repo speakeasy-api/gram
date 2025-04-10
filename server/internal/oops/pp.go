@@ -76,7 +76,11 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 
 func funcForPC(pc uintptr) string {
 	if f, ok := funcMemo.Load(pc); ok {
-		return f.(string)
+		val, ok := f.(string)
+		if !ok {
+			panic(fmt.Sprintf("funcForPC: expected string, got %T", f))
+		}
+		return val
 	}
 
 	fnc := runtime.FuncForPC(pc)

@@ -45,6 +45,7 @@ func (s *Service) GetProjectsOrSetupDefaults(ctx context.Context, organizationID
 			ProjectID:      project.ID,
 			Name:           "Default",
 			Slug:           "default",
+			Description:    conv.ToPGText("Default project for organization"),
 		})
 		if err != nil {
 			return nil, oops.E(err, "error creating default environment", "failed to create default environment").Log(ctx, s.logger)

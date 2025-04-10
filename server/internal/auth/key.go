@@ -38,6 +38,8 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID: apiKey.OrganizationID,
 		UserID:               apiKey.CreatedByUserID,
+		SessionID:            nil,
+		ProjectID:            nil,
 	})
 
 	return ctx, nil

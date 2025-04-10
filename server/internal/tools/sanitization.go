@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 
@@ -14,15 +15,17 @@ var (
 // Adapted from https://github.com/speakeasy-api/openapi-generation/blob/26e86daa32f8eebe2832080552237394aebfeb13/internal/sanitization/sanitization.go
 func SanitizeName(name string) string {
 	rawResult, _, _ := sanitizeNameGroup.Do(name, func() (any, error) {
-		runes := []rune(name)
-
 		var sb strings.Builder
 
 		prefix := true
 
 		var last rune
 
-		for _, r := range runes {
+		for _, r := range name {
+			isLower := r >= 'a' && r <= 'z'
+			isUpper := r >= 'A' && r <= 'Z'
+			isDigit := r >= '0' && r <= '9'
+
 			// Check if the current rune is a diatritic and if so, replace it with the appropriate replacement
 			if replacement, ok := normalizedDiatriticsLookup[r]; ok {
 				sb.WriteRune(replacement)
@@ -34,9 +37,9 @@ func SanitizeName(name string) string {
 					sb.WriteRune('_')
 					last = '_'
 				}
-			} else if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			} else if isLower || isUpper || isDigit {
 				// if the current rune is a letter or number, add it to the sanitized name
-				if !(r >= '0' && r <= '9') {
+				if !isDigit {
 					prefix = false // when we encounter the first letter we are no longer at the prefix
 				}
 				sb.WriteRune(r)
@@ -61,7 +64,12 @@ func SanitizeName(name string) string {
 		return sb.String(), nil
 	})
 
-	return rawResult.(string)
+	res, ok := rawResult.(string)
+	if !ok {
+		panic(fmt.Sprintf("SanitizeName: expected string, got %T", rawResult))
+	}
+
+	return res
 }
 
 func replaceChar(char rune) string {

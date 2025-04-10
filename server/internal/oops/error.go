@@ -10,6 +10,7 @@ type Error struct {
 func New(message string) *Error {
 	return &Error{
 		message: message,
+		err:     nil,
 	}
 }
 

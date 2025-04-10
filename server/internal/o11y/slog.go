@@ -20,8 +20,9 @@ func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
 	} else {
 		return &ContextHandler{
 			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-				AddSource: true,
-				Level:     LogLevels[rawLevel].Slog,
+				AddSource:   true,
+				Level:       LogLevels[rawLevel].Slog,
+				ReplaceAttr: nil,
 			}),
 		}
 	}
@@ -31,7 +32,7 @@ type ContextHandler struct {
 	Handler slog.Handler
 }
 
-var _ slog.Handler = &ContextHandler{}
+var _ slog.Handler = &ContextHandler{} //nolint:exhaustruct
 
 func (h *ContextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.Handler.Enabled(ctx, level)
@@ -58,4 +59,17 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	}
 
 	return h.Handler.Handle(ctx, record)
+}
+
+func LogDefer(ctx context.Context, logger *slog.Logger, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	logger.ErrorContext(ctx, "error", slog.String("error", err.Error()))
+
+	return err
+}
+
+func NoLogDefer(error) {
 }

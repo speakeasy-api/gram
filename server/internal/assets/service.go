@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 )
 
@@ -44,8 +45,8 @@ type Service struct {
 	repo     *repo.Queries
 }
 
-var _ gen.Service = &Service{}
-var _ gen.Auther = &Service{}
+var _ gen.Service = &Service{} //nolint:exhaustruct
+var _ gen.Auther = &Service{}  //nolint:exhaustruct
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore) *Service {
 	return &Service{
@@ -73,7 +74,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Payload, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
-	defer reader.Close()
+	defer o11y.LogDefer(ctx, s.logger, reader.Close())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -92,7 +93,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if err != nil {
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}
-	defer os.Remove(f.Name())
+	defer o11y.LogDefer(ctx, s.logger, os.Remove(f.Name()))
 
 	bsize := 4096
 	if payload.ContentLength < 4096 {
@@ -173,7 +174,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if err != nil {
 		return nil, fmt.Errorf("write to blob storage: %w", err)
 	}
-	defer dst.Close()
+	defer o11y.LogDefer(ctx, s.logger, dst.Close())
 
 	n, err := io.CopyBuffer(dst, f, make([]byte, bsize))
 	if err != nil {

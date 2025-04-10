@@ -29,7 +29,12 @@ func Check(group string, pairs ...any) error {
 	}
 
 	for i := 0; i < len(pairs); i += 2 {
-		id, pred := pairs[i].(string), pairs[i+1]
+		id, ok := pairs[i].(string)
+		if !ok {
+			panic(fmt.Sprintf("Check: expected string, got %T", pairs[i]))
+		}
+
+		pred := pairs[i+1]
 
 		if pred == nil {
 			// Nothing to do for nil values.
@@ -52,13 +57,13 @@ func Check(group string, pairs ...any) error {
 		case func() bool:
 			if !val() {
 				errs = append(errs, &CheckError{
-					Group: group, ID: id, Caller: caller,
+					Group: group, ID: id, Caller: caller, Cause: nil,
 				})
 			}
 		case bool:
 			if !val {
 				errs = append(errs, &CheckError{
-					Group: group, ID: id, Caller: caller,
+					Group: group, ID: id, Caller: caller, Cause: nil,
 				})
 			}
 		default:

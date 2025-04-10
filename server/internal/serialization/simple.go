@@ -25,7 +25,7 @@ func ParseSimpleParams(parentName string, objType reflect.Type, objValue reflect
 			return nil
 		}
 		var ppVals []string
-		for i := 0; i < objValue.Len(); i++ {
+		for i := range objValue.Len() {
 			ppVals = append(ppVals, valToString(objValue.Index(i).Interface()))
 		}
 		pathParams[parentName] = strings.Join(ppVals, ",")
@@ -45,7 +45,7 @@ func ParseSimpleParams(parentName string, objType reflect.Type, objValue reflect
 		pathParams[parentName] = strings.Join(ppVals, ",")
 	case reflect.Struct:
 		var ppVals []string
-		for i := 0; i < objType.NumField(); i++ {
+		for i := range objType.NumField() {
 			fieldType := objType.Field(i)
 			valType := objValue.Field(i)
 

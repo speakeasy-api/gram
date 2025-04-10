@@ -43,6 +43,9 @@ mise install
 echo -e "\n⏳ Installing dependencies"
 mise run install
 
+echo -e "\n⏳ Updating VS Code and Cursor editor settings"
+mise run install:vscode
+
 echo -e "\n⏳ Starting infra"
 mise infra:start
 

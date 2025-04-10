@@ -17,18 +17,19 @@ func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, e
 
 	// Convert to CachedUserInfo format
 	result := &CachedUserInfo{
-		UserID: userID,
-		Email:  userInfo.UserEmail,
+		UserID:        userID,
+		Email:         userInfo.UserEmail,
+		Organizations: make([]auth.Organization, len(userInfo.Organizations)),
 	}
 
 	// Convert organizations
-	result.Organizations = make([]auth.Organization, len(userInfo.Organizations))
 	for i, org := range userInfo.Organizations {
 		result.Organizations[i] = auth.Organization{
 			OrganizationID:   org.OrganizationID,
 			OrganizationName: org.OrganizationName,
 			OrganizationSlug: org.OrganizationSlug,
 			AccountType:      org.AccountType,
+			Projects:         []*auth.Project{},
 		}
 	}
 
