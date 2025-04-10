@@ -33,7 +33,7 @@ type Service struct {
 
 var _ gen.Service = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
 		tracer: otel.Tracer("github.com/speakeasy-api/gram/internal/tools"),
 		logger: logger,

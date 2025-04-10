@@ -24,7 +24,7 @@ type localEnvFile map[string]struct {
 	} `json:"organizations"`
 }
 
-type Sessions struct {
+type Manager struct {
 	logger        *slog.Logger
 	sessionCache  cache.Cache[Session]
 	userInfoCache cache.Cache[CachedUserInfo]
@@ -32,15 +32,15 @@ type Sessions struct {
 	unsafeLocal   bool
 }
 
-func NewSessionAuth(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix) *Sessions {
-	return &Sessions{
+func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix) *Manager {
+	return &Manager{
 		logger:        logger.With("component", "sessions"),
 		sessionCache:  cache.New[Session](logger.With("cache", "session"), redisClient, sessionCacheExpiry, cache.SuffixNone),
 		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), redisClient, userInfoCacheExpiry, cache.SuffixNone),
 	}
 }
 
-func NewUnsafeSessionAuth(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Sessions, error) {
+func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Manager, error) {
 	file, err := os.Open(localEnvPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open local env file: %w", err)
@@ -57,7 +57,7 @@ func NewUnsafeSessionAuth(logger *slog.Logger, redisClient *redis.Client, suffix
 		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
 	}
 
-	return &Sessions{
+	return &Manager{
 		logger:        logger.With("component", "sessions"),
 		sessionCache:  cache.New[Session](logger.With("cache", "session"), redisClient, sessionCacheExpiry, cache.SuffixNone),
 		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), redisClient, userInfoCacheExpiry, cache.SuffixNone),
@@ -66,7 +66,7 @@ func NewUnsafeSessionAuth(logger *slog.Logger, redisClient *redis.Client, suffix
 	}, nil
 }
 
-func (s *Sessions) SessionAuth(ctx context.Context, key string, canStubAuth bool) (context.Context, error) {
+func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool) (context.Context, error) {
 	if key == "" {
 		// This may have been set via cookie from http middleware, GOA does not support natively
 		key, _ = contextvalues.GetSessionTokenFromContext(ctx)
@@ -103,10 +103,10 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string, canStubAuth bool
 	return ctx, nil
 }
 
-func (s *Sessions) UpdateSession(ctx context.Context, session Session) error {
+func (s *Manager) UpdateSession(ctx context.Context, session Session) error {
 	return s.sessionCache.Update(ctx, session)
 }
 
-func (s *Sessions) ClearSession(ctx context.Context, session Session) error {
+func (s *Manager) ClearSession(ctx context.Context, session Session) error {
 	return s.sessionCache.Delete(ctx, session)
 }

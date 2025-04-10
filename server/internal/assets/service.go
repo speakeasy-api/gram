@@ -18,9 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/middleware"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -30,6 +27,9 @@ import (
 	srv "github.com/speakeasy-api/gram/gen/http/assets/server"
 	"github.com/speakeasy-api/gram/internal/assets/repo"
 	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/middleware"
 	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 )
 
@@ -47,7 +47,7 @@ type Service struct {
 var _ gen.Service = &Service{}
 var _ gen.Auther = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions, storage BlobStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore) *Service {
 	return &Service{
 		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/assets"),
 		logger:   logger,

@@ -17,7 +17,7 @@ type Service struct {
 	auth         *auth.Auth
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions, openaiAPIKey string) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openaiAPIKey string) *Service {
 	return &Service{
 		openaiAPIKey: openaiAPIKey,
 		auth:         auth.New(logger, db, sessions),

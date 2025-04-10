@@ -24,13 +24,13 @@ type Service struct {
 	tracer   trace.Tracer
 	logger   *slog.Logger
 	db       *pgxpool.Pool
-	sessions *sessions.Sessions
+	sessions *sessions.Manager
 	projects *projects.Service
 }
 
 var _ gen.Service = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
 		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
 		logger:   logger,
@@ -160,5 +160,5 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.SessionAuth(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
+	return s.sessions.Authenticate(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
 }

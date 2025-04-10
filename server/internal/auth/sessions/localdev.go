@@ -9,7 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/gen/auth"
 )
 
-func (s *Sessions) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
+func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
 	userInfo, ok := s.localEnvFile[userID]
 	if !ok {
 		return nil, fmt.Errorf("user with ID %s not found", userID)
@@ -35,7 +35,7 @@ func (s *Sessions) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, 
 	return result, nil
 }
 
-func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (string, error) {
+func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (string, error) {
 	var gramSession *Session
 
 	for userID, userInfo := range s.localEnvFile {

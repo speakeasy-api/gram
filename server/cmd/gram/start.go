@@ -210,17 +210,17 @@ func newStartCommand() *cli.Command {
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")
-			var sesh *sessions.Sessions
+			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sesh = sessions.NewSessionAuth(logger.With("component", "sessions"), redisClient, cache.SuffixNone)
+				sessionManager = sessions.NewManager(logger.With("component", "sessions"), redisClient, cache.SuffixNone)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
-				s, err := sessions.NewUnsafeSessionAuth(logger.With("component", "sessions"), redisClient, cache.Suffix("gram-local"), localEnvPath)
+				s, err := sessions.NewUnsafeManager(logger.With("component", "sessions"), redisClient, cache.Suffix("gram-local"), localEnvPath)
 				if err != nil {
 					return err
 				}
 
-				sesh = s
+				sessionManager = s
 			}
 
 			{
@@ -243,18 +243,18 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
 
-			chatService := chat.NewService(logger.With("component", "chat"), db, sesh, c.String("openai-api-key"))
+			chatService := chat.NewService(logger.With("component", "chat"), db, sessionManager, c.String("openai-api-key"))
 			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 				chatService.HandleCompletion(w, r)
 			})
-			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, sesh))
-			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, sesh, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, sesh, assetStorage))
-			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, sesh))
-			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, sesh))
-			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, sesh))
-			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db, sesh))
-			instances.Attach(mux, instances.NewService(logger.With("component", "instances"), db, sesh))
+			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, sessionManager))
+			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, sessionManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, sessionManager, assetStorage))
+			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, sessionManager))
+			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, sessionManager))
+			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, sessionManager))
+			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db, sessionManager))
+			instances.Attach(mux, instances.NewService(logger.With("component", "instances"), db, sessionManager))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),

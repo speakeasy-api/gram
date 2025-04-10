@@ -25,12 +25,12 @@ var (
 type Auth struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
-	sessions *sessions.Sessions
+	sessions *sessions.Manager
 	keys     *ByKey
 	repo     *repo.Queries
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions) *Auth {
+func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Auth {
 	return &Auth{
 		logger:   logger,
 		db:       db,
@@ -49,7 +49,7 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 	case KeySecurityScheme:
 		return s.keys.KeyBasedAuth(ctx, key, schema.RequiredScopes)
 	case SessionSecurityScheme:
-		return s.sessions.SessionAuth(ctx, key, false)
+		return s.sessions.Authenticate(ctx, key, false)
 	case ProjectSlugSecuritySchema:
 		return s.checkProjectAccess(ctx, s.logger, key)
 	default:

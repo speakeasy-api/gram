@@ -42,7 +42,7 @@ type Service struct {
 
 var _ gen.Service = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions, assetStorage assets.BlobStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/deployments"),
 		logger:       logger,

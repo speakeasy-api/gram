@@ -8,17 +8,17 @@ import (
 	"github.com/speakeasy-api/gram/gen/auth"
 )
 
-func (s *Sessions) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
+func (s *Manager) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
 	// This function is currently empty and needs to be implemented
 	// TODO: This will call GET api.speakeasy.com/v1/gram/info/{userID}
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (s *Sessions) InvalidateUserInfoCache(ctx context.Context, userID string) error {
+func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
 	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID})
 }
 
-func (s *Sessions) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, error) {
+func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, error) {
 	if userInfo, err := s.userInfoCache.Get(ctx, UserInfoCacheKey(userID)); err == nil {
 		return &userInfo, nil
 	}
@@ -42,7 +42,7 @@ func (s *Sessions) GetUserInfo(ctx context.Context, userID string) (*CachedUserI
 	return userInfo, err
 }
 
-func (s *Sessions) HasAccessToOrganization(ctx context.Context, userID, organizationID string) (*auth.Organization, bool) {
+func (s *Manager) HasAccessToOrganization(ctx context.Context, userID, organizationID string) (*auth.Organization, bool) {
 	userInfo, err := s.GetUserInfo(ctx, userID)
 	if err != nil {
 		return nil, false
