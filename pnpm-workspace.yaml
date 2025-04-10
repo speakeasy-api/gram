@@ -1,5 +1,7 @@
 packages:
-  - "client/*"
-
+  - client/*
 catalog:
   typescript: ^5.8.2
+onlyBuiltDependencies:
+  - bun
+  - esbuild
