@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/speakeasy-api/gram/gen/auth"
 )
@@ -27,8 +26,8 @@ func (s *Sessions) GetUserInfo(ctx context.Context, userID string) (*CachedUserI
 	var userInfo *CachedUserInfo
 	var err error
 
-	if os.Getenv("GRAM_ENVIRONMENT") == "local" {
-		userInfo, err = GetUserInfoFromLocalEnvFile(userID)
+	if s.unsafeLocal {
+		userInfo, err = s.GetUserInfoFromLocalEnvFile(userID)
 	} else {
 		userInfo, err = s.GetUserInfoFromSpeakeasy()
 	}

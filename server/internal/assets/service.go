@@ -18,7 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"go.opentelemetry.io/otel"
@@ -47,12 +47,12 @@ type Service struct {
 var _ gen.Service = &Service{}
 var _ gen.Auther = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, storage BlobStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions, storage BlobStore) *Service {
 	return &Service{
 		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/assets"),
 		logger:   logger,
 		db:       db,
-		auth:     auth.New(logger, db, redisClient),
+		auth:     auth.New(logger, db, sessions),
 		storage:  storage,
 		projects: projectsRepo.New(db),
 		repo:     repo.New(db),

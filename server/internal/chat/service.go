@@ -5,21 +5,22 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"goa.design/goa/v3/security"
 )
 
 type Service struct {
-	auth *auth.Auth
+	openaiAPIKey string
+	auth         *auth.Auth
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions, openaiAPIKey string) *Service {
 	return &Service{
-		auth: auth.New(logger, db, redisClient),
+		openaiAPIKey: openaiAPIKey,
+		auth:         auth.New(logger, db, sessions),
 	}
 }
 
@@ -53,13 +54,6 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		println("OPENAI_API_KEY environment variable not set")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	target, _ := url.Parse("https://api.openai.com")
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
@@ -70,7 +64,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		req.URL.Host = target.Host
 		req.URL.Scheme = target.Scheme
 		req.URL.Path = "/v1/chat/completions"
-		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Set("Authorization", "Bearer "+s.openaiAPIKey)
 	}
 
 	// Handle CORS headers in the response

@@ -21,7 +21,7 @@ services:
     volumes:
       - cache_data:/var/lib/gram-cache/data
     ports:
-      - "${CACHE_PORT}:35299"
+      - "${GRAM_REDIS_CACHE_ADDR}:35299"
     command: redis-server --port 35299 --requirepass xi9XILbY
 
   grafana:

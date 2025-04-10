@@ -5,12 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/redis/go-redis/v9"
 )
+
+type Suffix string
+
+const (
+	SuffixNone Suffix = ""
+)
+
+// Cacheable - when implementing this, make sure all data fields you want stored in the cache are exported (capitalized).
+type Cacheable[T any] interface {
+	CacheKey() string
+	AdditionalCacheKeys() []string
+}
 
 type Cache[T Cacheable[T]] struct {
 	logger    *slog.Logger
@@ -20,10 +31,12 @@ type Cache[T Cacheable[T]] struct {
 	ttl       time.Duration
 }
 
-// Cacheable - when implementing this, make sure all data fields you want stored in the cache are exported (capitalized).
-type Cacheable[T any] interface {
-	CacheKey() string
-	AdditionalCacheKeys() []string
+func New[T Cacheable[T]](logger *slog.Logger, redisClient *redis.Client, ttl time.Duration, suffix Suffix) Cache[T] {
+	cache := redisCache.New(&redisCache.Options{
+		Redis: redisClient,
+	})
+
+	return Cache[T]{logger: logger, rdb: redisClient, cache: cache, ttl: ttl, keySuffix: string(suffix)}
 }
 
 /*
@@ -73,17 +86,19 @@ func (d *Cache[T]) Delete(ctx context.Context, obj T) error {
 	}
 
 	cacheKey := d.fullKey(obj.CacheKey())
-	d.logger.InfoContext(ctx, "invalidating cache", slog.String("key", cacheKey))
+	d.logger.DebugContext(ctx, "invalidating cache", slog.String("key", cacheKey))
 	err := d.cache.Delete(ctx, cacheKey)
 	if err != nil {
 		return err
 	}
+
 	for _, key := range obj.AdditionalCacheKeys() {
 		err := d.cache.Delete(ctx, d.fullKey(key))
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -171,18 +186,4 @@ func (d *Cache[T]) Update(ctx context.Context, obj T) error {
 	}
 
 	return nil
-}
-
-func New[T Cacheable[T]](redisClient *redis.Client, logger *slog.Logger, ttl time.Duration) Cache[T] {
-	// TODO: Stable server versions
-	var serverVersion string
-	if os.Getenv("GRAM_ENVIRONMENT") == "local" {
-		serverVersion = "gram-local"
-	}
-
-	cache := redisCache.New(&redisCache.Options{
-		Redis: redisClient,
-	})
-
-	return Cache[T]{logger: logger, rdb: redisClient, cache: cache, ttl: ttl, keySuffix: serverVersion}
 }

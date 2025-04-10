@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
@@ -31,19 +30,19 @@ type Auth struct {
 	repo     *repo.Queries
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Auth {
+func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions) *Auth {
 	return &Auth{
 		logger:   logger,
 		db:       db,
 		keys:     NewKeyAuth(db),
-		sessions: sessions.NewSessionAuth(logger, redisClient),
+		sessions: sessions,
 		repo:     repo.New(db),
 	}
 }
 
 func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	if schema == nil {
-		panic("GOA has not passed a schema") // TODO: figure something out here
+		panic("Goa has not passed a schema") // TODO: figure something out here
 	}
 
 	switch schema.Name {

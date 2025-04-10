@@ -2,7 +2,10 @@ package sessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 
@@ -11,18 +14,56 @@ import (
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 )
 
+type localEnvFile map[string]struct {
+	UserEmail     string `json:"user_email"`
+	Organizations []struct {
+		OrganizationID   string `json:"organization_id"`
+		OrganizationName string `json:"organization_name"`
+		OrganizationSlug string `json:"organization_slug"`
+		AccountType      string `json:"account_type"`
+	} `json:"organizations"`
+}
+
 type Sessions struct {
 	logger        *slog.Logger
 	sessionCache  cache.Cache[Session]
 	userInfoCache cache.Cache[CachedUserInfo]
+	localEnvFile  localEnvFile
+	unsafeLocal   bool
 }
 
-func NewSessionAuth(logger *slog.Logger, redisClient *redis.Client) *Sessions {
+func NewSessionAuth(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix) *Sessions {
 	return &Sessions{
 		logger:        logger.With("component", "sessions"),
-		sessionCache:  cache.New[Session](redisClient, logger.With("cache", "session"), sessionCacheExpiry),
-		userInfoCache: cache.New[CachedUserInfo](redisClient, logger.With("cache", "user_info"), userInfoCacheExpiry),
+		sessionCache:  cache.New[Session](logger.With("cache", "session"), redisClient, sessionCacheExpiry, cache.SuffixNone),
+		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), redisClient, userInfoCacheExpiry, cache.SuffixNone),
 	}
+}
+
+func NewUnsafeSessionAuth(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Sessions, error) {
+	file, err := os.Open(localEnvPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open local env file: %w", err)
+	}
+	defer file.Close()
+
+	bs, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read local env file: %w", err)
+	}
+
+	var data localEnvFile
+	if err := json.Unmarshal(bs, &data); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
+	}
+
+	return &Sessions{
+		logger:        logger.With("component", "sessions"),
+		sessionCache:  cache.New[Session](logger.With("cache", "session"), redisClient, sessionCacheExpiry, cache.SuffixNone),
+		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), redisClient, userInfoCacheExpiry, cache.SuffixNone),
+		localEnvFile:  data,
+		unsafeLocal:   true,
+	}, nil
 }
 
 func (s *Sessions) SessionAuth(ctx context.Context, key string, canStubAuth bool) (context.Context, error) {
@@ -33,7 +74,7 @@ func (s *Sessions) SessionAuth(ctx context.Context, key string, canStubAuth bool
 
 	if key == "" {
 		// If you attempt auth with no token provided in local we will automatically populate the session from local env
-		if canStubAuth && os.Getenv("GRAM_ENVIRONMENT") == "local" {
+		if canStubAuth && s.unsafeLocal {
 			var err error
 			key, err = s.PopulateLocalDevDefaultAuthSession(ctx)
 			if err != nil {

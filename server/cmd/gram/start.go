@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -26,6 +27,8 @@ import (
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/deployments"
@@ -57,6 +60,11 @@ func newStartCommand() *cli.Command {
 				Value:   ":8081",
 				Usage:   "HTTP address to listen on",
 				EnvVars: []string{"GRAM_CONTROL_ADDRESS"},
+			},
+			&cli.StringFlag{
+				Name:    "unsafe-local-env-path",
+				Usage:   "The path to the local environment file used for session auth in local development",
+				EnvVars: []string{"GRAM_UNSAFE_LOCAL_ENV_PATH"},
 			},
 			&cli.StringFlag{
 				Name:     "database-url",
@@ -91,6 +99,28 @@ func newStartCommand() *cli.Command {
 				Usage:    "The location of the assets backend to connect to",
 				EnvVars:  []string{"GRAM_ASSETS_URI"},
 				Required: true,
+			},
+			&cli.StringFlag{
+				Name:    "redis-cache-addr",
+				Usage:   "Address of the redis cache server",
+				EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
+			},
+			&cli.StringFlag{
+				Name:    "redis-cache-password",
+				Usage:   "Password for the redis cache server",
+				EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
+			},
+			&cli.StringFlag{
+				Name:     "openai-api-key",
+				Usage:    "API key for the OpenAI API",
+				EnvVars:  []string{"GRAM_OPENAI_API_KEY"},
+				Required: true,
+				Action: func(c *cli.Context, val string) error {
+					if strings.TrimSpace(val) == "" {
+						return errors.New("OpenAI API key cannot be empty")
+					}
+					return nil
+				},
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -152,12 +182,8 @@ func newStartCommand() *cli.Command {
 
 			var redisClient *redis.Client
 			{
-				var redisAddr string
-				var redisPassword string
-				if os.Getenv("GRAM_ENVIRONMENT") == "local" {
-					redisAddr = fmt.Sprintf("localhost:%s", os.Getenv("CACHE_PORT"))
-					redisPassword = "xi9XILbY"
-				}
+				redisAddr := c.String("redis-cache-addr")
+				redisPassword := c.String("redis-cache-password")
 
 				db := 0 // we always use default DB
 				redisClient = redis.NewClient(&redis.Options{
@@ -183,6 +209,20 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			localEnvPath := c.String("unsafe-local-env-path")
+			var sesh *sessions.Sessions
+			if localEnvPath == "" {
+				sesh = sessions.NewSessionAuth(logger.With("component", "sessions"), redisClient, cache.SuffixNone)
+			} else {
+				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
+				s, err := sessions.NewUnsafeSessionAuth(logger.With("component", "sessions"), redisClient, cache.Suffix("gram-local"), localEnvPath)
+				if err != nil {
+					return err
+				}
+
+				sesh = s
+			}
+
 			{
 				controlServer := control.Server{
 					Address: c.String("control-address"),
@@ -203,18 +243,18 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
 			mux.Use(middleware.SessionMiddleware)
 
-			chatService := chat.NewService(logger.With("component", "chat"), db, redisClient)
+			chatService := chat.NewService(logger.With("component", "chat"), db, sesh, c.String("openai-api-key"))
 			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 				chatService.HandleCompletion(w, r)
 			})
-			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, redisClient))
-			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, redisClient, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, redisClient, assetStorage))
-			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, redisClient))
-			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, redisClient))
-			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, redisClient))
-			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db, redisClient))
-			instances.Attach(mux, instances.NewService(logger.With("component", "instances"), db, redisClient))
+			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, sesh))
+			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, sesh, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, sesh, assetStorage))
+			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, sesh))
+			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, sesh))
+			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, sesh))
+			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db, sesh))
+			instances.Attach(mux, instances.NewService(logger.With("component", "instances"), db, sesh))
 
 			srv := &http.Server{
 				Addr:    c.String("address"),

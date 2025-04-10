@@ -2,45 +2,15 @@ package sessions
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log/slog"
-	"os"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/gen/auth"
 )
 
-type localEnvFile map[string]struct {
-	UserEmail     string `json:"user_email"`
-	Organizations []struct {
-		OrganizationID   string `json:"organization_id"`
-		OrganizationName string `json:"organization_name"`
-		OrganizationSlug string `json:"organization_slug"`
-		AccountType      string `json:"account_type"`
-	} `json:"organizations"`
-}
-
-func GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
-	file, err := os.Open(os.Getenv("LOCAL_ENV_PATH"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to open local env file: %w", err)
-	}
-	defer file.Close()
-
-	byteValue, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read local env file: %w", err)
-	}
-
-	var data localEnvFile
-	if err := json.Unmarshal(byteValue, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
-	}
-
-	userInfo, ok := data[userID]
+func (s *Sessions) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
+	userInfo, ok := s.localEnvFile[userID]
 	if !ok {
 		return nil, fmt.Errorf("user with ID %s not found", userID)
 	}
@@ -66,40 +36,16 @@ func GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
 }
 
 func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (string, error) {
-	file, err := os.Open(os.Getenv("LOCAL_ENV_PATH"))
-	if err != nil {
-		return "", fmt.Errorf("failed to open local env file: %w", err)
-	}
-	defer file.Close()
-
-	byteValue, err := ioutil.ReadAll(file)
-	if err != nil {
-		return "", fmt.Errorf("failed to read local env file: %w", err)
-	}
-
-	var data map[string]struct {
-		UserEmail     string `json:"user_email"`
-		Organizations []struct {
-			OrgID       string `json:"organization_id"`
-			OrgName     string `json:"organization_name"`
-			OrgSlug     string `json:"organization_slug"`
-			AccountType string `json:"account_type"`
-		} `json:"organizations"`
-	}
-	if err := json.Unmarshal(byteValue, &data); err != nil {
-		return "", fmt.Errorf("failed to unmarshal local env file: %w", err)
-	}
-
 	var gramSession *Session
 
-	for userID, userInfo := range data {
+	for userID, userInfo := range s.localEnvFile {
 		if err := s.InvalidateUserInfoCache(ctx, userID); err != nil {
 			s.logger.WarnContext(ctx, "failed to invalidate user info cache", slog.String("error", err.Error()))
 		}
 		gramSession = &Session{
 			SessionID:            uuid.NewString(),
 			UserID:               userID,
-			ActiveOrganizationID: userInfo.Organizations[0].OrgID,
+			ActiveOrganizationID: userInfo.Organizations[0].OrganizationID,
 		}
 		break
 	}
@@ -108,8 +54,7 @@ func (s *Sessions) PopulateLocalDevDefaultAuthSession(ctx context.Context) (stri
 		return "", fmt.Errorf("no user found in local env file")
 	}
 
-	err = s.sessionCache.Store(ctx, *gramSession)
-	if err != nil {
+	if err := s.sessionCache.Store(ctx, *gramSession); err != nil {
 		return "", fmt.Errorf("failed to store session in cache: %w", err)
 	}
 

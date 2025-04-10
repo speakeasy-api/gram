@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/middleware"
@@ -31,12 +30,12 @@ type Service struct {
 
 var _ gen.Service = &Service{}
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Sessions) *Service {
 	return &Service{
 		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
 		logger:   logger,
 		db:       db,
-		sessions: sessions.NewSessionAuth(logger, redisClient),
+		sessions: sessions,
 		projects: projects.NewService(logger, db),
 	}
 }
