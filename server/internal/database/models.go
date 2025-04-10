@@ -140,6 +140,7 @@ type HttpToolDefinition struct {
 	HeaderSettings      []byte
 	QuerySettings       []byte
 	PathSettings        []byte
+	RequestContentType  pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

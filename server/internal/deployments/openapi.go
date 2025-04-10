@@ -168,13 +168,13 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 				defaultServer:    globalDefaultServer,
 			})
 			if err != nil {
-				if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
+				if logErr := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
 					DeploymentID: deploymentID,
 					ProjectID:    projectID,
 					Event:        "deployment:error",
 					Message:      fmt.Sprintf("%s: %s: skipped operation due to error: %s", docInfo.Name, op.operation.OperationId, err.Error()),
-				}); err != nil {
-					logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", err.Error()))
+				}); logErr != nil {
+					logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", err.Error()), slog.String("log_error", logErr.Error()))
 				}
 
 				continue
@@ -298,7 +298,7 @@ func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger,
 		}
 	}
 
-	requestBody, bodyRequired, err := captureRequestBody(op)
+	bodyResult, err := captureRequestBody(op)
 	if err != nil {
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error parsing request body: %w", err)
 	}
@@ -338,11 +338,13 @@ func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger,
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error merging operation schemas: %w", err)
 	}
 
-	if len(requestBody) > 0 {
-		merged.Properties.Set("body", json.RawMessage(requestBody))
-		if bodyRequired {
+	var requestContentType *string
+	if bodyResult.valid {
+		merged.Properties.Set("body", json.RawMessage(bodyResult.schema))
+		if bodyResult.required {
 			merged.Required = append(merged.Required, "body")
 		}
+		requestContentType = &bodyResult.contentType
 	}
 
 	var schemaBytes []byte
@@ -392,6 +394,7 @@ func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger,
 		HeaderSettings:      headerSettings,
 		QuerySettings:       querySettings,
 		PathSettings:        pathSettings,
+		RequestContentType:  conv.PtrToPGText(requestContentType),
 	}, nil
 }
 
@@ -441,9 +444,16 @@ func groupJSONSchemaObjects(keyvals ...any) (*jsonSchemaObject, error) {
 	return &result, nil
 }
 
-func captureRequestBody(op *v3.Operation) ([]byte, bool, error) {
+type capturedRequestBody struct {
+	valid       bool
+	schema      []byte
+	required    bool
+	contentType string
+}
+
+func captureRequestBody(op *v3.Operation) (capturedRequestBody, error) {
 	if op.RequestBody == nil || op.RequestBody.Content == nil || op.RequestBody.Content.Len() == 0 {
-		return nil, false, nil
+		return capturedRequestBody{}, nil
 	}
 
 	required := false
@@ -451,34 +461,44 @@ func captureRequestBody(op *v3.Operation) ([]byte, bool, error) {
 		required = *op.RequestBody.Required
 	}
 
-	mediaType := ""
+	contentType := ""
 	var spec *v3.MediaType
 
 	for mt, mtspec := range op.RequestBody.Content.FromOldest() {
 		if slices.ContainsFunc(preferredRequestTypes, func(t *regexp.Regexp) bool {
 			return t.MatchString(mt)
 		}) {
-			mediaType = mt
+			contentType = mt
 			spec = mtspec
 			break
 		}
 	}
 
-	if mediaType == "" {
+	if contentType == "" {
 		types := slices.Collect(op.RequestBody.Content.KeysFromOldest())
-		return nil, false, fmt.Errorf("no supported request body content type found: %s", strings.Join(types, ", "))
+		return capturedRequestBody{}, fmt.Errorf("no supported request body content type found: %s", strings.Join(types, ", "))
 	}
 
 	if spec == nil {
-		return []byte(`{"type":"object","additionalProperties":true}`), required, nil
+		return capturedRequestBody{
+			valid:       true,
+			schema:      []byte(`{"type":"object","additionalProperties":true}`),
+			required:    required,
+			contentType: contentType,
+		}, nil
 	}
 
 	schemaBytes, err := extractJSONSchemaFromYaml("requestBody", spec.Schema)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to extract json schema: %w", err)
+		return capturedRequestBody{}, fmt.Errorf("failed to extract json schema: %w", err)
 	}
 
-	return schemaBytes, required, nil
+	return capturedRequestBody{
+		valid:       true,
+		schema:      schemaBytes,
+		required:    required,
+		contentType: contentType,
+	}, nil
 }
 
 type openapiV3ParameterProxy struct {

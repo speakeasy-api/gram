@@ -140,7 +140,7 @@ WITH latest_deployment AS (
     WHERE project_id = $1
     GROUP BY id
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
 FROM http_tool_definitions
 INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
 WHERE http_tool_definitions.project_id = $1 AND http_tool_definitions.name = ANY($2::text[]) AND http_tool_definitions.deleted IS FALSE
@@ -171,6 +171,7 @@ type GetHTTPToolDefinitionsForToolsetRow struct {
 	HeaderSettings      []byte
 	QuerySettings       []byte
 	PathSettings        []byte
+	RequestContentType  pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -208,6 +209,7 @@ func (q *Queries) GetHTTPToolDefinitionsForToolset(ctx context.Context, arg GetH
 			&i.HeaderSettings,
 			&i.QuerySettings,
 			&i.PathSettings,
+			&i.RequestContentType,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
