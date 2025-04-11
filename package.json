@@ -13,6 +13,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.6.1",
   "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.13.17",
     "typescript": "catalog:",
     "zx": "^8.4.0"

@@ -1,3 +1,5 @@
+//go:build inv.debug
+
 package inv_test
 
 import (
