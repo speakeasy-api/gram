@@ -1,12 +1,17 @@
-import { createContext, Suspense, useState } from "react";
-import { InfoResponseBody, Project } from "@gram/sdk/models/components";
+import { createContext, Suspense, useState, useEffect } from "react";
+import {
+  InfoResponseBody,
+  Organization,
+  Project,
+} from "@gram/sdk/models/components";
 import { useContext } from "react";
-import { useSessionInfo, useSessionInfoSuspense } from "@gram/sdk/react-query";
+import { useSessionInfoSuspense } from "@gram/sdk/react-query";
 import { ErrorBoundary } from "react-error-boundary";
+import { GramLogo } from "@/components/gram-logo";
 
 type Session = InfoResponseBody & {
   session: string;
-}
+};
 
 const emptySession: Session = {
   userId: "",
@@ -25,14 +30,17 @@ export const useSession = () => {
 export const useProject = () => {
   const organization = useOrganization();
 
-  const [activeProject, setActiveProject] = useState<Project>(
-    organization.projects[0]
-  );
+  const defaultProject = organization.projects[0];
+
+  if (!defaultProject) {
+    throw new Error("No projects found");
+  }
+
+  const [activeProject, setActiveProject] = useState<Project>(defaultProject);
 
   const switchProject = (projectId: string) => {
     setActiveProject(
-      organization.projects.find((p) => p.projectId === projectId) ??
-        organization.projects[0]
+      organization.projects.find((p) => p.projectId === projectId) ?? defaultProject
     );
   };
 
@@ -42,7 +50,7 @@ export const useProject = () => {
   });
 };
 
-export const useOrganization = () => {
+export const useOrganization = (): Organization => {
   const session = useSession();
 
   const organization =
@@ -50,29 +58,51 @@ export const useOrganization = () => {
       (org) => org.organizationId === session.activeOrganizationId
     ) ?? session.organizations[0];
 
+  if (!organization) {
+    throw new Error("Organization not found");
+  }
+
   return organization;
 };
 
-// Create a separate component for the suspended content
-const AuthContent = ({ children }: { children: React.ReactNode }) => {
-  const sessionResponse = useSessionInfoSuspense(
-    {
-      sessionHeaderGramSession: "", // We are using cookies instead, so this won't get set
-    },
-  );
+// Custom Suspense component with minimum loading time
+// This is used to ensure the loader is visible for a minimum amount of time to avoid flickering
+const MinimumSuspense = ({
+  children,
+  fallback,
+  minimumLoadTimeMs = 1000,
+}: {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+  minimumLoadTimeMs?: number;
+}) => {
+  const [isLoading, setIsLoading] = useState(true);
 
-  const sessionId = sessionResponse.data.headers["gram-session"][0];
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, minimumLoadTimeMs);
 
-  const session: Session = {
-    ...sessionResponse.data.result,
-    session: sessionId,
-  };
+    return () => clearTimeout(timer);
+  }, [minimumLoadTimeMs]);
 
   return (
-    <SessionContext.Provider value={session}>
-      {children}
-    </SessionContext.Provider>
+    <Suspense fallback={fallback}>
+      {isLoading ? (
+        // This additional Suspense ensures the fallback stays visible
+        // even if the children resolve quickly
+        <NeverResolves />
+      ) : (
+        children
+      )}
+    </Suspense>
   );
+};
+
+// Component that never resolves during the minimum loading time
+const NeverResolves = () => {
+  throw new Promise(() => {});
+  return null;
 };
 
 // Error fallback component
@@ -86,11 +116,44 @@ const ErrorFallback = ({ error }: { error: Error }) => {
 };
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const FullScreenLoader = () => {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <GramLogo animate className="scale-125" />
+      </div>
+    );
+  };
+
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Suspense fallback={<div>Loading auth state...</div>}>
+      <MinimumSuspense fallback={<FullScreenLoader />}>
         <AuthContent>{children}</AuthContent>
-      </Suspense>
+      </MinimumSuspense>
     </ErrorBoundary>
+  );
+};
+
+const AuthContent = ({ children }: { children: React.ReactNode }) => {
+  const sessionResponse = useSessionInfoSuspense({
+    sessionHeaderGramSession: "", // We are using cookies instead, so this won't get set
+  });
+
+  const sessionId = sessionResponse.data.headers["gram-session"]?.[0];
+
+  if (!sessionId) {
+    throw new Error("Session ID not found");
+  }
+
+  console.log(sessionId);
+
+  const session: Session = {
+    ...sessionResponse.data.result,
+    session: sessionId,
+  };
+
+  return (
+    <SessionContext.Provider value={session}>
+      {children}
+    </SessionContext.Provider>
   );
 };

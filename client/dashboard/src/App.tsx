@@ -1,7 +1,7 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { RootLayout } from "./components/root-layout.tsx";
 import { AppRoute, ROUTES } from "./routes.ts";
@@ -13,17 +13,14 @@ import { SdkProvider } from "./contexts/Sdk.tsx";
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  const applyTheme = useCallback(
-    (theme: "light" | "dark") => {
-      if (theme === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-      setTheme(theme);
-    },
-    [theme]
-  );
+  const applyTheme = (theme: "light" | "dark") => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    setTheme(theme);
+  };
 
   useEffect(() => {
     if (window.matchMedia("(prefers-color-scheme: dark)").matches) {

@@ -74,14 +74,7 @@ export function createRegisterPrompt(
     prompt: PromptDefinition<A>,
   ): void => {
     const scopes = prompt.scopes ?? [];
-    if (allowedScopes.size > 0 && scopes.length === 0) {
-      return;
-    }
-
-    if (
-      allowedScopes.size > 0
-      && !scopes.every((s: MCPScope) => allowedScopes.has(s))
-    ) {
+    if (!scopes.every((s: MCPScope) => allowedScopes.has(s))) {
       return;
     }
 

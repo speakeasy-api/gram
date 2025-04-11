@@ -14,23 +14,6 @@ import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
 import { Separator } from "./ui/separator.tsx";
 import { Project } from "@gram/sdk/models/components";
 
-const projects = [
-  {
-    value: "project1",
-    label: "Project 1",
-    org: "org1",
-  },
-  {
-    value: "project2",
-    label: "Project 2",
-    org: "org2",
-  },
-  {
-    value: "project3",
-    label: "Project 3",
-    org: "org3",
-  },
-];
 
 // Add this helper function to generate colors from project label
 function getProjectColors(label: string): {
@@ -160,14 +143,14 @@ function ProjectSelector() {
   const organization = useOrganization();
   const project = useProject();
 
-  const projectWithIcons = organization.projects.map((project) => ({
+  const projectWithIcons = organization?.projects.map((project) => ({
     ...project,
     value: project.projectId,
     label: project.projectSlug,
     icon: <ProjectAvatar project={project} className="h-4 w-4" />,
   }));
 
-  projectWithIcons.push({
+  projectWithIcons?.push({
     value: "new-project",
     label: "New Project",
     icon: <PlusIcon className="h-4 w-4" />,
@@ -177,7 +160,7 @@ function ProjectSelector() {
   });
 
   const selected = projectWithIcons?.find(
-    (p) => p.projectId === project.projectId
+    (p) => p.projectId === project.projectId,
   );
 
   const changeProject = (projectId: string) => {

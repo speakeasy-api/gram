@@ -1,56 +1,263 @@
 import { Page } from "@/components/page-layout";
-import { useChat } from "@ai-sdk/react";
-import { useCallback } from "react";
-import { AIChatContainer } from "@speakeasy-api/moonshine";
+import { Message, useChat } from "@ai-sdk/react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import {
+  AIChatContainer,
+  ResizablePanel,
+  Stack,
+} from "@speakeasy-api/moonshine";
 import { useProject, useSession } from "@/contexts/Auth";
 import { smoothStream, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
-  useLoadInstanceSuspense,
-  useToolsetSuspense,
+  useLoadInstance,
+  useListToolsets,
+  useListEnvironments,
 } from "@gram/sdk/react-query";
 import { jsonSchema } from "ai";
+import { useSearchParams } from "react-router-dom";
+import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/heading";
+import { Combobox } from "@/components/ui/combobox";
+import { ChevronDownIcon } from "lucide-react";
+import { ToolsetView } from "../toolsets/Toolset";
+import { OnboardingContent } from "../onboarding/Onboarding";
+import { useSdkClient } from "@/contexts/Sdk";
+import { Deployment } from "@gram/sdk/models/components";
+
+type ChatConfig = React.RefObject<{
+  toolsetSlug: string | null;
+  environmentSlug: string | null;
+}>;
 
 export default function Sandbox() {
+  const [searchParams] = useSearchParams();
+
+  const [selectedToolset, setSelectedToolset] = useState<string | null>(
+    searchParams.get("toolset") ?? null
+  );
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
+    searchParams.get("environment") ?? null
+  );
+
+  // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
+  const chatConfigRef = useRef({
+    toolsetSlug: selectedToolset,
+    environmentSlug: selectedEnvironment,
+  });
+
+  chatConfigRef.current = {
+    toolsetSlug: selectedToolset,
+    environmentSlug: selectedEnvironment,
+  };
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
-        <ChatWindow />
+      <Page.Body className="max-w-full">
+        <ResizablePanel direction="horizontal" className="h-full">
+          <ResizablePanel.Pane minSize={35}>
+            <ChatWindow configRef={chatConfigRef} />
+          </ResizablePanel.Pane>
+          <ResizablePanel.Pane minSize={35} order={0}>
+            <ToolsetPanel
+              configRef={chatConfigRef}
+              setSelectedToolset={setSelectedToolset}
+              setSelectedEnvironment={setSelectedEnvironment}
+            />
+          </ResizablePanel.Pane>
+        </ResizablePanel>
       </Page.Body>
     </Page>
   );
 }
 
-export function ChatWindow() {
+export function OnboardingPanel({
+  selectToolset,
+}: {
+  selectToolset: (toolsetSlug: string) => void;
+}) {
+  const project = useProject();
+  const client = useSdkClient();
+
+  const onOnboardingComplete = async (deployment: Deployment) => {
+    const assetName = deployment.openapiv3Assets[0]?.name;
+
+    if (!assetName) {
+      throw new Error("No asset name found");
+    }
+
+    // Auto-create a default toolset
+    const res = await client.toolsets.toolsetsNumberCreateToolset({
+      gramProject: project.projectSlug,
+      createToolsetRequestBody: {
+        name: assetName,
+        description: `A toolset created from OpenAPI document: ${assetName}`,
+      },
+    });
+
+    const allTools = await client.tools.toolsNumberListTools({
+      gramProject: project.projectSlug,
+    });
+
+    // Add all tools to the toolset
+    await client.toolsets.toolsetsNumberUpdateToolset({
+      gramProject: project.projectSlug,
+      slug: res.slug,
+      updateToolsetRequestBody: {
+        httpToolNames: allTools.tools.map((tool) => tool.name),
+      },
+    });
+
+    //TODO: environment set up
+
+    selectToolset(res.slug);
+  };
+
+  return <OnboardingContent onOnboardingComplete={onOnboardingComplete} />;
+}
+
+export function ToolsetPanel({
+  configRef,
+  setSelectedToolset,
+  setSelectedEnvironment,
+}: {
+  configRef: ChatConfig;
+  setSelectedToolset: (toolset: string) => void;
+  setSelectedEnvironment: (environment: string) => void;
+}) {
+  const { data: toolsetsData } = useListToolsets();
+  const { data: environmentsData } = useListEnvironments();
+
+  const toolsets = toolsetsData?.toolsets;
+  const environments = environmentsData?.environments;
+
+  const selectedToolset = configRef.current.toolsetSlug;
+  const selectedEnvironment = configRef.current.environmentSlug;
+
+  const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
+
+  useEffect(() => {
+    if (toolsets?.[0] && configRef.current.toolsetSlug === null) {
+      setSelectedToolset(toolsets[0].slug);
+      if (toolsets[0].defaultEnvironmentSlug) {
+        setSelectedEnvironment(toolsets[0].defaultEnvironmentSlug);
+      }
+    }
+  }, [toolsets]);
+
+  useEffect(() => {
+    if (environments?.[0] && configRef.current.environmentSlug === null) {
+      if (toolset?.defaultEnvironmentSlug) {
+        setSelectedEnvironment(toolset.defaultEnvironmentSlug);
+      } else {
+        setSelectedEnvironment(environments[0].slug);
+      }
+    }
+  }, [environments]);
+
+  const toolsetDropdownItems =
+    toolsets?.map((toolset) => ({
+      ...toolset,
+      label: toolset.name,
+      value: toolset.slug,
+    })) ?? [];
+
+  const toolsetDropdown = (
+    <Combobox
+      items={toolsetDropdownItems}
+      selected={toolsetDropdownItems.find(
+        (item) => item.value === selectedToolset
+      )}
+      onSelectionChange={(value) => setSelectedToolset(value.value)}
+      className="max-w-fit"
+    >
+      <Stack direction="horizontal" gap={2} align="center">
+        <Type variant="small">{toolset?.name}</Type>
+        <ChevronDownIcon className="h-4 w-4" />
+      </Stack>
+    </Combobox>
+  );
+
+  const environmentDropdownItems =
+    environments?.map((environment) => ({
+      ...environment,
+      label: environment.name,
+      value: environment.slug,
+    })) ?? [];
+
+  const environmentDropdown = (
+    <Combobox
+      items={environmentDropdownItems}
+      selected={environmentDropdownItems.find(
+        (item) => item.value === selectedEnvironment
+      )}
+      onSelectionChange={(value) => setSelectedEnvironment(value.value)}
+      className="max-w-fit"
+    >
+      <Stack direction="horizontal" gap={2} align="center">
+        <Type variant="small">{selectedEnvironment}</Type>
+        <ChevronDownIcon className="h-4 w-4" />
+      </Stack>
+    </Combobox>
+  );
+
+  if (toolsets !== undefined && toolsets.length === 0) {
+    return <OnboardingPanel selectToolset={setSelectedToolset} />;
+  }
+
+  return (
+    <div className="max-h-full overflow-scroll rounded-tr-xl relative">
+      <div className="sticky top-0 bg-card py-3 px-8 border-b z-10">
+        <Stack direction="horizontal" gap={2} justify="space-between">
+          <Stack direction="horizontal" gap={2} align="center">
+            <Heading variant="h5">Active toolset: </Heading>
+            {toolsetDropdown}
+          </Stack>
+          <Stack direction="horizontal" gap={2} align="center">
+            <Heading variant="h5">Active environment: </Heading>
+            {environmentDropdown}
+          </Stack>
+        </Stack>
+      </div>
+      <ToolsetView
+        toolsetSlug={selectedToolset ?? ""}
+        className="p-8 2xl:p-12"
+        environmentSlug={selectedEnvironment ?? undefined}
+      />
+    </div>
+  );
+}
+
+export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
   const session = useSession();
   const project = useProject();
 
-  const instance = useLoadInstanceSuspense(
+  const instance = useLoadInstance(
     {},
     {
       gramProject: project.projectSlug,
-      toolsetSlug: "my-test",
-      environmentSlug: "test3",
+      toolsetSlug: configRef.current.toolsetSlug ?? "",
+      environmentSlug: configRef.current.environmentSlug ?? undefined,
+    },
+    {
+      enabled:
+        !!configRef.current.toolsetSlug && !!configRef.current.environmentSlug,
     }
   );
 
-  console.log(instance);
-
   const tools = Object.fromEntries(
-    instance.data.tools.map((tool) => [
+    instance.data?.tools.map((tool) => [
       tool.name,
       {
         id: tool.id,
         description: tool.description,
         parameters: jsonSchema(JSON.parse(tool.schema)),
       },
-    ])
+    ]) ?? []
   );
-
-  console.log(tools);
 
   const openai = createOpenAI({
     apiKey: "this is required",
@@ -73,16 +280,18 @@ export function ChatWindow() {
     return result.toDataStreamResponse();
   };
 
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    status,
-    setMessages,
-    append,
-    addToolResult,
-  } = useChat({
+  const initialMessages: Message[] = configRef.current.toolsetSlug // TODO
+    ? [
+        {
+          id: "1",
+          role: "assistant",
+          content:
+            "Welcome to Gram! Upload an OpenAPI document to get started.",
+        },
+      ]
+    : [];
+
+  const { messages, status, append } = useChat({
     fetch: openaiFetch,
     onFinish: (message) => {
       console.log("Chat finished with message:", message);
@@ -91,8 +300,12 @@ export function ChatWindow() {
       console.error("Chat error:", error.message, error.stack);
     },
     maxSteps: 5,
+    initialMessages,
     onToolCall: async ({ toolCall }) => {
       const tool = tools[toolCall.toolName];
+      if (!tool) {
+        throw new Error(`Tool ${toolCall.toolName} not found`);
+      }
 
       console.log("Received new tool call:", toolCall);
 
@@ -106,7 +319,7 @@ export function ChatWindow() {
           },
           body: JSON.stringify(toolCall.args),
         }
-      )
+      );
 
       const result = await response.json();
 
@@ -126,12 +339,15 @@ export function ChatWindow() {
     [append]
   );
 
+  // TODO: fix this
+  /* eslint-disable  @typescript-eslint/no-explicit-any */
+  const m = messages as any;
   return (
     <AIChatContainer
-      messages={messages}
+      messages={m}
       isLoading={status === "streaming"}
       onSendMessage={handleSend}
-      className="max-w-4xl"
+      className="pb-4"
     />
   );
 }

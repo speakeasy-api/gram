@@ -22,7 +22,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
       return fetch(newRequest);
     },
   });
-  
+
   const gram = new Gram({
     serverURL: "http://localhost:8080",
     httpClient,

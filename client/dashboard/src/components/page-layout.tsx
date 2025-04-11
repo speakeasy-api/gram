@@ -1,12 +1,26 @@
+import { cn } from "@/lib/utils.ts";
 import { PageHeader } from "./page-header.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <div className="h-[98vh] flex flex-col overflow-hidden">{children}</div>
+  );
 }
 
-function PageBody({ children }: { children: React.ReactNode }) {
+function PageBody({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="@container/main flex flex-1 flex-col gap-4 p-8">
+    <div
+      className={cn(
+        "@container/main flex flex-col gap-4 p-8 pb-0 overflow-y-auto h-full",
+        className,
+      )}
+    >
       {children}
     </div>
   );

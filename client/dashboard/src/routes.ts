@@ -1,8 +1,13 @@
-import { Icon, IconBook, IconCode, IconMessageChatbot } from "@tabler/icons-react";
+import {
+  Icon,
+  IconBook,
+  IconCode,
+  IconMessageChatbot,
+  IconUpload,
+} from "@tabler/icons-react";
 import { IconSettings } from "@tabler/icons-react";
 import { IconBlocks, IconTools } from "@tabler/icons-react";
 import { IconDashboard } from "@tabler/icons-react";
-import { IconCirclePlusFilled } from "@tabler/icons-react";
 import Integrations from "./pages/integrations/Integrations";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Home from "./pages/home/Home";
@@ -28,16 +33,11 @@ export type AppRoute = {
 };
 
 export const ROUTES = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   primaryCTA: {
-    title: "Upload OpenAPI",
-    url: "/upload",
-    icon: IconCirclePlusFilled,
-    component: Onboarding,
+    title: "Sandbox",
+    url: "/sandbox",
+    icon: SanboxIcon,
+    component: Sandbox,
   },
   navMain: [
     {
@@ -80,14 +80,14 @@ export const ROUTES = {
         },
       ],
     },
-    {
-      title: "Sandbox",
-      url: "/sandbox",
-      icon: SanboxIcon,
-      component: Sandbox,
-    },
   ],
   navSecondary: [
+    {
+      title: "Upload OpenAPI",
+      url: "/onboarding",
+      icon: IconUpload,
+      component: Onboarding,
+    },
     {
       title: "Settings",
       url: "/settings",

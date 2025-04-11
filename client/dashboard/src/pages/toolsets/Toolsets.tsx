@@ -14,15 +14,6 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
 import { useProject } from "@/contexts/Auth";
-import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { PlusIcon, AlertTriangle, Check } from "lucide-react";
 import {
@@ -33,6 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useEnvironments } from "../environments/Environments";
 import { Environment, ToolsetDetails } from "@gram/sdk/models/components";
+import { InputDialog } from "@/components/input-dialog";
 
 export function useToolsets() {
   const project = useProject();
@@ -110,42 +102,29 @@ export default function Toolsets() {
       </Page.Header>
       <Page.Body>
         {toolsets.map((toolset) => (
-          <ToolsetCard key={toolset.id} toolset={toolset} environments={environments} />
+          <ToolsetCard
+            key={toolset.id}
+            toolset={toolset}
+            environments={environments}
+          />
         ))}
         <CreateThingCard onClick={() => setCreateToolsetDialogOpen(true)}>
           + New Toolset
         </CreateThingCard>
-        <Dialog
+        <InputDialog
           open={createToolsetDialogOpen}
           onOpenChange={setCreateToolsetDialogOpen}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create a Toolset</DialogTitle>
-              <DialogDescription>Give your toolset a name.</DialogDescription>
-            </DialogHeader>
-            <Input
-              placeholder="Toolset name"
-              value={toolsetName}
-              onChange={(e) => setToolsetName(e.target.value)}
-              onEnter={createToolset}
-            />
-            <DialogFooter>
-              <Button
-                variant="ghost"
-                onClick={() => setCreateToolsetDialogOpen(false)}
-              >
-                Back
-              </Button>
-              <Button
-                onClick={createToolset}
-                disabled={toolsetName.length === 0}
-              >
-                Create
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          title="Create a Toolset"
+          description="Give your toolset a name."
+          inputs={{
+            label: "Toolset name",
+            placeholder: "Toolset name",
+            value: toolsetName,
+            onChange: (value) => setToolsetName(value),
+            onSubmit: createToolset,
+            validate: (value) => value.length > 0,
+          }}
+        />
       </Page.Body>
     </Page>
   );
@@ -175,33 +154,56 @@ export function CreateThingCard({
   );
 }
 
-function ToolsetCard({ toolset, environments }: { toolset: ToolsetDetails; environments: Environment[] }) {
-  const defaultEnvironment = environments.find(env => env.slug === toolset.defaultEnvironmentSlug);
-  
+function ToolsetCard({
+  toolset,
+  environments,
+}: {
+  toolset: ToolsetDetails;
+  environments: Environment[];
+}) {
+  const defaultEnvironment = environments.find(
+    (env) => env.slug === toolset.defaultEnvironmentSlug,
+  );
+
   // We consider a toolset to need env vars if it has relevant environment variables and the default environment is set
   // The environment does not have any variables from the toolset's relevant environment variables set
-  const needsEnvVars = defaultEnvironment && 
+  const needsEnvVars =
+    defaultEnvironment &&
     toolset.relevantEnvironmentVariables &&
     toolset.relevantEnvironmentVariables.length > 0 &&
-    !toolset.relevantEnvironmentVariables.some(varName => 
-      defaultEnvironment.entries.some(entry => entry.name === varName && entry.value !== "" && entry.value !== "<EMPTY>")
+    !toolset.relevantEnvironmentVariables.some((varName) =>
+      defaultEnvironment.entries.some(
+        (entry) =>
+          entry.name === varName &&
+          entry.value !== "" &&
+          entry.value !== "<EMPTY>",
+      ),
     );
 
   return (
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Link to={`/toolsets/${toolset.slug}`} className="hover:underline">
-            <Card.Title>
-              {toolset.name} <span className="text-muted-foreground">({toolset.slug})</span>
-            </Card.Title>
-          </Link>
+          <Card.Title>
+            <Stack direction="horizontal" gap={2}>
+              <Link
+                to={`/toolsets/${toolset.slug}`}
+                className="hover:underline"
+              >
+                <span>{toolset.name}</span>
+              </Link>
+              <span className="text-muted-foreground">({toolset.slug})</span>
+            </Stack>
+          </Card.Title>
           <div className="flex gap-2 items-center">
             {toolset.defaultEnvironmentSlug && (
               <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
-                <Badge variant="outline" className="h-6 flex items-center gap-1">
-                  {defaultEnvironment && (
-                    needsEnvVars ? (
+                <Badge
+                  variant="outline"
+                  className="h-6 flex items-center gap-1"
+                >
+                  {defaultEnvironment &&
+                    (needsEnvVars ? (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -210,19 +212,24 @@ function ToolsetCard({ toolset, environments }: { toolset: ToolsetDetails; envir
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>You have not set environment variables for this toolset. Navigate to the environment and use fill for toolset.</p>
+                            <p>
+                              You have not set environment variables for this
+                              toolset. Navigate to the environment and use fill
+                              for toolset.
+                            </p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     ) : (
                       <Check className="w-3 h-3 text-green-500" />
-                    )
-                  )}
+                    ))}
                   Default Env
                 </Badge>
               </Link>
             )}
-            <Badge className="h-6 flex items-center">{toolset.httpTools?.length || "No"} Tools</Badge>
+            <Badge className="h-6 flex items-center">
+              {toolset.httpTools?.length || "No"} Tools
+            </Badge>
           </div>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>

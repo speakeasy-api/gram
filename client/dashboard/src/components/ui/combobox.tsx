@@ -1,8 +1,4 @@
-"use client";
-
-import * as React from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
-
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,11 +14,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useState } from "react";
+import { ReactNode } from "react";
 
 export type DropdownItem = {
   value: string;
   label: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   onClick?: () => void;
 };
 
@@ -31,13 +29,15 @@ export function Combobox({
   children,
   selected,
   onSelectionChange,
+  className,
 }: {
   items: DropdownItem[];
   selected: DropdownItem | undefined;
   onSelectionChange: (value: DropdownItem) => void;
-  children: React.ReactNode;
+  children: ReactNode;
+  className?: string;
 }) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = useState(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -46,7 +46,7 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between"
+          className={cn("w-full justify-between", className)}
         >
           {children}
         </Button>

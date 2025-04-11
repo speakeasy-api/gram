@@ -1,10 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Column, Table } from "@speakeasy-api/moonshine";
-import { Key } from "@gram/sdk/models/components"
+import { Key } from "@gram/sdk/models/components";
 import { HumanizeDateTime } from "@/lib/dates";
 import { Type } from "@/components/ui/type";
-
 
 const apiKeyColumns: Column<Key>[] = [
   {
@@ -36,7 +35,7 @@ const apiKeys: Key[] = [
     createdByUserId: "",
     organizationId: "",
     scopes: [],
-    token: ""
+    token: "",
   },
   {
     id: "2",
@@ -46,15 +45,14 @@ const apiKeys: Key[] = [
     createdByUserId: "",
     organizationId: "",
     scopes: [],
-    token: ""
+    token: "",
   },
 ];
-
 
 export default function Settings() {
   return (
     <Page>
-      <Page.Header> 
+      <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>

@@ -34,7 +34,13 @@ interface EntryDialogProps {
   initialEntry?: EnvironmentEntry;
 }
 
-function EntryDialog({ open, onOpenChange, onSubmit, validateName, initialEntry }: EntryDialogProps) {
+function EntryDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  validateName,
+  initialEntry,
+}: EntryDialogProps) {
   const [name, setName] = useState(initialEntry?.name ?? "");
   const [value, setValue] = useState("");
 
@@ -55,8 +61,8 @@ function EntryDialog({ open, onOpenChange, onSubmit, validateName, initialEntry 
     handleClose();
   };
 
-  const isValid = initialEntry 
-    ? value.length > 0 
+  const isValid = initialEntry
+    ? value.length > 0
     : (validateName?.(name) ?? true) && value.length > 0;
 
   const preventSelect = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -68,12 +74,12 @@ function EntryDialog({ open, onOpenChange, onSubmit, validateName, initialEntry 
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {initialEntry ? 'Update Environment Entry' : 'New Variable'}
+            {initialEntry ? "Update Environment Entry" : "New Variable"}
           </DialogTitle>
           <DialogDescription>
-            {initialEntry 
-              ? 'Update the environment variable value.'
-              : 'Add a new environment variable.'}
+            {initialEntry
+              ? "Update the environment variable value."
+              : "Add a new environment variable."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -96,17 +102,11 @@ function EntryDialog({ open, onOpenChange, onSubmit, validateName, initialEntry 
           </div>
         </div>
         <DialogFooter>
-          <Button
-            variant="ghost"
-            onClick={handleClose}
-          >
+          <Button variant="ghost" onClick={handleClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!isValid}
-          >
-            {initialEntry ? 'Update' : 'Add'}
+          <Button onClick={handleSubmit} disabled={!isValid}>
+            {initialEntry ? "Update" : "Add"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -143,10 +143,11 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
     handleClose();
   };
 
-  const options = toolsetsData?.toolsets.map((toolset) => ({
-    label: toolset.name,
-    value: toolset.slug,
-  })) || [];
+  const options =
+    toolsetsData?.toolsets.map((toolset) => ({
+      label: toolset.name,
+      value: toolset.slug,
+    })) || [];
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -154,8 +155,9 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
         <DialogHeader>
           <DialogTitle>Fill for Toolset</DialogTitle>
           <DialogDescription>
-            Select a list toolsets you would like to  prefill environment variables for.
-            All possible env variables will be filled in as empty values, set any relevant variables and remove uneeded ones.
+            Select a list toolsets you would like to prefill environment
+            variables for. All possible env variables will be filled in as empty
+            values, set any relevant variables and remove uneeded ones.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -188,8 +190,10 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
   );
 }
 
-export function useEnvironment() {
-  const { environmentSlug } = useParams();
+export function useEnvironment(slug?: string) {
+  let { environmentSlug } = useParams();
+  if (slug) environmentSlug = slug;
+
   const environments = useEnvironments();
 
   const environment = environments.find(
@@ -205,9 +209,12 @@ export default function EnvironmentPage() {
   const environment = useEnvironment();
   const navigate = useNavigate();
   const project = useProject();
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<EnvironmentEntry | undefined>(undefined);
+  const [editingEntry, setEditingEntry] = useState<
+    EnvironmentEntry | undefined
+  >(undefined);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
 
   const deleteEnvironmentMutation = useDeleteEnvironmentMutation({
@@ -347,17 +354,25 @@ export default function EnvironmentPage() {
     computeChanges().updatedEntries.length > 0 ||
     computeChanges().removedEntries.length > 0;
 
-  const handleEntrySubmit = ({ name, value }: { name: string; value: string }) => {
-    const entry = editingEntry ? {
-      ...editingEntry,
-      value,
-    } : {
-      name,
-      value,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    
+  const handleEntrySubmit = ({
+    name,
+    value,
+  }: {
+    name: string;
+    value: string;
+  }) => {
+    const entry = editingEntry
+      ? {
+          ...editingEntry,
+          value,
+        }
+      : {
+          name,
+          value,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
     updateEntry(entry);
     setEditingEntry(undefined);
   };
@@ -466,7 +481,9 @@ function EntryItem({
         </Type>
       </div>
       <div className="flex items-center gap-2 pr-4">
-        <Type className={cn("truncate flex-1", isNew && "text-muted-foreground")}>
+        <Type
+          className={cn("truncate flex-1", isNew && "text-muted-foreground")}
+        >
           {entry.value}
         </Type>
         <Button

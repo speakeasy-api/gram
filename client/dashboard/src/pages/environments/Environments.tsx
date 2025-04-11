@@ -11,19 +11,11 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useProject } from "@/contexts/Auth";
-import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { Environment } from "@gram/sdk/models/components/environment.js";
 import { CreateThingCard } from "../toolsets/Toolsets";
+import { InputDialog } from "@/components/input-dialog";
 
 export function EnvironmentsRoot() {
   return <Outlet />;
@@ -35,7 +27,9 @@ export function useEnvironments() {
     useListEnvironmentsSuspense({
       gramProject: project.projectSlug,
     });
-  return Object.assign(environments.environments, { refetch: refetchEnvironments });
+  return Object.assign(environments.environments, {
+    refetch: refetchEnvironments,
+  });
 }
 
 export default function Environments() {
@@ -96,39 +90,20 @@ export default function Environments() {
         <CreateThingCard onClick={() => setCreateEnvironmentDialogOpen(true)}>
           + New Environment
         </CreateThingCard>
-        <Dialog
+        <InputDialog
           open={createEnvironmentDialogOpen}
           onOpenChange={setCreateEnvironmentDialogOpen}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create an Environment</DialogTitle>
-              <DialogDescription>
-                Give your environment a name.
-              </DialogDescription>
-            </DialogHeader>
-            <Input
-              placeholder="Environment name"
-              value={environmentName}
-              onChange={(e) => setEnvironmentName(e.target.value)}
-              onEnter={createEnvironment}
-            />
-            <DialogFooter>
-              <Button
-                variant="ghost"
-                onClick={() => setCreateEnvironmentDialogOpen(false)}
-              >
-                Back
-              </Button>
-              <Button
-                onClick={createEnvironment}
-                disabled={environmentName.length === 0}
-              >
-                Create
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          title="Create an Environment"
+          description="Give your environment a name."
+          inputs={{
+            label: "Environment name",
+            placeholder: "Environment name",
+            value: environmentName,
+            onChange: (value) => setEnvironmentName(value),
+            onSubmit: createEnvironment,
+            validate: (value) => value.length > 0,
+          }}
+        />
       </Page.Body>
     </Page>
   );

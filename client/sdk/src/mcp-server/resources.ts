@@ -109,14 +109,7 @@ export function createRegisterResource(
 ): (resource: ResourceDefinition) => void {
   return (resource: ResourceDefinition): void => {
     const scopes = resource.scopes ?? [];
-    if (allowedScopes.size > 0 && scopes.length === 0) {
-      return;
-    }
-
-    if (
-      allowedScopes.size > 0
-      && !scopes.every((s: MCPScope) => allowedScopes.has(s))
-    ) {
+    if (!scopes.every((s: MCPScope) => allowedScopes.has(s))) {
       return;
     }
 
@@ -144,14 +137,7 @@ export function createRegisterResourceTemplate(
 ): (resource: ResourceTemplateDefinition) => void {
   return (resource: ResourceTemplateDefinition): void => {
     const scopes = resource.scopes ?? [];
-    if (allowedScopes.size > 0 && scopes.length === 0) {
-      return;
-    }
-
-    if (
-      allowedScopes.size > 0
-      && !scopes.every((s: MCPScope) => allowedScopes.has(s))
-    ) {
+    if (!scopes.every((s: MCPScope) => allowedScopes.has(s))) {
       return;
     }
 

@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { UploadIcon } from "lucide-react";
-
+import { cn } from "@/lib/utils";
 export default function FileUpload({
   onUpload,
+  className,
 }: {
   onUpload: (file: File) => void;
+  className?: string;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [isInvalidFile, setIsInvalidFile] = useState(false);
@@ -25,11 +27,11 @@ export default function FileUpload({
   return (
     <form
       onSubmit={handleSubmit}
-      className="grid gap-4 w-full max-w-2xl"
+      className={cn("grid gap-4 w-full max-w-2xl", className)}
       onDragOver={(e) => {
         e.preventDefault();
         const items = e.dataTransfer.items;
-        if (items?.length === 1) {
+        if (items?.[0]) {
           const fileExtension =
             items[0].type === "application/json" ||
             items[0].type === "application/x-yaml" ||
@@ -48,13 +50,13 @@ export default function FileUpload({
             setFile(droppedFile);
           } else {
             console.warn(
-              "Invalid file type. Please upload a JSON or YAML file."
+              "Invalid file type. Please upload a JSON or YAML file.",
             );
           }
         }
       }}
     >
-      <div className="flex items-center justify-center">
+      <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
           className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-card trans ${

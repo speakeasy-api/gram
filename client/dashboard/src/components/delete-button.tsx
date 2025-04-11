@@ -16,7 +16,7 @@ export function DeleteButton({
       variant="ghost"
       className={cn(
         "text-muted-foreground hover:text-destructive hover:border-destructive",
-        className
+        className,
       )}
       tooltip={tooltip}
       onClick={onClick}

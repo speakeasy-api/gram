@@ -1,7 +1,7 @@
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Heading } from "./ui/heading.tsx";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import React from "react";
 
 function PageHeaderComponent({ children }: { children: React.ReactNode }) {

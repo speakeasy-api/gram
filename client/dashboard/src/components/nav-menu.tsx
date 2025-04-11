@@ -61,7 +61,7 @@ export function NavButton({
         <item.icon
           className={cn(
             "trans text-muted-foreground group-hover/nav-button:text-primary",
-            item.active && "text-primary"
+            item.active && "text-primary",
           )}
         />
       )}

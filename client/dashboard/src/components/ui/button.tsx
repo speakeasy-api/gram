@@ -37,10 +37,10 @@ const buttonVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
+  },
 );
 
-function Button({
+export function Button({
   className,
   variant,
   size,
@@ -59,7 +59,7 @@ function Button({
       data-slot="button"
       className={cn(
         buttonVariants({ variant, size, className }),
-        "cursor-pointer"
+        "cursor-pointer",
       )}
       {...props}
     />
@@ -78,5 +78,3 @@ function Button({
 
   return base;
 }
-
-export { Button, buttonVariants };
