@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "pnpm --filter ./client/dashboard dev",
     "lint": "pnpm -r --filter ./client/sdk lint",
-    "build": "pnpm -r --filter ./client/dashboard build"
+    "build": "pnpm -r build"
   },
   "keywords": [],
   "author": "",
