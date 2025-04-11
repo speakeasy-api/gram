@@ -28,7 +28,7 @@ type Service struct {
 	projects *projects.Service
 }
 
-var _ gen.Service = &Service{} //nolint:exhaustruct
+var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
@@ -53,7 +53,7 @@ func (s *Service) Callback(context.Context, *gen.CallbackPayload) (res *gen.Call
 	// TODO: Exchange sharedToken with speakeasy backend for user information OIDC. Token will either be a JWT userID or another short term redis backed token
 	// TODO: Populate an auth session from that information, redirect back to gram
 	// TODO: This will call GET api.speakeasy.com/v1/gram/info/{userID}
-	return &gen.CallbackResult{}, nil //nolint:exhaustruct
+	return &gen.CallbackResult{}, nil //nolint:exhaustruct // not yet implemented
 }
 
 func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {

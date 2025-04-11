@@ -26,7 +26,7 @@ type FSBlobStore struct {
 	Root *os.Root
 }
 
-var _ BlobStore = &FSBlobStore{} //nolint:exhaustruct
+var _ BlobStore = (*FSBlobStore)(nil)
 
 func (fbs *FSBlobStore) getPath(u *url.URL) (string, error) {
 	if u.Scheme != "file" {
@@ -122,7 +122,7 @@ type GCSBlobStore struct {
 	bucketURI *url.URL
 }
 
-var _ BlobStore = &GCSBlobStore{} //nolint:exhaustruct
+var _ BlobStore = (*GCSBlobStore)(nil)
 
 func NewGCSBlobStore(ctx context.Context, bucketURI string) (*GCSBlobStore, error) {
 	client, err := storage.NewClient(ctx)

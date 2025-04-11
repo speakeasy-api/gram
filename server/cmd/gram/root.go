@@ -55,13 +55,13 @@ func newApp() *cli.App {
 				logger.InfoContext(c.Context, fmt.Sprintf(s, i...))
 			}))
 			if err != nil {
-				logger.Error("automaxprocs", slog.String("error", err.Error()))
+				logger.ErrorContext(c.Context, "automaxprocs", slog.String("error", err.Error()))
 			}
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
 			_, err = memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(logger))
 			if err != nil {
-				logger.Error("automemlimit", slog.String("error", err.Error()))
+				logger.ErrorContext(c.Context, "automemlimit", slog.String("error", err.Error()))
 			}
 
 			c.Context = PushLogger(c.Context, logger.With(slog.String("app", "gram")))

@@ -32,15 +32,11 @@ type Map[K comparable, V any] struct {
 
 // New creates a new map with the specified elements.
 func New[K comparable, V any](elements ...*Element[K, V]) *Map[K, V] {
-	return new(-1, elements...)
+	return NewWithCapacity(-1, elements...)
 }
 
 // NewWithCapacity creates a new map with the specified capacity and elements.
 func NewWithCapacity[K comparable, V any](capacity int, elements ...*Element[K, V]) *Map[K, V] {
-	return new(capacity, elements...)
-}
-
-func new[K comparable, V any](capacity int, elements ...*Element[K, V]) *Map[K, V] {
 	if len(elements) > capacity && capacity > 0 {
 		capacity = len(elements)
 	}

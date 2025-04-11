@@ -55,7 +55,7 @@ func newStartCommand() *cli.Command {
 				Value:   ":8080",
 				Usage:   "HTTP address to listen on",
 				EnvVars: []string{"GRAM_SERVER_ADDRESS"},
-			},
+			}, //
 			&cli.StringFlag{
 				Name:    "control-address",
 				Value:   ":8081",
@@ -198,7 +198,7 @@ func newStartCommand() *cli.Command {
 				})
 
 				if err := redisClient.Ping(context.Background()).Err(); err != nil {
-					logger.Error("redis connection failed", slog.String("error", err.Error()))
+					logger.ErrorContext(ctx, "redis connection failed", slog.String("error", err.Error()))
 					panic(err)
 				}
 
@@ -214,10 +214,10 @@ func newStartCommand() *cli.Command {
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger.With("component", "sessions"), redisClient, cache.SuffixNone)
+				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), redisClient, cache.SuffixNone)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger.With("component", "sessions"), redisClient, cache.Suffix("gram-local"), localEnvPath)
+				s, err := sessions.NewUnsafeManager(logger.With(slog.String("component", "sessions")), redisClient, cache.Suffix("gram-local"), localEnvPath)
 				if err != nil {
 					return err
 				}
@@ -243,21 +243,21 @@ func newStartCommand() *cli.Command {
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware)
-			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With("component", "http")))
+			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
 			mux.Use(middleware.SessionMiddleware)
 
-			chatService := chat.NewService(logger.With("component", "chat"), db, sessionManager, c.String("openai-api-key"))
+			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"))
 			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 				chatService.HandleCompletion(w, r)
 			})
-			auth.Attach(mux, auth.NewService(logger.With("component", "auth"), db, sessionManager))
-			assets.Attach(mux, assets.NewService(logger.With("component", "assets"), db, sessionManager, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With("component", "deployments"), db, sessionManager, assetStorage))
-			toolsets.Attach(mux, toolsets.NewService(logger.With("component", "toolsets"), db, sessionManager))
-			keys.Attach(mux, keys.NewService(logger.With("component", "keys"), db, sessionManager))
-			environments.Attach(mux, environments.NewService(logger.With("component", "environments"), db, sessionManager))
-			tools.Attach(mux, tools.NewService(logger.With("component", "tools"), db, sessionManager))
-			instances.Attach(mux, instances.NewService(logger.With("component", "instances"), db, sessionManager))
+			auth.Attach(mux, auth.NewService(logger.With(slog.String("component", "auth")), db, sessionManager))
+			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, sessionManager, assetStorage))
+			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
+			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager))
+			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager))
+			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
+			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

@@ -203,7 +203,7 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		// Streaming mode: flush after each chunk
-		logger.InfoContext(ctx, "streaming with flush", slog.String("content-type", resp.Header.Get("Content-Type")))
+		logger.InfoContext(ctx, "streaming with flush", slog.String("content_type", resp.Header.Get("Content-Type")))
 
 		buf := make([]byte, 32*1024)
 		flusher, canFlush := w.(http.Flusher)
@@ -242,7 +242,7 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutio
 		if envVar != "" {
 			return envVar
 		} else {
-			logger.WarnContext(ctx, "environment variable for server not found", slog.String("envVar", toolExecutionInfo.Tool.ServerEnvVar))
+			logger.WarnContext(ctx, "environment variable for server not found", slog.String("key", toolExecutionInfo.Tool.ServerEnvVar))
 		}
 	}
 	return ""
@@ -255,7 +255,7 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 			if len(security.EnvVariables) == 0 {
 				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.String))
 			} else if envVars[security.EnvVariables[0]] == "" {
-				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("envVar", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
+				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
 			} else {
 				key := security.EnvVariables[0]
 				switch security.InPlacement {
@@ -275,7 +275,7 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 				if len(security.EnvVariables) == 0 {
 					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", slog.String("scheme", security.Scheme.String))
 				} else if envVars[security.EnvVariables[0]] == "" {
-					logger.ErrorContext(ctx, "token value is empty for bearer auth", slog.String("envVar", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
+					logger.ErrorContext(ctx, "token value is empty for bearer auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
 				} else {
 					token := envVars[security.EnvVariables[0]]
 					if !strings.HasPrefix(strings.ToLower(token), "bearer ") {
@@ -298,8 +298,8 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 
 					if username == "" || password == "" {
 						logger.ErrorContext(ctx, "missing username or password value for basic auth",
-							slog.String("envVarUsername", security.EnvVariables[0]),
-							slog.String("envVarPassword", security.EnvVariables[1]),
+							slog.Bool("env_username", security.EnvVariables[0] == ""),
+							slog.Bool("env_password", security.EnvVariables[1] == ""),
 							slog.String("scheme", security.Scheme.String))
 					} else {
 						req.SetBasicAuth(username, password)

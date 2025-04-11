@@ -7,15 +7,11 @@ run:
 
 linters:
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
     - bodyclose
     - containedctx
     - depguard
     - durationcheck
+    - errcheck
     - errname
     - errorlint
     - exhaustive
@@ -25,22 +21,46 @@ linters:
     - gochecksumtype
     - gocritic
     - gosec
+    - govet
     - iface
+    - importas
+    - ineffassign
     - intrange
     - loggercheck
     - mirror
     - musttag
+    - nolintlint
     - paralleltest
+    - predeclared
     - reassign
-    - sloglint #
-    - spancheck #
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - testifylint
     - thelper
     - tparallel
     - unconvert
+    - unused
+    - usetesting
   settings:
+    sloglint:
+      no-mixed-args: true
+      attr-only: true
+      no-global: all
+      context: all
+      key-naming-case: snake
+      forbidden-keys:
+        - err
+        - org
+        - project
     staticcheck:
       dot-import-whitelist:
         - goa.design/goa/v3/dsl
+    spancheck:
+      checks:
+        - end
+        - set-status
     gocritic:
       disabled-checks:
         - ifElseChain
@@ -83,3 +103,13 @@ linters:
               desc: Use gopkg.in/yaml.v3
             - pkg: "github.com/urfave/cli/v3"
               desc: V3 is not ready yet use github.com/urfave/cli/v2
+            - pkg: "github.com/pkg/errors"
+              desc: Should be replaced by standard lib errors package
+    importas:
+      no-unaliased: true
+      alias:
+        - pkg: goa.design/goa/v3/http
+          alias: goahttp
+    nolintlint:
+      require-specific: true
+      require-explanation: true

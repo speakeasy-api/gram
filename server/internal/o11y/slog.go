@@ -32,7 +32,7 @@ type ContextHandler struct {
 	Handler slog.Handler
 }
 
-var _ slog.Handler = &ContextHandler{} //nolint:exhaustruct
+var _ slog.Handler = (*ContextHandler)(nil)
 
 func (h *ContextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.Handler.Enabled(ctx, level)

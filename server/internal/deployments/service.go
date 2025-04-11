@@ -42,7 +42,7 @@ type Service struct {
 	assetStorage assets.BlobStore
 }
 
-var _ gen.Service = &Service{} //nolint:exhaustruct
+var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
 	return &Service{

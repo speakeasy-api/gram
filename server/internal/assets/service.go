@@ -45,8 +45,8 @@ type Service struct {
 	repo     *repo.Queries
 }
 
-var _ gen.Service = &Service{} //nolint:exhaustruct
-var _ gen.Auther = &Service{}  //nolint:exhaustruct
+var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore) *Service {
 	return &Service{

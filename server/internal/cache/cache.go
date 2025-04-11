@@ -116,7 +116,6 @@ func (d *Cache[T]) Get(context context.Context, key string) (T, error) { //nolin
 
 func (d *Cache[T]) Store(context context.Context, obj T) error {
 	if d.cache == nil {
-		//nolint:goerr113
 		return errors.New("cache is not configured")
 	}
 

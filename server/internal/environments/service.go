@@ -31,7 +31,7 @@ type Service struct {
 	auth   *auth.Auth
 }
 
-var _ gen.Service = &Service{} //nolint:exhaustruct
+var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{

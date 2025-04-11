@@ -36,9 +36,9 @@ type Manager struct {
 
 func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix) *Manager {
 	return &Manager{
-		logger:        logger.With("component", "sessions"),
-		sessionCache:  cache.New[Session](logger.With("cache", "session"), redisClient, sessionCacheExpiry, cache.SuffixNone),
-		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), redisClient, userInfoCacheExpiry, cache.SuffixNone),
+		logger:        logger.With(slog.String("component", "sessions")),
+		sessionCache:  cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
+		userInfoCache: cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
 		localEnvFile:  localEnvFile{},
 		unsafeLocal:   false,
 	}
@@ -62,9 +62,9 @@ func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cac
 	}
 
 	return &Manager{
-		logger:        logger.With("component", "sessions"),
-		sessionCache:  cache.New[Session](logger.With("cache", "session"), redisClient, sessionCacheExpiry, cache.SuffixNone),
-		userInfoCache: cache.New[CachedUserInfo](logger.With("cache", "user_info"), redisClient, userInfoCacheExpiry, cache.SuffixNone),
+		logger:        logger.With(slog.String("component", "sessions")),
+		sessionCache:  cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
+		userInfoCache: cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
 		localEnvFile:  data,
 		unsafeLocal:   true,
 	}, nil
