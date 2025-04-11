@@ -61,7 +61,8 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	return h.Handler.Handle(ctx, record)
 }
 
-func LogDefer(ctx context.Context, logger *slog.Logger, err error) error {
+func LogDefer(ctx context.Context, logger *slog.Logger, cb func() error) error {
+	err := cb()
 	if err == nil {
 		return nil
 	}
@@ -71,5 +72,6 @@ func LogDefer(ctx context.Context, logger *slog.Logger, err error) error {
 	return err
 }
 
-func NoLogDefer(error) {
+func NoLogDefer(cb func() error) {
+	_ = cb()
 }

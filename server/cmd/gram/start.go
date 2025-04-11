@@ -167,7 +167,9 @@ func newStartCommand() *cli.Command {
 					if err != nil {
 						return err
 					}
-					defer o11y.LogDefer(ctx, logger, root.Close())
+					defer o11y.LogDefer(ctx, logger, func() error {
+						return root.Close()
+					})
 
 					fstore := &assets.FSBlobStore{Root: root}
 					assetStorage = fstore

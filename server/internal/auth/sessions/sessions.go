@@ -49,7 +49,9 @@ func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cac
 	if err != nil {
 		return nil, fmt.Errorf("failed to open local env file: %w", err)
 	}
-	defer o11y.LogDefer(context.Background(), logger, file.Close())
+	defer o11y.LogDefer(context.Background(), logger, func() error {
+		return file.Close()
+	})
 
 	bs, err := io.ReadAll(file)
 	if err != nil {

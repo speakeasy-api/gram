@@ -50,7 +50,9 @@ func NewPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCl
 	if err != nil {
 		return nil, nil, err
 	}
-	defer o11y.NoLogDefer(conn.Close(ctx))
+	defer o11y.NoLogDefer(func() error {
+		return conn.Close(ctx)
+	})
 
 	_, err = conn.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true")
 	if err != nil {
@@ -73,7 +75,9 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 		if err != nil {
 			return nil, fmt.Errorf("connect to template database: %w", err)
 		}
-		defer o11y.NoLogDefer(conn.Close(ctx))
+		defer o11y.NoLogDefer(func() error {
+			return conn.Close(ctx)
+		})
 
 		clonename := fmt.Sprintf("%s_%s", name, must.Value(uuid.NewV7()))
 		_, err = conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", clonename))
@@ -96,7 +100,9 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 			if err != nil {
 				panic(fmt.Errorf("drop test database: connect: %w", err))
 			}
-			defer o11y.NoLogDefer(conn.Close(timeoutCtx))
+			defer o11y.NoLogDefer(func() error {
+				return conn.Close(timeoutCtx)
+			})
 
 			_, err = conn.Exec(timeoutCtx, fmt.Sprintf("DROP DATABASE %s;", clonename))
 			if err != nil {

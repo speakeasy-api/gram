@@ -74,7 +74,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Payload, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
-	defer o11y.LogDefer(ctx, s.logger, reader.Close())
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return reader.Close()
+	})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -93,7 +95,9 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if err != nil {
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, os.Remove(f.Name()))
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return os.Remove(f.Name())
+	})
 
 	bsize := 4096
 	if payload.ContentLength < 4096 {
@@ -174,7 +178,9 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if err != nil {
 		return nil, fmt.Errorf("write to blob storage: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, dst.Close())
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return dst.Close()
+	})
 
 	n, err := io.CopyBuffer(dst, f, make([]byte, bsize))
 	if err != nil {

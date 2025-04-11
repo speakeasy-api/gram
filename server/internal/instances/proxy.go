@@ -176,7 +176,9 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
-	defer o11y.LogDefer(ctx, logger, resp.Body.Close())
+	defer o11y.LogDefer(ctx, logger, func() error {
+		return resp.Body.Close()
+	})
 
 	if len(resp.Trailer) > 0 {
 		var trailerKeys []string

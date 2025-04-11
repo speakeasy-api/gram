@@ -67,7 +67,9 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		logger.ErrorContext(ctx, "failed to fetch openapi document", slog.String("error", err.Error()))
 		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error fetching openapi document")
 	}
-	defer o11y.LogDefer(ctx, logger, rc.Close())
+	defer o11y.LogDefer(ctx, logger, func() error {
+		return rc.Close()
+	})
 
 	doc, err := io.ReadAll(rc)
 	if err != nil {
