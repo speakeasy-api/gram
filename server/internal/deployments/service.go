@@ -191,7 +191,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	if err != nil {
 		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
 	})
 
@@ -420,7 +420,7 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 			if err != nil {
 				return oops.E(err, "unexpected database error", "failed to begin database transaction").Log(ctx, logger)
 			}
-			defer o11y.LogDefer(ctx, logger, func() error {
+			defer o11y.NoLogDefer(func() error {
 				return dbtx.Rollback(ctx)
 			})
 
@@ -473,7 +473,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 	if err != nil {
 		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
 	})
 
