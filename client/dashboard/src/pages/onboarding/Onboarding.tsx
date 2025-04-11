@@ -6,7 +6,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { UploadOpenAPIv3Result } from "@gram/sdk/models/components";
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 
 export default function Onboarding() {
   const project = useProject();
@@ -39,7 +39,7 @@ export default function Onboarding() {
 
       const deployment =
         await client.deployments.deploymentsNumberCreateDeployment({
-          idempotencyKey: uuidv4(),
+          idempotencyKey: nanoid(),
           createDeploymentRequestBody: {
             openapiv3Assets: [
               {
