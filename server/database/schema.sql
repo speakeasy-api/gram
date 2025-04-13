@@ -29,8 +29,8 @@ volatile;
 
 CREATE TABLE IF NOT EXISTS projects (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  name text NOT NULL,
-  slug text NOT NULL,
+  name VARCHAR(40) NOT NULL,
+  slug VARCHAR(40) NOT NULL,
 
   organization_id TEXT NOT NULL,
 
@@ -55,11 +55,11 @@ CREATE TABLE IF NOT EXISTS deployments (
   idempotency_key TEXT NOT NULL,
   cloned_from uuid,
 
-  github_repo TEXT,
-  github_pr TEXT,
-  github_sha TEXT,
-  external_id TEXT,
-  external_url TEXT,
+  github_repo VARCHAR(100),
+  github_pr VARCHAR(100),
+  github_sha VARCHAR(100),
+  external_id VARCHAR(100),
+  external_url VARCHAR(100),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
 
-  name text NOT NULL,
+  name VARCHAR(100) NOT NULL,
   url text NOT NULL,
   kind text NOT NULL,
   content_type text NOT NULL,
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   project_id uuid,
   created_by_user_id TEXT NOT NULL,
 
-  name TEXT NOT NULL,
+  name VARCHAR(40) NOT NULL,
   token TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
@@ -151,8 +151,8 @@ CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
   asset_id uuid NOT NULL,
-  name text NOT NULL,
-  slug text NOT NULL,
+  name VARCHAR(60) NOT NULL,
+  slug VARCHAR(60) NOT NULL,
 
   CONSTRAINT deployments_openapiv3_documents_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_openapiv3_documents_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
@@ -168,24 +168,24 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
   openapiv3_document_id uuid,
 
-  name text NOT NULL,
-  summary text NOT NULL,
-  description text NOT NULL,
-  openapiv3_operation text,
-  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  name VARCHAR(100) NOT NULL,
+  summary TEXT NOT NULL,
+  description TEXT NOT NULL,
+  openapiv3_operation VARCHAR(100),
+  tags VARCHAR(40)[] NOT NULL DEFAULT ARRAY[]::VARCHAR(40)[],
 
-  server_env_var text NOT NULL,
-  default_server_url text,
+  server_env_var TEXT NOT NULL,
+  default_server_url TEXT,
   security jsonb,
 
-  http_method text NOT NULL,
-  path text NOT NULL,
-  schema_version text NOT NULL,
+  http_method VARCHAR(20) NOT NULL,
+  path VARCHAR(140) NOT NULL,
+  schema_version VARCHAR(20) NOT NULL,
   schema JSONB,
   header_settings JSONB,
   query_settings JSONB,
   path_settings JSONB,
-  request_content_type text,
+  request_content_type TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -204,9 +204,9 @@ CREATE TABLE IF NOT EXISTS environments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
-  name text NOT NULL,
-  slug text NOT NULL,
-  description text,
+  name VARCHAR(40) NOT NULL,
+  slug VARCHAR(40) NOT NULL,
+  description VARCHAR(100),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -222,8 +222,8 @@ ON environments (project_id, slug)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS environment_entries (
-  name text NOT NULL,
-  value text NOT NULL,
+  name VARCHAR(60) NOT NULL,
+  value VARCHAR(4000) NOT NULL,
   environment_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -237,11 +237,11 @@ CREATE TABLE IF NOT EXISTS toolsets (
 
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
-  name text NOT NULL,
-  slug text NOT NULL,
-  description text,
-  default_environment_slug TEXT,
-  http_tool_names text[],
+  name VARCHAR(40) NOT NULL,
+  slug VARCHAR(40) NOT NULL,
+  description VARCHAR(100),
+  default_environment_slug VARCHAR(40),
+  http_tool_names VARCHAR(100)[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -259,15 +259,15 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS http_security (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   
-  key text NOT NULL,
+  key VARCHAR(60) NOT NULL,
   deployment_id uuid NOT NULL,
-  type text NOT NULL,
-  name text NOT NULL,
-  in_placement text NOT NULL, -- header, query, path
-  scheme text,
-  bearer_format text,
+  type VARCHAR(20) NULL,
+  name VARCHAR(60) NOT NULL,
+  in_placement VARCHAR(10) NOT NULL, -- header, query, path
+  scheme VARCHAR(20),
+  bearer_format VARCHAR(20),
 
-  env_variables text[] DEFAULT ARRAY[]::text[],
+  env_variables VARCHAR(60)[] DEFAULT ARRAY[]::VARCHAR(60)[],
   
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
