@@ -657,7 +657,7 @@ func securitySchemesFromOpenAPIv3(doc v3.Document, task openapiV3Task) (map[stri
 		res[key] = &repo.CreateHTTPSecurityParams{
 			Key:          key,
 			DeploymentID: task.deploymentID,
-			Type:         sec.Type,
+			Type:         conv.ToPGText(sec.Type),
 			Name:         sec.Name,
 			InPlacement:  sec.In,
 			Scheme:       conv.ToPGText(sec.Scheme),

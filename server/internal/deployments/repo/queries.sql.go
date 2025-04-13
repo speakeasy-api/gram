@@ -214,7 +214,7 @@ RETURNING id, key, deployment_id, type, name, in_placement, scheme, bearer_forma
 type CreateHTTPSecurityParams struct {
 	Key          string
 	DeploymentID uuid.UUID
-	Type         string
+	Type         pgtype.Text
 	Name         string
 	InPlacement  string
 	Scheme       pgtype.Text

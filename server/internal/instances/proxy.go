@@ -252,7 +252,12 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutio
 
 func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars map[string]string) {
 	for _, security := range toolExecutionInfo.Security {
-		switch security.Type {
+		if !security.Type.Valid {
+			logger.ErrorContext(ctx, "invalid security type in tool definition", slog.String("tool", toolExecutionInfo.Tool.Name))
+			continue
+		}
+
+		switch security.Type.String {
 		case "apiKey":
 			if len(security.EnvVariables) == 0 {
 				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.String))
@@ -312,7 +317,7 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 				continue
 			}
 		default:
-			logger.ErrorContext(ctx, "unsupported security scheme type", slog.String("type", security.Type))
+			logger.ErrorContext(ctx, "unsupported security scheme type", slog.String("type", security.Type.String))
 			continue
 		}
 	}

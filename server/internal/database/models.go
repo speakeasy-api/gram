@@ -108,7 +108,7 @@ type HttpSecurity struct {
 	ID           uuid.UUID
 	Key          string
 	DeploymentID uuid.UUID
-	Type         string
+	Type         pgtype.Text
 	Name         string
 	InPlacement  string
 	Scheme       pgtype.Text
