@@ -9,6 +9,20 @@ on:
 jobs:
   server-build-lint-test:
     runs-on: ubicloud-standard-4
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: gram
+          POSTGRES_PASSWORD: gram
+          POSTGRES_DB: gram
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5439:5432
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -22,10 +36,10 @@ jobs:
       - name: Cache Go
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: go-${{ env.GH_CACHE_GO_KEY }}
+          key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
-            go-${{ env.GH_CACHE_GO_KEY }}
-            go-${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
           path: |
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
@@ -35,6 +49,15 @@ jobs:
         with:
           install-mode: none # installed by mise
           working-directory: server
+      - name: Install Go tools
+        run: go install tool
+      - name: Run code generators
+        run: mise run "gen:*"
+      - name: Run "go mod tidy"
+        run: mise run "go:tidy"
+      - name: Check for dirty files
+        run: mise run git:porcelain
+
   client-build-lint-test:
     runs-on: ubicloud-standard-4
     steps:
@@ -50,10 +73,10 @@ jobs:
       - name: Cache PNPM
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: pnpm-${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
-            pnpm-${{ env.GH_CACHE_PNPM_KEY }}
-            pnpm-${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
           path: |
             ${{ env.PNPM_STORE_PATH }}
       - name: Install dependencies
@@ -65,3 +88,5 @@ jobs:
       - name: Prune PNPM store
         if: success()
         run: pnpm store prune
+      - name: Check for dirty files
+        run: mise run git:porcelain
