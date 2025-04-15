@@ -52,6 +52,7 @@ paths:
             summary: uploadOpenAPIv3 assets
             tags:
                 - assets
+            x-speakeasy-name-override: uploadOpenAPIv3
             x-speakeasy-react-hook:
                 name: UploadOpenAPIv3
     /rpc/auth.callback:
@@ -89,6 +90,7 @@ paths:
             summary: callback auth
             tags:
                 - auth
+            x-speakeasy-name-override: callback
             x-speakeasy-react-hook:
                 disabled: true
     /rpc/auth.info:
@@ -126,6 +128,7 @@ paths:
             summary: info auth
             tags:
                 - auth
+            x-speakeasy-name-override: info
             x-speakeasy-react-hook:
                 name: SessionInfo
     /rpc/auth.logout:
@@ -154,6 +157,7 @@ paths:
             summary: logout auth
             tags:
                 - auth
+            x-speakeasy-name-override: logout
             x-speakeasy-react-hook:
                 name: Logout
     /rpc/auth.switchScopes:
@@ -201,6 +205,7 @@ paths:
             summary: switchScopes auth
             tags:
                 - auth
+            x-speakeasy-name-override: switchScopes
             x-speakeasy-react-hook:
                 name: SwitchScopes
     /rpc/deployments.addOpenAPIv3Source:
@@ -241,6 +246,7 @@ paths:
             summary: addOpenAPIv3Source deployments
             tags:
                 - deployments
+            x-speakeasy-name-override: addOpenAPIv3Source
             x-speakeasy-react-hook:
                 name: AddOpenAPIv3Source
     /rpc/deployments.create:
@@ -291,6 +297,7 @@ paths:
             summary: createDeployment deployments
             tags:
                 - deployments
+            x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateDeployment
     /rpc/deployments.get:
@@ -333,6 +340,7 @@ paths:
             summary: getDeployment deployments
             tags:
                 - deployments
+            x-speakeasy-name-override: getById
             x-speakeasy-react-hook:
                 name: Deployment
     /rpc/deployments.list:
@@ -374,6 +382,7 @@ paths:
             summary: listDeployments deployments
             tags:
                 - deployments
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListDeployments
     /rpc/environments.create:
@@ -414,6 +423,7 @@ paths:
             summary: createEnvironment environments
             tags:
                 - environments
+            x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateEnvironment
     /rpc/environments.delete/{slug}:
@@ -451,6 +461,7 @@ paths:
             summary: deleteEnvironment environments
             tags:
                 - environments
+            x-speakeasy-name-override: deleteBySlug
             x-speakeasy-react-hook:
                 name: DeleteEnvironment
     /rpc/environments.list:
@@ -485,6 +496,7 @@ paths:
             summary: listEnvironments environments
             tags:
                 - environments
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListEnvironments
     /rpc/environments.update/{slug}:
@@ -532,6 +544,7 @@ paths:
             summary: updateEnvironment environments
             tags:
                 - environments
+            x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateEnvironment
     /rpc/instances.load:
@@ -590,6 +603,7 @@ paths:
             summary: loadInstance instances
             tags:
                 - instances
+            x-speakeasy-name-override: load
             x-speakeasy-react-hook:
                 name: LoadInstance
     /rpc/keys.create:
@@ -622,6 +636,7 @@ paths:
             summary: createKey keys
             tags:
                 - keys
+            x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateAPIKey
     /rpc/keys.list:
@@ -648,6 +663,7 @@ paths:
             summary: listKeys keys
             tags:
                 - keys
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListAPIKeys
     /rpc/keys.revoke/{id}:
@@ -677,6 +693,7 @@ paths:
             summary: revokeKey keys
             tags:
                 - keys
+            x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
     /rpc/tools.list:
@@ -718,6 +735,7 @@ paths:
             summary: listTools tools
             tags:
                 - tools
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListTools
     /rpc/toolsets.create:
@@ -758,6 +776,7 @@ paths:
             summary: createToolset toolsets
             tags:
                 - toolsets
+            x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateToolset
     /rpc/toolsets.delete/{slug}:
@@ -795,6 +814,7 @@ paths:
             summary: deleteToolset toolsets
             tags:
                 - toolsets
+            x-speakeasy-name-override: deleteBySlug
             x-speakeasy-react-hook:
                 name: DeleteToolset
     /rpc/toolsets.get/{slug}:
@@ -836,6 +856,7 @@ paths:
             summary: getToolsetDetails toolsets
             tags:
                 - toolsets
+            x-speakeasy-name-override: getById
             x-speakeasy-react-hook:
                 name: Toolset
     /rpc/toolsets.list:
@@ -870,6 +891,7 @@ paths:
             summary: listToolsets toolsets
             tags:
                 - toolsets
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListToolsets
     /rpc/toolsets.update/{slug}:
@@ -917,6 +939,7 @@ paths:
             summary: updateToolset toolsets
             tags:
                 - toolsets
+            x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateToolset
 components:

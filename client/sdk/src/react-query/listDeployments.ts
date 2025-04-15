@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { deploymentsDeploymentsNumberListDeployments } from "../funcs/deploymentsDeploymentsNumberListDeployments.js";
+import { deploymentsList } from "../funcs/deploymentsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -112,12 +112,7 @@ export function invalidateListDeployments(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "deployments",
-      "deploymentsNumberListDeployments",
-      ...queryKeyBase,
-    ],
+    queryKey: ["@gram/client", "deployments", "list", ...queryKeyBase],
   });
 }
 
@@ -127,11 +122,7 @@ export function invalidateAllListDeployments(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "deployments",
-      "deploymentsNumberListDeployments",
-    ],
+    queryKey: ["@gram/client", "deployments", "list"],
   });
 }
 
@@ -158,7 +149,7 @@ export function buildListDeploymentsQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(deploymentsDeploymentsNumberListDeployments(
+      return unwrapAsync(deploymentsList(
         client$,
         request,
         mergedOptions,
@@ -174,10 +165,5 @@ export function queryKeyListDeployments(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return [
-    "@gram/client",
-    "deployments",
-    "deploymentsNumberListDeployments",
-    parameters,
-  ];
+  return ["@gram/client", "deployments", "list", parameters];
 }

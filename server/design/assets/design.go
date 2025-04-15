@@ -13,9 +13,7 @@ var _ = Service("assets", func() {
 	Method("uploadOpenAPIv3", func() {
 		Description("Upload an OpenAPI v3 document to Gram.")
 
-		Payload(func() {
-			Extend(UploadOpenAPIv3Form)
-		})
+		Payload(UploadOpenAPIv3Form)
 
 		Result(UploadOpenAPIv3Result)
 
@@ -28,6 +26,7 @@ var _ = Service("assets", func() {
 			SkipRequestBodyEncodeDecode()
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadOpenAPIv3")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenAPIv3"}`)
 	})
 })

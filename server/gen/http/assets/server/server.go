@@ -115,7 +115,7 @@ func NewUploadOpenAPIv3Handler(
 			}
 			return
 		}
-		data := &assets.UploadOpenAPIv3RequestData{Payload: payload.(*assets.UploadOpenAPIv3Payload), Body: r.Body}
+		data := &assets.UploadOpenAPIv3RequestData{Payload: payload.(*assets.UploadOpenAPIv3Form), Body: r.Body}
 		res, err := endpoint(ctx, data)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil {

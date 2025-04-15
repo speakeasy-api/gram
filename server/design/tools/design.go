@@ -28,6 +28,7 @@ var _ = Service("tools", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListTools"}`)
 	})
 })

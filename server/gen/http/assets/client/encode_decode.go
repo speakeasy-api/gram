@@ -121,7 +121,7 @@ func BuildUploadOpenAPIv3StreamPayload(payload any, fpath string) (*assets.Uploa
 		return nil, err
 	}
 	return &assets.UploadOpenAPIv3RequestData{
-		Payload: payload.(*assets.UploadOpenAPIv3Payload),
+		Payload: payload.(*assets.UploadOpenAPIv3Form),
 		Body:    f,
 	}, nil
 }

@@ -1,0 +1,388 @@
+lockVersion: 2.0.0
+id: 1536f638-1fda-4f8e-a2c3-c7ca9e12fb09
+management:
+  docChecksum: 29d62c73793ce137e08dbeddece3e59a
+  docVersion: 0.0.1
+  speakeasyVersion: 1.531.5
+  generationVersion: 2.570.4
+  releaseVersion: 0.2.0
+  configChecksum: d1d25786f74f32ebc8abb86df581ec62
+features:
+  typescript:
+    additionalDependencies: 0.1.0
+    core: 3.21.6
+    defaultEnabledRetries: 0.1.0
+    enumUnions: 0.1.0
+    envVarSecurityUsage: 0.1.2
+    globalSecurity: 2.82.13
+    globalSecurityCallbacks: 0.1.0
+    globalServerURLs: 2.82.4
+    methodArguments: 0.1.2
+    methodSecurity: 2.82.6
+    nameOverrides: 2.81.2
+    responseFormat: 0.2.3
+    retries: 2.83.0
+    sdkHooks: 0.2.0
+generatedFiles:
+  - .gitattributes
+  - .npmignore
+  - FUNCTIONS.md
+  - RUNTIMES.md
+  - USAGE.md
+  - docs/lib/utils/retryconfig.md
+  - docs/models/components/addopenapiv3sourceresult.md
+  - docs/models/components/asset.md
+  - docs/models/components/createdeploymentrequestbody.md
+  - docs/models/components/createdeploymentresult.md
+  - docs/models/components/createenvironmentform.md
+  - docs/models/components/createkeyform.md
+  - docs/models/components/createtoolsetrequestbody.md
+  - docs/models/components/deployment.md
+  - docs/models/components/deploymentsummary.md
+  - docs/models/components/environment.md
+  - docs/models/components/environmententry.md
+  - docs/models/components/environmententryinput.md
+  - docs/models/components/getdeploymentresult.md
+  - docs/models/components/httptooldefinition.md
+  - docs/models/components/inforesponsebody.md
+  - docs/models/components/instanceresult.md
+  - docs/models/components/key.md
+  - docs/models/components/kind.md
+  - docs/models/components/listdeploymentresult.md
+  - docs/models/components/listenvironmentsresult.md
+  - docs/models/components/listkeysresult.md
+  - docs/models/components/listtoolsetsresult.md
+  - docs/models/components/listtoolsresult.md
+  - docs/models/components/openapiv3deploymentasset.md
+  - docs/models/components/openapiv3deploymentassetform.md
+  - docs/models/components/organization.md
+  - docs/models/components/project.md
+  - docs/models/components/security.md
+  - docs/models/components/toolsetdetails.md
+  - docs/models/components/updateenvironmentrequestbody.md
+  - docs/models/components/updatetoolsetrequestbody.md
+  - docs/models/components/uploadopenapiv3result.md
+  - docs/models/operations/assetsnumberuploadopenapiv3request.md
+  - docs/models/operations/authnumbercallbackrequest.md
+  - docs/models/operations/authnumbercallbackresponse.md
+  - docs/models/operations/authnumberinforequest.md
+  - docs/models/operations/authnumberinforesponse.md
+  - docs/models/operations/authnumberinfosecurity.md
+  - docs/models/operations/authnumberlogoutrequest.md
+  - docs/models/operations/authnumberlogoutresponse.md
+  - docs/models/operations/authnumberlogoutsecurity.md
+  - docs/models/operations/authnumberswitchscopesrequest.md
+  - docs/models/operations/authnumberswitchscopesresponse.md
+  - docs/models/operations/authnumberswitchscopessecurity.md
+  - docs/models/operations/deploymentsnumberaddopenapiv3sourcerequest.md
+  - docs/models/operations/deploymentsnumbercreatedeploymentrequest.md
+  - docs/models/operations/deploymentsnumbergetdeploymentrequest.md
+  - docs/models/operations/deploymentsnumberlistdeploymentsrequest.md
+  - docs/models/operations/environmentsnumbercreateenvironmentrequest.md
+  - docs/models/operations/environmentsnumberdeleteenvironmentrequest.md
+  - docs/models/operations/environmentsnumberlistenvironmentsrequest.md
+  - docs/models/operations/environmentsnumberupdateenvironmentrequest.md
+  - docs/models/operations/instancesnumberloadinstancerequest.md
+  - docs/models/operations/instancesnumberloadinstancesecurity.md
+  - docs/models/operations/instancesnumberloadinstancesecurityoption1.md
+  - docs/models/operations/instancesnumberloadinstancesecurityoption2.md
+  - docs/models/operations/keysnumbercreatekeyrequest.md
+  - docs/models/operations/keysnumbercreatekeysecurity.md
+  - docs/models/operations/keysnumberlistkeysrequest.md
+  - docs/models/operations/keysnumberlistkeyssecurity.md
+  - docs/models/operations/keysnumberrevokekeyrequest.md
+  - docs/models/operations/keysnumberrevokekeysecurity.md
+  - docs/models/operations/toolsetsnumbercreatetoolsetrequest.md
+  - docs/models/operations/toolsetsnumberdeletetoolsetrequest.md
+  - docs/models/operations/toolsetsnumbergettoolsetdetailsrequest.md
+  - docs/models/operations/toolsetsnumberlisttoolsetsrequest.md
+  - docs/models/operations/toolsetsnumberupdatetoolsetrequest.md
+  - docs/models/operations/toolsnumberlisttoolsrequest.md
+  - docs/sdks/assets/README.md
+  - docs/sdks/auth/README.md
+  - docs/sdks/deployments/README.md
+  - docs/sdks/environments/README.md
+  - docs/sdks/instances/README.md
+  - docs/sdks/keys/README.md
+  - docs/sdks/sdk/README.md
+  - docs/sdks/tools/README.md
+  - docs/sdks/toolsets/README.md
+  - eslint.config.mjs
+  - jsr.json
+  - package.json
+  - src/core.ts
+  - src/funcs/assetsUploadOpenAPIv3.ts
+  - src/funcs/authCallback.ts
+  - src/funcs/authInfo.ts
+  - src/funcs/authLogout.ts
+  - src/funcs/authSwitchScopes.ts
+  - src/funcs/deploymentsAddOpenAPIv3Source.ts
+  - src/funcs/deploymentsCreate.ts
+  - src/funcs/deploymentsGetById.ts
+  - src/funcs/deploymentsList.ts
+  - src/funcs/environmentsCreate.ts
+  - src/funcs/environmentsDeleteBySlug.ts
+  - src/funcs/environmentsList.ts
+  - src/funcs/environmentsUpdateBySlug.ts
+  - src/funcs/instancesLoad.ts
+  - src/funcs/keysCreate.ts
+  - src/funcs/keysList.ts
+  - src/funcs/keysRevokeById.ts
+  - src/funcs/toolsList.ts
+  - src/funcs/toolsetsCreate.ts
+  - src/funcs/toolsetsDeleteBySlug.ts
+  - src/funcs/toolsetsGetById.ts
+  - src/funcs/toolsetsList.ts
+  - src/funcs/toolsetsUpdateBySlug.ts
+  - src/hooks/hooks.ts
+  - src/hooks/index.ts
+  - src/hooks/types.ts
+  - src/index.ts
+  - src/lib/base64.ts
+  - src/lib/config.ts
+  - src/lib/dlv.ts
+  - src/lib/encodings.ts
+  - src/lib/files.ts
+  - src/lib/http.ts
+  - src/lib/is-plain-object.ts
+  - src/lib/logger.ts
+  - src/lib/matchers.ts
+  - src/lib/primitives.ts
+  - src/lib/retries.ts
+  - src/lib/schemas.ts
+  - src/lib/sdks.ts
+  - src/lib/security.ts
+  - src/lib/url.ts
+  - src/models/components/addopenapiv3sourceresult.ts
+  - src/models/components/asset.ts
+  - src/models/components/createdeploymentrequestbody.ts
+  - src/models/components/createdeploymentresult.ts
+  - src/models/components/createenvironmentform.ts
+  - src/models/components/createkeyform.ts
+  - src/models/components/createtoolsetrequestbody.ts
+  - src/models/components/deployment.ts
+  - src/models/components/deploymentsummary.ts
+  - src/models/components/environment.ts
+  - src/models/components/environmententry.ts
+  - src/models/components/environmententryinput.ts
+  - src/models/components/getdeploymentresult.ts
+  - src/models/components/httptooldefinition.ts
+  - src/models/components/index.ts
+  - src/models/components/inforesponsebody.ts
+  - src/models/components/instanceresult.ts
+  - src/models/components/key.ts
+  - src/models/components/listdeploymentresult.ts
+  - src/models/components/listenvironmentsresult.ts
+  - src/models/components/listkeysresult.ts
+  - src/models/components/listtoolsetsresult.ts
+  - src/models/components/listtoolsresult.ts
+  - src/models/components/openapiv3deploymentasset.ts
+  - src/models/components/openapiv3deploymentassetform.ts
+  - src/models/components/organization.ts
+  - src/models/components/project.ts
+  - src/models/components/security.ts
+  - src/models/components/toolsetdetails.ts
+  - src/models/components/updateenvironmentrequestbody.ts
+  - src/models/components/updatetoolsetrequestbody.ts
+  - src/models/components/uploadopenapiv3result.ts
+  - src/models/errors/apierror.ts
+  - src/models/errors/httpclienterrors.ts
+  - src/models/errors/index.ts
+  - src/models/errors/sdkvalidationerror.ts
+  - src/models/operations/assetsnumberuploadopenapiv3.ts
+  - src/models/operations/authnumbercallback.ts
+  - src/models/operations/authnumberinfo.ts
+  - src/models/operations/authnumberlogout.ts
+  - src/models/operations/authnumberswitchscopes.ts
+  - src/models/operations/deploymentsnumberaddopenapiv3source.ts
+  - src/models/operations/deploymentsnumbercreatedeployment.ts
+  - src/models/operations/deploymentsnumbergetdeployment.ts
+  - src/models/operations/deploymentsnumberlistdeployments.ts
+  - src/models/operations/environmentsnumbercreateenvironment.ts
+  - src/models/operations/environmentsnumberdeleteenvironment.ts
+  - src/models/operations/environmentsnumberlistenvironments.ts
+  - src/models/operations/environmentsnumberupdateenvironment.ts
+  - src/models/operations/index.ts
+  - src/models/operations/instancesnumberloadinstance.ts
+  - src/models/operations/keysnumbercreatekey.ts
+  - src/models/operations/keysnumberlistkeys.ts
+  - src/models/operations/keysnumberrevokekey.ts
+  - src/models/operations/toolsetsnumbercreatetoolset.ts
+  - src/models/operations/toolsetsnumberdeletetoolset.ts
+  - src/models/operations/toolsetsnumbergettoolsetdetails.ts
+  - src/models/operations/toolsetsnumberlisttoolsets.ts
+  - src/models/operations/toolsetsnumberupdatetoolset.ts
+  - src/models/operations/toolsnumberlisttools.ts
+  - src/sdk/assets.ts
+  - src/sdk/auth.ts
+  - src/sdk/deployments.ts
+  - src/sdk/environments.ts
+  - src/sdk/index.ts
+  - src/sdk/instances.ts
+  - src/sdk/keys.ts
+  - src/sdk/sdk.ts
+  - src/sdk/tools.ts
+  - src/sdk/toolsets.ts
+  - src/types/async.ts
+  - src/types/blobs.ts
+  - src/types/constdatetime.ts
+  - src/types/enums.ts
+  - src/types/fp.ts
+  - src/types/index.ts
+  - src/types/operations.ts
+  - src/types/rfcdate.ts
+  - src/types/streams.ts
+  - tsconfig.json
+examples:
+  assets#uploadOpenAPIv3:
+    speakeasy-default-assets#upload-open-AP-iv3:
+      parameters:
+        header:
+          Content-Length: 924456
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 309292, "content_type": "<value>", "created_at": "2025-08-06T08:52:40.387Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-07T16:19:35.673Z", "url": "https://deafening-loaf.name"}}
+  auth#callback:
+    speakeasy-default-auth#callback:
+      parameters:
+        query:
+          shared_token: "<value>"
+  auth#info:
+    speakeasy-default-auth#info:
+      responses:
+        "200":
+          application/json: {"active_organization_id": "<id>", "organizations": [{"account_type": "<value>", "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "projects": [{"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}, {"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}, {"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}]}], "user_email": "<value>", "user_id": "<id>"}
+  auth#logout: {}
+  auth#switchScopes: {}
+  deployments#addOpenAPIv3Source:
+    speakeasy-default-deployments#add-open-AP-iv3-source:
+      requestBody:
+        application/json: {"asset_id": "<id>", "name": "<value>", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2025-06-05T00:59:43.463Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+  deployments#createDeployment:
+    "":
+      parameters:
+        header:
+          Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
+      requestBody:
+        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2024-01-18T04:57:23.652Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+  deployments#getDeployment:
+    speakeasy-default-deployments#get-deployment:
+      parameters:
+        query:
+          id: "<id>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-04-28T00:14:36.618Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
+  deployments#listDeployments:
+    speakeasy-default-deployments#list-deployments:
+      responses:
+        "200":
+          application/json: {"items": [{"asset_count": 456392, "created_at": "2025-06-24T06:00:13.351Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
+  environments#createEnvironment:
+    speakeasy-default-environments#create-environment:
+      requestBody:
+        application/json: {"entries": [], "name": "<value>", "organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-12-08T14:08:22.081Z", "entries": [{"created_at": "2025-08-12T14:04:12.312Z", "name": "<value>", "updated_at": "2024-09-24T01:28:36.076Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-01-27T21:16:48.167Z"}
+  environments#deleteEnvironment:
+    speakeasy-default-environments#delete-environment:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+  environments#listEnvironments:
+    speakeasy-default-environments#list-environments:
+      responses:
+        "200":
+          application/json: {"environments": [{"created_at": "2023-04-09T09:12:47.380Z", "entries": [{"created_at": "2025-10-02T09:18:08.014Z", "name": "<value>", "updated_at": "2024-02-21T19:19:10.126Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-07T04:05:23.413Z"}]}
+  environments#updateEnvironment:
+    speakeasy-default-environments#update-environment:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+      requestBody:
+        application/json: {"entries_to_remove": ["<value>"], "entries_to_update": []}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-08-07T22:29:01.687Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-05-25T04:22:07.250Z"}
+  instances#loadInstance:
+    speakeasy-default-instances#load-instance:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"environment": {"created_at": "2023-07-31T19:02:18.027Z", "entries": [{"created_at": "2024-06-04T14:37:25.747Z", "name": "<value>", "updated_at": "2023-08-10T06:48:28.182Z", "value": "<value>"}, {"created_at": "2024-05-13T08:19:13.014Z", "name": "<value>", "updated_at": "2024-04-23T11:43:05.947Z", "value": "<value>"}, {"created_at": "2023-12-20T05:46:23.123Z", "name": "<value>", "updated_at": "2024-08-03T16:29:36.656Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-25T14:32:40.435Z"}, "name": "<value>", "tools": [{"created_at": "2025-06-14T23:33:47.853Z", "deployment_id": "<id>", "description": "whopping pro victoriously provided zowie confound habit", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2024-10-22T20:00:15.335Z"}, {"created_at": "2023-07-08T16:52:36.181Z", "deployment_id": "<id>", "description": "powerless modulo happily violently gah provided daily", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/srv", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-06-22T07:26:27.262Z"}]}
+  keys#createKey:
+    speakeasy-default-keys#create-key:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-02-04T15:44:05.452Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2025-10-26T04:54:37.718Z"}
+  keys#listKeys:
+    speakeasy-default-keys#list-keys:
+      responses:
+        "200":
+          application/json: {"keys": [{"created_at": "2025-01-16T17:32:25.648Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>", "<value>"], "token": "<value>", "updated_at": "2023-04-03T20:02:04.409Z"}]}
+  keys#revokeKey:
+    speakeasy-default-keys#revoke-key:
+      parameters:
+        path:
+          id: "<id>"
+        header: {}
+  tools#listTools:
+    speakeasy-default-tools#list-tools:
+      responses:
+        "200":
+          application/json: {"tools": [{"created_at": "2023-06-14T22:04:15.509Z", "deployment_id": "<id>", "description": "rubric while smoothly unless yeast", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-29T20:57:29.586Z"}]}
+  toolsets#createToolset:
+    speakeasy-default-toolsets#create-toolset:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-01-31T23:54:16.910Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-23T20:15:31.508Z"}
+  toolsets#deleteToolset:
+    speakeasy-default-toolsets#delete-toolset:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+  toolsets#getToolsetDetails:
+    speakeasy-default-toolsets#get-toolset-details:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-04-05T12:22:08.877Z", "http_tools": [{"created_at": "2025-06-30T15:43:44.156Z", "deployment_id": "<id>", "description": "cook jellyfish perspire until embossing er offensively as uselessly", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/share", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-12-06T23:51:20.681Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-26T16:46:42.146Z"}
+  toolsets#listToolsets:
+    speakeasy-default-toolsets#list-toolsets:
+      responses:
+        "200":
+          application/json: {"toolsets": []}
+  toolsets#updateToolset:
+    speakeasy-default-toolsets#update-toolset:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-10-11T13:18:21.498Z", "http_tools": [{"created_at": "2023-10-03T01:38:33.695Z", "deployment_id": "<id>", "description": "energetically under an pish", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Applications", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-28T13:20:29.259Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-06T02:30:28.396Z"}
+examplesVersion: 1.0.1
+generatedTests: {}

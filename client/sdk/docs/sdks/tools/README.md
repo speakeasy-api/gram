@@ -7,9 +7,9 @@ Dashboard API for interacting with tools.
 
 ### Available Operations
 
-* [toolsNumberListTools](#toolsnumberlisttools) - listTools tools
+* [list](#list) - listTools tools
 
-## toolsNumberListTools
+## list
 
 List all tools for a project
 
@@ -26,7 +26,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.tools.toolsNumberListTools();
+  const result = await gram.tools.list();
 
   // Handle the result
   console.log(result);
@@ -41,7 +41,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { toolsToolsNumberListTools } from "@gram/client/funcs/toolsToolsNumberListTools.js";
+import { toolsList } from "@gram/client/funcs/toolsList.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -53,7 +53,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await toolsToolsNumberListTools(gram);
+  const res = await toolsList(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -93,7 +93,7 @@ import {
   // mutations and other user actions.
   invalidateListTools,
   invalidateAllListTools,
-} from "@gram/client/react-query/toolsToolsNumberListTools.js";
+} from "@gram/client/react-query/toolsList.js";
 ```
 
 ### Parameters

@@ -7,7 +7,7 @@ import { AddOpenAPIv3SourceResult } from "@gram/client/models/components";
 
 let value: AddOpenAPIv3SourceResult = {
   deployment: {
-    createdAt: new Date("2025-07-01T13:13:56.703Z"),
+    createdAt: new Date("2025-04-30T22:23:46.134Z"),
     externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
     githubPr: "1234",
     githubRepo: "speakeasyapi/gram",

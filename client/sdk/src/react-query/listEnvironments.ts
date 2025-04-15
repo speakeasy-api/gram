@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { environmentsEnvironmentsNumberListEnvironments } from "../funcs/environmentsEnvironmentsNumberListEnvironments.js";
+import { environmentsList } from "../funcs/environmentsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -110,12 +110,7 @@ export function invalidateListEnvironments(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "environments",
-      "environmentsNumberListEnvironments",
-      ...queryKeyBase,
-    ],
+    queryKey: ["@gram/client", "environments", "list", ...queryKeyBase],
   });
 }
 
@@ -125,11 +120,7 @@ export function invalidateAllListEnvironments(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "environments",
-      "environmentsNumberListEnvironments",
-    ],
+    queryKey: ["@gram/client", "environments", "list"],
   });
 }
 
@@ -157,7 +148,7 @@ export function buildListEnvironmentsQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(environmentsEnvironmentsNumberListEnvironments(
+      return unwrapAsync(environmentsList(
         client$,
         request,
         mergedOptions,
@@ -172,10 +163,5 @@ export function queryKeyListEnvironments(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return [
-    "@gram/client",
-    "environments",
-    "environmentsNumberListEnvironments",
-    parameters,
-  ];
+  return ["@gram/client", "environments", "list", parameters];
 }

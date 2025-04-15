@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { deploymentsDeploymentsNumberAddOpenAPIv3Source } from "../funcs/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
+import { deploymentsAddOpenAPIv3Source } from "../funcs/deploymentsAddOpenAPIv3Source.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -50,7 +50,7 @@ export function useAddOpenAPIv3SourceMutation(
 }
 
 export function mutationKeyAddOpenAPIv3Source(): MutationKey {
-  return ["@gram/client", "deployments", "deploymentsNumberAddOpenAPIv3Source"];
+  return ["@gram/client", "deployments", "addOpenAPIv3Source"];
 }
 
 export function buildAddOpenAPIv3SourceMutation(
@@ -80,7 +80,7 @@ export function buildAddOpenAPIv3SourceMutation(
           ),
         },
       };
-      return unwrapAsync(deploymentsDeploymentsNumberAddOpenAPIv3Source(
+      return unwrapAsync(deploymentsAddOpenAPIv3Source(
         client$,
         request,
         mergedOptions,

@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --filter ./client/dashboard dev",
-    "lint": "pnpm -r --filter ./client/sdk lint",
+    "lint": "pnpm -r lint",
     "build": "pnpm -r build"
   },
   "keywords": [],

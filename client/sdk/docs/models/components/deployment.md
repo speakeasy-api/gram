@@ -6,7 +6,7 @@
 import { Deployment } from "@gram/client/models/components";
 
 let value: Deployment = {
-  createdAt: new Date("2025-05-02T20:38:06.637Z"),
+  createdAt: new Date("2024-06-02T18:09:36.655Z"),
   externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
   githubPr: "1234",
   githubRepo: "speakeasyapi/gram",

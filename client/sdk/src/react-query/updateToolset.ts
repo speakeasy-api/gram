@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { toolsetsToolsetsNumberUpdateToolset } from "../funcs/toolsetsToolsetsNumberUpdateToolset.js";
+import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -49,7 +49,7 @@ export function useUpdateToolsetMutation(
 }
 
 export function mutationKeyUpdateToolset(): MutationKey {
-  return ["@gram/client", "toolsets", "toolsetsNumberUpdateToolset"];
+  return ["@gram/client", "toolsets", "updateBySlug"];
 }
 
 export function buildUpdateToolsetMutation(
@@ -79,7 +79,7 @@ export function buildUpdateToolsetMutation(
           ),
         },
       };
-      return unwrapAsync(toolsetsToolsetsNumberUpdateToolset(
+      return unwrapAsync(toolsetsUpdateBySlug(
         client$,
         request,
         mergedOptions,

@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { toolsetsToolsetsNumberListToolsets } from "../funcs/toolsetsToolsetsNumberListToolsets.js";
+import { toolsetsList } from "../funcs/toolsetsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -110,12 +110,7 @@ export function invalidateListToolsets(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "toolsets",
-      "toolsetsNumberListToolsets",
-      ...queryKeyBase,
-    ],
+    queryKey: ["@gram/client", "toolsets", "list", ...queryKeyBase],
   });
 }
 
@@ -125,7 +120,7 @@ export function invalidateAllListToolsets(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "toolsets", "toolsetsNumberListToolsets"],
+    queryKey: ["@gram/client", "toolsets", "list"],
   });
 }
 
@@ -151,7 +146,7 @@ export function buildListToolsetsQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(toolsetsToolsetsNumberListToolsets(
+      return unwrapAsync(toolsetsList(
         client$,
         request,
         mergedOptions,
@@ -166,5 +161,5 @@ export function queryKeyListToolsets(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "toolsets", "toolsetsNumberListToolsets", parameters];
+  return ["@gram/client", "toolsets", "list", parameters];
 }

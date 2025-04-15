@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { toolsetsToolsetsNumberDeleteToolset } from "../funcs/toolsetsToolsetsNumberDeleteToolset.js";
+import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
@@ -48,7 +48,7 @@ export function useDeleteToolsetMutation(
 }
 
 export function mutationKeyDeleteToolset(): MutationKey {
-  return ["@gram/client", "toolsets", "toolsetsNumberDeleteToolset"];
+  return ["@gram/client", "toolsets", "deleteBySlug"];
 }
 
 export function buildDeleteToolsetMutation(
@@ -78,7 +78,7 @@ export function buildDeleteToolsetMutation(
           ),
         },
       };
-      return unwrapAsync(toolsetsToolsetsNumberDeleteToolset(
+      return unwrapAsync(toolsetsDeleteBySlug(
         client$,
         request,
         mergedOptions,

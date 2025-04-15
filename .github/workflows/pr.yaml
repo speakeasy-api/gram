@@ -111,10 +111,10 @@ jobs:
             ${{ env.PNPM_STORE_PATH }}
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm lint
       - name: Build
         run: pnpm build
+      - name: Lint
+        run: pnpm lint
       - name: Prune PNPM store
         if: success()
         run: pnpm store prune

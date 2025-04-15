@@ -11,24 +11,24 @@ import {
   createRegisterResource,
   createRegisterResourceTemplate,
 } from "./resources.js";
-import { MCPScope, mcpScopes } from "./scopes.js";
+import { MCPScope } from "./scopes.js";
 import { createRegisterTool } from "./tools.js";
-import { tool$assetsAssetsNumberUploadOpenAPIv3 } from "./tools/assetsAssetsNumberUploadOpenAPIv3.js";
-import { tool$authAuthNumberCallback } from "./tools/authAuthNumberCallback.js";
-import { tool$deploymentsDeploymentsNumberAddOpenAPIv3Source } from "./tools/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
-import { tool$deploymentsDeploymentsNumberCreateDeployment } from "./tools/deploymentsDeploymentsNumberCreateDeployment.js";
-import { tool$deploymentsDeploymentsNumberGetDeployment } from "./tools/deploymentsDeploymentsNumberGetDeployment.js";
-import { tool$deploymentsDeploymentsNumberListDeployments } from "./tools/deploymentsDeploymentsNumberListDeployments.js";
-import { tool$environmentsEnvironmentsNumberCreateEnvironment } from "./tools/environmentsEnvironmentsNumberCreateEnvironment.js";
-import { tool$environmentsEnvironmentsNumberDeleteEnvironment } from "./tools/environmentsEnvironmentsNumberDeleteEnvironment.js";
-import { tool$environmentsEnvironmentsNumberListEnvironments } from "./tools/environmentsEnvironmentsNumberListEnvironments.js";
-import { tool$environmentsEnvironmentsNumberUpdateEnvironment } from "./tools/environmentsEnvironmentsNumberUpdateEnvironment.js";
-import { tool$toolsetsToolsetsNumberCreateToolset } from "./tools/toolsetsToolsetsNumberCreateToolset.js";
-import { tool$toolsetsToolsetsNumberDeleteToolset } from "./tools/toolsetsToolsetsNumberDeleteToolset.js";
-import { tool$toolsetsToolsetsNumberGetToolsetDetails } from "./tools/toolsetsToolsetsNumberGetToolsetDetails.js";
-import { tool$toolsetsToolsetsNumberListToolsets } from "./tools/toolsetsToolsetsNumberListToolsets.js";
-import { tool$toolsetsToolsetsNumberUpdateToolset } from "./tools/toolsetsToolsetsNumberUpdateToolset.js";
-import { tool$toolsToolsNumberListTools } from "./tools/toolsToolsNumberListTools.js";
+import { tool$assetsUploadOpenAPIv3 } from "./tools/assetsUploadOpenAPIv3.js";
+import { tool$authCallback } from "./tools/authCallback.js";
+import { tool$deploymentsAddOpenAPIv3Source } from "./tools/deploymentsAddOpenAPIv3Source.js";
+import { tool$deploymentsCreate } from "./tools/deploymentsCreate.js";
+import { tool$deploymentsGetById } from "./tools/deploymentsGetById.js";
+import { tool$deploymentsList } from "./tools/deploymentsList.js";
+import { tool$environmentsCreate } from "./tools/environmentsCreate.js";
+import { tool$environmentsDeleteBySlug } from "./tools/environmentsDeleteBySlug.js";
+import { tool$environmentsList } from "./tools/environmentsList.js";
+import { tool$environmentsUpdateBySlug } from "./tools/environmentsUpdateBySlug.js";
+import { tool$toolsetsCreate } from "./tools/toolsetsCreate.js";
+import { tool$toolsetsDeleteBySlug } from "./tools/toolsetsDeleteBySlug.js";
+import { tool$toolsetsGetById } from "./tools/toolsetsGetById.js";
+import { tool$toolsetsList } from "./tools/toolsetsList.js";
+import { tool$toolsetsUpdateBySlug } from "./tools/toolsetsUpdateBySlug.js";
+import { tool$toolsList } from "./tools/toolsList.js";
 
 export function createMCPServer(deps: {
   logger: ConsoleLogger;
@@ -40,7 +40,7 @@ export function createMCPServer(deps: {
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.5.5",
+    version: "0.6.0",
   });
 
   const client = new GramCore({
@@ -49,7 +49,7 @@ export function createMCPServer(deps: {
     serverIdx: deps.serverIdx,
   });
 
-  const scopes = new Set(deps.scopes ?? mcpScopes);
+  const scopes = new Set(deps.scopes);
 
   const allowedTools = deps.allowedTools && new Set(deps.allowedTools);
   const tool = createRegisterTool(
@@ -70,22 +70,22 @@ export function createMCPServer(deps: {
   const register = { tool, resource, resourceTemplate, prompt };
   void register; // suppress unused warnings
 
-  tool(tool$assetsAssetsNumberUploadOpenAPIv3);
-  tool(tool$authAuthNumberCallback);
-  tool(tool$deploymentsDeploymentsNumberAddOpenAPIv3Source);
-  tool(tool$deploymentsDeploymentsNumberCreateDeployment);
-  tool(tool$deploymentsDeploymentsNumberGetDeployment);
-  tool(tool$deploymentsDeploymentsNumberListDeployments);
-  tool(tool$environmentsEnvironmentsNumberCreateEnvironment);
-  tool(tool$environmentsEnvironmentsNumberDeleteEnvironment);
-  tool(tool$environmentsEnvironmentsNumberListEnvironments);
-  tool(tool$environmentsEnvironmentsNumberUpdateEnvironment);
-  tool(tool$toolsToolsNumberListTools);
-  tool(tool$toolsetsToolsetsNumberCreateToolset);
-  tool(tool$toolsetsToolsetsNumberDeleteToolset);
-  tool(tool$toolsetsToolsetsNumberGetToolsetDetails);
-  tool(tool$toolsetsToolsetsNumberListToolsets);
-  tool(tool$toolsetsToolsetsNumberUpdateToolset);
+  tool(tool$assetsUploadOpenAPIv3);
+  tool(tool$authCallback);
+  tool(tool$deploymentsAddOpenAPIv3Source);
+  tool(tool$deploymentsCreate);
+  tool(tool$deploymentsGetById);
+  tool(tool$deploymentsList);
+  tool(tool$environmentsCreate);
+  tool(tool$environmentsDeleteBySlug);
+  tool(tool$environmentsList);
+  tool(tool$environmentsUpdateBySlug);
+  tool(tool$toolsList);
+  tool(tool$toolsetsCreate);
+  tool(tool$toolsetsDeleteBySlug);
+  tool(tool$toolsetsGetById);
+  tool(tool$toolsetsList);
+  tool(tool$toolsetsUpdateBySlug);
 
   return server;
 }

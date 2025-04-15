@@ -26,6 +26,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateToolset"}`)
 	})
 
@@ -46,6 +47,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
 	})
 
@@ -67,6 +69,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "updateBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateToolset"}`)
 	})
 
@@ -88,6 +91,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusNoContent)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteToolset"}`)
 	})
 
@@ -111,6 +115,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "getById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Toolset"}`)
 	})
 })

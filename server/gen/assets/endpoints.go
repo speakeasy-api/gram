@@ -24,7 +24,7 @@ type Endpoints struct {
 // reader of the "uploadOpenAPIv3" method.
 type UploadOpenAPIv3RequestData struct {
 	// Payload is the method payload.
-	Payload *UploadOpenAPIv3Payload
+	Payload *UploadOpenAPIv3Form
 	// Body streams the HTTP request body.
 	Body io.ReadCloser
 }

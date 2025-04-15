@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { authAuthNumberInfo } from "../funcs/authAuthNumberInfo.js";
+import { authInfo } from "../funcs/authInfo.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
@@ -107,7 +107,7 @@ export function invalidateSessionInfo(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "auth", "authNumberInfo", ...queryKeyBase],
+    queryKey: ["@gram/client", "auth", "info", ...queryKeyBase],
   });
 }
 
@@ -117,7 +117,7 @@ export function invalidateAllSessionInfo(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "auth", "authNumberInfo"],
+    queryKey: ["@gram/client", "auth", "info"],
   });
 }
 
@@ -141,7 +141,7 @@ export function buildSessionInfoQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(authAuthNumberInfo(
+      return unwrapAsync(authInfo(
         client$,
         security,
         request,
@@ -154,5 +154,5 @@ export function buildSessionInfoQuery(
 export function queryKeySessionInfo(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "auth", "authNumberInfo", parameters];
+  return ["@gram/client", "auth", "info", parameters];
 }

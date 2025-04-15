@@ -38,6 +38,7 @@ var _ = Service("instances", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "load")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadInstance"}`)
 	})
 })

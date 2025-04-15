@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { environmentsEnvironmentsNumberDeleteEnvironment } from "../funcs/environmentsEnvironmentsNumberDeleteEnvironment.js";
+import { environmentsDeleteBySlug } from "../funcs/environmentsDeleteBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
@@ -48,11 +48,7 @@ export function useDeleteEnvironmentMutation(
 }
 
 export function mutationKeyDeleteEnvironment(): MutationKey {
-  return [
-    "@gram/client",
-    "environments",
-    "environmentsNumberDeleteEnvironment",
-  ];
+  return ["@gram/client", "environments", "deleteBySlug"];
 }
 
 export function buildDeleteEnvironmentMutation(
@@ -82,7 +78,7 @@ export function buildDeleteEnvironmentMutation(
           ),
         },
       };
-      return unwrapAsync(environmentsEnvironmentsNumberDeleteEnvironment(
+      return unwrapAsync(environmentsDeleteBySlug(
         client$,
         request,
         mergedOptions,

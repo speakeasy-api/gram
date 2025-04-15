@@ -38,6 +38,7 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "callback")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 
@@ -67,6 +68,7 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "switchScopes")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SwitchScopes"}`)
 	})
 
@@ -91,11 +93,11 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "logout")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Logout"}`)
 	})
 
 	Method("info", func() {
-
 		Description("Provides information about the current authentication status.")
 
 		Payload(func() {
@@ -125,6 +127,7 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "info")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionInfo"}`)
 	})
 })

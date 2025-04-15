@@ -73,7 +73,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Payload, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
+func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Form, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return reader.Close()
 	})

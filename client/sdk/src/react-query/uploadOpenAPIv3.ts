@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { assetsAssetsNumberUploadOpenAPIv3 } from "../funcs/assetsAssetsNumberUploadOpenAPIv3.js";
+import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -49,7 +49,7 @@ export function useUploadOpenAPIv3Mutation(
 }
 
 export function mutationKeyUploadOpenAPIv3(): MutationKey {
-  return ["@gram/client", "assets", "assetsNumberUploadOpenAPIv3"];
+  return ["@gram/client", "assets", "uploadOpenAPIv3"];
 }
 
 export function buildUploadOpenAPIv3Mutation(
@@ -79,7 +79,7 @@ export function buildUploadOpenAPIv3Mutation(
           ),
         },
       };
-      return unwrapAsync(assetsAssetsNumberUploadOpenAPIv3(
+      return unwrapAsync(assetsUploadOpenAPIv3(
         client$,
         request,
         mergedOptions,

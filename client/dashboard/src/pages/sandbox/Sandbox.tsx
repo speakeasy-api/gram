@@ -90,7 +90,7 @@ export function OnboardingPanel({
     }
 
     // Auto-create a default toolset
-    const res = await client.toolsets.toolsetsNumberCreateToolset({
+    const res = await client.toolsets.create({
       gramProject: project.projectSlug,
       createToolsetRequestBody: {
         name: assetName,
@@ -98,12 +98,12 @@ export function OnboardingPanel({
       },
     });
 
-    const allTools = await client.tools.toolsNumberListTools({
+    const allTools = await client.tools.list({
       gramProject: project.projectSlug,
     });
 
     // Add all tools to the toolset
-    await client.toolsets.toolsetsNumberUpdateToolset({
+    await client.toolsets.updateBySlug({
       gramProject: project.projectSlug,
       slug: res.slug,
       updateToolsetRequestBody: {

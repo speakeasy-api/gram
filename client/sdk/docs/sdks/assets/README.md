@@ -7,9 +7,9 @@ Manages assets used by Gram projects.
 
 ### Available Operations
 
-* [assetsNumberUploadOpenAPIv3](#assetsnumberuploadopenapiv3) - uploadOpenAPIv3 assets
+* [uploadOpenAPIv3](#uploadopenapiv3) - uploadOpenAPIv3 assets
 
-## assetsNumberUploadOpenAPIv3
+## uploadOpenAPIv3
 
 Upload an OpenAPI v3 document to Gram.
 
@@ -26,7 +26,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+  const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
   });
 
@@ -43,7 +43,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { assetsAssetsNumberUploadOpenAPIv3 } from "@gram/client/funcs/assetsAssetsNumberUploadOpenAPIv3.js";
+import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -55,7 +55,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await assetsAssetsNumberUploadOpenAPIv3(gram, {
+  const res = await assetsUploadOpenAPIv3(gram, {
     contentLength: 924456,
   });
 
@@ -86,7 +86,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useUploadOpenAPIv3Mutation
-} from "@gram/client/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+} from "@gram/client/react-query/assetsUploadOpenAPIv3.js";
 ```
 
 ### Parameters

@@ -53,10 +53,10 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
+import { useAuthCallback } from "@gram/client/react-query/authCallback.js";
 
 export function Example() {
-  const { data, error, status } = useAuthAuthNumberCallback({
+  const { data, error, status } = useAuthCallback({
     sharedToken: "<value>",
   });
 
@@ -71,11 +71,11 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
+import { useAuthCallback } from "@gram/client/react-query/authCallback.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useAuthAuthNumberCallback(
+  const { data, error, status } = useAuthCallback(
     {
       sharedToken: "<value>",
     },
@@ -115,7 +115,7 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsUploadOpenAPIv3.js";
 
 export function Example() {
   const { mutate, status } = useUploadOpenAPIv3Mutation();
@@ -145,7 +145,7 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsUploadOpenAPIv3.js";
 
 export function ExampleWithOptions() {
   const { mutate, status } = useUploadOpenAPIv3Mutation({
@@ -180,7 +180,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateAuthAuthNumberCallback, invalidateAllAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
+import { invalidateAuthCallback, invalidateAllAuthCallback } from "@gram/client/react-query/authCallback.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/client/react-query/example.js";
 
@@ -198,9 +198,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateAuthAuthNumberCallback(queryClient, /* ... arguments ... */);
+            invalidateAuthCallback(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllAuthAuthNumberCallback(queryClient);
+            invalidateAllAuthCallback(queryClient);
           },
         });
       }}
@@ -228,7 +228,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
-import { useAuthAuthNumberCallbackSuspense } from "@gram/client/react-query/authAuthNumberCallback.js";
+import { useAuthCallbackSuspense } from "@gram/client/react-query/authCallback.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
@@ -266,7 +266,7 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useAuthAuthNumberCallbackSuspense({
+  const { data } = useAuthCallbackSuspense({
     sharedToken: "<value>",
   });
 
@@ -288,7 +288,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/client";
-import { prefetchAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
+import { prefetchAuthCallback } from "@gram/client/react-query/authCallback.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
@@ -299,7 +299,7 @@ export default async function Page() {
     },
   });
 
-  await prefetchAuthAuthNumberCallback(queryClient, gram, {
+  await prefetchAuthCallback(queryClient, gram, {
     sharedToken: "<value>",
   });
 

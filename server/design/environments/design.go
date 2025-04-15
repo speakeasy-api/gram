@@ -27,6 +27,7 @@ var _ = Service("environments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateEnvironment"}`)
 	})
 
@@ -47,6 +48,7 @@ var _ = Service("environments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListEnvironments"}`)
 	})
 
@@ -69,6 +71,7 @@ var _ = Service("environments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "updateBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateEnvironment"}`)
 	})
 
@@ -90,6 +93,7 @@ var _ = Service("environments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteEnvironment"}`)
 	})
 })

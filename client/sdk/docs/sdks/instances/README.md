@@ -7,9 +7,9 @@ Consumer APIs for interacting with all relevant data for an instance of a toolse
 
 ### Available Operations
 
-* [instancesNumberLoadInstance](#instancesnumberloadinstance) - loadInstance instances
+* [load](#load) - loadInstance instances
 
-## instancesNumberLoadInstance
+## load
 
 load all relevant data for an instance of a toolset and environment
 
@@ -21,7 +21,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.instances.instancesNumberLoadInstance({
+  const result = await gram.instances.load({
     option1: {
       projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
       sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
@@ -43,14 +43,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { instancesInstancesNumberLoadInstance } from "@gram/client/funcs/instancesInstancesNumberLoadInstance.js";
+import { instancesLoad } from "@gram/client/funcs/instancesLoad.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await instancesInstancesNumberLoadInstance(gram, {
+  const res = await instancesLoad(gram, {
     option1: {
       projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
       sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
@@ -97,7 +97,7 @@ import {
   // mutations and other user actions.
   invalidateLoadInstance,
   invalidateAllLoadInstance,
-} from "@gram/client/react-query/instancesInstancesNumberLoadInstance.js";
+} from "@gram/client/react-query/instancesLoad.js";
 ```
 
 ### Parameters

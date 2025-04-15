@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { toolsetsToolsetsNumberCreateToolset } from "../funcs/toolsetsToolsetsNumberCreateToolset.js";
+import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -49,7 +49,7 @@ export function useCreateToolsetMutation(
 }
 
 export function mutationKeyCreateToolset(): MutationKey {
-  return ["@gram/client", "toolsets", "toolsetsNumberCreateToolset"];
+  return ["@gram/client", "toolsets", "create"];
 }
 
 export function buildCreateToolsetMutation(
@@ -79,7 +79,7 @@ export function buildCreateToolsetMutation(
           ),
         },
       };
-      return unwrapAsync(toolsetsToolsetsNumberCreateToolset(
+      return unwrapAsync(toolsetsCreate(
         client$,
         request,
         mergedOptions,

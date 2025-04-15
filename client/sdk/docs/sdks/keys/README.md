@@ -7,11 +7,11 @@ Managing system api keys.
 
 ### Available Operations
 
-* [keysNumberCreateKey](#keysnumbercreatekey) - createKey keys
-* [keysNumberListKeys](#keysnumberlistkeys) - listKeys keys
-* [keysNumberRevokeKey](#keysnumberrevokekey) - revokeKey keys
+* [create](#create) - createKey keys
+* [list](#list) - listKeys keys
+* [revokeById](#revokebyid) - revokeKey keys
 
-## keysNumberCreateKey
+## create
 
 Create a new api key
 
@@ -23,7 +23,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.keys.keysNumberCreateKey({
+  const result = await gram.keys.create({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   }, {
     createKeyForm: {
@@ -44,14 +44,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { keysKeysNumberCreateKey } from "@gram/client/funcs/keysKeysNumberCreateKey.js";
+import { keysCreate } from "@gram/client/funcs/keysCreate.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await keysKeysNumberCreateKey(gram, {
+  const res = await keysCreate(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   }, {
     createKeyForm: {
@@ -86,7 +86,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateAPIKeyMutation
-} from "@gram/client/react-query/keysKeysNumberCreateKey.js";
+} from "@gram/client/react-query/keysCreate.js";
 ```
 
 ### Parameters
@@ -109,7 +109,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## keysNumberListKeys
+## list
 
 List all api keys for an organization
 
@@ -121,7 +121,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.keys.keysNumberListKeys({
+  const result = await gram.keys.list({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -138,14 +138,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { keysKeysNumberListKeys } from "@gram/client/funcs/keysKeysNumberListKeys.js";
+import { keysList } from "@gram/client/funcs/keysList.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await keysKeysNumberListKeys(gram, {
+  const res = await keysList(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -187,7 +187,7 @@ import {
   // mutations and other user actions.
   invalidateListAPIKeys,
   invalidateAllListAPIKeys,
-} from "@gram/client/react-query/keysKeysNumberListKeys.js";
+} from "@gram/client/react-query/keysList.js";
 ```
 
 ### Parameters
@@ -210,7 +210,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## keysNumberRevokeKey
+## revokeById
 
 Revoke a api key
 
@@ -222,7 +222,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  await gram.keys.keysNumberRevokeKey({
+  await gram.keys.revokeById({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   }, {
     id: "<id>",
@@ -240,14 +240,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { keysKeysNumberRevokeKey } from "@gram/client/funcs/keysKeysNumberRevokeKey.js";
+import { keysRevokeById } from "@gram/client/funcs/keysRevokeById.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await keysKeysNumberRevokeKey(gram, {
+  const res = await keysRevokeById(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   }, {
     id: "<id>",
@@ -279,7 +279,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useRevokeAPIKeyMutation
-} from "@gram/client/react-query/keysKeysNumberRevokeKey.js";
+} from "@gram/client/react-query/keysRevokeById.js";
 ```
 
 ### Parameters

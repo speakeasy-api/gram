@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { instancesInstancesNumberLoadInstance } from "../funcs/instancesInstancesNumberLoadInstance.js";
+import { instancesLoad } from "../funcs/instancesLoad.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -122,12 +122,7 @@ export function invalidateLoadInstance(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "instances",
-      "instancesNumberLoadInstance",
-      ...queryKeyBase,
-    ],
+    queryKey: ["@gram/client", "instances", "load", ...queryKeyBase],
   });
 }
 
@@ -137,7 +132,7 @@ export function invalidateAllLoadInstance(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "instances", "instancesNumberLoadInstance"],
+    queryKey: ["@gram/client", "instances", "load"],
   });
 }
 
@@ -167,7 +162,7 @@ export function buildLoadInstanceQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(instancesInstancesNumberLoadInstance(
+      return unwrapAsync(instancesLoad(
         client$,
         security,
         request,
@@ -186,10 +181,5 @@ export function queryKeyLoadInstance(
     gramKey?: string | undefined;
   },
 ): QueryKey {
-  return [
-    "@gram/client",
-    "instances",
-    "instancesNumberLoadInstance",
-    parameters,
-  ];
+  return ["@gram/client", "instances", "load", parameters];
 }

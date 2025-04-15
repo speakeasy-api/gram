@@ -27,7 +27,7 @@ func NewClient(uploadOpenAPIv3 goa.Endpoint) *Client {
 }
 
 // UploadOpenAPIv3 calls the "uploadOpenAPIv3" endpoint of the "assets" service.
-func (c *Client) UploadOpenAPIv3(ctx context.Context, p *UploadOpenAPIv3Payload, req io.ReadCloser) (res *UploadOpenAPIv3Result, err error) {
+func (c *Client) UploadOpenAPIv3(ctx context.Context, p *UploadOpenAPIv3Form, req io.ReadCloser) (res *UploadOpenAPIv3Result, err error) {
 	var ires any
 	ires, err = c.UploadOpenAPIv3Endpoint(ctx, &UploadOpenAPIv3RequestData{Payload: p, Body: req})
 	if err != nil {

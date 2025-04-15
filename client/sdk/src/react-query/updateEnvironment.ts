@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { environmentsEnvironmentsNumberUpdateEnvironment } from "../funcs/environmentsEnvironmentsNumberUpdateEnvironment.js";
+import { environmentsUpdateBySlug } from "../funcs/environmentsUpdateBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -49,11 +49,7 @@ export function useUpdateEnvironmentMutation(
 }
 
 export function mutationKeyUpdateEnvironment(): MutationKey {
-  return [
-    "@gram/client",
-    "environments",
-    "environmentsNumberUpdateEnvironment",
-  ];
+  return ["@gram/client", "environments", "updateBySlug"];
 }
 
 export function buildUpdateEnvironmentMutation(
@@ -83,7 +79,7 @@ export function buildUpdateEnvironmentMutation(
           ),
         },
       };
-      return unwrapAsync(environmentsEnvironmentsNumberUpdateEnvironment(
+      return unwrapAsync(environmentsUpdateBySlug(
         client$,
         request,
         mergedOptions,

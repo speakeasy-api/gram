@@ -17,7 +17,7 @@ import (
 // Manages assets used by Gram projects.
 type Service interface {
 	// Upload an OpenAPI v3 document to Gram.
-	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Payload, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
+	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Form, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -60,9 +60,9 @@ type Asset struct {
 	UpdatedAt string
 }
 
-// UploadOpenAPIv3Payload is the payload type of the assets service
+// UploadOpenAPIv3Form is the payload type of the assets service
 // uploadOpenAPIv3 method.
-type UploadOpenAPIv3Payload struct {
+type UploadOpenAPIv3Form struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	ContentType      string

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { keysKeysNumberRevokeKey } from "../funcs/keysKeysNumberRevokeKey.js";
+import { keysRevokeById } from "../funcs/keysRevokeById.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
@@ -49,7 +49,7 @@ export function useRevokeAPIKeyMutation(
 }
 
 export function mutationKeyRevokeAPIKey(): MutationKey {
-  return ["@gram/client", "keys", "keysNumberRevokeKey"];
+  return ["@gram/client", "keys", "revokeById"];
 }
 
 export function buildRevokeAPIKeyMutation(
@@ -80,7 +80,7 @@ export function buildRevokeAPIKeyMutation(
           ),
         },
       };
-      return unwrapAsync(keysKeysNumberRevokeKey(
+      return unwrapAsync(keysRevokeById(
         client$,
         security,
         request,

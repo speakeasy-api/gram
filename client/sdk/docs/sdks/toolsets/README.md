@@ -7,13 +7,13 @@ Managed toolsets for gram AI consumers.
 
 ### Available Operations
 
-* [toolsetsNumberCreateToolset](#toolsetsnumbercreatetoolset) - createToolset toolsets
-* [toolsetsNumberDeleteToolset](#toolsetsnumberdeletetoolset) - deleteToolset toolsets
-* [toolsetsNumberGetToolsetDetails](#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
-* [toolsetsNumberListToolsets](#toolsetsnumberlisttoolsets) - listToolsets toolsets
-* [toolsetsNumberUpdateToolset](#toolsetsnumberupdatetoolset) - updateToolset toolsets
+* [create](#create) - createToolset toolsets
+* [deleteBySlug](#deletebyslug) - deleteToolset toolsets
+* [getById](#getbyid) - getToolsetDetails toolsets
+* [list](#list) - listToolsets toolsets
+* [updateBySlug](#updatebyslug) - updateToolset toolsets
 
-## toolsetsNumberCreateToolset
+## create
 
 Create a new toolset with associated tools
 
@@ -30,7 +30,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.toolsets.toolsetsNumberCreateToolset({
+  const result = await gram.toolsets.create({
     createToolsetRequestBody: {
       name: "<value>",
     },
@@ -49,7 +49,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { toolsetsToolsetsNumberCreateToolset } from "@gram/client/funcs/toolsetsToolsetsNumberCreateToolset.js";
+import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -61,7 +61,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await toolsetsToolsetsNumberCreateToolset(gram, {
+  const res = await toolsetsCreate(gram, {
     createToolsetRequestBody: {
       name: "<value>",
     },
@@ -94,7 +94,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateToolsetMutation
-} from "@gram/client/react-query/toolsetsToolsetsNumberCreateToolset.js";
+} from "@gram/client/react-query/toolsetsCreate.js";
 ```
 
 ### Parameters
@@ -116,7 +116,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## toolsetsNumberDeleteToolset
+## deleteBySlug
 
 Delete a toolset by its ID
 
@@ -133,7 +133,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  await gram.toolsets.toolsetsNumberDeleteToolset({
+  await gram.toolsets.deleteBySlug({
     slug: "<value>",
   });
 
@@ -149,7 +149,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { toolsetsToolsetsNumberDeleteToolset } from "@gram/client/funcs/toolsetsToolsetsNumberDeleteToolset.js";
+import { toolsetsDeleteBySlug } from "@gram/client/funcs/toolsetsDeleteBySlug.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -161,7 +161,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await toolsetsToolsetsNumberDeleteToolset(gram, {
+  const res = await toolsetsDeleteBySlug(gram, {
     slug: "<value>",
   });
 
@@ -191,7 +191,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useDeleteToolsetMutation
-} from "@gram/client/react-query/toolsetsToolsetsNumberDeleteToolset.js";
+} from "@gram/client/react-query/toolsetsDeleteBySlug.js";
 ```
 
 ### Parameters
@@ -213,7 +213,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## toolsetsNumberGetToolsetDetails
+## getById
 
 Get detailed information about a toolset including full HTTP tool definitions
 
@@ -230,7 +230,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.toolsets.toolsetsNumberGetToolsetDetails({
+  const result = await gram.toolsets.getById({
     slug: "<value>",
   });
 
@@ -247,7 +247,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { toolsetsToolsetsNumberGetToolsetDetails } from "@gram/client/funcs/toolsetsToolsetsNumberGetToolsetDetails.js";
+import { toolsetsGetById } from "@gram/client/funcs/toolsetsGetById.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -259,7 +259,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await toolsetsToolsetsNumberGetToolsetDetails(gram, {
+  const res = await toolsetsGetById(gram, {
     slug: "<value>",
   });
 
@@ -301,7 +301,7 @@ import {
   // mutations and other user actions.
   invalidateToolset,
   invalidateAllToolset,
-} from "@gram/client/react-query/toolsetsToolsetsNumberGetToolsetDetails.js";
+} from "@gram/client/react-query/toolsetsGetById.js";
 ```
 
 ### Parameters
@@ -323,7 +323,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## toolsetsNumberListToolsets
+## list
 
 List all toolsets for a project
 
@@ -340,7 +340,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.toolsets.toolsetsNumberListToolsets();
+  const result = await gram.toolsets.list();
 
   // Handle the result
   console.log(result);
@@ -355,7 +355,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { toolsetsToolsetsNumberListToolsets } from "@gram/client/funcs/toolsetsToolsetsNumberListToolsets.js";
+import { toolsetsList } from "@gram/client/funcs/toolsetsList.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -367,7 +367,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await toolsetsToolsetsNumberListToolsets(gram);
+  const res = await toolsetsList(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -407,7 +407,7 @@ import {
   // mutations and other user actions.
   invalidateListToolsets,
   invalidateAllListToolsets,
-} from "@gram/client/react-query/toolsetsToolsetsNumberListToolsets.js";
+} from "@gram/client/react-query/toolsetsList.js";
 ```
 
 ### Parameters
@@ -429,7 +429,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## toolsetsNumberUpdateToolset
+## updateBySlug
 
 Update a toolset's properties including name, description, and HTTP tools
 
@@ -446,7 +446,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.toolsets.toolsetsNumberUpdateToolset({
+  const result = await gram.toolsets.updateBySlug({
     slug: "<value>",
     updateToolsetRequestBody: {},
   });
@@ -464,7 +464,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { toolsetsToolsetsNumberUpdateToolset } from "@gram/client/funcs/toolsetsToolsetsNumberUpdateToolset.js";
+import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -476,7 +476,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await toolsetsToolsetsNumberUpdateToolset(gram, {
+  const res = await toolsetsUpdateBySlug(gram, {
     slug: "<value>",
     updateToolsetRequestBody: {},
   });
@@ -508,7 +508,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useUpdateToolsetMutation
-} from "@gram/client/react-query/toolsetsToolsetsNumberUpdateToolset.js";
+} from "@gram/client/react-query/toolsetsUpdateBySlug.js";
 ```
 
 ### Parameters

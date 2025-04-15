@@ -7,12 +7,12 @@ Managed auth for gram producers and dashboard.
 
 ### Available Operations
 
-* [authNumberCallback](#authnumbercallback) - callback auth
-* [authNumberInfo](#authnumberinfo) - info auth
-* [authNumberLogout](#authnumberlogout) - logout auth
-* [authNumberSwitchScopes](#authnumberswitchscopes) - switchScopes auth
+* [callback](#callback) - callback auth
+* [info](#info) - info auth
+* [logout](#logout) - logout auth
+* [switchScopes](#switchscopes) - switchScopes auth
 
-## authNumberCallback
+## callback
 
 Handles the authentication callback.
 
@@ -29,7 +29,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.auth.authNumberCallback({
+  const result = await gram.auth.callback({
     sharedToken: "<value>",
   });
 
@@ -46,7 +46,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { authAuthNumberCallback } from "@gram/client/funcs/authAuthNumberCallback.js";
+import { authCallback } from "@gram/client/funcs/authCallback.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -58,7 +58,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await authAuthNumberCallback(gram, {
+  const res = await authCallback(gram, {
     sharedToken: "<value>",
   });
 
@@ -94,7 +94,7 @@ run();
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## authNumberInfo
+## info
 
 Provides information about the current authentication status.
 
@@ -106,7 +106,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.authNumberInfo({
+  const result = await gram.auth.info({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -123,14 +123,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { authAuthNumberInfo } from "@gram/client/funcs/authAuthNumberInfo.js";
+import { authInfo } from "@gram/client/funcs/authInfo.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await authAuthNumberInfo(gram, {
+  const res = await authInfo(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -172,7 +172,7 @@ import {
   // mutations and other user actions.
   invalidateSessionInfo,
   invalidateAllSessionInfo,
-} from "@gram/client/react-query/authAuthNumberInfo.js";
+} from "@gram/client/react-query/authInfo.js";
 ```
 
 ### Parameters
@@ -195,7 +195,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## authNumberLogout
+## logout
 
 Logs out the current user by clearing their session.
 
@@ -207,7 +207,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.authNumberLogout({
+  const result = await gram.auth.logout({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -224,14 +224,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { authAuthNumberLogout } from "@gram/client/funcs/authAuthNumberLogout.js";
+import { authLogout } from "@gram/client/funcs/authLogout.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await authAuthNumberLogout(gram, {
+  const res = await authLogout(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -273,7 +273,7 @@ import {
   // mutations and other user actions.
   invalidateLogout,
   invalidateAllLogout,
-} from "@gram/client/react-query/authAuthNumberLogout.js";
+} from "@gram/client/react-query/authLogout.js";
 ```
 
 ### Parameters
@@ -296,7 +296,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## authNumberSwitchScopes
+## switchScopes
 
 Switches the authentication scope to a different organization.
 
@@ -308,7 +308,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.authNumberSwitchScopes({
+  const result = await gram.auth.switchScopes({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -325,14 +325,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { authAuthNumberSwitchScopes } from "@gram/client/funcs/authAuthNumberSwitchScopes.js";
+import { authSwitchScopes } from "@gram/client/funcs/authSwitchScopes.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await authAuthNumberSwitchScopes(gram, {
+  const res = await authSwitchScopes(gram, {
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
   });
 
@@ -363,7 +363,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useSwitchScopesMutation
-} from "@gram/client/react-query/authAuthNumberSwitchScopes.js";
+} from "@gram/client/react-query/authSwitchScopes.js";
 ```
 
 ### Parameters

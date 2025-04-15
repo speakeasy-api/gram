@@ -7,12 +7,12 @@ Manages deployments of tools from upstream sources.
 
 ### Available Operations
 
-* [deploymentsNumberAddOpenAPIv3Source](#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
-* [deploymentsNumberCreateDeployment](#deploymentsnumbercreatedeployment) - createDeployment deployments
-* [deploymentsNumberGetDeployment](#deploymentsnumbergetdeployment) - getDeployment deployments
-* [deploymentsNumberListDeployments](#deploymentsnumberlistdeployments) - listDeployments deployments
+* [addOpenAPIv3Source](#addopenapiv3source) - addOpenAPIv3Source deployments
+* [create](#create) - createDeployment deployments
+* [getById](#getbyid) - getDeployment deployments
+* [list](#list) - listDeployments deployments
 
-## deploymentsNumberAddOpenAPIv3Source
+## addOpenAPIv3Source
 
 Create a new deployment with an additional OpenAPI 3.x document.
 
@@ -29,7 +29,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.deployments.deploymentsNumberAddOpenAPIv3Source({
+  const result = await gram.deployments.addOpenAPIv3Source({
     openAPIv3DeploymentAssetForm: {
       assetId: "<id>",
       name: "<value>",
@@ -50,7 +50,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { deploymentsDeploymentsNumberAddOpenAPIv3Source } from "@gram/client/funcs/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
+import { deploymentsAddOpenAPIv3Source } from "@gram/client/funcs/deploymentsAddOpenAPIv3Source.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -62,7 +62,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await deploymentsDeploymentsNumberAddOpenAPIv3Source(gram, {
+  const res = await deploymentsAddOpenAPIv3Source(gram, {
     openAPIv3DeploymentAssetForm: {
       assetId: "<id>",
       name: "<value>",
@@ -97,7 +97,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useAddOpenAPIv3SourceMutation
-} from "@gram/client/react-query/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
+} from "@gram/client/react-query/deploymentsAddOpenAPIv3Source.js";
 ```
 
 ### Parameters
@@ -119,7 +119,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## deploymentsNumberCreateDeployment
+## create
 
 Create a deployment to load tool definitions.
 
@@ -136,7 +136,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.deployments.deploymentsNumberCreateDeployment({
+  const result = await gram.deployments.create({
     idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
     createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
@@ -159,7 +159,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { deploymentsDeploymentsNumberCreateDeployment } from "@gram/client/funcs/deploymentsDeploymentsNumberCreateDeployment.js";
+import { deploymentsCreate } from "@gram/client/funcs/deploymentsCreate.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -171,7 +171,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await deploymentsDeploymentsNumberCreateDeployment(gram, {
+  const res = await deploymentsCreate(gram, {
     idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
     createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
@@ -208,7 +208,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateDeploymentMutation
-} from "@gram/client/react-query/deploymentsDeploymentsNumberCreateDeployment.js";
+} from "@gram/client/react-query/deploymentsCreate.js";
 ```
 
 ### Parameters
@@ -230,7 +230,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## deploymentsNumberGetDeployment
+## getById
 
 Create a deployment to load tool definitions.
 
@@ -247,7 +247,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.deployments.deploymentsNumberGetDeployment({
+  const result = await gram.deployments.getById({
     id: "<id>",
   });
 
@@ -264,7 +264,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { deploymentsDeploymentsNumberGetDeployment } from "@gram/client/funcs/deploymentsDeploymentsNumberGetDeployment.js";
+import { deploymentsGetById } from "@gram/client/funcs/deploymentsGetById.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -276,7 +276,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await deploymentsDeploymentsNumberGetDeployment(gram, {
+  const res = await deploymentsGetById(gram, {
     id: "<id>",
   });
 
@@ -318,7 +318,7 @@ import {
   // mutations and other user actions.
   invalidateDeployment,
   invalidateAllDeployment,
-} from "@gram/client/react-query/deploymentsDeploymentsNumberGetDeployment.js";
+} from "@gram/client/react-query/deploymentsGetById.js";
 ```
 
 ### Parameters
@@ -340,7 +340,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## deploymentsNumberListDeployments
+## list
 
 List all deployments in descending order of creation.
 
@@ -357,7 +357,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.deployments.deploymentsNumberListDeployments();
+  const result = await gram.deployments.list();
 
   // Handle the result
   console.log(result);
@@ -372,7 +372,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { deploymentsDeploymentsNumberListDeployments } from "@gram/client/funcs/deploymentsDeploymentsNumberListDeployments.js";
+import { deploymentsList } from "@gram/client/funcs/deploymentsList.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -384,7 +384,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await deploymentsDeploymentsNumberListDeployments(gram);
+  const res = await deploymentsList(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -424,7 +424,7 @@ import {
   // mutations and other user actions.
   invalidateListDeployments,
   invalidateAllListDeployments,
-} from "@gram/client/react-query/deploymentsDeploymentsNumberListDeployments.js";
+} from "@gram/client/react-query/deploymentsList.js";
 ```
 
 ### Parameters

@@ -200,7 +200,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+  const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
   });
 
@@ -239,7 +239,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+  const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
   });
 
@@ -260,7 +260,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.authNumberInfo({
+  const result = await gram.auth.info({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
       ?? "",
   });
@@ -282,51 +282,51 @@ run();
 
 ### [assets](docs/sdks/assets/README.md)
 
-* [assetsNumberUploadOpenAPIv3](docs/sdks/assets/README.md#assetsnumberuploadopenapiv3) - uploadOpenAPIv3 assets
+* [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
 ### [auth](docs/sdks/auth/README.md)
 
-* [authNumberCallback](docs/sdks/auth/README.md#authnumbercallback) - callback auth
-* [authNumberInfo](docs/sdks/auth/README.md#authnumberinfo) - info auth
-* [authNumberLogout](docs/sdks/auth/README.md#authnumberlogout) - logout auth
-* [authNumberSwitchScopes](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
+* [callback](docs/sdks/auth/README.md#callback) - callback auth
+* [info](docs/sdks/auth/README.md#info) - info auth
+* [logout](docs/sdks/auth/README.md#logout) - logout auth
+* [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
 ### [deployments](docs/sdks/deployments/README.md)
 
-* [deploymentsNumberAddOpenAPIv3Source](docs/sdks/deployments/README.md#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
-* [deploymentsNumberCreateDeployment](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
-* [deploymentsNumberGetDeployment](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
-* [deploymentsNumberListDeployments](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
+* [addOpenAPIv3Source](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
+* [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
+* [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+* [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
 
 ### [environments](docs/sdks/environments/README.md)
 
-* [environmentsNumberCreateEnvironment](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments
-* [environmentsNumberDeleteEnvironment](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
-* [environmentsNumberListEnvironments](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
-* [environmentsNumberUpdateEnvironment](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
+* [create](docs/sdks/environments/README.md#create) - createEnvironment environments
+* [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+* [list](docs/sdks/environments/README.md#list) - listEnvironments environments
+* [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
 
 ### [instances](docs/sdks/instances/README.md)
 
-* [instancesNumberLoadInstance](docs/sdks/instances/README.md#instancesnumberloadinstance) - loadInstance instances
+* [load](docs/sdks/instances/README.md#load) - loadInstance instances
 
 ### [keys](docs/sdks/keys/README.md)
 
-* [keysNumberCreateKey](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
-* [keysNumberListKeys](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
-* [keysNumberRevokeKey](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
+* [create](docs/sdks/keys/README.md#create) - createKey keys
+* [list](docs/sdks/keys/README.md#list) - listKeys keys
+* [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 
 ### [tools](docs/sdks/tools/README.md)
 
-* [toolsNumberListTools](docs/sdks/tools/README.md#toolsnumberlisttools) - listTools tools
+* [list](docs/sdks/tools/README.md#list) - listTools tools
 
 ### [toolsets](docs/sdks/toolsets/README.md)
 
-* [toolsetsNumberCreateToolset](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
-* [toolsetsNumberDeleteToolset](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
-* [toolsetsNumberGetToolsetDetails](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
-* [toolsetsNumberListToolsets](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
-* [toolsetsNumberUpdateToolset](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
+* [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+* [deleteBySlug](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
+* [getById](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
+* [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
+* [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 
 </details>
 <!-- End Available Resources and Operations [operations] -->
@@ -346,29 +346,29 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
-- [`assetsAssetsNumberUploadOpenAPIv3`](docs/sdks/assets/README.md#assetsnumberuploadopenapiv3) - uploadOpenAPIv3 assets
-- [`authAuthNumberCallback`](docs/sdks/auth/README.md#authnumbercallback) - callback auth
-- [`authAuthNumberInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
-- [`authAuthNumberLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
-- [`authAuthNumberSwitchScopes`](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
-- [`deploymentsDeploymentsNumberAddOpenAPIv3Source`](docs/sdks/deployments/README.md#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
-- [`deploymentsDeploymentsNumberCreateDeployment`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
-- [`deploymentsDeploymentsNumberGetDeployment`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
-- [`deploymentsDeploymentsNumberListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
-- [`environmentsEnvironmentsNumberCreateEnvironment`](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments
-- [`environmentsEnvironmentsNumberDeleteEnvironment`](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
-- [`environmentsEnvironmentsNumberListEnvironments`](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
-- [`environmentsEnvironmentsNumberUpdateEnvironment`](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
-- [`instancesInstancesNumberLoadInstance`](docs/sdks/instances/README.md#instancesnumberloadinstance) - loadInstance instances
-- [`keysKeysNumberCreateKey`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
-- [`keysKeysNumberListKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
-- [`keysKeysNumberRevokeKey`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
-- [`toolsetsToolsetsNumberCreateToolset`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
-- [`toolsetsToolsetsNumberDeleteToolset`](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
-- [`toolsetsToolsetsNumberGetToolsetDetails`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
-- [`toolsetsToolsetsNumberListToolsets`](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
-- [`toolsetsToolsetsNumberUpdateToolset`](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
-- [`toolsToolsNumberListTools`](docs/sdks/tools/README.md#toolsnumberlisttools) - listTools tools
+- [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+- [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
+- [`authInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
+- [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`deploymentsAddOpenAPIv3Source`](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
+- [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
+- [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+- [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
+- [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`instancesLoad`](docs/sdks/instances/README.md#load) - loadInstance instances
+- [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
+- [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
+- [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+- [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
+- [`toolsetsGetById`](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
+- [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
+- [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 
 </details>
 <!-- End Standalone functions [standalone-funcs] -->
@@ -395,28 +395,28 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
-- [`useAddOpenAPIv3SourceMutation`](docs/sdks/deployments/README.md#deploymentsnumberaddopenapiv3source) - addOpenAPIv3Source deployments
-- [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#keysnumbercreatekey) - createKey keys
-- [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#deploymentsnumbercreatedeployment) - createDeployment deployments
-- [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumbercreateenvironment) - createEnvironment environments
-- [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumbercreatetoolset) - createToolset toolsets
-- [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumberdeleteenvironment) - deleteEnvironment environments
-- [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumberdeletetoolset) - deleteToolset toolsets
-- [`useDeployment`](docs/sdks/deployments/README.md#deploymentsnumbergetdeployment) - getDeployment deployments
-- [`useListAPIKeys`](docs/sdks/keys/README.md#keysnumberlistkeys) - listKeys keys
-- [`useListDeployments`](docs/sdks/deployments/README.md#deploymentsnumberlistdeployments) - listDeployments deployments
-- [`useListEnvironments`](docs/sdks/environments/README.md#environmentsnumberlistenvironments) - listEnvironments environments
-- [`useListTools`](docs/sdks/tools/README.md#toolsnumberlisttools) - listTools tools
-- [`useListToolsets`](docs/sdks/toolsets/README.md#toolsetsnumberlisttoolsets) - listToolsets toolsets
-- [`useLoadInstance`](docs/sdks/instances/README.md#instancesnumberloadinstance) - loadInstance instances
-- [`useLogout`](docs/sdks/auth/README.md#authnumberlogout) - logout auth
-- [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#keysnumberrevokekey) - revokeKey keys
-- [`useSessionInfo`](docs/sdks/auth/README.md#authnumberinfo) - info auth
-- [`useSwitchScopesMutation`](docs/sdks/auth/README.md#authnumberswitchscopes) - switchScopes auth
-- [`useToolset`](docs/sdks/toolsets/README.md#toolsetsnumbergettoolsetdetails) - getToolsetDetails toolsets
-- [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#environmentsnumberupdateenvironment) - updateEnvironment environments
-- [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#toolsetsnumberupdatetoolset) - updateToolset toolsets
-- [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#assetsnumberuploadopenapiv3) - uploadOpenAPIv3 assets
+- [`useAddOpenAPIv3SourceMutation`](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
+- [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
+- [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
+- [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+- [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
+- [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+- [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
+- [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
+- [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
+- [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
+- [`useLoadInstance`](docs/sdks/instances/README.md#load) - loadInstance instances
+- [`useLogout`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`useToolset`](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
+- [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->
@@ -440,7 +440,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+  const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
   }, {
     retries: {
@@ -487,7 +487,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+  const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
   });
 
@@ -525,7 +525,7 @@ const gram = new Gram({
 async function run() {
   let result;
   try {
-    result = await gram.assets.assetsNumberUploadOpenAPIv3({
+    result = await gram.assets.uploadOpenAPIv3({
       contentLength: 924456,
     });
 
@@ -594,7 +594,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+  const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
   });
 

@@ -7,12 +7,12 @@ import { InstanceResult } from "@gram/client/models/components";
 
 let value: InstanceResult = {
   environment: {
-    createdAt: new Date("2024-11-07T22:17:02.814Z"),
+    createdAt: new Date("2023-10-17T18:07:30.469Z"),
     entries: [
       {
-        createdAt: new Date("2024-11-01T20:33:57.206Z"),
+        createdAt: new Date("2025-02-20T04:41:45.906Z"),
         name: "<value>",
-        updatedAt: new Date("2024-11-07T03:49:54.674Z"),
+        updatedAt: new Date("2024-03-10T22:10:58.239Z"),
         value: "<value>",
       },
     ],
@@ -21,25 +21,25 @@ let value: InstanceResult = {
     organizationId: "<id>",
     projectId: "<id>",
     slug: "<value>",
-    updatedAt: new Date("2025-10-31T08:20:58.047Z"),
+    updatedAt: new Date("2024-08-18T10:47:36.935Z"),
   },
   name: "<value>",
   tools: [
     {
-      createdAt: new Date("2025-01-17T06:36:04.132Z"),
+      createdAt: new Date("2024-04-15T03:02:21.323Z"),
       deploymentId: "<id>",
-      description: "continually fooey amid gosh arraign",
+      description: "archive since murky dependency syringe instantly",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/lost+found",
+      path: "/usr/local/bin",
       projectId: "<id>",
       schema: "<value>",
       summary: "<value>",
       tags: [
         "<value>",
       ],
-      updatedAt: new Date("2023-05-12T17:39:01.246Z"),
+      updatedAt: new Date("2024-05-13T03:29:42.791Z"),
     },
   ],
 };

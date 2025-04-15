@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { keysKeysNumberCreateKey } from "../funcs/keysKeysNumberCreateKey.js";
+import { keysCreate } from "../funcs/keysCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -50,7 +50,7 @@ export function useCreateAPIKeyMutation(
 }
 
 export function mutationKeyCreateAPIKey(): MutationKey {
-  return ["@gram/client", "keys", "keysNumberCreateKey"];
+  return ["@gram/client", "keys", "create"];
 }
 
 export function buildCreateAPIKeyMutation(
@@ -81,7 +81,7 @@ export function buildCreateAPIKeyMutation(
           ),
         },
       };
-      return unwrapAsync(keysKeysNumberCreateKey(
+      return unwrapAsync(keysCreate(
         client$,
         security,
         request,

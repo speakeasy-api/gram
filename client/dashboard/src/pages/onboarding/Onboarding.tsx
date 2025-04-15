@@ -89,19 +89,18 @@ export function OnboardingContent({
 
     setCreatingDeployment(true);
 
-    const deployment =
-      await client.deployments.deploymentsNumberCreateDeployment({
-        idempotencyKey: uuidv4(),
-        createDeploymentRequestBody: {
-          openapiv3Assets: [
-            {
-              assetId: asset.asset.id,
-              name: apiName,
-              slug: apiName.replace(" ", "-").toLowerCase(),
-            },
-          ],
-        },
-      });
+    const deployment = await client.deployments.create({
+      idempotencyKey: uuidv4(),
+      createDeploymentRequestBody: {
+        openapiv3Assets: [
+          {
+            assetId: asset.asset.id,
+            name: apiName,
+            slug: apiName.replace(" ", "-").toLowerCase(),
+          },
+        ],
+      },
+    });
 
     console.log("Deployment created:", deployment);
     setDeployment(deployment.deployment);

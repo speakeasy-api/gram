@@ -7,7 +7,7 @@ sources:
         registry:
             location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
 targets:
-    gram:
+    gram-internal:
         target: typescript
         source: Gram API Description
         output: client/sdk
@@ -17,3 +17,7 @@ targets:
             labelOverride:
                 fixedValue: Typescript (SDK)
             blocking: false
+    gram-public:
+        target: typescript
+        source: Gram API Description
+        output: sdks/typescript

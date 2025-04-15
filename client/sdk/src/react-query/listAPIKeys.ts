@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { keysKeysNumberListKeys } from "../funcs/keysKeysNumberListKeys.js";
+import { keysList } from "../funcs/keysList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -108,7 +108,7 @@ export function invalidateListAPIKeys(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "keys", "keysNumberListKeys", ...queryKeyBase],
+    queryKey: ["@gram/client", "keys", "list", ...queryKeyBase],
   });
 }
 
@@ -118,7 +118,7 @@ export function invalidateAllListAPIKeys(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "keys", "keysNumberListKeys"],
+    queryKey: ["@gram/client", "keys", "list"],
   });
 }
 
@@ -142,7 +142,7 @@ export function buildListAPIKeysQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(keysKeysNumberListKeys(
+      return unwrapAsync(keysList(
         client$,
         security,
         request,
@@ -155,5 +155,5 @@ export function buildListAPIKeysQuery(
 export function queryKeyListAPIKeys(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "keys", "keysNumberListKeys", parameters];
+  return ["@gram/client", "keys", "list", parameters];
 }

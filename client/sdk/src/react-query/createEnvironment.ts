@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { environmentsEnvironmentsNumberCreateEnvironment } from "../funcs/environmentsEnvironmentsNumberCreateEnvironment.js";
+import { environmentsCreate } from "../funcs/environmentsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -49,11 +49,7 @@ export function useCreateEnvironmentMutation(
 }
 
 export function mutationKeyCreateEnvironment(): MutationKey {
-  return [
-    "@gram/client",
-    "environments",
-    "environmentsNumberCreateEnvironment",
-  ];
+  return ["@gram/client", "environments", "create"];
 }
 
 export function buildCreateEnvironmentMutation(
@@ -83,7 +79,7 @@ export function buildCreateEnvironmentMutation(
           ),
         },
       };
-      return unwrapAsync(environmentsEnvironmentsNumberCreateEnvironment(
+      return unwrapAsync(environmentsCreate(
         client$,
         request,
         mergedOptions,

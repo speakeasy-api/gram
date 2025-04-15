@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { authAuthNumberSwitchScopes } from "../funcs/authAuthNumberSwitchScopes.js";
+import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
@@ -51,7 +51,7 @@ export function useSwitchScopesMutation(
 }
 
 export function mutationKeySwitchScopes(): MutationKey {
-  return ["@gram/client", "auth", "authNumberSwitchScopes"];
+  return ["@gram/client", "auth", "switchScopes"];
 }
 
 export function buildSwitchScopesMutation(
@@ -82,7 +82,7 @@ export function buildSwitchScopesMutation(
           ),
         },
       };
-      return unwrapAsync(authAuthNumberSwitchScopes(
+      return unwrapAsync(authSwitchScopes(
         client$,
         security,
         request,

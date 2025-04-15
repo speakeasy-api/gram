@@ -12,7 +12,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.assetsNumberUploadOpenAPIv3({
+  const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
   });
 

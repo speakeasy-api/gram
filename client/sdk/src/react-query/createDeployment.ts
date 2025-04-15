@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { deploymentsDeploymentsNumberCreateDeployment } from "../funcs/deploymentsDeploymentsNumberCreateDeployment.js";
+import { deploymentsCreate } from "../funcs/deploymentsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -49,7 +49,7 @@ export function useCreateDeploymentMutation(
 }
 
 export function mutationKeyCreateDeployment(): MutationKey {
-  return ["@gram/client", "deployments", "deploymentsNumberCreateDeployment"];
+  return ["@gram/client", "deployments", "create"];
 }
 
 export function buildCreateDeploymentMutation(
@@ -79,7 +79,7 @@ export function buildCreateDeploymentMutation(
           ),
         },
       };
-      return unwrapAsync(deploymentsDeploymentsNumberCreateDeployment(
+      return unwrapAsync(deploymentsCreate(
         client$,
         request,
         mergedOptions,

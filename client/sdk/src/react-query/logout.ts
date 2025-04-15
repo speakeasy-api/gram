@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { authAuthNumberLogout } from "../funcs/authAuthNumberLogout.js";
+import { authLogout } from "../funcs/authLogout.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
@@ -107,7 +107,7 @@ export function invalidateLogout(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "auth", "authNumberLogout", ...queryKeyBase],
+    queryKey: ["@gram/client", "auth", "logout", ...queryKeyBase],
   });
 }
 
@@ -117,7 +117,7 @@ export function invalidateAllLogout(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "auth", "authNumberLogout"],
+    queryKey: ["@gram/client", "auth", "logout"],
   });
 }
 
@@ -139,7 +139,7 @@ export function buildLogoutQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(authAuthNumberLogout(
+      return unwrapAsync(authLogout(
         client$,
         security,
         request,
@@ -152,5 +152,5 @@ export function buildLogoutQuery(
 export function queryKeyLogout(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "auth", "authNumberLogout", parameters];
+  return ["@gram/client", "auth", "logout", parameters];
 }

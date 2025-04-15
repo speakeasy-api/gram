@@ -1,9 +1,9 @@
-speakeasyVersion: 1.520.1
+speakeasyVersion: 1.531.5
 sources:
     Gram API Description:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:85cc9600fac8cbc9e02d8e43cf368c5c8a838080dfd55d1cad818bb0e33610be
-        sourceBlobDigest: sha256:4eabaff35d3721649fb727dd6e307d3e8ff1d6693ed8a199459d311f7f37e4a0
+        sourceRevisionDigest: sha256:22f0e23605a1da4e9eb4bda208616f2fa5162f0e3d1cc924fafca912074149ce
+        sourceBlobDigest: sha256:8de4eab396d991358605be52396901aa476c86e073b05acbc2c871d8094bda5b
         tags:
             - latest
             - 0.0.1
@@ -15,6 +15,18 @@ targets:
         sourceBlobDigest: sha256:4eabaff35d3721649fb727dd6e307d3e8ff1d6693ed8a199459d311f7f37e4a0
         codeSamplesNamespace: gram-api-description-typescript-code-samples
         codeSamplesRevisionDigest: sha256:8eb8d7950761e56bc70b4069b7a5b716ef287e35c48511d34d01c14689fab6a2
+    gram-internal:
+        source: Gram API Description
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:22f0e23605a1da4e9eb4bda208616f2fa5162f0e3d1cc924fafca912074149ce
+        sourceBlobDigest: sha256:8de4eab396d991358605be52396901aa476c86e073b05acbc2c871d8094bda5b
+        codeSamplesNamespace: gram-api-description-typescript-code-samples
+        codeSamplesRevisionDigest: sha256:9a2be2a1cb86e20645c6b61abca6df61c365a7cc5c3453d1d54d749aa3a3351e
+    gram-public:
+        source: Gram API Description
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:22f0e23605a1da4e9eb4bda208616f2fa5162f0e3d1cc924fafca912074149ce
+        sourceBlobDigest: sha256:8de4eab396d991358605be52396901aa476c86e073b05acbc2c871d8094bda5b
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest
@@ -25,7 +37,7 @@ workflow:
             registry:
                 location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
     targets:
-        gram:
+        gram-internal:
             target: typescript
             source: Gram API Description
             output: client/sdk
@@ -35,3 +47,7 @@ workflow:
                 labelOverride:
                     fixedValue: Typescript (SDK)
                 blocking: false
+        gram-public:
+            target: typescript
+            source: Gram API Description
+            output: sdks/typescript

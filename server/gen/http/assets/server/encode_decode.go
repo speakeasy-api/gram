@@ -67,7 +67,7 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return nil, err
 		}
-		payload := NewUploadOpenAPIv3Payload(contentType, contentLength, projectSlugInput, sessionToken)
+		payload := NewUploadOpenAPIv3Form(contentType, contentLength, projectSlugInput, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -7,12 +7,12 @@ Managing toolset environments.
 
 ### Available Operations
 
-* [environmentsNumberCreateEnvironment](#environmentsnumbercreateenvironment) - createEnvironment environments
-* [environmentsNumberDeleteEnvironment](#environmentsnumberdeleteenvironment) - deleteEnvironment environments
-* [environmentsNumberListEnvironments](#environmentsnumberlistenvironments) - listEnvironments environments
-* [environmentsNumberUpdateEnvironment](#environmentsnumberupdateenvironment) - updateEnvironment environments
+* [create](#create) - createEnvironment environments
+* [deleteBySlug](#deletebyslug) - deleteEnvironment environments
+* [list](#list) - listEnvironments environments
+* [updateBySlug](#updatebyslug) - updateEnvironment environments
 
-## environmentsNumberCreateEnvironment
+## create
 
 Create a new environment
 
@@ -29,7 +29,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.environments.environmentsNumberCreateEnvironment({
+  const result = await gram.environments.create({
     createEnvironmentForm: {
       entries: [
 
@@ -52,7 +52,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { environmentsEnvironmentsNumberCreateEnvironment } from "@gram/client/funcs/environmentsEnvironmentsNumberCreateEnvironment.js";
+import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -64,7 +64,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await environmentsEnvironmentsNumberCreateEnvironment(gram, {
+  const res = await environmentsCreate(gram, {
     createEnvironmentForm: {
       entries: [
   
@@ -101,7 +101,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateEnvironmentMutation
-} from "@gram/client/react-query/environmentsEnvironmentsNumberCreateEnvironment.js";
+} from "@gram/client/react-query/environmentsCreate.js";
 ```
 
 ### Parameters
@@ -123,7 +123,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## environmentsNumberDeleteEnvironment
+## deleteBySlug
 
 Delete an environment
 
@@ -140,7 +140,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  await gram.environments.environmentsNumberDeleteEnvironment({
+  await gram.environments.deleteBySlug({
     slug: "<value>",
   });
 
@@ -156,7 +156,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { environmentsEnvironmentsNumberDeleteEnvironment } from "@gram/client/funcs/environmentsEnvironmentsNumberDeleteEnvironment.js";
+import { environmentsDeleteBySlug } from "@gram/client/funcs/environmentsDeleteBySlug.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -168,7 +168,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await environmentsEnvironmentsNumberDeleteEnvironment(gram, {
+  const res = await environmentsDeleteBySlug(gram, {
     slug: "<value>",
   });
 
@@ -198,7 +198,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useDeleteEnvironmentMutation
-} from "@gram/client/react-query/environmentsEnvironmentsNumberDeleteEnvironment.js";
+} from "@gram/client/react-query/environmentsDeleteBySlug.js";
 ```
 
 ### Parameters
@@ -220,7 +220,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## environmentsNumberListEnvironments
+## list
 
 List all environments for an organization
 
@@ -237,7 +237,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.environments.environmentsNumberListEnvironments();
+  const result = await gram.environments.list();
 
   // Handle the result
   console.log(result);
@@ -252,7 +252,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { environmentsEnvironmentsNumberListEnvironments } from "@gram/client/funcs/environmentsEnvironmentsNumberListEnvironments.js";
+import { environmentsList } from "@gram/client/funcs/environmentsList.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -264,7 +264,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await environmentsEnvironmentsNumberListEnvironments(gram);
+  const res = await environmentsList(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -304,7 +304,7 @@ import {
   // mutations and other user actions.
   invalidateListEnvironments,
   invalidateAllListEnvironments,
-} from "@gram/client/react-query/environmentsEnvironmentsNumberListEnvironments.js";
+} from "@gram/client/react-query/environmentsList.js";
 ```
 
 ### Parameters
@@ -326,7 +326,7 @@ import {
 | --------------- | --------------- | --------------- |
 | errors.APIError | 4XX, 5XX        | \*/\*           |
 
-## environmentsNumberUpdateEnvironment
+## updateBySlug
 
 Update an environment
 
@@ -343,7 +343,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.environments.environmentsNumberUpdateEnvironment({
+  const result = await gram.environments.updateBySlug({
     slug: "<value>",
     updateEnvironmentRequestBody: {
       entriesToRemove: [
@@ -368,7 +368,7 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { environmentsEnvironmentsNumberUpdateEnvironment } from "@gram/client/funcs/environmentsEnvironmentsNumberUpdateEnvironment.js";
+import { environmentsUpdateBySlug } from "@gram/client/funcs/environmentsUpdateBySlug.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -380,7 +380,7 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await environmentsEnvironmentsNumberUpdateEnvironment(gram, {
+  const res = await environmentsUpdateBySlug(gram, {
     slug: "<value>",
     updateEnvironmentRequestBody: {
       entriesToRemove: [
@@ -419,7 +419,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useUpdateEnvironmentMutation
-} from "@gram/client/react-query/environmentsEnvironmentsNumberUpdateEnvironment.js";
+} from "@gram/client/react-query/environmentsUpdateBySlug.js";
 ```
 
 ### Parameters
