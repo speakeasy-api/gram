@@ -12,7 +12,7 @@ import { Keys } from "./keys.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 
-export class SDK extends ClientSDK {
+export class GramAPI extends ClientSDK {
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));

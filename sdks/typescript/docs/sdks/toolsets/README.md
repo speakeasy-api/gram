@@ -20,9 +20,9 @@ Create a new toolset with associated tools
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -30,7 +30,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.toolsets.create({
+  const result = await gramAPI.toolsets.create({
     createToolsetRequestBody: {
       name: "<value>",
     },
@@ -48,12 +48,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { toolsetsCreate } from "@gram/sdk/funcs/toolsetsCreate.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -61,7 +61,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await toolsetsCreate(sdk, {
+  const res = await toolsetsCreate(gramAPI, {
     createToolsetRequestBody: {
       name: "<value>",
     },
@@ -106,9 +106,9 @@ Delete a toolset by its ID
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -116,7 +116,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  await sdk.toolsets.deleteBySlug({
+  await gramAPI.toolsets.deleteBySlug({
     slug: "<value>",
   });
 
@@ -131,12 +131,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { toolsetsDeleteBySlug } from "@gram/sdk/funcs/toolsetsDeleteBySlug.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -144,7 +144,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await toolsetsDeleteBySlug(sdk, {
+  const res = await toolsetsDeleteBySlug(gramAPI, {
     slug: "<value>",
   });
 
@@ -186,9 +186,9 @@ Get detailed information about a toolset including full HTTP tool definitions
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -196,7 +196,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.toolsets.getById({
+  const result = await gramAPI.toolsets.getById({
     slug: "<value>",
   });
 
@@ -212,12 +212,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { toolsetsGetById } from "@gram/sdk/funcs/toolsetsGetById.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -225,7 +225,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await toolsetsGetById(sdk, {
+  const res = await toolsetsGetById(gramAPI, {
     slug: "<value>",
   });
 
@@ -268,9 +268,9 @@ List all toolsets for a project
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -278,7 +278,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.toolsets.list();
+  const result = await gramAPI.toolsets.list();
 
   // Handle the result
   console.log(result);
@@ -292,12 +292,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { toolsetsList } from "@gram/sdk/funcs/toolsetsList.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -305,7 +305,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await toolsetsList(sdk);
+  const res = await toolsetsList(gramAPI);
 
   if (!res.ok) {
     throw res.error;
@@ -346,9 +346,9 @@ Update a toolset's properties including name, description, and HTTP tools
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -356,7 +356,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.toolsets.updateBySlug({
+  const result = await gramAPI.toolsets.updateBySlug({
     slug: "<value>",
     updateToolsetRequestBody: {},
   });
@@ -373,12 +373,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { toolsetsUpdateBySlug } from "@gram/sdk/funcs/toolsetsUpdateBySlug.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -386,7 +386,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await toolsetsUpdateBySlug(sdk, {
+  const res = await toolsetsUpdateBySlug(gramAPI, {
     slug: "<value>",
     updateToolsetRequestBody: {},
   });

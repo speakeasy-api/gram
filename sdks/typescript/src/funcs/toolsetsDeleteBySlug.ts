@@ -3,7 +3,7 @@
  */
 
 import * as z from "zod";
-import { SDKCore } from "../core.js";
+import { GramAPICore } from "../core.js";
 import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * Delete a toolset by its ID
  */
 export function toolsetsDeleteBySlug(
-  client: SDKCore,
+  client: GramAPICore,
   request: operations.ToolsetsNumberDeleteToolsetRequest,
   options?: RequestOptions,
 ): APIPromise<
@@ -54,7 +54,7 @@ export function toolsetsDeleteBySlug(
 }
 
 async function $do(
-  client: SDKCore,
+  client: GramAPICore,
   request: operations.ToolsetsNumberDeleteToolsetRequest,
   options?: RequestOptions,
 ): Promise<

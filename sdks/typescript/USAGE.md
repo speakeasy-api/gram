@@ -1,9 +1,9 @@
 <!-- Start SDK Example Usage [usage] -->
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -11,7 +11,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });

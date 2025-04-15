@@ -16,9 +16,9 @@ List all tools for a project
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -26,7 +26,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.tools.list();
+  const result = await gramAPI.tools.list();
 
   // Handle the result
   console.log(result);
@@ -40,12 +40,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { toolsList } from "@gram/sdk/funcs/toolsList.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -53,7 +53,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await toolsList(sdk);
+  const res = await toolsList(gramAPI);
 
   if (!res.ok) {
     throw res.error;

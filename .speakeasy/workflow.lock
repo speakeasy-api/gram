@@ -2,7 +2,7 @@ speakeasyVersion: 1.531.5
 sources:
     Gram API Description:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
+        sourceRevisionDigest: sha256:1c2dfd934c12c4986896cb48e0e93a5e3ed51b520dfda87bba306777e47d0dd0
         sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
         tags:
             - latest
@@ -32,7 +32,7 @@ targets:
     gram-public:
         source: Gram API Description
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
+        sourceRevisionDigest: sha256:1c2dfd934c12c4986896cb48e0e93a5e3ed51b520dfda87bba306777e47d0dd0
         sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
 workflow:
     workflowVersion: 1.0.0

@@ -19,9 +19,9 @@ Create a new environment
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -29,7 +29,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.environments.create({
+  const result = await gramAPI.environments.create({
     createEnvironmentForm: {
       entries: [
 
@@ -51,12 +51,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { environmentsCreate } from "@gram/sdk/funcs/environmentsCreate.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -64,7 +64,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await environmentsCreate(sdk, {
+  const res = await environmentsCreate(gramAPI, {
     createEnvironmentForm: {
       entries: [
   
@@ -113,9 +113,9 @@ Delete an environment
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -123,7 +123,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  await sdk.environments.deleteBySlug({
+  await gramAPI.environments.deleteBySlug({
     slug: "<value>",
   });
 
@@ -138,12 +138,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { environmentsDeleteBySlug } from "@gram/sdk/funcs/environmentsDeleteBySlug.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -151,7 +151,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await environmentsDeleteBySlug(sdk, {
+  const res = await environmentsDeleteBySlug(gramAPI, {
     slug: "<value>",
   });
 
@@ -193,9 +193,9 @@ List all environments for an organization
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -203,7 +203,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.environments.list();
+  const result = await gramAPI.environments.list();
 
   // Handle the result
   console.log(result);
@@ -217,12 +217,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { environmentsList } from "@gram/sdk/funcs/environmentsList.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -230,7 +230,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await environmentsList(sdk);
+  const res = await environmentsList(gramAPI);
 
   if (!res.ok) {
     throw res.error;
@@ -271,9 +271,9 @@ Update an environment
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -281,7 +281,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.environments.updateBySlug({
+  const result = await gramAPI.environments.updateBySlug({
     slug: "<value>",
     updateEnvironmentRequestBody: {
       entriesToRemove: [
@@ -305,12 +305,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { environmentsUpdateBySlug } from "@gram/sdk/funcs/environmentsUpdateBySlug.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -318,7 +318,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await environmentsUpdateBySlug(sdk, {
+  const res = await environmentsUpdateBySlug(gramAPI, {
     slug: "<value>",
     updateEnvironmentRequestBody: {
       entriesToRemove: [

@@ -95,10 +95,10 @@ For supported JavaScript runtimes, please consult [RUNTIMES.md](RUNTIMES.md).
 ### Example
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -106,7 +106,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });
@@ -134,10 +134,10 @@ This SDK supports the following security schemes globally:
 
 You can set the security parameters through the `security` optional parameter when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -145,7 +145,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });
@@ -162,12 +162,12 @@ run();
 
 Some operations in this SDK require the security scheme to be specified at the request level. For example:
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await sdk.auth.info({
+  const result = await gramAPI.auth.info({
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -211,6 +211,7 @@ run();
 * [list](docs/sdks/environments/README.md#list) - listEnvironments environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
+
 ### [instances](docs/sdks/instances/README.md)
 
 * [load](docs/sdks/instances/README.md#load) - loadInstance instances
@@ -220,7 +221,6 @@ run();
 * [create](docs/sdks/keys/README.md#create) - createKey keys
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
-
 
 ### [tools](docs/sdks/tools/README.md)
 
@@ -294,10 +294,10 @@ Certain SDK methods accept files as part of a multi-part request. It is possible
 > - **Node.js v18:** A file stream can be created using the `fileFrom` helper from [`fetch-blob/from.js`](https://www.npmjs.com/package/fetch-blob).
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -305,7 +305,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });
@@ -326,10 +326,10 @@ Some of the endpoints in this SDK support retries.  If you use the SDK without a
 
 To change the default retry strategy for a single API call, simply provide a retryConfig object to the call:
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -337,7 +337,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   }, {
@@ -363,10 +363,10 @@ run();
 
 If you'd like to override the default retry strategy for all operations that support retries, you can provide a retryConfig at SDK initialization:
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   retryConfig: {
     strategy: "backoff",
     backoff: {
@@ -384,7 +384,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });
@@ -408,11 +408,11 @@ If the request fails due to, for example 4XX or 5XX status codes, it will throw 
 | errors.APIError | 4XX, 5XX    | \*/\*        |
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { SDKValidationError } from "@gram/sdk/models/errors";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -422,7 +422,7 @@ const sdk = new SDK({
 async function run() {
   let result;
   try {
-    result = await sdk.assets.uploadOpenAPIv3({
+    result = await gramAPI.assets.uploadOpenAPIv3({
       contentLength: 924456,
       requestBody: await openAsBlob("example.file"),
     });
@@ -479,10 +479,10 @@ In some rare cases, the SDK can fail to get a response from the server or even m
 
 The default server can be overridden globally by passing a URL to the `serverURL: string` optional parameter when initializing the SDK client instance. For example:
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   serverURL: "http://localhost:80",
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
@@ -491,7 +491,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });
@@ -523,7 +523,7 @@ custom header and a timeout to requests and how to use the `"requestError"` hook
 to log errors:
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { HTTPClient } from "@gram/sdk/lib/http";
 
 const httpClient = new HTTPClient({
@@ -550,7 +550,7 @@ httpClient.addHook("requestError", (error, request) => {
   console.groupEnd();
 });
 
-const sdk = new SDK({ httpClient });
+const sdk = new GramAPI({ httpClient });
 ```
 <!-- End Custom HTTP Client [http-client] -->
 
@@ -565,9 +565,9 @@ You can pass a logger that matches `console`'s interface as an SDK option.
 > Beware that debug logging will reveal secrets, like API tokens in headers, in log messages printed to a console or files. It's recommended to use this feature only during local development and not in production.
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({ debugLogger: console });
+const sdk = new GramAPI({ debugLogger: console });
 ```
 <!-- End Debugging [debug] -->
 

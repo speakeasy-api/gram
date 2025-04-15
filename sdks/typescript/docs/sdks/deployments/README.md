@@ -19,9 +19,9 @@ Create a new deployment with an additional OpenAPI 3.x document.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -29,7 +29,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.deployments.addOpenAPIv3Source({
+  const result = await gramAPI.deployments.addOpenAPIv3Source({
     openAPIv3DeploymentAssetForm: {
       assetId: "<id>",
       name: "<value>",
@@ -49,12 +49,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { deploymentsAddOpenAPIv3Source } from "@gram/sdk/funcs/deploymentsAddOpenAPIv3Source.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -62,7 +62,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await deploymentsAddOpenAPIv3Source(sdk, {
+  const res = await deploymentsAddOpenAPIv3Source(gramAPI, {
     openAPIv3DeploymentAssetForm: {
       assetId: "<id>",
       name: "<value>",
@@ -109,9 +109,9 @@ Create a deployment to load tool definitions.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -119,7 +119,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.deployments.create({
+  const result = await gramAPI.deployments.create({
     idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
     createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
@@ -141,12 +141,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { deploymentsCreate } from "@gram/sdk/funcs/deploymentsCreate.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -154,7 +154,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await deploymentsCreate(sdk, {
+  const res = await deploymentsCreate(gramAPI, {
     idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
     createDeploymentRequestBody: {
       externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
@@ -203,9 +203,9 @@ Create a deployment to load tool definitions.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -213,7 +213,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.deployments.getById({
+  const result = await gramAPI.deployments.getById({
     id: "<id>",
   });
 
@@ -229,12 +229,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { deploymentsGetById } from "@gram/sdk/funcs/deploymentsGetById.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -242,7 +242,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await deploymentsGetById(sdk, {
+  const res = await deploymentsGetById(gramAPI, {
     id: "<id>",
   });
 
@@ -285,9 +285,9 @@ List all deployments in descending order of creation.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -295,7 +295,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.deployments.list();
+  const result = await gramAPI.deployments.list();
 
   // Handle the result
   console.log(result);
@@ -309,12 +309,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { deploymentsList } from "@gram/sdk/funcs/deploymentsList.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -322,7 +322,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await deploymentsList(sdk);
+  const res = await deploymentsList(gramAPI);
 
   if (!res.ok) {
     throw res.error;

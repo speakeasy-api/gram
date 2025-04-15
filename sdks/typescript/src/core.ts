@@ -10,4 +10,4 @@ import { ClientSDK } from "./lib/sdks.js";
  * application and passed around through some dependency injection mechanism  to
  * parts of an application that need to make SDK calls.
  */
-export class SDKCore extends ClientSDK {}
+export class GramAPICore extends ClientSDK {}

@@ -16,10 +16,10 @@ Upload an OpenAPI v3 document to Gram.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 import { openAsBlob } from "node:fs";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -27,7 +27,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.assets.uploadOpenAPIv3({
+  const result = await gramAPI.assets.uploadOpenAPIv3({
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });
@@ -44,13 +44,13 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { assetsUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsUploadOpenAPIv3.js";
 import { openAsBlob } from "node:fs";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -58,7 +58,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await assetsUploadOpenAPIv3(sdk, {
+  const res = await assetsUploadOpenAPIv3(gramAPI, {
     contentLength: 924456,
     requestBody: await openAsBlob("example.file"),
   });

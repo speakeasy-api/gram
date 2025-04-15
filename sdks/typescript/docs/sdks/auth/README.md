@@ -19,9 +19,9 @@ Handles the authentication callback.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK({
+const gramAPI = new GramAPI({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -29,7 +29,7 @@ const sdk = new SDK({
 });
 
 async function run() {
-  const result = await sdk.auth.callback({
+  const result = await gramAPI.auth.callback({
     sharedToken: "<value>",
   });
 
@@ -45,12 +45,12 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { authCallback } from "@gram/sdk/funcs/authCallback.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore({
+const gramAPI = new GramAPICore({
   security: {
     projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -58,7 +58,7 @@ const sdk = new SDKCore({
 });
 
 async function run() {
-  const res = await authCallback(sdk, {
+  const res = await authCallback(gramAPI, {
     sharedToken: "<value>",
   });
 
@@ -101,12 +101,12 @@ Provides information about the current authentication status.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await sdk.auth.info({
+  const result = await gramAPI.auth.info({
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -122,15 +122,15 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { authInfo } from "@gram/sdk/funcs/authInfo.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore();
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await authInfo(sdk, {
+  const res = await authInfo(gramAPI, {
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -174,12 +174,12 @@ Logs out the current user by clearing their session.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await sdk.auth.logout({
+  const result = await gramAPI.auth.logout({
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -195,15 +195,15 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { authLogout } from "@gram/sdk/funcs/authLogout.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore();
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await authLogout(sdk, {
+  const res = await authLogout(gramAPI, {
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -247,12 +247,12 @@ Switches the authentication scope to a different organization.
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await sdk.auth.switchScopes({
+  const result = await gramAPI.auth.switchScopes({
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -268,15 +268,15 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { authSwitchScopes } from "@gram/sdk/funcs/authSwitchScopes.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore();
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await authSwitchScopes(sdk, {
+  const res = await authSwitchScopes(gramAPI, {
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 

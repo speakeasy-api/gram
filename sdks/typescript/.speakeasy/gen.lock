@@ -5,8 +5,8 @@ management:
   docVersion: 0.0.1
   speakeasyVersion: 1.531.5
   generationVersion: 2.570.4
-  releaseVersion: 0.3.0
-  configChecksum: 94bcd8d69da8ed7f5adca76c5eebe316
+  releaseVersion: 0.3.1
+  configChecksum: cccfcbfce8985e0003705494d6fded28
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -103,9 +103,9 @@ generatedFiles:
   - docs/sdks/auth/README.md
   - docs/sdks/deployments/README.md
   - docs/sdks/environments/README.md
+  - docs/sdks/gramapi/README.md
   - docs/sdks/instances/README.md
   - docs/sdks/keys/README.md
-  - docs/sdks/sdk/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
   - eslint.config.mjs

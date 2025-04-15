@@ -16,12 +16,12 @@ load all relevant data for an instance of a toolset and environment
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await sdk.instances.load({
+  const result = await gramAPI.instances.load({
     option1: {
       projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
       sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
@@ -42,15 +42,15 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { instancesLoad } from "@gram/sdk/funcs/instancesLoad.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore();
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await instancesLoad(sdk, {
+  const res = await instancesLoad(gramAPI, {
     option1: {
       projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
       sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",

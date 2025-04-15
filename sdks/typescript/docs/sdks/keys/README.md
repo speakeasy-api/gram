@@ -18,12 +18,12 @@ Create a new api key
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await sdk.keys.create({
+  const result = await gramAPI.keys.create({
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   }, {
     createKeyForm: {
@@ -43,15 +43,15 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { keysCreate } from "@gram/sdk/funcs/keysCreate.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore();
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await keysCreate(sdk, {
+  const res = await keysCreate(gramAPI, {
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   }, {
     createKeyForm: {
@@ -99,12 +99,12 @@ List all api keys for an organization
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await sdk.keys.list({
+  const result = await gramAPI.keys.list({
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -120,15 +120,15 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { keysList } from "@gram/sdk/funcs/keysList.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore();
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await keysList(sdk, {
+  const res = await keysList(gramAPI, {
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   });
 
@@ -172,12 +172,12 @@ Revoke a api key
 ### Example Usage
 
 ```typescript
-import { SDK } from "@gram/sdk";
+import { GramAPI } from "@gram/sdk";
 
-const sdk = new SDK();
+const gramAPI = new GramAPI();
 
 async function run() {
-  await sdk.keys.revokeById({
+  await gramAPI.keys.revokeById({
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   }, {
     id: "<id>",
@@ -194,15 +194,15 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { SDKCore } from "@gram/sdk/core.js";
+import { GramAPICore } from "@gram/sdk/core.js";
 import { keysRevokeById } from "@gram/sdk/funcs/keysRevokeById.js";
 
-// Use `SDKCore` for best tree-shaking performance.
+// Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const sdk = new SDKCore();
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await keysRevokeById(sdk, {
+  const res = await keysRevokeById(gramAPI, {
     sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
   }, {
     id: "<id>",
