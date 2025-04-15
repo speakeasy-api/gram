@@ -22,6 +22,7 @@ specific category of applications.
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { SDKValidationError } from "@gram/client/models/errors/sdkvalidationerror.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -35,6 +36,7 @@ const gram = new GramCore({
 async function run() {
   const res = await assetsUploadOpenAPIv3(gram, {
     contentLength: 924456,
+    requestBody: await openAsBlob("example.file"),
   });
 
   switch (true) {

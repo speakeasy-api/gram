@@ -17,6 +17,7 @@ Upload an OpenAPI v3 document to Gram.
 
 ```typescript
 import { SDK } from "@gram/sdk";
+import { openAsBlob } from "node:fs";
 
 const sdk = new SDK({
   security: {
@@ -28,6 +29,7 @@ const sdk = new SDK({
 async function run() {
   const result = await sdk.assets.uploadOpenAPIv3({
     contentLength: 924456,
+    requestBody: await openAsBlob("example.file"),
   });
 
   // Handle the result
@@ -44,6 +46,7 @@ The standalone function version of this method:
 ```typescript
 import { SDKCore } from "@gram/sdk/core.js";
 import { assetsUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsUploadOpenAPIv3.js";
+import { openAsBlob } from "node:fs";
 
 // Use `SDKCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -57,6 +60,7 @@ const sdk = new SDKCore({
 async function run() {
   const res = await assetsUploadOpenAPIv3(sdk, {
     contentLength: 924456,
+    requestBody: await openAsBlob("example.file"),
   });
 
   if (!res.ok) {

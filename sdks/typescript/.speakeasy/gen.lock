@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 1536f638-1fda-4f8e-a2c3-c7ca9e12fb09
 management:
-  docChecksum: 29d62c73793ce137e08dbeddece3e59a
+  docChecksum: 5567b1d46d1df841ccda676b442e2400
   docVersion: 0.0.1
   speakeasyVersion: 1.531.5
   generationVersion: 2.570.4
-  releaseVersion: 0.2.0
-  configChecksum: d1d25786f74f32ebc8abb86df581ec62
+  releaseVersion: 0.3.0
+  configChecksum: 94bcd8d69da8ed7f5adca76c5eebe316
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -23,6 +23,7 @@ features:
     responseFormat: 0.2.3
     retries: 2.83.0
     sdkHooks: 0.2.0
+    uploadStreams: 0.1.0
 generatedFiles:
   - .gitattributes
   - .npmignore
@@ -239,6 +240,8 @@ examples:
       parameters:
         header:
           Content-Length: 924456
+      requestBody:
+        '*/*': "x-file: example.file"
       responses:
         "200":
           application/json: {"asset": {"content_length": 309292, "content_type": "<value>", "created_at": "2025-08-06T08:52:40.387Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-07T16:19:35.673Z", "url": "https://deafening-loaf.name"}}

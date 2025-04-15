@@ -18,6 +18,7 @@ export type AssetsNumberUploadOpenAPIv3Request = {
    * Session header
    */
   gramSession?: string | undefined;
+  requestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
 /** @internal */
@@ -29,11 +30,18 @@ export const AssetsNumberUploadOpenAPIv3Request$inboundSchema: z.ZodType<
   "Content-Length": z.number().int(),
   "Gram-Project": z.string().optional(),
   "Gram-Session": z.string().optional(),
+  RequestBody: z.union([
+    z.instanceof(ReadableStream<Uint8Array>),
+    z.instanceof(Blob),
+    z.instanceof(ArrayBuffer),
+    z.instanceof(Uint8Array),
+  ]),
 }).transform((v) => {
   return remap$(v, {
     "Content-Length": "contentLength",
     "Gram-Project": "gramProject",
     "Gram-Session": "gramSession",
+    "RequestBody": "requestBody",
   });
 });
 
@@ -42,6 +50,7 @@ export type AssetsNumberUploadOpenAPIv3Request$Outbound = {
   "Content-Length": number;
   "Gram-Project"?: string | undefined;
   "Gram-Session"?: string | undefined;
+  RequestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
 /** @internal */
@@ -53,11 +62,18 @@ export const AssetsNumberUploadOpenAPIv3Request$outboundSchema: z.ZodType<
   contentLength: z.number().int(),
   gramProject: z.string().optional(),
   gramSession: z.string().optional(),
+  requestBody: z.union([
+    z.instanceof(ReadableStream<Uint8Array>),
+    z.instanceof(Blob),
+    z.instanceof(ArrayBuffer),
+    z.instanceof(Uint8Array),
+  ]),
 }).transform((v) => {
   return remap$(v, {
     contentLength: "Content-Length",
     gramProject: "Gram-Project",
     gramSession: "Gram-Session",
+    requestBody: "RequestBody",
   });
 });
 

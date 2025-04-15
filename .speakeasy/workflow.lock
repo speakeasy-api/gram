@@ -2,8 +2,15 @@ speakeasyVersion: 1.531.5
 sources:
     Gram API Description:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:22f0e23605a1da4e9eb4bda208616f2fa5162f0e3d1cc924fafca912074149ce
-        sourceBlobDigest: sha256:8de4eab396d991358605be52396901aa476c86e073b05acbc2c871d8094bda5b
+        sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
+        sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
+        tags:
+            - latest
+            - 0.0.1
+    gram-api:
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
+        sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
         tags:
             - latest
             - 0.0.1
@@ -18,15 +25,15 @@ targets:
     gram-internal:
         source: Gram API Description
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:22f0e23605a1da4e9eb4bda208616f2fa5162f0e3d1cc924fafca912074149ce
-        sourceBlobDigest: sha256:8de4eab396d991358605be52396901aa476c86e073b05acbc2c871d8094bda5b
+        sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
+        sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:9a2be2a1cb86e20645c6b61abca6df61c365a7cc5c3453d1d54d749aa3a3351e
+        codeSamplesRevisionDigest: sha256:1f85a26467e7acd07c32f5448201787f83825a799e1ebf0e4f9712fb9688c426
     gram-public:
         source: Gram API Description
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:22f0e23605a1da4e9eb4bda208616f2fa5162f0e3d1cc924fafca912074149ce
-        sourceBlobDigest: sha256:8de4eab396d991358605be52396901aa476c86e073b05acbc2c871d8094bda5b
+        sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
+        sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest
@@ -34,6 +41,8 @@ workflow:
         Gram API Description:
             inputs:
                 - location: server/gen/http/openapi3.yaml
+            overlays:
+                - location: overlays/goa.yaml
             registry:
                 location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
     targets:

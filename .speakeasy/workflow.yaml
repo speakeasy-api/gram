@@ -4,6 +4,8 @@ sources:
     Gram API Description:
         inputs:
             - location: server/gen/http/openapi3.yaml
+        overlays:
+            - location: overlays/goa.yaml
         registry:
             location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
 targets:

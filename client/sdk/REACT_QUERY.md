@@ -129,6 +129,7 @@ export function Example() {
 
         mutate({
           contentLength: 924456,
+          requestBody: await openAsBlob("example.file"),
         });
       }}
     >

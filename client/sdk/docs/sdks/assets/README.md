@@ -17,6 +17,7 @@ Upload an OpenAPI v3 document to Gram.
 
 ```typescript
 import { Gram } from "@gram/client";
+import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   security: {
@@ -28,6 +29,7 @@ const gram = new Gram({
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
     contentLength: 924456,
+    requestBody: await openAsBlob("example.file"),
   });
 
   // Handle the result
@@ -44,6 +46,7 @@ The standalone function version of this method:
 ```typescript
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { openAsBlob } from "node:fs";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -57,6 +60,7 @@ const gram = new GramCore({
 async function run() {
   const res = await assetsUploadOpenAPIv3(gram, {
     contentLength: 924456,
+    requestBody: await openAsBlob("example.file"),
   });
 
   if (!res.ok) {

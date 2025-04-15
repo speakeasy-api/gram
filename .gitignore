@@ -10,3 +10,4 @@ junit-report.xml
 .idea
 /server/goa*
 /scratch
+.speakeasy/temp

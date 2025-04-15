@@ -22,6 +22,7 @@ specific category of applications.
 import { SDKCore } from "@gram/sdk/core.js";
 import { assetsUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsUploadOpenAPIv3.js";
 import { SDKValidationError } from "@gram/sdk/models/errors/sdkvalidationerror.js";
+import { openAsBlob } from "node:fs";
 
 // Use `SDKCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -35,6 +36,7 @@ const sdk = new SDKCore({
 async function run() {
   const res = await assetsUploadOpenAPIv3(sdk, {
     contentLength: 924456,
+    requestBody: await openAsBlob("example.file"),
   });
 
   switch (true) {
