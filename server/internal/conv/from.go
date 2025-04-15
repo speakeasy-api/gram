@@ -58,13 +58,3 @@ func ToSlug(s string) string {
 	s = strings.Trim(s, "-") // trim leading and trailing dashes
 	return s
 }
-
-func RedactedEnvironment(val string) string {
-	if val == "" {
-		return "<EMPTY>"
-	}
-	if len(val) <= 3 {
-		return strings.Repeat("*", 5)
-	}
-	return val[:3] + strings.Repeat("*", 5)
-}

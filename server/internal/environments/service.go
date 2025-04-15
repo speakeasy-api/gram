@@ -19,27 +19,31 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	auth   *auth.Auth
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	repo    *repo.Queries
+	auth    *auth.Auth
+	entries *EnvironmentEntries
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption) *Service {
+	envRepo := repo.New(db)
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/internal/environments"),
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
-		auth:   auth.New(logger, db, sessions),
+		tracer:  otel.Tracer("github.com/speakeasy-api/gram/internal/environments"),
+		logger:  logger,
+		db:      db,
+		repo:    envRepo,
+		auth:    auth.New(logger, db, sessions),
+		entries: NewEnvironmentEntries(logger, envRepo, enc),
 	}
 }
 
@@ -80,7 +84,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		values[i] = entry.Value
 	}
 
-	rows, err := s.repo.CreateEnvironmentEntries(ctx, repo.CreateEnvironmentEntriesParams{
+	rows, err := s.entries.CreateEnvironmentEntries(ctx, repo.CreateEnvironmentEntriesParams{
 		EnvironmentID: environment.ID,
 		Names:         names,
 		Values:        values,
@@ -93,7 +97,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 	for i, entry := range rows {
 		entries[i] = &gen.EnvironmentEntry{
 			Name:      entry.Name,
-			Value:     conv.RedactedEnvironment(entry.Value),
+			Value:     entry.Value,
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -125,7 +129,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 
 	var result []*gen.Environment
 	for _, environment := range environments {
-		entries, err := s.repo.ListEnvironmentEntries(ctx, environment.ID)
+		entries, err := s.entries.ListEnvironmentEntries(ctx, environment.ID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +138,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 		for _, entry := range entries {
 			genEntries = append(genEntries, &gen.EnvironmentEntry{
 				Name:      entry.Name,
-				Value:     conv.RedactedEnvironment(entry.Value),
+				Value:     entry.Value,
 				CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 			})
@@ -196,7 +200,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 
 	for _, updatedEntry := range payload.EntriesToUpdate {
-		if _, err := s.repo.UpsertEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
+		if err := s.entries.UpdateEnvironmentEntry(ctx, repo.UpsertEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
 			Name:          updatedEntry.Name,
 			Value:         updatedEntry.Value, // This is the actual environment value to update too, do not redact it
@@ -205,7 +209,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 	for _, removedEntry := range payload.EntriesToRemove {
-		if err := s.repo.DeleteEnvironmentEntry(ctx, repo.DeleteEnvironmentEntryParams{
+		if err := s.entries.DeleteEnvironmentEntry(ctx, repo.DeleteEnvironmentEntryParams{
 			EnvironmentID: environment.ID,
 			Name:          removedEntry,
 		}); err != nil {
@@ -213,7 +217,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
-	entries, err := s.repo.ListEnvironmentEntries(ctx, environment.ID)
+	entries, err := s.entries.ListEnvironmentEntries(ctx, environment.ID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +226,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	for i, entry := range entries {
 		genEntries[i] = &gen.EnvironmentEntry{
 			Name:      entry.Name,
-			Value:     conv.RedactedEnvironment(entry.Value),
+			Value:     entry.Value,
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}

@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/deployments"
+	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
 	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/keys"
@@ -110,6 +111,12 @@ func newStartCommand() *cli.Command {
 				Name:    "redis-cache-password",
 				Usage:   "Password for the redis cache server",
 				EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
+			},
+			&cli.StringFlag{
+				Name:     "encryption-key",
+				Usage:    "Key for App level AES encryption/decyryption",
+				Required: true,
+				EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 			},
 			&cli.StringFlag{
 				Name:     "openai-api-key",
@@ -227,6 +234,11 @@ func newStartCommand() *cli.Command {
 				sessionManager = s
 			}
 
+			encryptionClient, err := encryption.New(c.String("encryption-key"))
+			if err != nil {
+				return err
+			}
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -257,9 +269,9 @@ func newStartCommand() *cli.Command {
 			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
 			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager))
-			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager))
+			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
-			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager))
+			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

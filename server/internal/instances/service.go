@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/encryption"
+	"github.com/speakeasy-api/gram/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/toolsets"
@@ -35,18 +37,21 @@ type Service struct {
 	auth             *auth.Auth
 	toolset          *toolsets.Toolsets
 	environmentsRepo *environments_repo.Queries
+	entries          *environments.EnvironmentEntries
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption) *Service {
+	envRepo := environments_repo.New(db)
 	return &Service{
 		tracer:           otel.Tracer("github.com/speakeasy-api/gram/internal/instances"),
 		logger:           logger,
 		db:               db,
 		auth:             auth.New(logger, db, sessions),
 		toolset:          toolsets.NewToolsets(db),
-		environmentsRepo: environments_repo.New(db),
+		environmentsRepo: envRepo,
+		entries:          environments.NewEnvironmentEntries(logger, envRepo, enc),
 	}
 }
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -92,7 +97,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 		return nil, err
 	}
 
-	environmentEntries, err := s.environmentsRepo.ListEnvironmentEntries(ctx, envModel.ID)
+	environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +106,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 	for i, entry := range environmentEntries {
 		genEntries[i] = &gen.EnvironmentEntry{
 			Name:      entry.Name,
-			Value:     conv.RedactedEnvironment(entry.Value),
+			Value:     entry.Value,
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -208,7 +213,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	environmentEntries, err := s.environmentsRepo.ListEnvironmentEntries(ctx, envModel.ID)
+	environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, false)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
