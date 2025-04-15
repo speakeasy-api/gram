@@ -5,7 +5,7 @@ A single environment entry
 ## Example Usage
 
 ```typescript
-import { EnvironmentEntryInput } from "@gram/sdk/models/components";
+import { EnvironmentEntryInput } from "@gram/client/models/components";
 
 let value: EnvironmentEntryInput = {
   name: "<value>",

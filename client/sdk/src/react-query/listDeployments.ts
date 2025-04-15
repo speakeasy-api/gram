@@ -113,7 +113,7 @@ export function invalidateListDeployments(
   return client.invalidateQueries({
     ...filters,
     queryKey: [
-      "@gram/sdk",
+      "@gram/client",
       "deployments",
       "deploymentsNumberListDeployments",
       ...queryKeyBase,
@@ -127,7 +127,11 @@ export function invalidateAllListDeployments(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "deployments", "deploymentsNumberListDeployments"],
+    queryKey: [
+      "@gram/client",
+      "deployments",
+      "deploymentsNumberListDeployments",
+    ],
   });
 }
 
@@ -171,7 +175,7 @@ export function queryKeyListDeployments(
   },
 ): QueryKey {
   return [
-    "@gram/sdk",
+    "@gram/client",
     "deployments",
     "deploymentsNumberListDeployments",
     parameters,

@@ -10,7 +10,7 @@ import {
   useCreateToolsetMutation,
   useListToolsetsSuspense,
   useToolsetSuspense,
-} from "@gram/sdk/react-query";
+} from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
 import { useProject } from "@/contexts/Auth";
@@ -23,7 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useEnvironments } from "../environments/Environments";
-import { Environment, ToolsetDetails } from "@gram/sdk/models/components";
+import { Environment, ToolsetDetails } from "@gram/client/models/components";
 import { InputDialog } from "@/components/input-dialog";
 
 export function useToolsets() {
@@ -162,7 +162,7 @@ function ToolsetCard({
   environments: Environment[];
 }) {
   const defaultEnvironment = environments.find(
-    (env) => env.slug === toolset.defaultEnvironmentSlug,
+    (env) => env.slug === toolset.defaultEnvironmentSlug
   );
 
   // We consider a toolset to need env vars if it has relevant environment variables and the default environment is set
@@ -176,8 +176,8 @@ function ToolsetCard({
         (entry) =>
           entry.name === varName &&
           entry.value !== "" &&
-          entry.value !== "<EMPTY>",
-      ),
+          entry.value !== "<EMPTY>"
+      )
     );
 
   return (

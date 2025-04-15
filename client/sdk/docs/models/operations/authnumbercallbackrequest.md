@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { AuthNumberCallbackRequest } from "@gram/sdk/models/operations";
+import { AuthNumberCallbackRequest } from "@gram/client/models/operations";
 
 let value: AuthNumberCallbackRequest = {
   sharedToken: "<value>",

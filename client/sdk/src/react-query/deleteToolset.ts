@@ -48,7 +48,7 @@ export function useDeleteToolsetMutation(
 }
 
 export function mutationKeyDeleteToolset(): MutationKey {
-  return ["@gram/sdk", "toolsets", "toolsetsNumberDeleteToolset"];
+  return ["@gram/client", "toolsets", "toolsetsNumberDeleteToolset"];
 }
 
 export function buildDeleteToolsetMutation(

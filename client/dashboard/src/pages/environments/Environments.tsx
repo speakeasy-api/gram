@@ -7,13 +7,13 @@ import { HumanizeDateTime } from "@/lib/dates";
 import {
   useCreateEnvironmentMutation,
   useListEnvironmentsSuspense,
-} from "@gram/sdk/react-query";
+} from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useProject } from "@/contexts/Auth";
 import { useState } from "react";
 import { PlusIcon } from "lucide-react";
-import { Environment } from "@gram/sdk/models/components/environment.js";
+import { Environment } from "@gram/client/models/components/environment.js";
 import { CreateThingCard } from "../toolsets/Toolsets";
 import { InputDialog } from "@/components/input-dialog";
 

@@ -3,10 +3,10 @@
 ## Example Usage
 
 ```typescript
-import { Key } from "@gram/sdk/models/components";
+import { Key } from "@gram/client/models/components";
 
 let value: Key = {
-  createdAt: new Date("2025-10-29T20:25:41.722Z"),
+  createdAt: new Date("2025-11-20T13:24:26.967Z"),
   createdByUserId: "<id>",
   id: "<id>",
   name: "<value>",
@@ -15,7 +15,7 @@ let value: Key = {
     "<value>",
   ],
   token: "<value>",
-  updatedAt: new Date("2025-11-12T04:40:01.714Z"),
+  updatedAt: new Date("2023-09-30T15:12:09.673Z"),
 };
 ```
 

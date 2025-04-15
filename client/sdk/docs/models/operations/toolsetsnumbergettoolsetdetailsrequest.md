@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { ToolsetsNumberGetToolsetDetailsRequest } from "@gram/sdk/models/operations";
+import { ToolsetsNumberGetToolsetDetailsRequest } from "@gram/client/models/operations";
 
 let value: ToolsetsNumberGetToolsetDetailsRequest = {
   slug: "<value>",

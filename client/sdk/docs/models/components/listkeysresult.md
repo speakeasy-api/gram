@@ -3,12 +3,12 @@
 ## Example Usage
 
 ```typescript
-import { ListKeysResult } from "@gram/sdk/models/components";
+import { ListKeysResult } from "@gram/client/models/components";
 
 let value: ListKeysResult = {
   keys: [
     {
-      createdAt: new Date("2025-03-20T15:32:38.576Z"),
+      createdAt: new Date("2024-09-23T11:14:33.088Z"),
       createdByUserId: "<id>",
       id: "<id>",
       name: "<value>",
@@ -17,7 +17,7 @@ let value: ListKeysResult = {
         "<value>",
       ],
       token: "<value>",
-      updatedAt: new Date("2024-09-10T01:23:16.211Z"),
+      updatedAt: new Date("2024-10-10T21:04:15.457Z"),
     },
   ],
 };

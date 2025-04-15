@@ -19,7 +19,7 @@ Handles the authentication callback.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -45,8 +45,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { authAuthNumberCallback } from "@gram/sdk/funcs/authAuthNumberCallback.js";
+import { GramCore } from "@gram/client/core.js";
+import { authAuthNumberCallback } from "@gram/client/funcs/authAuthNumberCallback.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -101,7 +101,7 @@ Provides information about the current authentication status.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
@@ -122,8 +122,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { authAuthNumberInfo } from "@gram/sdk/funcs/authAuthNumberInfo.js";
+import { GramCore } from "@gram/client/core.js";
+import { authAuthNumberInfo } from "@gram/client/funcs/authAuthNumberInfo.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -172,7 +172,7 @@ import {
   // mutations and other user actions.
   invalidateSessionInfo,
   invalidateAllSessionInfo,
-} from "@gram/sdk/react-query/authAuthNumberInfo.js";
+} from "@gram/client/react-query/authAuthNumberInfo.js";
 ```
 
 ### Parameters
@@ -202,7 +202,7 @@ Logs out the current user by clearing their session.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
@@ -223,8 +223,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { authAuthNumberLogout } from "@gram/sdk/funcs/authAuthNumberLogout.js";
+import { GramCore } from "@gram/client/core.js";
+import { authAuthNumberLogout } from "@gram/client/funcs/authAuthNumberLogout.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -273,7 +273,7 @@ import {
   // mutations and other user actions.
   invalidateLogout,
   invalidateAllLogout,
-} from "@gram/sdk/react-query/authAuthNumberLogout.js";
+} from "@gram/client/react-query/authAuthNumberLogout.js";
 ```
 
 ### Parameters
@@ -303,7 +303,7 @@ Switches the authentication scope to a different organization.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
@@ -324,8 +324,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { authAuthNumberSwitchScopes } from "@gram/sdk/funcs/authAuthNumberSwitchScopes.js";
+import { GramCore } from "@gram/client/core.js";
+import { authAuthNumberSwitchScopes } from "@gram/client/funcs/authAuthNumberSwitchScopes.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -363,7 +363,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useSwitchScopesMutation
-} from "@gram/sdk/react-query/authAuthNumberSwitchScopes.js";
+} from "@gram/client/react-query/authAuthNumberSwitchScopes.js";
 ```
 
 ### Parameters

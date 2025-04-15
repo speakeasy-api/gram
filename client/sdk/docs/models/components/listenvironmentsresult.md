@@ -5,17 +5,17 @@ Result type for listing environments
 ## Example Usage
 
 ```typescript
-import { ListEnvironmentsResult } from "@gram/sdk/models/components";
+import { ListEnvironmentsResult } from "@gram/client/models/components";
 
 let value: ListEnvironmentsResult = {
   environments: [
     {
-      createdAt: new Date("2025-02-25T11:58:58.144Z"),
+      createdAt: new Date("2025-04-28T13:26:34.681Z"),
       entries: [
         {
-          createdAt: new Date("2024-09-17T23:46:52.488Z"),
+          createdAt: new Date("2024-05-14T22:34:42.019Z"),
           name: "<value>",
-          updatedAt: new Date("2025-12-31T18:49:14.472Z"),
+          updatedAt: new Date("2024-09-15T00:05:11.728Z"),
           value: "<value>",
         },
       ],
@@ -24,7 +24,7 @@ let value: ListEnvironmentsResult = {
       organizationId: "<id>",
       projectId: "<id>",
       slug: "<value>",
-      updatedAt: new Date("2025-04-04T09:14:28.012Z"),
+      updatedAt: new Date("2023-01-21T14:14:48.878Z"),
     },
   ],
 };

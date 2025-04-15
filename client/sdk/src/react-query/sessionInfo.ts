@@ -107,7 +107,7 @@ export function invalidateSessionInfo(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "auth", "authNumberInfo", ...queryKeyBase],
+    queryKey: ["@gram/client", "auth", "authNumberInfo", ...queryKeyBase],
   });
 }
 
@@ -117,7 +117,7 @@ export function invalidateAllSessionInfo(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "auth", "authNumberInfo"],
+    queryKey: ["@gram/client", "auth", "authNumberInfo"],
   });
 }
 
@@ -154,5 +154,5 @@ export function buildSessionInfoQuery(
 export function queryKeySessionInfo(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/sdk", "auth", "authNumberInfo", parameters];
+  return ["@gram/client", "auth", "authNumberInfo", parameters];
 }

@@ -3,10 +3,10 @@
 ## Example Usage
 
 ```typescript
-import { GetDeploymentResult } from "@gram/sdk/models/components";
+import { GetDeploymentResult } from "@gram/client/models/components";
 
 let value: GetDeploymentResult = {
-  createdAt: new Date("2023-09-03T15:00:04.554Z"),
+  createdAt: new Date("2025-12-08T13:34:36.747Z"),
   externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
   githubPr: "1234",
   githubRepo: "speakeasyapi/gram",

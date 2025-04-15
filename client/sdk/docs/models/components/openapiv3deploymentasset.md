@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { OpenAPIv3DeploymentAsset } from "@gram/sdk/models/components";
+import { OpenAPIv3DeploymentAsset } from "@gram/client/models/components";
 
 let value: OpenAPIv3DeploymentAsset = {
   assetId: "<id>",

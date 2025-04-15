@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { Organization } from "@gram/sdk/models/components";
+import { Organization } from "@gram/client/models/components";
 
 let value: Organization = {
   accountType: "<value>",

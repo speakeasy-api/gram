@@ -20,7 +20,7 @@ Create a new toolset with associated tools
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -48,8 +48,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { toolsetsToolsetsNumberCreateToolset } from "@gram/sdk/funcs/toolsetsToolsetsNumberCreateToolset.js";
+import { GramCore } from "@gram/client/core.js";
+import { toolsetsToolsetsNumberCreateToolset } from "@gram/client/funcs/toolsetsToolsetsNumberCreateToolset.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -94,7 +94,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateToolsetMutation
-} from "@gram/sdk/react-query/toolsetsToolsetsNumberCreateToolset.js";
+} from "@gram/client/react-query/toolsetsToolsetsNumberCreateToolset.js";
 ```
 
 ### Parameters
@@ -123,7 +123,7 @@ Delete a toolset by its ID
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -148,8 +148,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { toolsetsToolsetsNumberDeleteToolset } from "@gram/sdk/funcs/toolsetsToolsetsNumberDeleteToolset.js";
+import { GramCore } from "@gram/client/core.js";
+import { toolsetsToolsetsNumberDeleteToolset } from "@gram/client/funcs/toolsetsToolsetsNumberDeleteToolset.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -191,7 +191,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useDeleteToolsetMutation
-} from "@gram/sdk/react-query/toolsetsToolsetsNumberDeleteToolset.js";
+} from "@gram/client/react-query/toolsetsToolsetsNumberDeleteToolset.js";
 ```
 
 ### Parameters
@@ -220,7 +220,7 @@ Get detailed information about a toolset including full HTTP tool definitions
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -246,8 +246,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { toolsetsToolsetsNumberGetToolsetDetails } from "@gram/sdk/funcs/toolsetsToolsetsNumberGetToolsetDetails.js";
+import { GramCore } from "@gram/client/core.js";
+import { toolsetsToolsetsNumberGetToolsetDetails } from "@gram/client/funcs/toolsetsToolsetsNumberGetToolsetDetails.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -301,7 +301,7 @@ import {
   // mutations and other user actions.
   invalidateToolset,
   invalidateAllToolset,
-} from "@gram/sdk/react-query/toolsetsToolsetsNumberGetToolsetDetails.js";
+} from "@gram/client/react-query/toolsetsToolsetsNumberGetToolsetDetails.js";
 ```
 
 ### Parameters
@@ -330,7 +330,7 @@ List all toolsets for a project
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -354,8 +354,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { toolsetsToolsetsNumberListToolsets } from "@gram/sdk/funcs/toolsetsToolsetsNumberListToolsets.js";
+import { GramCore } from "@gram/client/core.js";
+import { toolsetsToolsetsNumberListToolsets } from "@gram/client/funcs/toolsetsToolsetsNumberListToolsets.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -407,7 +407,7 @@ import {
   // mutations and other user actions.
   invalidateListToolsets,
   invalidateAllListToolsets,
-} from "@gram/sdk/react-query/toolsetsToolsetsNumberListToolsets.js";
+} from "@gram/client/react-query/toolsetsToolsetsNumberListToolsets.js";
 ```
 
 ### Parameters
@@ -436,7 +436,7 @@ Update a toolset's properties including name, description, and HTTP tools
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -463,8 +463,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { toolsetsToolsetsNumberUpdateToolset } from "@gram/sdk/funcs/toolsetsToolsetsNumberUpdateToolset.js";
+import { GramCore } from "@gram/client/core.js";
+import { toolsetsToolsetsNumberUpdateToolset } from "@gram/client/funcs/toolsetsToolsetsNumberUpdateToolset.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -508,7 +508,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useUpdateToolsetMutation
-} from "@gram/sdk/react-query/toolsetsToolsetsNumberUpdateToolset.js";
+} from "@gram/client/react-query/toolsetsToolsetsNumberUpdateToolset.js";
 ```
 
 ### Parameters

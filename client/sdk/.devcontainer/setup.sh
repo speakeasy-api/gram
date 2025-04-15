@@ -10,7 +10,7 @@ mkdir samples
 npm install
 npm install -g ts-node
 npm link
-npm link @gram/sdk
+npm link @gram/client
 TS_CONFIG_CONTENT=$(cat <<EOL
 {
   "compilerOptions": {
@@ -27,4 +27,4 @@ EOL
 echo "$TS_CONFIG_CONTENT" > samples/tsconfig.json
 
 # Generate starter usage sample with speakeasy
-speakeasy generate usage -s server/gen/http/openapi3.yaml -l typescript -o samples/root.ts
+speakeasy generate usage -s ../../server/gen/http/openapi3.yaml -l typescript -o samples/root.ts

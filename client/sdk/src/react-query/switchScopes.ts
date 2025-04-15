@@ -51,7 +51,7 @@ export function useSwitchScopesMutation(
 }
 
 export function mutationKeySwitchScopes(): MutationKey {
-  return ["@gram/sdk", "auth", "authNumberSwitchScopes"];
+  return ["@gram/client", "auth", "authNumberSwitchScopes"];
 }
 
 export function buildSwitchScopesMutation(

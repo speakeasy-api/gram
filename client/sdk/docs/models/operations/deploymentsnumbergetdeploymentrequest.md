@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { DeploymentsNumberGetDeploymentRequest } from "@gram/sdk/models/operations";
+import { DeploymentsNumberGetDeploymentRequest } from "@gram/client/models/operations";
 
 let value: DeploymentsNumberGetDeploymentRequest = {
   id: "<id>",

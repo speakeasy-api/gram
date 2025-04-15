@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { AuthNumberLogoutResponse } from "@gram/sdk/models/operations";
+import { AuthNumberLogoutResponse } from "@gram/client/models/operations";
 
 let value: AuthNumberLogoutResponse = {
   headers: {

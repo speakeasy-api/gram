@@ -49,7 +49,7 @@ export function useRevokeAPIKeyMutation(
 }
 
 export function mutationKeyRevokeAPIKey(): MutationKey {
-  return ["@gram/sdk", "keys", "keysNumberRevokeKey"];
+  return ["@gram/client", "keys", "keysNumberRevokeKey"];
 }
 
 export function buildRevokeAPIKeyMutation(

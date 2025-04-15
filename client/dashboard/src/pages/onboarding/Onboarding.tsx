@@ -4,12 +4,15 @@ import { Type } from "@/components/ui/type";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { Deployment, UploadOpenAPIv3Result } from "@gram/sdk/models/components";
+import {
+  Deployment,
+  UploadOpenAPIv3Result,
+} from "@gram/client/models/components";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useListTools } from "@gram/sdk/react-query";
+import { useListTools } from "@gram/client/react-query/index.js";
 import { Input } from "@/components/ui/input";
 import { Stepper, StepProps } from "@/components/stepper";
 

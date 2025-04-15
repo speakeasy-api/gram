@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { EnvironmentsNumberUpdateEnvironmentRequest } from "@gram/sdk/models/operations";
+import { EnvironmentsNumberUpdateEnvironmentRequest } from "@gram/client/models/operations";
 
 let value: EnvironmentsNumberUpdateEnvironmentRequest = {
   slug: "<value>",

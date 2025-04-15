@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { KeysNumberCreateKeyRequest } from "@gram/sdk/models/operations";
+import { KeysNumberCreateKeyRequest } from "@gram/client/models/operations";
 
 let value: KeysNumberCreateKeyRequest = {
   createKeyForm: {

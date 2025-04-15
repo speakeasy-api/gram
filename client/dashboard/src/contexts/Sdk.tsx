@@ -1,6 +1,6 @@
-import { Gram } from "@gram/sdk";
-import { HTTPClient } from "@gram/sdk/lib/http.js";
-import { GramProvider } from "@gram/sdk/react-query";
+import { Gram } from "@gram/client";
+import { HTTPClient } from "@gram/client/lib/http.js";
+import { GramProvider } from "@gram/client/react-query/index.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 

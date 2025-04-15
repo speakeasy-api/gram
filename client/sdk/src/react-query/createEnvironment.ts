@@ -49,7 +49,11 @@ export function useCreateEnvironmentMutation(
 }
 
 export function mutationKeyCreateEnvironment(): MutationKey {
-  return ["@gram/sdk", "environments", "environmentsNumberCreateEnvironment"];
+  return [
+    "@gram/client",
+    "environments",
+    "environmentsNumberCreateEnvironment",
+  ];
 }
 
 export function buildCreateEnvironmentMutation(

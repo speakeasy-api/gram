@@ -3,28 +3,28 @@
 ## Example Usage
 
 ```typescript
-import { ListToolsetsResult } from "@gram/sdk/models/components";
+import { ListToolsetsResult } from "@gram/client/models/components";
 
 let value: ListToolsetsResult = {
   toolsets: [
     {
-      createdAt: new Date("2025-09-20T12:21:57.178Z"),
+      createdAt: new Date("2023-06-30T12:06:54.333Z"),
       httpTools: [
         {
-          createdAt: new Date("2025-10-23T12:10:12.732Z"),
+          createdAt: new Date("2024-11-12T03:22:04.343Z"),
           deploymentId: "<id>",
-          description: "revoke aw blah upside-down gah greatly",
+          description: "general astride boohoo without godparent finally aside",
           httpMethod: "<value>",
           id: "<id>",
           name: "<value>",
-          path: "/selinux",
+          path: "/rescue",
           projectId: "<id>",
           schema: "<value>",
           summary: "<value>",
           tags: [
             "<value>",
           ],
-          updatedAt: new Date("2024-11-14T21:37:54.702Z"),
+          updatedAt: new Date("2023-01-29T03:01:55.688Z"),
         },
       ],
       id: "<id>",
@@ -32,7 +32,7 @@ let value: ListToolsetsResult = {
       organizationId: "<id>",
       projectId: "<id>",
       slug: "<value>",
-      updatedAt: new Date("2025-10-26T13:44:01.494Z"),
+      updatedAt: new Date("2023-08-16T09:17:34.312Z"),
     },
   ],
 };

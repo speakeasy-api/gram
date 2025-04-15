@@ -3,9 +3,9 @@ import {
   InfoResponseBody,
   Organization,
   Project,
-} from "@gram/sdk/models/components";
+} from "@gram/client/models/components";
 import { useContext } from "react";
-import { useSessionInfoSuspense } from "@gram/sdk/react-query";
+import { useSessionInfoSuspense } from "@gram/client/react-query/index.js";
 import { ErrorBoundary } from "react-error-boundary";
 import { GramLogo } from "@/components/gram-logo";
 
@@ -40,7 +40,8 @@ export const useProject = () => {
 
   const switchProject = (projectId: string) => {
     setActiveProject(
-      organization.projects.find((p) => p.projectId === projectId) ?? defaultProject
+      organization.projects.find((p) => p.projectId === projectId) ??
+        defaultProject
     );
   };
 

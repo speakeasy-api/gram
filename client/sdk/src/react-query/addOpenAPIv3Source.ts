@@ -50,7 +50,7 @@ export function useAddOpenAPIv3SourceMutation(
 }
 
 export function mutationKeyAddOpenAPIv3Source(): MutationKey {
-  return ["@gram/sdk", "deployments", "deploymentsNumberAddOpenAPIv3Source"];
+  return ["@gram/client", "deployments", "deploymentsNumberAddOpenAPIv3Source"];
 }
 
 export function buildAddOpenAPIv3SourceMutation(

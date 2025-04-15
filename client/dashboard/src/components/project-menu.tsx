@@ -12,8 +12,7 @@ import { cn } from "@/lib/utils.ts";
 import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
 import { Separator } from "./ui/separator.tsx";
-import { Project } from "@gram/sdk/models/components";
-
+import { Project } from "@gram/client/models/components";
 
 // Add this helper function to generate colors from project label
 function getProjectColors(label: string): {
@@ -160,7 +159,7 @@ function ProjectSelector() {
   });
 
   const selected = projectWithIcons?.find(
-    (p) => p.projectId === project.projectId,
+    (p) => p.projectId === project.projectId
   );
 
   const changeProject = (projectId: string) => {

@@ -49,7 +49,7 @@ export function useUpdateToolsetMutation(
 }
 
 export function mutationKeyUpdateToolset(): MutationKey {
-  return ["@gram/sdk", "toolsets", "toolsetsNumberUpdateToolset"];
+  return ["@gram/client", "toolsets", "toolsetsNumberUpdateToolset"];
 }
 
 export function buildUpdateToolsetMutation(

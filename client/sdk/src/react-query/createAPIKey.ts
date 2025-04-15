@@ -50,7 +50,7 @@ export function useCreateAPIKeyMutation(
 }
 
 export function mutationKeyCreateAPIKey(): MutationKey {
-  return ["@gram/sdk", "keys", "keysNumberCreateKey"];
+  return ["@gram/client", "keys", "keysNumberCreateKey"];
 }
 
 export function buildCreateAPIKeyMutation(

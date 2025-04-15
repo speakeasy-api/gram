@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { EnvironmentsNumberCreateEnvironmentRequest } from "@gram/sdk/models/operations";
+import { EnvironmentsNumberCreateEnvironmentRequest } from "@gram/client/models/operations";
 
 let value: EnvironmentsNumberCreateEnvironmentRequest = {
   createEnvironmentForm: {

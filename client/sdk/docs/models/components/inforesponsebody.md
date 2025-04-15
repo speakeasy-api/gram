@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { InfoResponseBody } from "@gram/sdk/models/components";
+import { InfoResponseBody } from "@gram/client/models/components";
 
 let value: InfoResponseBody = {
   activeOrganizationId: "<id>",

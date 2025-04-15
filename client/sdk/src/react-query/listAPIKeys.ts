@@ -108,7 +108,7 @@ export function invalidateListAPIKeys(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "keys", "keysNumberListKeys", ...queryKeyBase],
+    queryKey: ["@gram/client", "keys", "keysNumberListKeys", ...queryKeyBase],
   });
 }
 
@@ -118,7 +118,7 @@ export function invalidateAllListAPIKeys(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "keys", "keysNumberListKeys"],
+    queryKey: ["@gram/client", "keys", "keysNumberListKeys"],
   });
 }
 
@@ -155,5 +155,5 @@ export function buildListAPIKeysQuery(
 export function queryKeyListAPIKeys(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/sdk", "keys", "keysNumberListKeys", parameters];
+  return ["@gram/client", "keys", "keysNumberListKeys", parameters];
 }

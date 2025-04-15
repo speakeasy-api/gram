@@ -107,7 +107,7 @@ export function invalidateLogout(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "auth", "authNumberLogout", ...queryKeyBase],
+    queryKey: ["@gram/client", "auth", "authNumberLogout", ...queryKeyBase],
   });
 }
 
@@ -117,7 +117,7 @@ export function invalidateAllLogout(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "auth", "authNumberLogout"],
+    queryKey: ["@gram/client", "auth", "authNumberLogout"],
   });
 }
 
@@ -152,5 +152,5 @@ export function buildLogoutQuery(
 export function queryKeyLogout(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/sdk", "auth", "authNumberLogout", parameters];
+  return ["@gram/client", "auth", "authNumberLogout", parameters];
 }

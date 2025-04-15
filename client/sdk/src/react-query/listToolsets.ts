@@ -111,7 +111,7 @@ export function invalidateListToolsets(
   return client.invalidateQueries({
     ...filters,
     queryKey: [
-      "@gram/sdk",
+      "@gram/client",
       "toolsets",
       "toolsetsNumberListToolsets",
       ...queryKeyBase,
@@ -125,7 +125,7 @@ export function invalidateAllListToolsets(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "toolsets", "toolsetsNumberListToolsets"],
+    queryKey: ["@gram/client", "toolsets", "toolsetsNumberListToolsets"],
   });
 }
 
@@ -166,5 +166,5 @@ export function queryKeyListToolsets(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/sdk", "toolsets", "toolsetsNumberListToolsets", parameters];
+  return ["@gram/client", "toolsets", "toolsetsNumberListToolsets", parameters];
 }

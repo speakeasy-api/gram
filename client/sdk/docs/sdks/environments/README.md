@@ -19,7 +19,7 @@ Create a new environment
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -51,8 +51,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { environmentsEnvironmentsNumberCreateEnvironment } from "@gram/sdk/funcs/environmentsEnvironmentsNumberCreateEnvironment.js";
+import { GramCore } from "@gram/client/core.js";
+import { environmentsEnvironmentsNumberCreateEnvironment } from "@gram/client/funcs/environmentsEnvironmentsNumberCreateEnvironment.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -101,7 +101,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateEnvironmentMutation
-} from "@gram/sdk/react-query/environmentsEnvironmentsNumberCreateEnvironment.js";
+} from "@gram/client/react-query/environmentsEnvironmentsNumberCreateEnvironment.js";
 ```
 
 ### Parameters
@@ -130,7 +130,7 @@ Delete an environment
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -155,8 +155,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { environmentsEnvironmentsNumberDeleteEnvironment } from "@gram/sdk/funcs/environmentsEnvironmentsNumberDeleteEnvironment.js";
+import { GramCore } from "@gram/client/core.js";
+import { environmentsEnvironmentsNumberDeleteEnvironment } from "@gram/client/funcs/environmentsEnvironmentsNumberDeleteEnvironment.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -198,7 +198,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useDeleteEnvironmentMutation
-} from "@gram/sdk/react-query/environmentsEnvironmentsNumberDeleteEnvironment.js";
+} from "@gram/client/react-query/environmentsEnvironmentsNumberDeleteEnvironment.js";
 ```
 
 ### Parameters
@@ -227,7 +227,7 @@ List all environments for an organization
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -251,8 +251,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { environmentsEnvironmentsNumberListEnvironments } from "@gram/sdk/funcs/environmentsEnvironmentsNumberListEnvironments.js";
+import { GramCore } from "@gram/client/core.js";
+import { environmentsEnvironmentsNumberListEnvironments } from "@gram/client/funcs/environmentsEnvironmentsNumberListEnvironments.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -304,7 +304,7 @@ import {
   // mutations and other user actions.
   invalidateListEnvironments,
   invalidateAllListEnvironments,
-} from "@gram/sdk/react-query/environmentsEnvironmentsNumberListEnvironments.js";
+} from "@gram/client/react-query/environmentsEnvironmentsNumberListEnvironments.js";
 ```
 
 ### Parameters
@@ -333,7 +333,7 @@ Update an environment
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -367,8 +367,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { environmentsEnvironmentsNumberUpdateEnvironment } from "@gram/sdk/funcs/environmentsEnvironmentsNumberUpdateEnvironment.js";
+import { GramCore } from "@gram/client/core.js";
+import { environmentsEnvironmentsNumberUpdateEnvironment } from "@gram/client/funcs/environmentsEnvironmentsNumberUpdateEnvironment.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -419,7 +419,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useUpdateEnvironmentMutation
-} from "@gram/sdk/react-query/environmentsEnvironmentsNumberUpdateEnvironment.js";
+} from "@gram/client/react-query/environmentsEnvironmentsNumberUpdateEnvironment.js";
 ```
 
 ### Parameters

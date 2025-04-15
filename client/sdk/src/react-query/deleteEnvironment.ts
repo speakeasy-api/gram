@@ -48,7 +48,11 @@ export function useDeleteEnvironmentMutation(
 }
 
 export function mutationKeyDeleteEnvironment(): MutationKey {
-  return ["@gram/sdk", "environments", "environmentsNumberDeleteEnvironment"];
+  return [
+    "@gram/client",
+    "environments",
+    "environmentsNumberDeleteEnvironment",
+  ];
 }
 
 export function buildDeleteEnvironmentMutation(

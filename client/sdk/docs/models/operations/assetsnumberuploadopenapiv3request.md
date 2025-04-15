@@ -3,10 +3,10 @@
 ## Example Usage
 
 ```typescript
-import { AssetsNumberUploadOpenAPIv3Request } from "@gram/sdk/models/operations";
+import { AssetsNumberUploadOpenAPIv3Request } from "@gram/client/models/operations";
 
 let value: AssetsNumberUploadOpenAPIv3Request = {
-  contentLength: 342484,
+  contentLength: 424685,
 };
 ```
 

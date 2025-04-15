@@ -13,7 +13,7 @@ import {
   useLoadInstance,
   useListToolsets,
   useListEnvironments,
-} from "@gram/sdk/react-query";
+} from "@gram/client/react-query/index.js";
 import { jsonSchema } from "ai";
 import { useSearchParams } from "react-router-dom";
 import { Type } from "@/components/ui/type";
@@ -23,7 +23,7 @@ import { ChevronDownIcon } from "lucide-react";
 import { ToolsetView } from "../toolsets/Toolset";
 import { OnboardingContent } from "../onboarding/Onboarding";
 import { useSdkClient } from "@/contexts/Sdk";
-import { Deployment } from "@gram/sdk/models/components";
+import { Deployment } from "@gram/client/models/components";
 
 type ChatConfig = React.RefObject<{
   toolsetSlug: string | null;

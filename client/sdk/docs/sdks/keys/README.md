@@ -18,7 +18,7 @@ Create a new api key
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
@@ -43,8 +43,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { keysKeysNumberCreateKey } from "@gram/sdk/funcs/keysKeysNumberCreateKey.js";
+import { GramCore } from "@gram/client/core.js";
+import { keysKeysNumberCreateKey } from "@gram/client/funcs/keysKeysNumberCreateKey.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -86,7 +86,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateAPIKeyMutation
-} from "@gram/sdk/react-query/keysKeysNumberCreateKey.js";
+} from "@gram/client/react-query/keysKeysNumberCreateKey.js";
 ```
 
 ### Parameters
@@ -116,7 +116,7 @@ List all api keys for an organization
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
@@ -137,8 +137,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { keysKeysNumberListKeys } from "@gram/sdk/funcs/keysKeysNumberListKeys.js";
+import { GramCore } from "@gram/client/core.js";
+import { keysKeysNumberListKeys } from "@gram/client/funcs/keysKeysNumberListKeys.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -187,7 +187,7 @@ import {
   // mutations and other user actions.
   invalidateListAPIKeys,
   invalidateAllListAPIKeys,
-} from "@gram/sdk/react-query/keysKeysNumberListKeys.js";
+} from "@gram/client/react-query/keysKeysNumberListKeys.js";
 ```
 
 ### Parameters
@@ -217,7 +217,7 @@ Revoke a api key
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
@@ -239,8 +239,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { keysKeysNumberRevokeKey } from "@gram/sdk/funcs/keysKeysNumberRevokeKey.js";
+import { GramCore } from "@gram/client/core.js";
+import { keysKeysNumberRevokeKey } from "@gram/client/funcs/keysKeysNumberRevokeKey.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -279,7 +279,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useRevokeAPIKeyMutation
-} from "@gram/sdk/react-query/keysKeysNumberRevokeKey.js";
+} from "@gram/client/react-query/keysKeysNumberRevokeKey.js";
 ```
 
 ### Parameters

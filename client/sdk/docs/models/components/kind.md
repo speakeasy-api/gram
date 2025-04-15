@@ -3,9 +3,9 @@
 ## Example Usage
 
 ```typescript
-import { Kind } from "@gram/sdk/models/components";
+import { Kind } from "@gram/client/models/components";
 
-let value: Kind = "openapiv3";
+let value: Kind = "unknown";
 ```
 
 ## Values

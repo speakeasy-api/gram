@@ -5,7 +5,7 @@ Form for creating a new environment
 ## Example Usage
 
 ```typescript
-import { CreateEnvironmentForm } from "@gram/sdk/models/components";
+import { CreateEnvironmentForm } from "@gram/client/models/components";
 
 let value: CreateEnvironmentForm = {
   entries: [

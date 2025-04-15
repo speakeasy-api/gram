@@ -3,11 +3,11 @@
 ## Example Usage
 
 ```typescript
-import { DeploymentSummary } from "@gram/sdk/models/components";
+import { DeploymentSummary } from "@gram/client/models/components";
 
 let value: DeploymentSummary = {
-  assetCount: 986195,
-  createdAt: new Date("2024-10-20T13:37:09.806Z"),
+  assetCount: 780529,
+  createdAt: new Date("2023-05-10T15:05:25.793Z"),
   id: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
   userId: "<id>",
 };

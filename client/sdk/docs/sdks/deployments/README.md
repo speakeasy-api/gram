@@ -19,7 +19,7 @@ Create a new deployment with an additional OpenAPI 3.x document.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -49,8 +49,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { deploymentsDeploymentsNumberAddOpenAPIv3Source } from "@gram/sdk/funcs/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
+import { GramCore } from "@gram/client/core.js";
+import { deploymentsDeploymentsNumberAddOpenAPIv3Source } from "@gram/client/funcs/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -97,7 +97,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useAddOpenAPIv3SourceMutation
-} from "@gram/sdk/react-query/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
+} from "@gram/client/react-query/deploymentsDeploymentsNumberAddOpenAPIv3Source.js";
 ```
 
 ### Parameters
@@ -126,7 +126,7 @@ Create a deployment to load tool definitions.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -158,8 +158,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { deploymentsDeploymentsNumberCreateDeployment } from "@gram/sdk/funcs/deploymentsDeploymentsNumberCreateDeployment.js";
+import { GramCore } from "@gram/client/core.js";
+import { deploymentsDeploymentsNumberCreateDeployment } from "@gram/client/funcs/deploymentsDeploymentsNumberCreateDeployment.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -208,7 +208,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useCreateDeploymentMutation
-} from "@gram/sdk/react-query/deploymentsDeploymentsNumberCreateDeployment.js";
+} from "@gram/client/react-query/deploymentsDeploymentsNumberCreateDeployment.js";
 ```
 
 ### Parameters
@@ -237,7 +237,7 @@ Create a deployment to load tool definitions.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -263,8 +263,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { deploymentsDeploymentsNumberGetDeployment } from "@gram/sdk/funcs/deploymentsDeploymentsNumberGetDeployment.js";
+import { GramCore } from "@gram/client/core.js";
+import { deploymentsDeploymentsNumberGetDeployment } from "@gram/client/funcs/deploymentsDeploymentsNumberGetDeployment.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -318,7 +318,7 @@ import {
   // mutations and other user actions.
   invalidateDeployment,
   invalidateAllDeployment,
-} from "@gram/sdk/react-query/deploymentsDeploymentsNumberGetDeployment.js";
+} from "@gram/client/react-query/deploymentsDeploymentsNumberGetDeployment.js";
 ```
 
 ### Parameters
@@ -347,7 +347,7 @@ List all deployments in descending order of creation.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -371,8 +371,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { deploymentsDeploymentsNumberListDeployments } from "@gram/sdk/funcs/deploymentsDeploymentsNumberListDeployments.js";
+import { GramCore } from "@gram/client/core.js";
+import { deploymentsDeploymentsNumberListDeployments } from "@gram/client/funcs/deploymentsDeploymentsNumberListDeployments.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -424,7 +424,7 @@ import {
   // mutations and other user actions.
   invalidateListDeployments,
   invalidateAllListDeployments,
-} from "@gram/sdk/react-query/deploymentsDeploymentsNumberListDeployments.js";
+} from "@gram/client/react-query/deploymentsDeploymentsNumberListDeployments.js";
 ```
 
 ### Parameters

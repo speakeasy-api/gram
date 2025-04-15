@@ -112,7 +112,12 @@ export function invalidateListTools(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "tools", "toolsNumberListTools", ...queryKeyBase],
+    queryKey: [
+      "@gram/client",
+      "tools",
+      "toolsNumberListTools",
+      ...queryKeyBase,
+    ],
   });
 }
 
@@ -122,7 +127,7 @@ export function invalidateAllListTools(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "tools", "toolsNumberListTools"],
+    queryKey: ["@gram/client", "tools", "toolsNumberListTools"],
   });
 }
 
@@ -163,5 +168,5 @@ export function queryKeyListTools(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/sdk", "tools", "toolsNumberListTools", parameters];
+  return ["@gram/client", "tools", "toolsNumberListTools", parameters];
 }

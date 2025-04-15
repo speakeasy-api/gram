@@ -2,18 +2,18 @@ import { Card, Cards } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
-import { HTTPToolDefinition } from "@gram/sdk/models/components/httptooldefinition";
+import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
   useListTools,
   useToolset,
   useUpdateEnvironmentMutation,
   useUpdateToolsetMutation,
-} from "@gram/sdk/react-query";
+} from "@gram/client/react-query/index.js";
 import {
   EnvironmentEntryInput,
   ToolsetDetails,
-} from "@gram/sdk/models/components";
+} from "@gram/client/models/components";
 import { EditableText } from "@/components/editable-text";
 import { CreateThingCard, useToolsets } from "./Toolsets";
 import { useNavigate, useParams } from "react-router-dom";

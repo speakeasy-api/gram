@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { KeysNumberRevokeKeySecurity } from "@gram/sdk/models/operations";
+import { KeysNumberRevokeKeySecurity } from "@gram/client/models/operations";
 
 let value: KeysNumberRevokeKeySecurity = {
   sessionHeaderGramSession: "<value>",

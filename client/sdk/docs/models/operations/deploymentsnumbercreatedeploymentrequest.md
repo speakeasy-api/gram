@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { DeploymentsNumberCreateDeploymentRequest } from "@gram/sdk/models/operations";
+import { DeploymentsNumberCreateDeploymentRequest } from "@gram/client/models/operations";
 
 let value: DeploymentsNumberCreateDeploymentRequest = {
   idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",

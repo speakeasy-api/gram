@@ -123,7 +123,7 @@ export function invalidateLoadInstance(
   return client.invalidateQueries({
     ...filters,
     queryKey: [
-      "@gram/sdk",
+      "@gram/client",
       "instances",
       "instancesNumberLoadInstance",
       ...queryKeyBase,
@@ -137,7 +137,7 @@ export function invalidateAllLoadInstance(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/sdk", "instances", "instancesNumberLoadInstance"],
+    queryKey: ["@gram/client", "instances", "instancesNumberLoadInstance"],
   });
 }
 
@@ -186,5 +186,10 @@ export function queryKeyLoadInstance(
     gramKey?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/sdk", "instances", "instancesNumberLoadInstance", parameters];
+  return [
+    "@gram/client",
+    "instances",
+    "instancesNumberLoadInstance",
+    parameters,
+  ];
 }

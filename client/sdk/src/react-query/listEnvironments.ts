@@ -111,7 +111,7 @@ export function invalidateListEnvironments(
   return client.invalidateQueries({
     ...filters,
     queryKey: [
-      "@gram/sdk",
+      "@gram/client",
       "environments",
       "environmentsNumberListEnvironments",
       ...queryKeyBase,
@@ -126,7 +126,7 @@ export function invalidateAllListEnvironments(
   return client.invalidateQueries({
     ...filters,
     queryKey: [
-      "@gram/sdk",
+      "@gram/client",
       "environments",
       "environmentsNumberListEnvironments",
     ],
@@ -173,7 +173,7 @@ export function queryKeyListEnvironments(
   },
 ): QueryKey {
   return [
-    "@gram/sdk",
+    "@gram/client",
     "environments",
     "environmentsNumberListEnvironments",
     parameters,

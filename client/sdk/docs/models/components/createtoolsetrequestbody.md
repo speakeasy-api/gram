@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { CreateToolsetRequestBody } from "@gram/sdk/models/components";
+import { CreateToolsetRequestBody } from "@gram/client/models/components";
 
 let value: CreateToolsetRequestBody = {
   name: "<value>",

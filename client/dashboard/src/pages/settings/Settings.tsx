@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Column, Table } from "@speakeasy-api/moonshine";
-import { Key } from "@gram/sdk/models/components";
+import { Key } from "@gram/client/models/components";
 import { HumanizeDateTime } from "@/lib/dates";
 import { Type } from "@/components/ui/type";
 

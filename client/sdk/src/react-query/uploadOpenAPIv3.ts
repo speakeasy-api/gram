@@ -49,7 +49,7 @@ export function useUploadOpenAPIv3Mutation(
 }
 
 export function mutationKeyUploadOpenAPIv3(): MutationKey {
-  return ["@gram/sdk", "assets", "assetsNumberUploadOpenAPIv3"];
+  return ["@gram/client", "assets", "assetsNumberUploadOpenAPIv3"];
 }
 
 export function buildUploadOpenAPIv3Mutation(

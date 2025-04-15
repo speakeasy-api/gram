@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { CreateDeploymentRequestBody } from "@gram/sdk/models/components";
+import { CreateDeploymentRequestBody } from "@gram/client/models/components";
 
 let value: CreateDeploymentRequestBody = {
   externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",

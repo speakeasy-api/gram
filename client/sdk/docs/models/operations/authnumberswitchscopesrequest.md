@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { AuthNumberSwitchScopesRequest } from "@gram/sdk/models/operations";
+import { AuthNumberSwitchScopesRequest } from "@gram/client/models/operations";
 
 let value: AuthNumberSwitchScopesRequest = {};
 ```

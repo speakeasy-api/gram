@@ -2,7 +2,7 @@ configVersion: 2.0.0
 generation:
   devContainers:
     enabled: true
-    schemaPath: server/gen/http/openapi3.yaml
+    schemaPath: ../../server/gen/http/openapi3.yaml
   sdkClassName: Gram
   maintainOpenAPIOrder: true
   usageSnippets:
@@ -18,7 +18,7 @@ generation:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
 typescript:
-  version: 0.5.4
+  version: 0.5.5
   additionalDependencies:
     dependencies: {}
     devDependencies: {}
@@ -50,7 +50,7 @@ typescript:
   methodArguments: infer-optional-args
   moduleFormat: esm
   outputModelSuffix: output
-  packageName: '@gram/sdk'
+  packageName: '@gram/client'
   responseFormat: flat
   templateVersion: v2
   useIndexModules: true

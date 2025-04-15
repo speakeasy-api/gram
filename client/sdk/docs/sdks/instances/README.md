@@ -16,7 +16,7 @@ load all relevant data for an instance of a toolset and environment
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
@@ -42,8 +42,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { instancesInstancesNumberLoadInstance } from "@gram/sdk/funcs/instancesInstancesNumberLoadInstance.js";
+import { GramCore } from "@gram/client/core.js";
+import { instancesInstancesNumberLoadInstance } from "@gram/client/funcs/instancesInstancesNumberLoadInstance.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -97,7 +97,7 @@ import {
   // mutations and other user actions.
   invalidateLoadInstance,
   invalidateAllLoadInstance,
-} from "@gram/sdk/react-query/instancesInstancesNumberLoadInstance.js";
+} from "@gram/client/react-query/instancesInstancesNumberLoadInstance.js";
 ```
 
 ### Parameters

@@ -18,8 +18,8 @@ your React app at the root or layout component. For example:
 
 ```tsx
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { GramCore } from "@gram/sdk";
-import { GramProvider } from "@gram/sdk/react-query";
+import { GramCore } from "@gram/client";
+import { GramProvider } from "@gram/client/react-query";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
@@ -30,8 +30,8 @@ const gram = new GramCore({
 });
 
 // Retries are handled by the underlying SDK.
-queryClient.setQueryDefaults(["@gram/sdk"], { retry: false });
-queryClient.setMutationDefaults(["@gram/sdk"], { retry: false });
+queryClient.setQueryDefaults(["@gram/client"], { retry: false });
+queryClient.setMutationDefaults(["@gram/client"], { retry: false });
 
 export function App() {
   return (
@@ -53,7 +53,7 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
+import { useAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
 
 export function Example() {
   const { data, error, status } = useAuthAuthNumberCallback({
@@ -71,7 +71,7 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
+import { useAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
@@ -115,7 +115,7 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUploadOpenAPIv3Mutation } from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
 
 export function Example() {
   const { mutate, status } = useUploadOpenAPIv3Mutation();
@@ -145,7 +145,7 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUploadOpenAPIv3Mutation } from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
 
 export function ExampleWithOptions() {
   const { mutate, status } = useUploadOpenAPIv3Mutation({
@@ -180,9 +180,9 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateAuthAuthNumberCallback, invalidateAllAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
+import { invalidateAuthAuthNumberCallback, invalidateAllAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
 // Replace this with a real mutation
-import { useExampleMutation } from "@gram/sdk/react-query/example.js";
+import { useExampleMutation } from "@gram/client/react-query/example.js";
 
 export function Example() {
   const { queryClient } = useQueryClient();
@@ -226,9 +226,9 @@ hooks that integrate neatly with React Suspense.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 
-import { GramCore } from "@gram/sdk";
-import { GramProvider } from "@gram/sdk/react-query";
-import { useAuthAuthNumberCallbackSuspense } from "@gram/sdk/react-query/authAuthNumberCallback.js";
+import { GramCore } from "@gram/client";
+import { GramProvider } from "@gram/client/react-query";
+import { useAuthAuthNumberCallbackSuspense } from "@gram/client/react-query/authAuthNumberCallback.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
@@ -287,8 +287,8 @@ import {
   HydrationBoundary,
   QueryClient,
 } from "@tanstack/react-query";
-import { GramCore } from "@gram/sdk";
-import { prefetchAuthAuthNumberCallback } from "@gram/sdk/react-query/authAuthNumberCallback.js";
+import { GramCore } from "@gram/client";
+import { prefetchAuthAuthNumberCallback } from "@gram/client/react-query/authAuthNumberCallback.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();

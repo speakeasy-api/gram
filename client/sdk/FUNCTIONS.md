@@ -19,9 +19,9 @@ specific category of applications.
 ## Example
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { assetsAssetsNumberUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsAssetsNumberUploadOpenAPIv3.js";
-import { SDKValidationError } from "@gram/sdk/models/errors/sdkvalidationerror.js";
+import { GramCore } from "@gram/client/core.js";
+import { assetsAssetsNumberUploadOpenAPIv3 } from "@gram/client/funcs/assetsAssetsNumberUploadOpenAPIv3.js";
+import { SDKValidationError } from "@gram/client/models/errors/sdkvalidationerror.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.

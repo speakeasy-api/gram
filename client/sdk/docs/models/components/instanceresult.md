@@ -3,16 +3,16 @@
 ## Example Usage
 
 ```typescript
-import { InstanceResult } from "@gram/sdk/models/components";
+import { InstanceResult } from "@gram/client/models/components";
 
 let value: InstanceResult = {
   environment: {
-    createdAt: new Date("2023-10-17T18:07:30.469Z"),
+    createdAt: new Date("2024-11-07T22:17:02.814Z"),
     entries: [
       {
-        createdAt: new Date("2025-02-20T04:41:45.906Z"),
+        createdAt: new Date("2024-11-01T20:33:57.206Z"),
         name: "<value>",
-        updatedAt: new Date("2024-03-10T22:10:58.239Z"),
+        updatedAt: new Date("2024-11-07T03:49:54.674Z"),
         value: "<value>",
       },
     ],
@@ -21,25 +21,25 @@ let value: InstanceResult = {
     organizationId: "<id>",
     projectId: "<id>",
     slug: "<value>",
-    updatedAt: new Date("2024-08-18T10:47:36.935Z"),
+    updatedAt: new Date("2025-10-31T08:20:58.047Z"),
   },
   name: "<value>",
   tools: [
     {
-      createdAt: new Date("2024-04-15T03:02:21.323Z"),
+      createdAt: new Date("2025-01-17T06:36:04.132Z"),
       deploymentId: "<id>",
-      description: "archive since murky dependency syringe instantly",
+      description: "continually fooey amid gosh arraign",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/usr/local/bin",
+      path: "/lost+found",
       projectId: "<id>",
       schema: "<value>",
       summary: "<value>",
       tags: [
         "<value>",
       ],
-      updatedAt: new Date("2024-05-13T03:29:42.791Z"),
+      updatedAt: new Date("2023-05-12T17:39:01.246Z"),
     },
   ],
 };

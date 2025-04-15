@@ -3,17 +3,17 @@
 ## Example Usage
 
 ```typescript
-import { Asset } from "@gram/sdk/models/components";
+import { Asset } from "@gram/client/models/components";
 
 let value: Asset = {
-  contentLength: 95314,
+  contentLength: 383441,
   contentType: "<value>",
-  createdAt: new Date("2025-11-12T07:39:23.206Z"),
+  createdAt: new Date("2025-05-17T17:32:07.447Z"),
   id: "<id>",
-  kind: "openapiv3",
+  kind: "unknown",
   sha256: "<value>",
-  updatedAt: new Date("2023-04-08T11:11:06.209Z"),
-  url: "https://wretched-humor.biz",
+  updatedAt: new Date("2024-09-14T13:50:38.886Z"),
+  url: "https://blaring-bog.com",
 };
 ```
 

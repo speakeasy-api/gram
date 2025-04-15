@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { UpdateEnvironmentRequestBody } from "@gram/sdk/models/components";
+import { UpdateEnvironmentRequestBody } from "@gram/client/models/components";
 
 let value: UpdateEnvironmentRequestBody = {
   entriesToRemove: [

@@ -49,7 +49,7 @@ export function useCreateDeploymentMutation(
 }
 
 export function mutationKeyCreateDeployment(): MutationKey {
-  return ["@gram/sdk", "deployments", "deploymentsNumberCreateDeployment"];
+  return ["@gram/client", "deployments", "deploymentsNumberCreateDeployment"];
 }
 
 export function buildCreateDeploymentMutation(

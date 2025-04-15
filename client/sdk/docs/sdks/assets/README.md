@@ -16,7 +16,7 @@ Upload an OpenAPI v3 document to Gram.
 ### Example Usage
 
 ```typescript
-import { Gram } from "@gram/sdk";
+import { Gram } from "@gram/client";
 
 const gram = new Gram({
   security: {
@@ -42,8 +42,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramCore } from "@gram/sdk/core.js";
-import { assetsAssetsNumberUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsAssetsNumberUploadOpenAPIv3.js";
+import { GramCore } from "@gram/client/core.js";
+import { assetsAssetsNumberUploadOpenAPIv3 } from "@gram/client/funcs/assetsAssetsNumberUploadOpenAPIv3.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -86,7 +86,7 @@ associated utilities.
 import {
   // Mutation hook for triggering the API call.
   useUploadOpenAPIv3Mutation
-} from "@gram/sdk/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
+} from "@gram/client/react-query/assetsAssetsNumberUploadOpenAPIv3.js";
 ```
 
 ### Parameters

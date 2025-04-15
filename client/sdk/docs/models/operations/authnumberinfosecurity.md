@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { AuthNumberInfoSecurity } from "@gram/sdk/models/operations";
+import { AuthNumberInfoSecurity } from "@gram/client/models/operations";
 
 let value: AuthNumberInfoSecurity = {
   sessionHeaderGramSession: "<value>",

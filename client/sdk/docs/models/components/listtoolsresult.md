@@ -3,25 +3,25 @@
 ## Example Usage
 
 ```typescript
-import { ListToolsResult } from "@gram/sdk/models/components";
+import { ListToolsResult } from "@gram/client/models/components";
 
 let value: ListToolsResult = {
   tools: [
     {
-      createdAt: new Date("2024-07-22T19:54:53.930Z"),
+      createdAt: new Date("2024-09-19T04:30:50.868Z"),
       deploymentId: "<id>",
-      description: "ack shoddy soliloquy cleaner drag catalog",
+      description: "aha well-to-do below outrun",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/usr/lib",
+      path: "/Users",
       projectId: "<id>",
       schema: "<value>",
       summary: "<value>",
       tags: [
         "<value>",
       ],
-      updatedAt: new Date("2025-06-28T14:34:38.671Z"),
+      updatedAt: new Date("2024-12-15T16:55:27.891Z"),
     },
   ],
 };

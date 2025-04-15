@@ -3,8 +3,8 @@ import { useProject } from "@/contexts/Auth";
 import {
   useDeleteEnvironmentMutation,
   useUpdateEnvironmentMutation,
-} from "@gram/sdk/react-query";
-import { EnvironmentEntry } from "@gram/sdk/models/components";
+} from "@gram/client/react-query/index.js";
+import { EnvironmentEntry } from "@gram/client/models/components";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useListToolsets, useToolset } from "@gram/sdk/react-query";
+import { useListToolsets, useToolset } from "@gram/client/react-query/index.js";
 
 interface EntryDialogProps {
   open: boolean;
