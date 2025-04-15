@@ -320,7 +320,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
       console.log("Received new tool call:", toolCall);
 
       const response = await fetch(
-        `http://localhost:8080/rpc/instances.invoke/tool?tool_id=${tool.id}&environment_slug=test3`,
+        `http://localhost:8080/rpc/instances.invoke/tool?tool_id=${tool.id}&environment_slug=${configRef.current.environmentSlug}`,
         {
           method: "POST",
           headers: {
