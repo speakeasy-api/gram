@@ -28,6 +28,7 @@ import { Deployment } from "@gram/client/models/components";
 type ChatConfig = React.RefObject<{
   toolsetSlug: string | null;
   environmentSlug: string | null;
+  isOnboarding: boolean;
 }>;
 
 export default function Sandbox() {
@@ -44,11 +45,13 @@ export default function Sandbox() {
   const chatConfigRef = useRef({
     toolsetSlug: selectedToolset,
     environmentSlug: selectedEnvironment,
+    isOnboarding: false,
   });
 
   chatConfigRef.current = {
     toolsetSlug: selectedToolset,
     environmentSlug: selectedEnvironment,
+    isOnboarding: false,
   };
 
   return (
@@ -111,8 +114,6 @@ export function OnboardingPanel({
       },
     });
 
-    //TODO: environment set up
-
     selectToolset(res.slug);
   };
 
@@ -136,6 +137,8 @@ export function ToolsetPanel({
 
   const selectedToolset = configRef.current.toolsetSlug;
   const selectedEnvironment = configRef.current.environmentSlug;
+  console.log("selectedToolset", selectedToolset);
+
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
 
@@ -204,7 +207,14 @@ export function ToolsetPanel({
     </Combobox>
   );
 
-  if (toolsets !== undefined && toolsets.length === 0) {
+  // This is prefetched in PrefetchedQueries, so this state shouldn't be hit
+  if (toolsets === undefined) {
+    return <div>Loading...</div>;
+  }
+
+  // If listToolsets has completed and there's nothing there, show the onboarding panel
+  if (toolsets !== undefined && !configRef.current.toolsetSlug) {
+    configRef.current.isOnboarding = true;
     return <OnboardingPanel selectToolset={setSelectedToolset} />;
   }
 
@@ -280,7 +290,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
     return result.toDataStreamResponse();
   };
 
-  const initialMessages: Message[] = configRef.current.toolsetSlug // TODO
+  const initialMessages: Message[] = configRef.current.isOnboarding
     ? [
         {
           id: "1",

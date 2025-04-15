@@ -5,7 +5,7 @@ import {
   Project,
 } from "@gram/client/models/components";
 import { useContext } from "react";
-import { useSessionInfoSuspense } from "@gram/client/react-query/index.js";
+import { useListEnvironmentsSuspense, useListToolsetsSuspense, useSessionInfoSuspense } from "@gram/client/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import { GramLogo } from "@/components/gram-logo";
 
@@ -128,13 +128,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <MinimumSuspense fallback={<FullScreenLoader />}>
-        <AuthContent>{children}</AuthContent>
+        <AuthHandler>
+          <PrefetchedQueries>{children}</PrefetchedQueries>
+        </AuthHandler>
       </MinimumSuspense>
     </ErrorBoundary>
   );
 };
 
-const AuthContent = ({ children }: { children: React.ReactNode }) => {
+// Prefetch any queries while we're in the top-level loading state
+const PrefetchedQueries = ({ children }: { children: React.ReactNode }) => {
+  const project = useProject();
+
+  useListToolsetsSuspense({
+    gramProject: project.projectSlug,
+  });
+
+  useListEnvironmentsSuspense({
+    gramProject: project.projectSlug,
+  });
+
+  return children;
+};
+
+const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const sessionResponse = useSessionInfoSuspense({
     sessionHeaderGramSession: "", // We are using cookies instead, so this won't get set
   });

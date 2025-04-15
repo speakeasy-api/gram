@@ -135,7 +135,7 @@ export function OnboardingContent({
       heading: "Name Your API",
       description: "The tools generated will be scoped under this name.",
       display: (
-        <Stack direction={"horizontal"} gap={2}>
+        <Stack direction={"horizontal"} gap={2} className="max-w-sm">
           <Input
             value={apiName}
             onChange={(e) => setApiName(e.target.value)}
