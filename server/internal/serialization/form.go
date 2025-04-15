@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func ParseFormParams(paramName string, objType reflect.Type, objValue reflect.Value, delimiter string, explode bool) url.Values {
+func parseFormParams(paramName string, objType reflect.Type, objValue reflect.Value, delimiter string, explode bool) url.Values {
 
 	formValues := url.Values{}
 

@@ -49,10 +49,20 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	// Handle path parameters
 	requestPath := toolExecutionInfo.Tool.Path
 	if toolCallBody.PathParameters != nil {
+		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.PathSettings)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to parse path parameter settings", slog.String("error", err.Error()))
+			http.Error(w, "problem parsing parameter settings", http.StatusInternalServerError)
+			return
+		}
 		pathParams := make(map[string]string)
 		for name, value := range toolCallBody.PathParameters {
+			parameterSettings := parameterSettings[name]
+			if parameterSettings == nil {
+				logger.WarnContext(ctx, "no parameter settings found for path parameter", slog.String("parameter", name))
+			}
 			// style: simple and explode: false is the default serialization for path parameters
-			params := serialization.ParseSimpleParams(name, reflect.TypeOf(value), reflect.ValueOf(value), false)
+			params := serialization.ParsePathAndHeaderParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), parameterSettings)
 			if params != nil && params[name] != "" {
 				pathParams[name] = params[name]
 			} else {
@@ -101,10 +111,20 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	req.Header.Set("Content-Type", "application/json")
 
 	if toolCallBody.QueryParameters != nil {
+		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.QuerySettings)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to parse query parameter settings", slog.String("error", err.Error()))
+			http.Error(w, "problem parsing parameter settings", http.StatusInternalServerError)
+			return
+		}
 		values := url.Values{}
 		for name, value := range toolCallBody.QueryParameters {
+			parameterSettings := parameterSettings[name]
+			if parameterSettings == nil {
+				logger.WarnContext(ctx, "no parameter settings found for query parameter", slog.String("parameter", name))
+			}
 			// style: form and explode: true with , delimiter is default for query parameters
-			params := serialization.ParseFormParams(name, reflect.TypeOf(value), reflect.ValueOf(value), ",", true)
+			params := serialization.ParseQueryParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), parameterSettings)
 			if len(params) > 0 {
 				for name, value := range params {
 					for _, vv := range value {
@@ -120,9 +140,19 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 
 	// Handle headers
 	if toolCallBody.Headers != nil {
+		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.HeaderSettings)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to parse header parameter settings", slog.String("error", err.Error()))
+			http.Error(w, "problem parsing parameter settings", http.StatusInternalServerError)
+			return
+		}
 		for name, value := range toolCallBody.Headers {
+			parameterSettings := parameterSettings[name]
+			if parameterSettings == nil {
+				logger.WarnContext(ctx, "no parameter settings found for header parameter", slog.String("parameter", name))
+			}
 			// style: simple and explode: false is the default serialization for headers
-			params := serialization.ParseSimpleParams(name, reflect.TypeOf(value), reflect.ValueOf(value), false)
+			params := serialization.ParsePathAndHeaderParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), parameterSettings)
 			if params != nil && params[name] != "" {
 				req.Header.Set(name, params[name])
 			} else {

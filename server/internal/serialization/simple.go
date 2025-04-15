@@ -7,7 +7,7 @@ import (
 )
 
 // parseSimpleParams parses path parameters and headers using simple style encoding.
-func ParseSimpleParams(parentName string, objType reflect.Type, objValue reflect.Value, explode bool) map[string]string {
+func parseSimpleParams(parentName string, objType reflect.Type, objValue reflect.Value, explode bool) map[string]string {
 	pathParams := make(map[string]string)
 
 	if isNil(objType, objValue) {

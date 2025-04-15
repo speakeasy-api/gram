@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/openapi"
 	"github.com/speakeasy-api/gram/internal/orderedmap"
 	"github.com/speakeasy-api/gram/internal/tools"
 )
@@ -520,18 +521,6 @@ func captureRequestBody(op *v3.Operation) (capturedRequestBody, error) {
 	}, nil
 }
 
-type openapiV3ParameterProxy struct {
-	Schema          json.RawMessage `json:"schema,omitempty" yaml:"schema,omitempty"`
-	In              string          `json:"in,omitempty" yaml:"in,omitempty"`
-	Name            string          `json:"name,omitempty" yaml:"name,omitempty"`
-	Description     string          `json:"description,omitempty" yaml:"description,omitempty"`
-	Required        *bool           `json:"required,omitempty" yaml:"required,omitempty"`
-	Deprecated      bool            `json:"deprecated,omitempty" yaml:"deprecated,omitempty"`
-	AllowEmptyValue bool            `json:"allowEmptyValue,omitempty" yaml:"allowEmptyValue,omitempty"`
-	Style           string          `json:"style,omitempty" yaml:"style,omitempty"`
-	Explode         *bool           `json:"explode,omitempty" yaml:"explode,omitempty"`
-}
-
 func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, spec []byte, err error) {
 	if len(params) == 0 {
 		return nil, nil, nil
@@ -544,7 +533,7 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 		AdditionalProperties: conv.Ptr(false),
 	}
 
-	specs := make(map[string]*openapiV3ParameterProxy, len(params))
+	specs := make(map[string]*openapi.OpenapiV3ParameterProxy, len(params))
 
 	for _, param := range params {
 		var schemaBytes []byte
@@ -565,7 +554,7 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 			schemaBytes = sb
 		}
 
-		proxy := &openapiV3ParameterProxy{
+		proxy := &openapi.OpenapiV3ParameterProxy{
 			Schema:          json.RawMessage(schemaBytes),
 			In:              param.In,
 			Name:            param.Name,

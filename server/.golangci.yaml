@@ -25,7 +25,6 @@ linters:
     - iface
     - importas
     - ineffassign
-    - intrange
     - loggercheck
     - mirror
     - musttag
