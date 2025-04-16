@@ -59,10 +59,10 @@ echo -e "\n⏳ Running migrations"
 mise db:migrate
 
 echo -e "\n✅ All set up!"
-echo "Want me to start the server (\`mise w \"start:*\" --restart\`)?"
+echo "Want me to start the server and dashboard (\`mise run start\`)?"
 echo -n "[y/N] "
 read -r answer
 answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
 if [ "$answer" = "y" ]; then
-  exec mise w "start:*" --restart
+  exec mise run start
 fi

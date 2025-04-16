@@ -1,0 +1,7 @@
+procs:
+  server:
+    cmd: ["mise", "watch", "start:server"]
+    stop: SIGTERM
+  dashboard:
+    cmd: ["mise", "run", "start:dashboard"]
+    stop: SIGINT

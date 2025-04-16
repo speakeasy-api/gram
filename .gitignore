@@ -11,3 +11,4 @@ junit-report.xml
 /server/goa*
 /scratch
 .speakeasy/temp
+mprocs.log
