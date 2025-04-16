@@ -43,6 +43,9 @@ mise install
 echo -e "\n⏳ Installing dependencies"
 mise run install
 
+echo -e "\n⏳ Building internal SDK"
+mise run build:internal-sdk
+
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
