@@ -333,23 +333,13 @@ func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
-// BuildGetToolsetDetailsRequest instantiates a HTTP request object with method
-// and path set to call the "toolsets" service "getToolsetDetails" endpoint
-func (c *Client) BuildGetToolsetDetailsRequest(ctx context.Context, v any) (*http.Request, error) {
-	var (
-		slug string
-	)
-	{
-		p, ok := v.(*toolsets.GetToolsetDetailsPayload)
-		if !ok {
-			return nil, goahttp.ErrInvalidType("toolsets", "getToolsetDetails", "*toolsets.GetToolsetDetailsPayload", v)
-		}
-		slug = p.Slug
-	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolsetDetailsToolsetsPath(slug)}
+// BuildGetToolsetRequest instantiates a HTTP request object with method and
+// path set to call the "toolsets" service "getToolset" endpoint
+func (c *Client) BuildGetToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolsetToolsetsPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("toolsets", "getToolsetDetails", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("toolsets", "getToolset", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -358,13 +348,13 @@ func (c *Client) BuildGetToolsetDetailsRequest(ctx context.Context, v any) (*htt
 	return req, nil
 }
 
-// EncodeGetToolsetDetailsRequest returns an encoder for requests sent to the
-// toolsets getToolsetDetails server.
-func EncodeGetToolsetDetailsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeGetToolsetRequest returns an encoder for requests sent to the toolsets
+// getToolset server.
+func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*toolsets.GetToolsetDetailsPayload)
+		p, ok := v.(*toolsets.GetToolsetPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("toolsets", "getToolsetDetails", "*toolsets.GetToolsetDetailsPayload", v)
+			return goahttp.ErrInvalidType("toolsets", "getToolset", "*toolsets.GetToolsetPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -374,14 +364,17 @@ func EncodeGetToolsetDetailsRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("slug", p.Slug)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeGetToolsetDetailsResponse returns a decoder for responses returned by
-// the toolsets getToolsetDetails endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-func DecodeGetToolsetDetailsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+// DecodeGetToolsetResponse returns a decoder for responses returned by the
+// toolsets getToolset endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -398,22 +391,22 @@ func DecodeGetToolsetDetailsResponse(decoder func(*http.Response) goahttp.Decode
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body GetToolsetDetailsResponseBody
+				body GetToolsetResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "getToolsetDetails", err)
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
 			}
-			err = ValidateGetToolsetDetailsResponseBody(&body)
+			err = ValidateGetToolsetResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "getToolsetDetails", err)
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
 			}
-			res := NewGetToolsetDetailsToolsetDetailsOK(&body)
+			res := NewGetToolsetToolsetDetailsOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("toolsets", "getToolsetDetails", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("toolsets", "getToolset", resp.StatusCode, string(body))
 		}
 	}
 }

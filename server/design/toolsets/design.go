@@ -26,6 +26,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "createToolset")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateToolset"}`)
 	})
@@ -47,6 +48,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "listToolsets")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
 	})
@@ -69,6 +71,7 @@ var _ = Service("toolsets", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "updateToolset")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateToolset"}`)
 	})
@@ -91,11 +94,12 @@ var _ = Service("toolsets", func() {
 			Response(StatusNoContent)
 		})
 
+		Meta("openapi:operationId", "deleteToolset")
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteToolset"}`)
 	})
 
-	Method("getToolsetDetails", func() {
+	Method("getToolset", func() {
 		Description("Get detailed information about a toolset including full HTTP tool definitions")
 
 		Payload(func() {
@@ -108,14 +112,15 @@ var _ = Service("toolsets", func() {
 		Result(ToolsetDetails)
 
 		HTTP(func() {
+			GET("/rpc/toolsets.get")
 			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()
-			GET("/rpc/toolsets.get/{slug}")
 			Response(StatusOK)
 		})
 
-		Meta("openapi:extension:x-speakeasy-name-override", "getById")
+		Meta("openapi:operationId", "getToolset")
+		Meta("openapi:extension:x-speakeasy-name-override", "getBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Toolset"}`)
 	})
 })

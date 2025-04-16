@@ -25,6 +25,7 @@ var _ = Service("keys", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "createAPIKey")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAPIKey"}`)
 	})
@@ -44,6 +45,7 @@ var _ = Service("keys", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "listAPIKeys")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAPIKeys"}`)
 	})
@@ -64,6 +66,7 @@ var _ = Service("keys", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "revokeAPIKey")
 		Meta("openapi:extension:x-speakeasy-name-override", "revokeById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAPIKey"}`)
 	})

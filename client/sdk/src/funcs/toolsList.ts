@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function toolsList(
   client: GramCore,
-  request?: operations.ToolsNumberListToolsRequest | undefined,
+  request?: operations.ListToolsRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function toolsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ToolsNumberListToolsRequest | undefined,
+  request?: operations.ListToolsRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -75,9 +75,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.ToolsNumberListToolsRequest$outboundSchema.optional().parse(
-        value,
-      ),
+      operations.ListToolsRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -109,7 +107,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "tools#listTools",
+    operationID: "listTools",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

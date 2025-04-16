@@ -66,7 +66,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	})
 }
 
-func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePayload) (res *gen.InstanceResult, err error) {
+func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm) (res *gen.GetInstanceResult, err error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("project ID is required")
@@ -146,7 +146,7 @@ func (s *Service) LoadInstance(ctx context.Context, payload *gen.LoadInstancePay
 		}
 	}
 
-	return &gen.InstanceResult{
+	return &gen.GetInstanceResult{
 		Name:                         toolset.Name,
 		Description:                  toolset.Description,
 		RelevantEnvironmentVariables: toolset.RelevantEnvironmentVariables,

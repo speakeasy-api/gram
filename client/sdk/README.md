@@ -31,7 +31,6 @@ Gram API Description: Gram is the tools platform for AI agents
   * [Available Resources and Operations](#available-resources-and-operations)
   * [Standalone functions](#standalone-functions)
   * [React hooks with TanStack Query](#react-hooks-with-tanstack-query)
-  * [File uploads](#file-uploads)
   * [Retries](#retries)
   * [Error Handling](#error-handling)
   * [Server Selection](#server-selection)
@@ -190,7 +189,6 @@ For supported JavaScript runtimes, please consult [RUNTIMES.md](RUNTIMES.md).
 
 ```typescript
 import { Gram } from "@gram/client";
-import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   security: {
@@ -203,8 +201,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+    contentLength: 342044,
   });
 
   // Handle the result
@@ -231,7 +228,6 @@ This SDK supports the following security schemes globally:
 You can set the security parameters through the `security` optional parameter when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
 ```typescript
 import { Gram } from "@gram/client";
-import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   security: {
@@ -244,8 +240,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+    contentLength: 342044,
   });
 
   // Handle the result
@@ -313,7 +308,7 @@ run();
 
 ### [instances](docs/sdks/instances/README.md)
 
-* [load](docs/sdks/instances/README.md#load) - loadInstance instances
+* [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 
 ### [keys](docs/sdks/keys/README.md)
 
@@ -329,7 +324,7 @@ run();
 
 * [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 * [deleteBySlug](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
-* [getById](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
+* [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 
@@ -364,13 +359,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
-- [`instancesLoad`](docs/sdks/instances/README.md#load) - loadInstance instances
+- [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
-- [`toolsetsGetById`](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
+- [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
@@ -408,65 +403,23 @@ To learn about this feature and how to get started, check
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+- [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
-- [`useLoadInstance`](docs/sdks/instances/README.md#load) - loadInstance instances
 - [`useLogout`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
-- [`useToolset`](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
+- [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->
-
-<!-- Start File uploads [file-upload] -->
-## File uploads
-
-Certain SDK methods accept files as part of a multi-part request. It is possible and typically recommended to upload files as a stream rather than reading the entire contents into memory. This avoids excessive memory consumption and potentially crashing with out-of-memory errors when working with very large files. The following example demonstrates how to attach a file stream to a request.
-
-> [!TIP]
->
-> Depending on your JavaScript runtime, there are convenient utilities that return a handle to a file without reading the entire contents into memory:
->
-> - **Node.js v20+:** Since v20, Node.js comes with a native `openAsBlob` function in [`node:fs`](https://nodejs.org/docs/latest-v20.x/api/fs.html#fsopenasblobpath-options).
-> - **Bun:** The native [`Bun.file`](https://bun.sh/docs/api/file-io#reading-files-bun-file) function produces a file handle that can be used for streaming file uploads.
-> - **Browsers:** All supported browsers return an instance to a [`File`](https://developer.mozilla.org/en-US/docs/Web/API/File) when reading the value from an `<input type="file">` element.
-> - **Node.js v18:** A file stream can be created using the `fileFrom` helper from [`fetch-blob/from.js`](https://www.npmjs.com/package/fetch-blob).
-
-```typescript
-import { Gram } from "@gram/client";
-import { openAsBlob } from "node:fs";
-
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
-});
-
-async function run() {
-  const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
-  });
-
-  // Handle the result
-  console.log(result);
-}
-
-run();
-
-```
-<!-- End File uploads [file-upload] -->
 
 <!-- Start Retries [retries] -->
 ## Retries
@@ -476,7 +429,6 @@ Some of the endpoints in this SDK support retries.  If you use the SDK without a
 To change the default retry strategy for a single API call, simply provide a retryConfig object to the call:
 ```typescript
 import { Gram } from "@gram/client";
-import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   security: {
@@ -489,8 +441,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+    contentLength: 342044,
   }, {
     retries: {
       strategy: "backoff",
@@ -515,7 +466,6 @@ run();
 If you'd like to override the default retry strategy for all operations that support retries, you can provide a retryConfig at SDK initialization:
 ```typescript
 import { Gram } from "@gram/client";
-import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   retryConfig: {
@@ -538,8 +488,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+    contentLength: 342044,
   });
 
   // Handle the result
@@ -563,7 +512,6 @@ If the request fails due to, for example 4XX or 5XX status codes, it will throw 
 ```typescript
 import { Gram } from "@gram/client";
 import { SDKValidationError } from "@gram/client/models/errors";
-import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   security: {
@@ -578,8 +526,7 @@ async function run() {
   let result;
   try {
     result = await gram.assets.uploadOpenAPIv3({
-      contentLength: 924456,
-      requestBody: await openAsBlob("example.file"),
+      contentLength: 342044,
     });
 
     // Handle the result
@@ -635,7 +582,6 @@ In some rare cases, the SDK can fail to get a response from the server or even m
 The default server can be overridden globally by passing a URL to the `serverURL: string` optional parameter when initializing the SDK client instance. For example:
 ```typescript
 import { Gram } from "@gram/client";
-import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   serverURL: "http://localhost:80",
@@ -649,8 +595,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+    contentLength: 342044,
   });
 
   // Handle the result

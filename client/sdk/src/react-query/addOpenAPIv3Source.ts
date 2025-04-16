@@ -18,7 +18,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type AddOpenAPIv3SourceMutationVariables = {
-  request: operations.DeploymentsNumberAddOpenAPIv3SourceRequest;
+  request: operations.AddOpenAPIv3ToDeploymentRequest;
   options?: RequestOptions;
 };
 

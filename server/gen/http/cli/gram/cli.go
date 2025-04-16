@@ -35,8 +35,8 @@ deployments (get-deployment|create-deployment|add-open-ap-iv3-source|list-deploy
 environments (create-environment|list-environments|update-environment|delete-environment)
 keys (create-key|list-keys|revoke-key)
 tools list-tools
-instances load-instance
-toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset-details)
+instances get-instance
+toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset)
 `
 }
 
@@ -172,12 +172,12 @@ func ParseEndpoint(
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
-		instancesLoadInstanceFlags                = flag.NewFlagSet("load-instance", flag.ExitOnError)
-		instancesLoadInstanceToolsetSlugFlag      = instancesLoadInstanceFlags.String("toolset-slug", "REQUIRED", "")
-		instancesLoadInstanceEnvironmentSlugFlag  = instancesLoadInstanceFlags.String("environment-slug", "", "")
-		instancesLoadInstanceSessionTokenFlag     = instancesLoadInstanceFlags.String("session-token", "", "")
-		instancesLoadInstanceProjectSlugInputFlag = instancesLoadInstanceFlags.String("project-slug-input", "", "")
-		instancesLoadInstanceApikeyTokenFlag      = instancesLoadInstanceFlags.String("apikey-token", "", "")
+		instancesGetInstanceFlags                = flag.NewFlagSet("get-instance", flag.ExitOnError)
+		instancesGetInstanceToolsetSlugFlag      = instancesGetInstanceFlags.String("toolset-slug", "REQUIRED", "")
+		instancesGetInstanceEnvironmentSlugFlag  = instancesGetInstanceFlags.String("environment-slug", "", "")
+		instancesGetInstanceSessionTokenFlag     = instancesGetInstanceFlags.String("session-token", "", "")
+		instancesGetInstanceProjectSlugInputFlag = instancesGetInstanceFlags.String("project-slug-input", "", "")
+		instancesGetInstanceApikeyTokenFlag      = instancesGetInstanceFlags.String("apikey-token", "", "")
 
 		toolsetsFlags = flag.NewFlagSet("toolsets", flag.ContinueOnError)
 
@@ -201,10 +201,10 @@ func ParseEndpoint(
 		toolsetsDeleteToolsetSessionTokenFlag     = toolsetsDeleteToolsetFlags.String("session-token", "", "")
 		toolsetsDeleteToolsetProjectSlugInputFlag = toolsetsDeleteToolsetFlags.String("project-slug-input", "", "")
 
-		toolsetsGetToolsetDetailsFlags                = flag.NewFlagSet("get-toolset-details", flag.ExitOnError)
-		toolsetsGetToolsetDetailsSlugFlag             = toolsetsGetToolsetDetailsFlags.String("slug", "REQUIRED", "The slug of the toolset")
-		toolsetsGetToolsetDetailsSessionTokenFlag     = toolsetsGetToolsetDetailsFlags.String("session-token", "", "")
-		toolsetsGetToolsetDetailsProjectSlugInputFlag = toolsetsGetToolsetDetailsFlags.String("project-slug-input", "", "")
+		toolsetsGetToolsetFlags                = flag.NewFlagSet("get-toolset", flag.ExitOnError)
+		toolsetsGetToolsetSlugFlag             = toolsetsGetToolsetFlags.String("slug", "REQUIRED", "")
+		toolsetsGetToolsetSessionTokenFlag     = toolsetsGetToolsetFlags.String("session-token", "", "")
+		toolsetsGetToolsetProjectSlugInputFlag = toolsetsGetToolsetFlags.String("project-slug-input", "", "")
 	)
 	assetsFlags.Usage = assetsUsage
 	assetsUploadOpenAPIv3Flags.Usage = assetsUploadOpenAPIv3Usage
@@ -236,14 +236,14 @@ func ParseEndpoint(
 	toolsListToolsFlags.Usage = toolsListToolsUsage
 
 	instancesFlags.Usage = instancesUsage
-	instancesLoadInstanceFlags.Usage = instancesLoadInstanceUsage
+	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
 	toolsetsFlags.Usage = toolsetsUsage
 	toolsetsCreateToolsetFlags.Usage = toolsetsCreateToolsetUsage
 	toolsetsListToolsetsFlags.Usage = toolsetsListToolsetsUsage
 	toolsetsUpdateToolsetFlags.Usage = toolsetsUpdateToolsetUsage
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
-	toolsetsGetToolsetDetailsFlags.Usage = toolsetsGetToolsetDetailsUsage
+	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -368,8 +368,8 @@ func ParseEndpoint(
 
 		case "instances":
 			switch epn {
-			case "load-instance":
-				epf = instancesLoadInstanceFlags
+			case "get-instance":
+				epf = instancesGetInstanceFlags
 
 			}
 
@@ -387,8 +387,8 @@ func ParseEndpoint(
 			case "delete-toolset":
 				epf = toolsetsDeleteToolsetFlags
 
-			case "get-toolset-details":
-				epf = toolsetsGetToolsetDetailsFlags
+			case "get-toolset":
+				epf = toolsetsGetToolsetFlags
 
 			}
 
@@ -493,9 +493,9 @@ func ParseEndpoint(
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "load-instance":
-				endpoint = c.LoadInstance()
-				data, err = instancesc.BuildLoadInstancePayload(*instancesLoadInstanceToolsetSlugFlag, *instancesLoadInstanceEnvironmentSlugFlag, *instancesLoadInstanceSessionTokenFlag, *instancesLoadInstanceProjectSlugInputFlag, *instancesLoadInstanceApikeyTokenFlag)
+			case "get-instance":
+				endpoint = c.GetInstance()
+				data, err = instancesc.BuildGetInstancePayload(*instancesGetInstanceToolsetSlugFlag, *instancesGetInstanceEnvironmentSlugFlag, *instancesGetInstanceSessionTokenFlag, *instancesGetInstanceProjectSlugInputFlag, *instancesGetInstanceApikeyTokenFlag)
 			}
 		case "toolsets":
 			c := toolsetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -512,9 +512,9 @@ func ParseEndpoint(
 			case "delete-toolset":
 				endpoint = c.DeleteToolset()
 				data, err = toolsetsc.BuildDeleteToolsetPayload(*toolsetsDeleteToolsetSlugFlag, *toolsetsDeleteToolsetSessionTokenFlag, *toolsetsDeleteToolsetProjectSlugInputFlag)
-			case "get-toolset-details":
-				endpoint = c.GetToolsetDetails()
-				data, err = toolsetsc.BuildGetToolsetDetailsPayload(*toolsetsGetToolsetDetailsSlugFlag, *toolsetsGetToolsetDetailsSessionTokenFlag, *toolsetsGetToolsetDetailsProjectSlugInputFlag)
+			case "get-toolset":
+				endpoint = c.GetToolset()
+				data, err = toolsetsc.BuildGetToolsetPayload(*toolsetsGetToolsetSlugFlag, *toolsetsGetToolsetSessionTokenFlag, *toolsetsGetToolsetProjectSlugInputFlag)
 			}
 		}
 	}
@@ -906,16 +906,16 @@ Usage:
     %[1]s [globalflags] instances COMMAND [flags]
 
 COMMAND:
-    load-instance: load all relevant data for an instance of a toolset and environment
+    get-instance: Load all relevant data for an instance of a toolset and environment
 
 Additional help:
     %[1]s instances COMMAND --help
 `, os.Args[0])
 }
-func instancesLoadInstanceUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] instances load-instance -toolset-slug STRING -environment-slug STRING -session-token STRING -project-slug-input STRING -apikey-token STRING
+func instancesGetInstanceUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] instances get-instance -toolset-slug STRING -environment-slug STRING -session-token STRING -project-slug-input STRING -apikey-token STRING
 
-load all relevant data for an instance of a toolset and environment
+Load all relevant data for an instance of a toolset and environment
     -toolset-slug STRING: 
     -environment-slug STRING: 
     -session-token STRING: 
@@ -923,7 +923,7 @@ load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances load-instance --toolset-slug "Quas nesciunt rerum nam." --environment-slug "Ipsa distinctio." --session-token "Numquam non aliquid quae minus." --project-slug-input "Voluptatem cum ipsam voluptatem illum minima nobis." --apikey-token "Consequatur hic maxime unde dolorem provident."
+    %[1]s instances get-instance --toolset-slug "Quas nesciunt rerum nam." --environment-slug "Ipsa distinctio." --session-token "Numquam non aliquid quae minus." --project-slug-input "Voluptatem cum ipsam voluptatem illum minima nobis." --apikey-token "Consequatur hic maxime unde dolorem provident."
 `, os.Args[0])
 }
 
@@ -938,7 +938,7 @@ COMMAND:
     list-toolsets: List all toolsets for a project
     update-toolset: Update a toolset's properties including name, description, and HTTP tools
     delete-toolset: Delete a toolset by its ID
-    get-toolset-details: Get detailed information about a toolset including full HTTP tool definitions
+    get-toolset: Get detailed information about a toolset including full HTTP tool definitions
 
 Additional help:
     %[1]s toolsets COMMAND --help
@@ -1014,15 +1014,15 @@ Example:
 `, os.Args[0])
 }
 
-func toolsetsGetToolsetDetailsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset-details -slug STRING -session-token STRING -project-slug-input STRING
+func toolsetsGetToolsetUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets get-toolset -slug STRING -session-token STRING -project-slug-input STRING
 
 Get detailed information about a toolset including full HTTP tool definitions
-    -slug STRING: The slug of the toolset
+    -slug STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset-details --slug "Quae beatae." --session-token "Consequuntur et consequatur aut." --project-slug-input "Accusamus et beatae."
+    %[1]s toolsets get-toolset --slug "Velit sed aut." --session-token "Quae beatae." --project-slug-input "Consequuntur et consequatur aut."
 `, os.Args[0])
 }

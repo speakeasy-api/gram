@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { toolsetsGetById } from "../funcs/toolsetsGetById.js";
+import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -29,13 +29,13 @@ import {
 export type ToolsetQueryData = components.ToolsetDetails;
 
 /**
- * getToolsetDetails toolsets
+ * getToolset toolsets
  *
  * @remarks
  * Get detailed information about a toolset including full HTTP tool definitions
  */
 export function useToolset(
-  request: operations.ToolsetsNumberGetToolsetDetailsRequest,
+  request: operations.GetToolsetRequest,
   options?: QueryHookOptions<ToolsetQueryData>,
 ): UseQueryResult<ToolsetQueryData, Error> {
   const client = useGramContext();
@@ -50,13 +50,13 @@ export function useToolset(
 }
 
 /**
- * getToolsetDetails toolsets
+ * getToolset toolsets
  *
  * @remarks
  * Get detailed information about a toolset including full HTTP tool definitions
  */
 export function useToolsetSuspense(
-  request: operations.ToolsetsNumberGetToolsetDetailsRequest,
+  request: operations.GetToolsetRequest,
   options?: SuspenseQueryHookOptions<ToolsetQueryData>,
 ): UseSuspenseQueryResult<ToolsetQueryData, Error> {
   const client = useGramContext();
@@ -73,7 +73,7 @@ export function useToolsetSuspense(
 export function prefetchToolset(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ToolsetsNumberGetToolsetDetailsRequest,
+  request: operations.GetToolsetRequest,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildToolsetQuery(
@@ -86,8 +86,8 @@ export function prefetchToolset(
 export function setToolsetData(
   client: QueryClient,
   queryKeyBase: [
-    slug: string,
     parameters: {
+      slug: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -102,19 +102,17 @@ export function setToolsetData(
 export function invalidateToolset(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [
-      slug: string,
-      parameters: {
-        gramSession?: string | undefined;
-        gramProject?: string | undefined;
-      },
-    ]
+    [parameters: {
+      slug: string;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "toolsets", "getById", ...queryKeyBase],
+    queryKey: ["@gram/client", "toolsets", "getBySlug", ...queryKeyBase],
   });
 }
 
@@ -124,20 +122,21 @@ export function invalidateAllToolset(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "toolsets", "getById"],
+    queryKey: ["@gram/client", "toolsets", "getBySlug"],
   });
 }
 
 export function buildToolsetQuery(
   client$: GramCore,
-  request: operations.ToolsetsNumberGetToolsetDetailsRequest,
+  request: operations.GetToolsetRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (context: QueryFunctionContext) => Promise<ToolsetQueryData>;
 } {
   return {
-    queryKey: queryKeyToolset(request.slug, {
+    queryKey: queryKeyToolset({
+      slug: request.slug,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
@@ -148,7 +147,7 @@ export function buildToolsetQuery(
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(toolsetsGetById(
+      return unwrapAsync(toolsetsGetBySlug(
         client$,
         request,
         mergedOptions,
@@ -158,11 +157,11 @@ export function buildToolsetQuery(
 }
 
 export function queryKeyToolset(
-  slug: string,
   parameters: {
+    slug: string;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "toolsets", "getById", slug, parameters];
+  return ["@gram/client", "toolsets", "getBySlug", parameters];
 }

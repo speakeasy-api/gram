@@ -7,7 +7,7 @@
 
 package client
 
-// LoadInstanceInstancesPath returns the URL path to the instances service loadInstance HTTP endpoint.
-func LoadInstanceInstancesPath() string {
-	return "/rpc/instances.load"
+// GetInstanceInstancesPath returns the URL path to the instances service getInstance HTTP endpoint.
+func GetInstanceInstancesPath() string {
+	return "/rpc/instances.get"
 }

@@ -18,7 +18,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateEnvironmentMutationVariables = {
-  request: operations.EnvironmentsNumberUpdateEnvironmentRequest;
+  request: operations.UpdateEnvironmentRequest;
   options?: RequestOptions;
 };
 

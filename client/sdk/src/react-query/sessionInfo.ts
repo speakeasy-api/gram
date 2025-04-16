@@ -25,7 +25,7 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type SessionInfoQueryData = operations.AuthNumberInfoResponse;
+export type SessionInfoQueryData = operations.SessionInfoResponse;
 
 /**
  * info auth
@@ -34,8 +34,8 @@ export type SessionInfoQueryData = operations.AuthNumberInfoResponse;
  * Provides information about the current authentication status.
  */
 export function useSessionInfo(
-  security: operations.AuthNumberInfoSecurity,
-  request?: operations.AuthNumberInfoRequest | undefined,
+  security: operations.SessionInfoSecurity,
+  request?: operations.SessionInfoRequest | undefined,
   options?: QueryHookOptions<SessionInfoQueryData>,
 ): UseQueryResult<SessionInfoQueryData, Error> {
   const client = useGramContext();
@@ -57,8 +57,8 @@ export function useSessionInfo(
  * Provides information about the current authentication status.
  */
 export function useSessionInfoSuspense(
-  security: operations.AuthNumberInfoSecurity,
-  request?: operations.AuthNumberInfoRequest | undefined,
+  security: operations.SessionInfoSecurity,
+  request?: operations.SessionInfoRequest | undefined,
   options?: SuspenseQueryHookOptions<SessionInfoQueryData>,
 ): UseSuspenseQueryResult<SessionInfoQueryData, Error> {
   const client = useGramContext();
@@ -76,8 +76,8 @@ export function useSessionInfoSuspense(
 export function prefetchSessionInfo(
   queryClient: QueryClient,
   client$: GramCore,
-  security: operations.AuthNumberInfoSecurity,
-  request?: operations.AuthNumberInfoRequest | undefined,
+  security: operations.SessionInfoSecurity,
+  request?: operations.SessionInfoRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildSessionInfoQuery(
@@ -123,8 +123,8 @@ export function invalidateAllSessionInfo(
 
 export function buildSessionInfoQuery(
   client$: GramCore,
-  security: operations.AuthNumberInfoSecurity,
-  request?: operations.AuthNumberInfoRequest | undefined,
+  security: operations.SessionInfoSecurity,
+  request?: operations.SessionInfoRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

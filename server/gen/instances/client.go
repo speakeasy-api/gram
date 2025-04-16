@@ -15,22 +15,22 @@ import (
 
 // Client is the "instances" service client.
 type Client struct {
-	LoadInstanceEndpoint goa.Endpoint
+	GetInstanceEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "instances" service client given the endpoints.
-func NewClient(loadInstance goa.Endpoint) *Client {
+func NewClient(getInstance goa.Endpoint) *Client {
 	return &Client{
-		LoadInstanceEndpoint: loadInstance,
+		GetInstanceEndpoint: getInstance,
 	}
 }
 
-// LoadInstance calls the "loadInstance" endpoint of the "instances" service.
-func (c *Client) LoadInstance(ctx context.Context, p *LoadInstancePayload) (res *InstanceResult, err error) {
+// GetInstance calls the "getInstance" endpoint of the "instances" service.
+func (c *Client) GetInstance(ctx context.Context, p *GetInstanceForm) (res *GetInstanceResult, err error) {
 	var ires any
-	ires, err = c.LoadInstanceEndpoint(ctx, p)
+	ires, err = c.GetInstanceEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*InstanceResult), nil
+	return ires.(*GetInstanceResult), nil
 }

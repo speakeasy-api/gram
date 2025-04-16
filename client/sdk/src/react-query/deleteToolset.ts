@@ -17,7 +17,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteToolsetMutationVariables = {
-  request: operations.ToolsetsNumberDeleteToolsetRequest;
+  request: operations.DeleteToolsetRequest;
   options?: RequestOptions;
 };
 

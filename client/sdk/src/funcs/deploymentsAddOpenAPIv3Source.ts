@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function deploymentsAddOpenAPIv3Source(
   client: GramCore,
-  request: operations.DeploymentsNumberAddOpenAPIv3SourceRequest,
+  request: operations.AddOpenAPIv3ToDeploymentRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function deploymentsAddOpenAPIv3Source(
 
 async function $do(
   client: GramCore,
-  request: operations.DeploymentsNumberAddOpenAPIv3SourceRequest,
+  request: operations.AddOpenAPIv3ToDeploymentRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -75,8 +75,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.DeploymentsNumberAddOpenAPIv3SourceRequest$outboundSchema
-        .parse(value),
+      operations.AddOpenAPIv3ToDeploymentRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -107,7 +106,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deployments#addOpenAPIv3Source",
+    operationID: "addOpenAPIv3ToDeployment",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

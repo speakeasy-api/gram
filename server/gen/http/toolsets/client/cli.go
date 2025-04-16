@@ -148,26 +148,26 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 	return v, nil
 }
 
-// BuildGetToolsetDetailsPayload builds the payload for the toolsets
-// getToolsetDetails endpoint from CLI flags.
-func BuildGetToolsetDetailsPayload(toolsetsGetToolsetDetailsSlug string, toolsetsGetToolsetDetailsSessionToken string, toolsetsGetToolsetDetailsProjectSlugInput string) (*toolsets.GetToolsetDetailsPayload, error) {
+// BuildGetToolsetPayload builds the payload for the toolsets getToolset
+// endpoint from CLI flags.
+func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSessionToken string, toolsetsGetToolsetProjectSlugInput string) (*toolsets.GetToolsetPayload, error) {
 	var slug string
 	{
-		slug = toolsetsGetToolsetDetailsSlug
+		slug = toolsetsGetToolsetSlug
 	}
 	var sessionToken *string
 	{
-		if toolsetsGetToolsetDetailsSessionToken != "" {
-			sessionToken = &toolsetsGetToolsetDetailsSessionToken
+		if toolsetsGetToolsetSessionToken != "" {
+			sessionToken = &toolsetsGetToolsetSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if toolsetsGetToolsetDetailsProjectSlugInput != "" {
-			projectSlugInput = &toolsetsGetToolsetDetailsProjectSlugInput
+		if toolsetsGetToolsetProjectSlugInput != "" {
+			projectSlugInput = &toolsetsGetToolsetProjectSlugInput
 		}
 	}
-	v := &toolsets.GetToolsetDetailsPayload{}
+	v := &toolsets.GetToolsetPayload{}
 	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -31,12 +31,12 @@ import { Result } from "../types/fp.js";
  */
 export function authSwitchScopes(
   client: GramCore,
-  security: operations.AuthNumberSwitchScopesSecurity,
-  request?: operations.AuthNumberSwitchScopesRequest | undefined,
+  security: operations.SwitchAuthScopesSecurity,
+  request?: operations.SwitchAuthScopesRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.AuthNumberSwitchScopesResponse | undefined,
+    operations.SwitchAuthScopesResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -56,13 +56,13 @@ export function authSwitchScopes(
 
 async function $do(
   client: GramCore,
-  security: operations.AuthNumberSwitchScopesSecurity,
-  request?: operations.AuthNumberSwitchScopesRequest | undefined,
+  security: operations.SwitchAuthScopesSecurity,
+  request?: operations.SwitchAuthScopesRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.AuthNumberSwitchScopesResponse | undefined,
+      operations.SwitchAuthScopesResponse | undefined,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -77,9 +77,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.AuthNumberSwitchScopesRequest$outboundSchema.optional().parse(
-        value,
-      ),
+      operations.SwitchAuthScopesRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -115,7 +113,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "auth#switchScopes",
+    operationID: "switchAuthScopes",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -158,7 +156,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.AuthNumberSwitchScopesResponse | undefined,
+    operations.SwitchAuthScopesResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -167,11 +165,9 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.nil(
-      200,
-      operations.AuthNumberSwitchScopesResponse$inboundSchema.optional(),
-      { hdrs: true },
-    ),
+    M.nil(200, operations.SwitchAuthScopesResponse$inboundSchema.optional(), {
+      hdrs: true,
+    }),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, { extraFields: responseFields });

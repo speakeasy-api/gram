@@ -24,7 +24,7 @@ type Service interface {
 	// Delete a toolset by its ID
 	DeleteToolset(context.Context, *DeleteToolsetPayload) (err error)
 	// Get detailed information about a toolset including full HTTP tool definitions
-	GetToolsetDetails(context.Context, *GetToolsetDetailsPayload) (res *ToolsetDetails, err error)
+	GetToolset(context.Context, *GetToolsetPayload) (res *ToolsetDetails, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -47,7 +47,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolsetDetails"}
+var MethodNames = [5]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset"}
 
 // CreateToolsetPayload is the payload type of the toolsets service
 // createToolset method.
@@ -73,9 +73,9 @@ type DeleteToolsetPayload struct {
 	ProjectSlugInput *string
 }
 
-// GetToolsetDetailsPayload is the payload type of the toolsets service
-// getToolsetDetails method.
-type GetToolsetDetailsPayload struct {
+// GetToolsetPayload is the payload type of the toolsets service getToolset
+// method.
+type GetToolsetPayload struct {
 	// The slug of the toolset
 	Slug             string
 	SessionToken     *string

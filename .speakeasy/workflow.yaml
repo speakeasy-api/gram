@@ -1,17 +1,25 @@
 workflowVersion: 1.0.0
 speakeasyVersion: latest
 sources:
-    Gram API Description:
+    Gram Internal:
         inputs:
             - location: server/gen/http/openapi3.yaml
         overlays:
             - location: overlays/goa.yaml
         registry:
             location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
+    Gram Public:
+        inputs:
+            - location: server/gen/http/openapi3.yaml
+        overlays:
+            - location: overlays/goa.yaml
+            - location: overlays/public-sdk.yaml
+        registry:
+            location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
 targets:
     gram-internal:
         target: typescript
-        source: Gram API Description
+        source: Gram Internal
         output: client/sdk
         codeSamples:
             registry:
@@ -21,5 +29,5 @@ targets:
             blocking: false
     gram-public:
         target: typescript
-        source: Gram API Description
+        source: Gram Public
         output: sdks/typescript

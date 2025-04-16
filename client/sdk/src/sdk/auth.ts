@@ -18,9 +18,9 @@ export class Auth extends ClientSDK {
    * Handles the authentication callback.
    */
   async callback(
-    request: operations.AuthNumberCallbackRequest,
+    request: operations.AuthCallbackRequest,
     options?: RequestOptions,
-  ): Promise<operations.AuthNumberCallbackResponse | undefined> {
+  ): Promise<operations.AuthCallbackResponse | undefined> {
     return unwrapAsync(authCallback(
       this,
       request,
@@ -35,10 +35,10 @@ export class Auth extends ClientSDK {
    * Provides information about the current authentication status.
    */
   async info(
-    security: operations.AuthNumberInfoSecurity,
-    request?: operations.AuthNumberInfoRequest | undefined,
+    security: operations.SessionInfoSecurity,
+    request?: operations.SessionInfoRequest | undefined,
     options?: RequestOptions,
-  ): Promise<operations.AuthNumberInfoResponse> {
+  ): Promise<operations.SessionInfoResponse> {
     return unwrapAsync(authInfo(
       this,
       security,
@@ -54,10 +54,10 @@ export class Auth extends ClientSDK {
    * Logs out the current user by clearing their session.
    */
   async logout(
-    security: operations.AuthNumberLogoutSecurity,
-    request?: operations.AuthNumberLogoutRequest | undefined,
+    security: operations.LogoutSecurity,
+    request?: operations.LogoutRequest | undefined,
     options?: RequestOptions,
-  ): Promise<operations.AuthNumberLogoutResponse | undefined> {
+  ): Promise<operations.LogoutResponse | undefined> {
     return unwrapAsync(authLogout(
       this,
       security,
@@ -73,10 +73,10 @@ export class Auth extends ClientSDK {
    * Switches the authentication scope to a different organization.
    */
   async switchScopes(
-    security: operations.AuthNumberSwitchScopesSecurity,
-    request?: operations.AuthNumberSwitchScopesRequest | undefined,
+    security: operations.SwitchAuthScopesSecurity,
+    request?: operations.SwitchAuthScopesRequest | undefined,
     options?: RequestOptions,
-  ): Promise<operations.AuthNumberSwitchScopesResponse | undefined> {
+  ): Promise<operations.SwitchAuthScopesResponse | undefined> {
     return unwrapAsync(authSwitchScopes(
       this,
       security,

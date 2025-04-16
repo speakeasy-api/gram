@@ -35,7 +35,7 @@ export type ListToolsQueryData = components.ListToolsResult;
  * List all tools for a project
  */
 export function useListTools(
-  request?: operations.ToolsNumberListToolsRequest | undefined,
+  request?: operations.ListToolsRequest | undefined,
   options?: QueryHookOptions<ListToolsQueryData>,
 ): UseQueryResult<ListToolsQueryData, Error> {
   const client = useGramContext();
@@ -56,7 +56,7 @@ export function useListTools(
  * List all tools for a project
  */
 export function useListToolsSuspense(
-  request?: operations.ToolsNumberListToolsRequest | undefined,
+  request?: operations.ListToolsRequest | undefined,
   options?: SuspenseQueryHookOptions<ListToolsQueryData>,
 ): UseSuspenseQueryResult<ListToolsQueryData, Error> {
   const client = useGramContext();
@@ -73,7 +73,7 @@ export function useListToolsSuspense(
 export function prefetchListTools(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ToolsNumberListToolsRequest | undefined,
+  request?: operations.ListToolsRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListToolsQuery(
@@ -128,7 +128,7 @@ export function invalidateAllListTools(
 
 export function buildListToolsQuery(
   client$: GramCore,
-  request?: operations.ToolsNumberListToolsRequest | undefined,
+  request?: operations.ListToolsRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

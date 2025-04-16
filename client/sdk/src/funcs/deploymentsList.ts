@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function deploymentsList(
   client: GramCore,
-  request?: operations.DeploymentsNumberListDeploymentsRequest | undefined,
+  request?: operations.ListDeploymentsRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function deploymentsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.DeploymentsNumberListDeploymentsRequest | undefined,
+  request?: operations.ListDeploymentsRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -75,8 +75,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.DeploymentsNumberListDeploymentsRequest$outboundSchema
-        .optional().parse(value),
+      operations.ListDeploymentsRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,7 +107,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deployments#listDeployments",
+    operationID: "listDeployments",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

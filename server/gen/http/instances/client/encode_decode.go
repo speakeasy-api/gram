@@ -18,13 +18,13 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildLoadInstanceRequest instantiates a HTTP request object with method and
-// path set to call the "instances" service "loadInstance" endpoint
-func (c *Client) BuildLoadInstanceRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LoadInstanceInstancesPath()}
+// BuildGetInstanceRequest instantiates a HTTP request object with method and
+// path set to call the "instances" service "getInstance" endpoint
+func (c *Client) BuildGetInstanceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInstanceInstancesPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("instances", "loadInstance", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("instances", "getInstance", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -33,13 +33,13 @@ func (c *Client) BuildLoadInstanceRequest(ctx context.Context, v any) (*http.Req
 	return req, nil
 }
 
-// EncodeLoadInstanceRequest returns an encoder for requests sent to the
-// instances loadInstance server.
-func EncodeLoadInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeGetInstanceRequest returns an encoder for requests sent to the
+// instances getInstance server.
+func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*instances.LoadInstancePayload)
+		p, ok := v.(*instances.GetInstanceForm)
 		if !ok {
-			return goahttp.ErrInvalidType("instances", "loadInstance", "*instances.LoadInstancePayload", v)
+			return goahttp.ErrInvalidType("instances", "getInstance", "*instances.GetInstanceForm", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -63,10 +63,10 @@ func EncodeLoadInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func
 	}
 }
 
-// DecodeLoadInstanceResponse returns a decoder for responses returned by the
-// instances loadInstance endpoint. restoreBody controls whether the response
+// DecodeGetInstanceResponse returns a decoder for responses returned by the
+// instances getInstance endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
-func DecodeLoadInstanceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -83,22 +83,22 @@ func DecodeLoadInstanceResponse(decoder func(*http.Response) goahttp.Decoder, re
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body LoadInstanceResponseBody
+				body GetInstanceResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("instances", "loadInstance", err)
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
 			}
-			err = ValidateLoadInstanceResponseBody(&body)
+			err = ValidateGetInstanceResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("instances", "loadInstance", err)
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
 			}
-			res := NewLoadInstanceInstanceResultOK(&body)
+			res := NewGetInstanceResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("instances", "loadInstance", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("instances", "getInstance", resp.StatusCode, string(body))
 		}
 	}
 }

@@ -20,23 +20,21 @@ specific category of applications.
 
 ```typescript
 import { GramAPICore } from "@gram/sdk/core.js";
-import { assetsUploadOpenAPIv3 } from "@gram/sdk/funcs/assetsUploadOpenAPIv3.js";
+import { instancesGetBySlug } from "@gram/sdk/funcs/instancesGetBySlug.js";
 import { SDKValidationError } from "@gram/sdk/models/errors/sdkvalidationerror.js";
-import { openAsBlob } from "node:fs";
 
 // Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const gramAPI = new GramAPICore({
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
-});
+const gramAPI = new GramAPICore();
 
 async function run() {
-  const res = await assetsUploadOpenAPIv3(gramAPI, {
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+  const res = await instancesGetBySlug(gramAPI, {
+    option1: {
+      projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+      sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+    },
+  }, {
+    toolsetSlug: "<value>",
   });
 
   switch (true) {

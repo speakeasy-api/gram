@@ -31,12 +31,12 @@ import { Result } from "../types/fp.js";
  */
 export function authInfo(
   client: GramCore,
-  security: operations.AuthNumberInfoSecurity,
-  request?: operations.AuthNumberInfoRequest | undefined,
+  security: operations.SessionInfoSecurity,
+  request?: operations.SessionInfoRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.AuthNumberInfoResponse,
+    operations.SessionInfoResponse,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -56,13 +56,13 @@ export function authInfo(
 
 async function $do(
   client: GramCore,
-  security: operations.AuthNumberInfoSecurity,
-  request?: operations.AuthNumberInfoRequest | undefined,
+  security: operations.SessionInfoSecurity,
+  request?: operations.SessionInfoRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.AuthNumberInfoResponse,
+      operations.SessionInfoResponse,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -77,7 +77,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.AuthNumberInfoRequest$outboundSchema.optional().parse(value),
+      operations.SessionInfoRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,7 +108,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "auth#info",
+    operationID: "sessionInfo",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -150,7 +150,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.AuthNumberInfoResponse,
+    operations.SessionInfoResponse,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -159,7 +159,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.json(200, operations.AuthNumberInfoResponse$inboundSchema, {
+    M.json(200, operations.SessionInfoResponse$inboundSchema, {
       hdrs: true,
       key: "Result",
     }),

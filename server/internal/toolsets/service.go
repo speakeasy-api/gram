@@ -20,7 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
-	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
+	environmentsRepo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
@@ -31,7 +31,7 @@ type Service struct {
 	logger          *slog.Logger
 	db              *pgxpool.Pool
 	repo            *repo.Queries
-	environmentRepo *environments_repo.Queries
+	environmentRepo *environmentsRepo.Queries
 	auth            *auth.Auth
 	toolsets        *Toolsets
 }
@@ -45,7 +45,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:              db,
 		repo:            repo.New(db),
 		auth:            auth.New(logger, db, sessions),
-		environmentRepo: environments_repo.New(db),
+		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
 	}
 }
@@ -76,7 +76,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
+		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
 			Slug:      *payload.DefaultEnvironmentSlug,
 			ProjectID: *authCtx.ProjectID,
 		})
@@ -171,7 +171,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
+		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
 			Slug:      *payload.DefaultEnvironmentSlug,
 			ProjectID: *authCtx.ProjectID,
 		})
@@ -212,7 +212,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	})
 }
 
-func (s *Service) GetToolsetDetails(ctx context.Context, payload *gen.GetToolsetDetailsPayload) (*gen.ToolsetDetails, error) {
+func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*gen.ToolsetDetails, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("project ID not found in context")

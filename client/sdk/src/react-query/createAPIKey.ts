@@ -18,8 +18,8 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateAPIKeyMutationVariables = {
-  security: operations.KeysNumberCreateKeySecurity;
-  request: operations.KeysNumberCreateKeyRequest;
+  security: operations.CreateAPIKeySecurity;
+  request: operations.CreateAPIKeyRequest;
   options?: RequestOptions;
 };
 

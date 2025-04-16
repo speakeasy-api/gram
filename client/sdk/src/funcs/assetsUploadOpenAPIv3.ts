@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function assetsUploadOpenAPIv3(
   client: GramCore,
-  request: operations.AssetsNumberUploadOpenAPIv3Request,
+  request: operations.UploadOpenAPIv3AssetRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function assetsUploadOpenAPIv3(
 
 async function $do(
   client: GramCore,
-  request: operations.AssetsNumberUploadOpenAPIv3Request,
+  request: operations.UploadOpenAPIv3AssetRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -75,19 +75,18 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.AssetsNumberUploadOpenAPIv3Request$outboundSchema.parse(value),
+      operations.UploadOpenAPIv3AssetRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = payload.RequestBody;
+  const body = null;
 
   const path = pathToFunc("/rpc/assets.uploadOpenAPIv3")();
 
   const headers = new Headers(compactMap({
-    "Content-Type": body instanceof Blob && body.type ? body.type : undefined,
     Accept: "application/json",
     "Content-Length": encodeSimple(
       "Content-Length",
@@ -109,7 +108,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "assets#uploadOpenAPIv3",
+    operationID: "uploadOpenAPIv3Asset",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

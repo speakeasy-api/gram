@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function toolsetsUpdateBySlug(
   client: GramCore,
-  request: operations.ToolsetsNumberUpdateToolsetRequest,
+  request: operations.UpdateToolsetRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function toolsetsUpdateBySlug(
 
 async function $do(
   client: GramCore,
-  request: operations.ToolsetsNumberUpdateToolsetRequest,
+  request: operations.UpdateToolsetRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -74,8 +74,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.ToolsetsNumberUpdateToolsetRequest$outboundSchema.parse(value),
+    (value) => operations.UpdateToolsetRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -113,7 +112,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "toolsets#updateToolset",
+    operationID: "updateToolset",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

@@ -31,7 +31,7 @@ func DeleteToolsetToolsetsPath(slug string) string {
 	return fmt.Sprintf("/rpc/toolsets.delete/%v", slug)
 }
 
-// GetToolsetDetailsToolsetsPath returns the URL path to the toolsets service getToolsetDetails HTTP endpoint.
-func GetToolsetDetailsToolsetsPath(slug string) string {
-	return fmt.Sprintf("/rpc/toolsets.get/%v", slug)
+// GetToolsetToolsetsPath returns the URL path to the toolsets service getToolset HTTP endpoint.
+func GetToolsetToolsetsPath() string {
+	return "/rpc/toolsets.get"
 }

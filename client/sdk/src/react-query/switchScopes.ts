@@ -17,13 +17,13 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SwitchScopesMutationVariables = {
-  security: operations.AuthNumberSwitchScopesSecurity;
-  request?: operations.AuthNumberSwitchScopesRequest | undefined;
+  security: operations.SwitchAuthScopesSecurity;
+  request?: operations.SwitchAuthScopesRequest | undefined;
   options?: RequestOptions;
 };
 
 export type SwitchScopesMutationData =
-  | operations.AuthNumberSwitchScopesResponse
+  | operations.SwitchAuthScopesResponse
   | undefined;
 
 /**

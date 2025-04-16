@@ -128,8 +128,7 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          contentLength: 924456,
-          requestBody: await openAsBlob("example.file"),
+          contentLength: 342044,
         });
       }}
     >

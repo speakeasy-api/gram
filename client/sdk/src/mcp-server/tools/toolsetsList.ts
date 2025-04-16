@@ -7,8 +7,7 @@ import * as operations from "../../models/operations/index.js";
 import { formatResult, ToolDefinition } from "../tools.js";
 
 const args = {
-  request: operations.ToolsetsNumberListToolsetsRequest$inboundSchema
-    .optional(),
+  request: operations.ListToolsetsRequest$inboundSchema.optional(),
 };
 
 export const tool$toolsetsList: ToolDefinition<typeof args> = {

@@ -18,7 +18,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateToolsetMutationVariables = {
-  request: operations.ToolsetsNumberUpdateToolsetRequest;
+  request: operations.UpdateToolsetRequest;
   options?: RequestOptions;
 };
 

@@ -32,8 +32,8 @@ import { Result } from "../types/fp.js";
  */
 export function keysRevokeById(
   client: GramCore,
-  security: operations.KeysNumberRevokeKeySecurity,
-  request: operations.KeysNumberRevokeKeyRequest,
+  security: operations.RevokeAPIKeySecurity,
+  request: operations.RevokeAPIKeyRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -57,8 +57,8 @@ export function keysRevokeById(
 
 async function $do(
   client: GramCore,
-  security: operations.KeysNumberRevokeKeySecurity,
-  request: operations.KeysNumberRevokeKeyRequest,
+  security: operations.RevokeAPIKeySecurity,
+  request: operations.RevokeAPIKeyRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -77,8 +77,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.KeysNumberRevokeKeyRequest$outboundSchema.parse(value),
+    (value) => operations.RevokeAPIKeyRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -116,7 +115,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "keys#revokeKey",
+    operationID: "revokeAPIKey",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

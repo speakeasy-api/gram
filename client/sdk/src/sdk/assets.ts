@@ -16,7 +16,7 @@ export class Assets extends ClientSDK {
    * Upload an OpenAPI v3 document to Gram.
    */
   async uploadOpenAPIv3(
-    request: operations.AssetsNumberUploadOpenAPIv3Request,
+    request: operations.UploadOpenAPIv3AssetRequest,
     options?: RequestOptions,
   ): Promise<components.UploadOpenAPIv3Result> {
     return unwrapAsync(assetsUploadOpenAPIv3(

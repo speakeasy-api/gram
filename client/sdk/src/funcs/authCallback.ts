@@ -31,11 +31,11 @@ import { Result } from "../types/fp.js";
  */
 export function authCallback(
   client: GramCore,
-  request: operations.AuthNumberCallbackRequest,
+  request: operations.AuthCallbackRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.AuthNumberCallbackResponse | undefined,
+    operations.AuthCallbackResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -54,12 +54,12 @@ export function authCallback(
 
 async function $do(
   client: GramCore,
-  request: operations.AuthNumberCallbackRequest,
+  request: operations.AuthCallbackRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.AuthNumberCallbackResponse | undefined,
+      operations.AuthCallbackResponse | undefined,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -73,7 +73,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.AuthNumberCallbackRequest$outboundSchema.parse(value),
+    (value) => operations.AuthCallbackRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -97,7 +97,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "auth#callback",
+    operationID: "authCallback",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,
@@ -140,7 +140,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.AuthNumberCallbackResponse | undefined,
+    operations.AuthCallbackResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -149,7 +149,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.nil(307, operations.AuthNumberCallbackResponse$inboundSchema.optional(), {
+    M.nil(307, operations.AuthCallbackResponse$inboundSchema.optional(), {
       hdrs: true,
     }),
     M.fail("4XX"),

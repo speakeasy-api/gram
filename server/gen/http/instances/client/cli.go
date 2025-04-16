@@ -11,38 +11,38 @@ import (
 	instances "github.com/speakeasy-api/gram/gen/instances"
 )
 
-// BuildLoadInstancePayload builds the payload for the instances loadInstance
+// BuildGetInstancePayload builds the payload for the instances getInstance
 // endpoint from CLI flags.
-func BuildLoadInstancePayload(instancesLoadInstanceToolsetSlug string, instancesLoadInstanceEnvironmentSlug string, instancesLoadInstanceSessionToken string, instancesLoadInstanceProjectSlugInput string, instancesLoadInstanceApikeyToken string) (*instances.LoadInstancePayload, error) {
+func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGetInstanceEnvironmentSlug string, instancesGetInstanceSessionToken string, instancesGetInstanceProjectSlugInput string, instancesGetInstanceApikeyToken string) (*instances.GetInstanceForm, error) {
 	var toolsetSlug string
 	{
-		toolsetSlug = instancesLoadInstanceToolsetSlug
+		toolsetSlug = instancesGetInstanceToolsetSlug
 	}
 	var environmentSlug *string
 	{
-		if instancesLoadInstanceEnvironmentSlug != "" {
-			environmentSlug = &instancesLoadInstanceEnvironmentSlug
+		if instancesGetInstanceEnvironmentSlug != "" {
+			environmentSlug = &instancesGetInstanceEnvironmentSlug
 		}
 	}
 	var sessionToken *string
 	{
-		if instancesLoadInstanceSessionToken != "" {
-			sessionToken = &instancesLoadInstanceSessionToken
+		if instancesGetInstanceSessionToken != "" {
+			sessionToken = &instancesGetInstanceSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if instancesLoadInstanceProjectSlugInput != "" {
-			projectSlugInput = &instancesLoadInstanceProjectSlugInput
+		if instancesGetInstanceProjectSlugInput != "" {
+			projectSlugInput = &instancesGetInstanceProjectSlugInput
 		}
 	}
 	var apikeyToken *string
 	{
-		if instancesLoadInstanceApikeyToken != "" {
-			apikeyToken = &instancesLoadInstanceApikeyToken
+		if instancesGetInstanceApikeyToken != "" {
+			apikeyToken = &instancesGetInstanceApikeyToken
 		}
 	}
-	v := &instances.LoadInstancePayload{}
+	v := &instances.GetInstanceForm{}
 	v.ToolsetSlug = toolsetSlug
 	v.EnvironmentSlug = environmentSlug
 	v.SessionToken = sessionToken

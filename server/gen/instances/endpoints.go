@@ -16,7 +16,7 @@ import (
 
 // Endpoints wraps the "instances" service endpoints.
 type Endpoints struct {
-	LoadInstance goa.Endpoint
+	GetInstance goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "instances" service with endpoints.
@@ -24,20 +24,20 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		LoadInstance: NewLoadInstanceEndpoint(s, a.APIKeyAuth),
+		GetInstance: NewGetInstanceEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "instances" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.LoadInstance = m(e.LoadInstance)
+	e.GetInstance = m(e.GetInstance)
 }
 
-// NewLoadInstanceEndpoint returns an endpoint function that calls the method
-// "loadInstance" of service "instances".
-func NewLoadInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewGetInstanceEndpoint returns an endpoint function that calls the method
+// "getInstance" of service "instances".
+func NewGetInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*LoadInstancePayload)
+		p := req.(*GetInstanceForm)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -88,6 +88,6 @@ func NewLoadInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			return nil, err
 		}
-		return s.LoadInstance(ctx, p)
+		return s.GetInstance(ctx, p)
 	}
 }

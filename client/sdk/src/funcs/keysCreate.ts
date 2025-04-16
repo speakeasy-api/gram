@@ -32,8 +32,8 @@ import { Result } from "../types/fp.js";
  */
 export function keysCreate(
   client: GramCore,
-  security: operations.KeysNumberCreateKeySecurity,
-  request: operations.KeysNumberCreateKeyRequest,
+  security: operations.CreateAPIKeySecurity,
+  request: operations.CreateAPIKeyRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -57,8 +57,8 @@ export function keysCreate(
 
 async function $do(
   client: GramCore,
-  security: operations.KeysNumberCreateKeySecurity,
-  request: operations.KeysNumberCreateKeyRequest,
+  security: operations.CreateAPIKeySecurity,
+  request: operations.CreateAPIKeyRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -77,8 +77,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.KeysNumberCreateKeyRequest$outboundSchema.parse(value),
+    (value) => operations.CreateAPIKeyRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -110,7 +109,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "keys#createKey",
+    operationID: "createAPIKey",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

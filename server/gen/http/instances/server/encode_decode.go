@@ -17,21 +17,21 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeLoadInstanceResponse returns an encoder for responses returned by the
-// instances loadInstance endpoint.
-func EncodeLoadInstanceResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetInstanceResponse returns an encoder for responses returned by the
+// instances getInstance endpoint.
+func EncodeGetInstanceResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*instances.InstanceResult)
+		res, _ := v.(*instances.GetInstanceResult)
 		enc := encoder(ctx, w)
-		body := NewLoadInstanceResponseBody(res)
+		body := NewGetInstanceResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeLoadInstanceRequest returns a decoder for requests sent to the
-// instances loadInstance endpoint.
-func DecodeLoadInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+// DecodeGetInstanceRequest returns a decoder for requests sent to the
+// instances getInstance endpoint.
+func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
 			toolsetSlug      string
@@ -65,7 +65,7 @@ func DecodeLoadInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return nil, err
 		}
-		payload := NewLoadInstancePayload(toolsetSlug, environmentSlug, sessionToken, projectSlugInput, apikeyToken)
+		payload := NewGetInstanceForm(toolsetSlug, environmentSlug, sessionToken, projectSlugInput, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

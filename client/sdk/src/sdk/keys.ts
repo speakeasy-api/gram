@@ -18,8 +18,8 @@ export class Keys extends ClientSDK {
    * Create a new api key
    */
   async create(
-    security: operations.KeysNumberCreateKeySecurity,
-    request: operations.KeysNumberCreateKeyRequest,
+    security: operations.CreateAPIKeySecurity,
+    request: operations.CreateAPIKeyRequest,
     options?: RequestOptions,
   ): Promise<components.Key> {
     return unwrapAsync(keysCreate(
@@ -37,8 +37,8 @@ export class Keys extends ClientSDK {
    * List all api keys for an organization
    */
   async list(
-    security: operations.KeysNumberListKeysSecurity,
-    request?: operations.KeysNumberListKeysRequest | undefined,
+    security: operations.ListAPIKeysSecurity,
+    request?: operations.ListAPIKeysRequest | undefined,
     options?: RequestOptions,
   ): Promise<components.ListKeysResult> {
     return unwrapAsync(keysList(
@@ -56,8 +56,8 @@ export class Keys extends ClientSDK {
    * Revoke a api key
    */
   async revokeById(
-    security: operations.KeysNumberRevokeKeySecurity,
-    request: operations.KeysNumberRevokeKeyRequest,
+    security: operations.RevokeAPIKeySecurity,
+    request: operations.RevokeAPIKeyRequest,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(keysRevokeById(

@@ -19,7 +19,7 @@ export class Deployments extends ClientSDK {
    * Create a new deployment with an additional OpenAPI 3.x document.
    */
   async addOpenAPIv3Source(
-    request: operations.DeploymentsNumberAddOpenAPIv3SourceRequest,
+    request: operations.AddOpenAPIv3ToDeploymentRequest,
     options?: RequestOptions,
   ): Promise<components.AddOpenAPIv3SourceResult> {
     return unwrapAsync(deploymentsAddOpenAPIv3Source(
@@ -36,7 +36,7 @@ export class Deployments extends ClientSDK {
    * Create a deployment to load tool definitions.
    */
   async create(
-    request: operations.DeploymentsNumberCreateDeploymentRequest,
+    request: operations.CreateDeploymentRequest,
     options?: RequestOptions,
   ): Promise<components.CreateDeploymentResult> {
     return unwrapAsync(deploymentsCreate(
@@ -53,7 +53,7 @@ export class Deployments extends ClientSDK {
    * Create a deployment to load tool definitions.
    */
   async getById(
-    request: operations.DeploymentsNumberGetDeploymentRequest,
+    request: operations.GetDeploymentRequest,
     options?: RequestOptions,
   ): Promise<components.GetDeploymentResult> {
     return unwrapAsync(deploymentsGetById(
@@ -70,7 +70,7 @@ export class Deployments extends ClientSDK {
    * List all deployments in descending order of creation.
    */
   async list(
-    request?: operations.DeploymentsNumberListDeploymentsRequest | undefined,
+    request?: operations.ListDeploymentsRequest | undefined,
     options?: RequestOptions,
   ): Promise<components.ListDeploymentResult> {
     return unwrapAsync(deploymentsList(

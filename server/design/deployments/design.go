@@ -29,6 +29,7 @@ var _ = Service("deployments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "getDeployment")
 		Meta("openapi:extension:x-speakeasy-name-override", "getById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Deployment"}`)
 	})
@@ -52,6 +53,7 @@ var _ = Service("deployments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "createDeployment")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateDeployment"}`)
 	})
@@ -74,6 +76,7 @@ var _ = Service("deployments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "addOpenAPIv3ToDeployment")
 		Meta("openapi:extension:x-speakeasy-name-override", "addOpenAPIv3Source")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOpenAPIv3Source"}`)
 	})
@@ -97,6 +100,7 @@ var _ = Service("deployments", func() {
 			Response(StatusOK)
 		})
 
+		Meta("openapi:operationId", "listDeployments")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDeployments"}`)
 	})

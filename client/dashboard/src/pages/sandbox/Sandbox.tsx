@@ -10,7 +10,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { smoothStream, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
-  useLoadInstance,
+  useInstance,
   useListToolsets,
   useListEnvironments,
 } from "@gram/client/react-query/index.js";
@@ -139,7 +139,6 @@ export function ToolsetPanel({
   const selectedEnvironment = configRef.current.environmentSlug;
   console.log("selectedToolset", selectedToolset);
 
-
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
 
   useEffect(() => {
@@ -245,7 +244,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
   const session = useSession();
   const project = useProject();
 
-  const instance = useLoadInstance(
+  const instance = useInstance(
     {},
     {
       gramProject: project.projectSlug,

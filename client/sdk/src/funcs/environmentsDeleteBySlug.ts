@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function environmentsDeleteBySlug(
   client: GramCore,
-  request: operations.EnvironmentsNumberDeleteEnvironmentRequest,
+  request: operations.DeleteEnvironmentRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function environmentsDeleteBySlug(
 
 async function $do(
   client: GramCore,
-  request: operations.EnvironmentsNumberDeleteEnvironmentRequest,
+  request: operations.DeleteEnvironmentRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -74,9 +74,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.EnvironmentsNumberDeleteEnvironmentRequest$outboundSchema
-        .parse(value),
+    (value) => operations.DeleteEnvironmentRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -111,7 +109,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "environments#deleteEnvironment",
+    operationID: "deleteEnvironment",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

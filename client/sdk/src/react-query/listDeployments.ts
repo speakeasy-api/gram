@@ -35,7 +35,7 @@ export type ListDeploymentsQueryData = components.ListDeploymentResult;
  * List all deployments in descending order of creation.
  */
 export function useListDeployments(
-  request?: operations.DeploymentsNumberListDeploymentsRequest | undefined,
+  request?: operations.ListDeploymentsRequest | undefined,
   options?: QueryHookOptions<ListDeploymentsQueryData>,
 ): UseQueryResult<ListDeploymentsQueryData, Error> {
   const client = useGramContext();
@@ -56,7 +56,7 @@ export function useListDeployments(
  * List all deployments in descending order of creation.
  */
 export function useListDeploymentsSuspense(
-  request?: operations.DeploymentsNumberListDeploymentsRequest | undefined,
+  request?: operations.ListDeploymentsRequest | undefined,
   options?: SuspenseQueryHookOptions<ListDeploymentsQueryData>,
 ): UseSuspenseQueryResult<ListDeploymentsQueryData, Error> {
   const client = useGramContext();
@@ -73,7 +73,7 @@ export function useListDeploymentsSuspense(
 export function prefetchListDeployments(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.DeploymentsNumberListDeploymentsRequest | undefined,
+  request?: operations.ListDeploymentsRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListDeploymentsQuery(
@@ -128,7 +128,7 @@ export function invalidateAllListDeployments(
 
 export function buildListDeploymentsQuery(
   client$: GramCore,
-  request?: operations.DeploymentsNumberListDeploymentsRequest | undefined,
+  request?: operations.ListDeploymentsRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

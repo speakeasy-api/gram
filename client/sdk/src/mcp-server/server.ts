@@ -25,7 +25,7 @@ import { tool$environmentsList } from "./tools/environmentsList.js";
 import { tool$environmentsUpdateBySlug } from "./tools/environmentsUpdateBySlug.js";
 import { tool$toolsetsCreate } from "./tools/toolsetsCreate.js";
 import { tool$toolsetsDeleteBySlug } from "./tools/toolsetsDeleteBySlug.js";
-import { tool$toolsetsGetById } from "./tools/toolsetsGetById.js";
+import { tool$toolsetsGetBySlug } from "./tools/toolsetsGetBySlug.js";
 import { tool$toolsetsList } from "./tools/toolsetsList.js";
 import { tool$toolsetsUpdateBySlug } from "./tools/toolsetsUpdateBySlug.js";
 import { tool$toolsList } from "./tools/toolsList.js";
@@ -40,7 +40,7 @@ export function createMCPServer(deps: {
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.7.0",
+    version: "0.8.1",
   });
 
   const client = new GramCore({
@@ -83,7 +83,7 @@ export function createMCPServer(deps: {
   tool(tool$toolsList);
   tool(tool$toolsetsCreate);
   tool(tool$toolsetsDeleteBySlug);
-  tool(tool$toolsetsGetById);
+  tool(tool$toolsetsGetBySlug);
   tool(tool$toolsetsList);
   tool(tool$toolsetsUpdateBySlug);
 

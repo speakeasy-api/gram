@@ -30,7 +30,6 @@ Gram API Description: Gram is the tools platform for AI agents
   * [Authentication](#authentication)
   * [Available Resources and Operations](#available-resources-and-operations)
   * [Standalone functions](#standalone-functions)
-  * [File uploads](#file-uploads)
   * [Retries](#retries)
   * [Error Handling](#error-handling)
   * [Server Selection](#server-selection)
@@ -96,19 +95,17 @@ For supported JavaScript runtimes, please consult [RUNTIMES.md](RUNTIMES.md).
 
 ```typescript
 import { GramAPI } from "@gram/sdk";
-import { openAsBlob } from "node:fs";
 
-const gramAPI = new GramAPI({
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
-});
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await gramAPI.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+  const result = await gramAPI.instances.getBySlug({
+    option1: {
+      projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+      sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+    },
+  }, {
+    toolsetSlug: "<value>",
   });
 
   // Handle the result
@@ -133,30 +130,7 @@ This SDK supports the following security schemes globally:
 | `sessionHeaderGramSession`     | apiKey | API key |
 
 You can set the security parameters through the `security` optional parameter when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
-```typescript
-import { GramAPI } from "@gram/sdk";
-import { openAsBlob } from "node:fs";
 
-const gramAPI = new GramAPI({
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
-});
-
-async function run() {
-  const result = await gramAPI.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
-  });
-
-  // Handle the result
-  console.log(result);
-}
-
-run();
-
-```
 
 ### Per-Operation Security Schemes
 
@@ -167,8 +141,13 @@ import { GramAPI } from "@gram/sdk";
 const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await gramAPI.auth.info({
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+  const result = await gramAPI.instances.getBySlug({
+    option1: {
+      projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+      sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+    },
+  }, {
+    toolsetSlug: "<value>",
   });
 
   // Handle the result
@@ -186,53 +165,10 @@ run();
 <details open>
 <summary>Available methods</summary>
 
-### [assets](docs/sdks/assets/README.md)
-
-* [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
-
-### [auth](docs/sdks/auth/README.md)
-
-* [callback](docs/sdks/auth/README.md#callback) - callback auth
-* [info](docs/sdks/auth/README.md#info) - info auth
-* [logout](docs/sdks/auth/README.md#logout) - logout auth
-* [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
-
-### [deployments](docs/sdks/deployments/README.md)
-
-* [addOpenAPIv3Source](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
-* [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
-* [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
-* [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
-
-### [environments](docs/sdks/environments/README.md)
-
-* [create](docs/sdks/environments/README.md#create) - createEnvironment environments
-* [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
-* [list](docs/sdks/environments/README.md#list) - listEnvironments environments
-* [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
-
 
 ### [instances](docs/sdks/instances/README.md)
 
-* [load](docs/sdks/instances/README.md#load) - loadInstance instances
-
-### [keys](docs/sdks/keys/README.md)
-
-* [create](docs/sdks/keys/README.md#create) - createKey keys
-* [list](docs/sdks/keys/README.md#list) - listKeys keys
-* [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
-
-### [tools](docs/sdks/tools/README.md)
-
-* [list](docs/sdks/tools/README.md#list) - listTools tools
-
-### [toolsets](docs/sdks/toolsets/README.md)
-
-* [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
-* [deleteBySlug](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
-* [getById](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
-* [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
-* [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+* [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 
 </details>
 <!-- End Available Resources and Operations [operations] -->
@@ -252,72 +188,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
-- [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
-- [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
-- [`authInfo`](docs/sdks/auth/README.md#info) - info auth
-- [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
-- [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
-- [`deploymentsAddOpenAPIv3Source`](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
-- [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
-- [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
-- [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
-- [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
-- [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
-- [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
-- [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
-- [`instancesLoad`](docs/sdks/instances/README.md#load) - loadInstance instances
-- [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
-- [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
-- [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
-- [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
-- [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
-- [`toolsetsGetById`](docs/sdks/toolsets/README.md#getbyid) - getToolsetDetails toolsets
-- [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
-- [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
-- [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
+- [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 
 </details>
 <!-- End Standalone functions [standalone-funcs] -->
-
-<!-- Start File uploads [file-upload] -->
-## File uploads
-
-Certain SDK methods accept files as part of a multi-part request. It is possible and typically recommended to upload files as a stream rather than reading the entire contents into memory. This avoids excessive memory consumption and potentially crashing with out-of-memory errors when working with very large files. The following example demonstrates how to attach a file stream to a request.
-
-> [!TIP]
->
-> Depending on your JavaScript runtime, there are convenient utilities that return a handle to a file without reading the entire contents into memory:
->
-> - **Node.js v20+:** Since v20, Node.js comes with a native `openAsBlob` function in [`node:fs`](https://nodejs.org/docs/latest-v20.x/api/fs.html#fsopenasblobpath-options).
-> - **Bun:** The native [`Bun.file`](https://bun.sh/docs/api/file-io#reading-files-bun-file) function produces a file handle that can be used for streaming file uploads.
-> - **Browsers:** All supported browsers return an instance to a [`File`](https://developer.mozilla.org/en-US/docs/Web/API/File) when reading the value from an `<input type="file">` element.
-> - **Node.js v18:** A file stream can be created using the `fileFrom` helper from [`fetch-blob/from.js`](https://www.npmjs.com/package/fetch-blob).
-
-```typescript
-import { GramAPI } from "@gram/sdk";
-import { openAsBlob } from "node:fs";
-
-const gramAPI = new GramAPI({
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
-});
-
-async function run() {
-  const result = await gramAPI.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
-  });
-
-  // Handle the result
-  console.log(result);
-}
-
-run();
-
-```
-<!-- End File uploads [file-upload] -->
 
 <!-- Start Retries [retries] -->
 ## Retries
@@ -327,19 +201,17 @@ Some of the endpoints in this SDK support retries.  If you use the SDK without a
 To change the default retry strategy for a single API call, simply provide a retryConfig object to the call:
 ```typescript
 import { GramAPI } from "@gram/sdk";
-import { openAsBlob } from "node:fs";
 
-const gramAPI = new GramAPI({
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
-});
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await gramAPI.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+  const result = await gramAPI.instances.getBySlug({
+    option1: {
+      projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+      sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+    },
+  }, {
+    toolsetSlug: "<value>",
   }, {
     retries: {
       strategy: "backoff",
@@ -364,7 +236,6 @@ run();
 If you'd like to override the default retry strategy for all operations that support retries, you can provide a retryConfig at SDK initialization:
 ```typescript
 import { GramAPI } from "@gram/sdk";
-import { openAsBlob } from "node:fs";
 
 const gramAPI = new GramAPI({
   retryConfig: {
@@ -377,16 +248,16 @@ const gramAPI = new GramAPI({
     },
     retryConnectionErrors: false,
   },
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
 });
 
 async function run() {
-  const result = await gramAPI.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+  const result = await gramAPI.instances.getBySlug({
+    option1: {
+      projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+      sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+    },
+  }, {
+    toolsetSlug: "<value>",
   });
 
   // Handle the result
@@ -410,21 +281,19 @@ If the request fails due to, for example 4XX or 5XX status codes, it will throw 
 ```typescript
 import { GramAPI } from "@gram/sdk";
 import { SDKValidationError } from "@gram/sdk/models/errors";
-import { openAsBlob } from "node:fs";
 
-const gramAPI = new GramAPI({
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
-});
+const gramAPI = new GramAPI();
 
 async function run() {
   let result;
   try {
-    result = await gramAPI.assets.uploadOpenAPIv3({
-      contentLength: 924456,
-      requestBody: await openAsBlob("example.file"),
+    result = await gramAPI.instances.getBySlug({
+      option1: {
+        projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+        sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+      },
+    }, {
+      toolsetSlug: "<value>",
     });
 
     // Handle the result
@@ -480,20 +349,19 @@ In some rare cases, the SDK can fail to get a response from the server or even m
 The default server can be overridden globally by passing a URL to the `serverURL: string` optional parameter when initializing the SDK client instance. For example:
 ```typescript
 import { GramAPI } from "@gram/sdk";
-import { openAsBlob } from "node:fs";
 
 const gramAPI = new GramAPI({
   serverURL: "http://localhost:80",
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
 });
 
 async function run() {
-  const result = await gramAPI.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+  const result = await gramAPI.instances.getBySlug({
+    option1: {
+      projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+      sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+    },
+  }, {
+    toolsetSlug: "<value>",
   });
 
   // Handle the result

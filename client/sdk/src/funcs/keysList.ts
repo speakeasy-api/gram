@@ -32,8 +32,8 @@ import { Result } from "../types/fp.js";
  */
 export function keysList(
   client: GramCore,
-  security: operations.KeysNumberListKeysSecurity,
-  request?: operations.KeysNumberListKeysRequest | undefined,
+  security: operations.ListAPIKeysSecurity,
+  request?: operations.ListAPIKeysRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -57,8 +57,8 @@ export function keysList(
 
 async function $do(
   client: GramCore,
-  security: operations.KeysNumberListKeysSecurity,
-  request?: operations.KeysNumberListKeysRequest | undefined,
+  security: operations.ListAPIKeysSecurity,
+  request?: operations.ListAPIKeysRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -78,9 +78,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.KeysNumberListKeysRequest$outboundSchema.optional().parse(
-        value,
-      ),
+      operations.ListAPIKeysRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -111,7 +109,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "keys#listKeys",
+    operationID: "listAPIKeys",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

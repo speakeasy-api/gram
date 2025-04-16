@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 5567b1d46d1df841ccda676b442e2400
+  docChecksum: b0c26d0ad0c91744121e15984f229faf
   docVersion: 0.0.1
   speakeasyVersion: 1.531.5
   generationVersion: 2.570.4
-  releaseVersion: 0.7.0
-  configChecksum: c901de1624a7d5f5236043ee5de7a19e
+  releaseVersion: 0.8.1
+  configChecksum: 9aa1fe4744e28792a2b5197e21cac04f
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -26,7 +26,6 @@ features:
     responseFormat: 0.2.3
     retries: 2.83.0
     sdkHooks: 0.2.0
-    uploadStreams: 0.1.0
 generatedFiles:
   - .devcontainer/README.md
   - .devcontainer/devcontainer.json
@@ -51,9 +50,9 @@ generatedFiles:
   - docs/models/components/environmententry.md
   - docs/models/components/environmententryinput.md
   - docs/models/components/getdeploymentresult.md
+  - docs/models/components/getinstanceresult.md
   - docs/models/components/httptooldefinition.md
   - docs/models/components/inforesponsebody.md
-  - docs/models/components/instanceresult.md
   - docs/models/components/key.md
   - docs/models/components/kind.md
   - docs/models/components/listdeploymentresult.md
@@ -70,42 +69,42 @@ generatedFiles:
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
   - docs/models/components/uploadopenapiv3result.md
-  - docs/models/operations/assetsnumberuploadopenapiv3request.md
-  - docs/models/operations/authnumbercallbackrequest.md
-  - docs/models/operations/authnumbercallbackresponse.md
-  - docs/models/operations/authnumberinforequest.md
-  - docs/models/operations/authnumberinforesponse.md
-  - docs/models/operations/authnumberinfosecurity.md
-  - docs/models/operations/authnumberlogoutrequest.md
-  - docs/models/operations/authnumberlogoutresponse.md
-  - docs/models/operations/authnumberlogoutsecurity.md
-  - docs/models/operations/authnumberswitchscopesrequest.md
-  - docs/models/operations/authnumberswitchscopesresponse.md
-  - docs/models/operations/authnumberswitchscopessecurity.md
-  - docs/models/operations/deploymentsnumberaddopenapiv3sourcerequest.md
-  - docs/models/operations/deploymentsnumbercreatedeploymentrequest.md
-  - docs/models/operations/deploymentsnumbergetdeploymentrequest.md
-  - docs/models/operations/deploymentsnumberlistdeploymentsrequest.md
-  - docs/models/operations/environmentsnumbercreateenvironmentrequest.md
-  - docs/models/operations/environmentsnumberdeleteenvironmentrequest.md
-  - docs/models/operations/environmentsnumberlistenvironmentsrequest.md
-  - docs/models/operations/environmentsnumberupdateenvironmentrequest.md
-  - docs/models/operations/instancesnumberloadinstancerequest.md
-  - docs/models/operations/instancesnumberloadinstancesecurity.md
-  - docs/models/operations/instancesnumberloadinstancesecurityoption1.md
-  - docs/models/operations/instancesnumberloadinstancesecurityoption2.md
-  - docs/models/operations/keysnumbercreatekeyrequest.md
-  - docs/models/operations/keysnumbercreatekeysecurity.md
-  - docs/models/operations/keysnumberlistkeysrequest.md
-  - docs/models/operations/keysnumberlistkeyssecurity.md
-  - docs/models/operations/keysnumberrevokekeyrequest.md
-  - docs/models/operations/keysnumberrevokekeysecurity.md
-  - docs/models/operations/toolsetsnumbercreatetoolsetrequest.md
-  - docs/models/operations/toolsetsnumberdeletetoolsetrequest.md
-  - docs/models/operations/toolsetsnumbergettoolsetdetailsrequest.md
-  - docs/models/operations/toolsetsnumberlisttoolsetsrequest.md
-  - docs/models/operations/toolsetsnumberupdatetoolsetrequest.md
-  - docs/models/operations/toolsnumberlisttoolsrequest.md
+  - docs/models/operations/addopenapiv3todeploymentrequest.md
+  - docs/models/operations/authcallbackrequest.md
+  - docs/models/operations/authcallbackresponse.md
+  - docs/models/operations/createapikeyrequest.md
+  - docs/models/operations/createapikeysecurity.md
+  - docs/models/operations/createdeploymentrequest.md
+  - docs/models/operations/createenvironmentrequest.md
+  - docs/models/operations/createtoolsetrequest.md
+  - docs/models/operations/deleteenvironmentrequest.md
+  - docs/models/operations/deletetoolsetrequest.md
+  - docs/models/operations/getdeploymentrequest.md
+  - docs/models/operations/getinstancerequest.md
+  - docs/models/operations/getinstancesecurity.md
+  - docs/models/operations/getinstancesecurityoption1.md
+  - docs/models/operations/getinstancesecurityoption2.md
+  - docs/models/operations/gettoolsetrequest.md
+  - docs/models/operations/listapikeysrequest.md
+  - docs/models/operations/listapikeyssecurity.md
+  - docs/models/operations/listdeploymentsrequest.md
+  - docs/models/operations/listenvironmentsrequest.md
+  - docs/models/operations/listtoolsetsrequest.md
+  - docs/models/operations/listtoolsrequest.md
+  - docs/models/operations/logoutrequest.md
+  - docs/models/operations/logoutresponse.md
+  - docs/models/operations/logoutsecurity.md
+  - docs/models/operations/revokeapikeyrequest.md
+  - docs/models/operations/revokeapikeysecurity.md
+  - docs/models/operations/sessioninforequest.md
+  - docs/models/operations/sessioninforesponse.md
+  - docs/models/operations/sessioninfosecurity.md
+  - docs/models/operations/switchauthscopesrequest.md
+  - docs/models/operations/switchauthscopesresponse.md
+  - docs/models/operations/switchauthscopessecurity.md
+  - docs/models/operations/updateenvironmentrequest.md
+  - docs/models/operations/updatetoolsetrequest.md
+  - docs/models/operations/uploadopenapiv3assetrequest.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
   - docs/sdks/deployments/README.md
@@ -132,14 +131,14 @@ generatedFiles:
   - src/funcs/environmentsDeleteBySlug.ts
   - src/funcs/environmentsList.ts
   - src/funcs/environmentsUpdateBySlug.ts
-  - src/funcs/instancesLoad.ts
+  - src/funcs/instancesGetBySlug.ts
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
   - src/funcs/toolsList.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
-  - src/funcs/toolsetsGetById.ts
+  - src/funcs/toolsetsGetBySlug.ts
   - src/funcs/toolsetsList.ts
   - src/funcs/toolsetsUpdateBySlug.ts
   - src/hooks/hooks.ts
@@ -188,7 +187,7 @@ generatedFiles:
   - src/mcp-server/tools/toolsList.ts
   - src/mcp-server/tools/toolsetsCreate.ts
   - src/mcp-server/tools/toolsetsDeleteBySlug.ts
-  - src/mcp-server/tools/toolsetsGetById.ts
+  - src/mcp-server/tools/toolsetsGetBySlug.ts
   - src/mcp-server/tools/toolsetsList.ts
   - src/mcp-server/tools/toolsetsUpdateBySlug.ts
   - src/models/components/addopenapiv3sourceresult.ts
@@ -204,10 +203,10 @@ generatedFiles:
   - src/models/components/environmententry.ts
   - src/models/components/environmententryinput.ts
   - src/models/components/getdeploymentresult.ts
+  - src/models/components/getinstanceresult.ts
   - src/models/components/httptooldefinition.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
-  - src/models/components/instanceresult.ts
   - src/models/components/key.ts
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
@@ -227,30 +226,30 @@ generatedFiles:
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
   - src/models/errors/sdkvalidationerror.ts
-  - src/models/operations/assetsnumberuploadopenapiv3.ts
-  - src/models/operations/authnumbercallback.ts
-  - src/models/operations/authnumberinfo.ts
-  - src/models/operations/authnumberlogout.ts
-  - src/models/operations/authnumberswitchscopes.ts
-  - src/models/operations/deploymentsnumberaddopenapiv3source.ts
-  - src/models/operations/deploymentsnumbercreatedeployment.ts
-  - src/models/operations/deploymentsnumbergetdeployment.ts
-  - src/models/operations/deploymentsnumberlistdeployments.ts
-  - src/models/operations/environmentsnumbercreateenvironment.ts
-  - src/models/operations/environmentsnumberdeleteenvironment.ts
-  - src/models/operations/environmentsnumberlistenvironments.ts
-  - src/models/operations/environmentsnumberupdateenvironment.ts
+  - src/models/operations/addopenapiv3todeployment.ts
+  - src/models/operations/authcallback.ts
+  - src/models/operations/createapikey.ts
+  - src/models/operations/createdeployment.ts
+  - src/models/operations/createenvironment.ts
+  - src/models/operations/createtoolset.ts
+  - src/models/operations/deleteenvironment.ts
+  - src/models/operations/deletetoolset.ts
+  - src/models/operations/getdeployment.ts
+  - src/models/operations/getinstance.ts
+  - src/models/operations/gettoolset.ts
   - src/models/operations/index.ts
-  - src/models/operations/instancesnumberloadinstance.ts
-  - src/models/operations/keysnumbercreatekey.ts
-  - src/models/operations/keysnumberlistkeys.ts
-  - src/models/operations/keysnumberrevokekey.ts
-  - src/models/operations/toolsetsnumbercreatetoolset.ts
-  - src/models/operations/toolsetsnumberdeletetoolset.ts
-  - src/models/operations/toolsetsnumbergettoolsetdetails.ts
-  - src/models/operations/toolsetsnumberlisttoolsets.ts
-  - src/models/operations/toolsetsnumberupdatetoolset.ts
-  - src/models/operations/toolsnumberlisttools.ts
+  - src/models/operations/listapikeys.ts
+  - src/models/operations/listdeployments.ts
+  - src/models/operations/listenvironments.ts
+  - src/models/operations/listtools.ts
+  - src/models/operations/listtoolsets.ts
+  - src/models/operations/logout.ts
+  - src/models/operations/revokeapikey.ts
+  - src/models/operations/sessioninfo.ts
+  - src/models/operations/switchauthscopes.ts
+  - src/models/operations/updateenvironment.ts
+  - src/models/operations/updatetoolset.ts
+  - src/models/operations/uploadopenapiv3asset.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
   - src/react-query/addOpenAPIv3Source.ts
@@ -262,12 +261,12 @@ generatedFiles:
   - src/react-query/deleteToolset.ts
   - src/react-query/deployment.ts
   - src/react-query/index.ts
+  - src/react-query/instance.ts
   - src/react-query/listAPIKeys.ts
   - src/react-query/listDeployments.ts
   - src/react-query/listEnvironments.ts
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
-  - src/react-query/loadInstance.ts
   - src/react-query/logout.ts
   - src/react-query/revokeAPIKey.ts
   - src/react-query/sessionInfo.ts
@@ -449,5 +448,173 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2023-10-11T13:18:21.498Z", "http_tools": [{"created_at": "2023-10-03T01:38:33.695Z", "deployment_id": "<id>", "description": "energetically under an pish", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Applications", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-28T13:20:29.259Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-06T02:30:28.396Z"}
+  uploadOpenAPIv3Asset:
+    speakeasy-default-upload-open-AP-iv3-asset:
+      parameters:
+        header:
+          Content-Length: 342044
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 980702, "content_type": "<value>", "created_at": "2023-05-05T02:34:33.347Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-21T22:57:42.919Z", "url": "https://sad-sonar.biz"}}
+  authCallback:
+    speakeasy-default-auth-callback:
+      parameters:
+        query:
+          shared_token: "<value>"
+  sessionInfo:
+    speakeasy-default-session-info:
+      responses:
+        "200":
+          application/json: {"active_organization_id": "<id>", "organizations": [], "user_email": "<value>", "user_id": "<id>"}
+  logout: {}
+  switchAuthScopes: {}
+  addOpenAPIv3ToDeployment:
+    speakeasy-default-add-open-AP-iv3-to-deployment:
+      requestBody:
+        application/json: {"asset_id": "<id>", "name": "<value>", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2024-08-21T13:39:22.662Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+  createDeployment:
+    "":
+      parameters:
+        header:
+          Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
+      requestBody:
+        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2024-06-17T07:14:55.338Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+  getDeployment:
+    speakeasy-default-get-deployment:
+      parameters:
+        query:
+          id: "<id>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-10-30T17:38:07.047Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
+  listDeployments:
+    speakeasy-default-list-deployments:
+      responses:
+        "200":
+          application/json: {"items": [{"asset_count": 547272, "created_at": "2025-01-13T10:26:00.433Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}, {"asset_count": 177706, "created_at": "2023-09-09T18:28:08.953Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}, {"asset_count": 152837, "created_at": "2024-11-27T13:02:27.296Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
+  createEnvironment:
+    speakeasy-default-create-environment:
+      requestBody:
+        application/json: {"entries": [{"name": "<value>", "value": "<value>"}], "name": "<value>", "organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-11-30T17:06:07.804Z", "entries": [{"created_at": "2023-05-28T06:20:22.766Z", "name": "<value>", "updated_at": "2023-03-17T15:39:20.911Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-05-22T22:27:14.379Z"}
+  deleteEnvironment:
+    speakeasy-default-delete-environment:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+  listEnvironments:
+    speakeasy-default-list-environments:
+      responses:
+        "200":
+          application/json: {"environments": [{"created_at": "2024-08-22T19:26:20.850Z", "entries": [{"created_at": "2023-07-14T18:23:27.528Z", "name": "<value>", "updated_at": "2023-09-09T18:28:08.953Z", "value": "<value>"}, {"created_at": "2023-06-17T12:14:27.999Z", "name": "<value>", "updated_at": "2024-11-27T13:02:27.296Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-01T18:25:37.169Z"}, {"created_at": "2023-01-20T06:21:22.156Z", "entries": [{"created_at": "2023-04-05T09:49:38.010Z", "name": "<value>", "updated_at": "2023-03-17T01:57:00.187Z", "value": "<value>"}, {"created_at": "2025-01-24T00:05:25.844Z", "name": "<value>", "updated_at": "2024-07-12T19:57:33.016Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-25T18:23:24.264Z"}, {"created_at": "2023-01-09T04:26:27.312Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-08T01:09:52.088Z"}]}
+  updateEnvironment:
+    speakeasy-default-update-environment:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+      requestBody:
+        application/json: {"entries_to_remove": [], "entries_to_update": []}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-04-22T23:31:14.301Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-03-31T22:01:21.951Z"}
+  loadInstance:
+    speakeasy-default-load-instance:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"environment": {"created_at": "2025-04-30T10:11:49.833Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-07-22T09:00:14.525Z"}, "name": "<value>", "tools": [{"created_at": "2025-04-27T15:39:41.657Z", "deployment_id": "<id>", "description": "qua ew whitewash", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Library", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2025-04-14T01:05:16.425Z"}, {"created_at": "2023-11-25T13:02:35.894Z", "deployment_id": "<id>", "description": "steeple randomize uh-huh heartfelt sweetly yippee rim shadowbox not specific", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/X11R6", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2025-06-11T15:26:29.539Z"}]}
+  createAPIKey:
+    speakeasy-default-create-API-key:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-06-17T07:14:55.338Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>"], "token": "<value>", "updated_at": "2024-04-02T12:48:32.253Z"}
+  listAPIKeys:
+    speakeasy-default-list-API-keys:
+      responses:
+        "200":
+          application/json: {"keys": [{"created_at": "2024-08-22T19:26:20.850Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>"], "token": "<value>", "updated_at": "2023-07-14T18:23:27.528Z"}, {"created_at": "2023-09-09T18:28:08.953Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2024-11-27T13:02:27.296Z"}, {"created_at": "2024-12-01T18:25:37.169Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2025-02-26T06:14:46.641Z"}]}
+  revokeAPIKey:
+    speakeasy-default-revoke-API-key:
+      parameters:
+        path:
+          id: "<id>"
+        header: {}
+  listTools:
+    speakeasy-default-list-tools:
+      responses:
+        "200":
+          application/json: {"tools": [{"created_at": "2024-08-22T19:26:20.850Z", "deployment_id": "<id>", "description": "mmm avalanche jungle unto meanwhile beside tromp worth", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/dev", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2023-03-23T01:47:30.770Z"}, {"created_at": "2025-07-06T02:51:23.749Z", "deployment_id": "<id>", "description": "as plastic via during someplace woot excepting gah only", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2024-09-14T02:22:04.749Z"}, {"created_at": "2023-04-20T19:52:18.966Z", "deployment_id": "<id>", "description": "dramatic damp inasmuch unlined monthly lampoon", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/local/bin", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-02T02:57:15.201Z"}]}
+  createToolset:
+    speakeasy-default-create-toolset:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-06-17T07:14:55.338Z", "http_tools": [{"created_at": "2024-04-02T12:48:32.253Z", "deployment_id": "<id>", "description": "sweetly after boo yuck", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/rescue", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2024-12-24T00:15:46.309Z"}, {"created_at": "2024-08-26T07:54:28.842Z", "deployment_id": "<id>", "description": "up bulky electronics through for ick superb nudge embalm simple", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/var/yp", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-11-06T13:12:23.698Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-06-30T08:34:56.549Z"}
+  deleteToolset:
+    speakeasy-default-delete-toolset:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+  describeToolset:
+    speakeasy-default-describe-toolset:
+      parameters:
+        query:
+          slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-10-10T23:33:09.777Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-25T09:34:15.935Z"}
+  listToolsets:
+    speakeasy-default-list-toolsets:
+      responses:
+        "200":
+          application/json: {"toolsets": [{"created_at": "2024-08-22T19:26:20.850Z", "http_tools": [{"created_at": "2023-07-14T18:23:27.528Z", "deployment_id": "<id>", "description": "biodegrade miserably fedora blah", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2024-05-19T11:06:26.987Z"}, {"created_at": "2024-04-11T03:59:08.538Z", "deployment_id": "<id>", "description": "beside tromp worth reluctantly wound accompanist", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/local/src", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2025-05-02T01:42:40.060Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-07-08T07:59:15.466Z"}, {"created_at": "2025-11-05T16:19:50.933Z", "http_tools": [{"created_at": "2023-01-23T14:15:37.576Z", "deployment_id": "<id>", "description": "unless brightly for dead meh yippee", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-10-22T07:49:38.272Z"}, {"created_at": "2024-02-27T07:39:18.966Z", "deployment_id": "<id>", "description": "jump joyfully discourse merrily wherever failing orchestrate lest validity yuck", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/root", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2025-11-21T00:24:26.155Z"}, {"created_at": "2024-11-16T21:16:42.369Z", "deployment_id": "<id>", "description": "pish hence lowball", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/var/tmp", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2023-01-21T07:06:12.853Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-08-05T18:20:08.987Z"}, {"created_at": "2024-11-12T02:36:59.348Z", "http_tools": [{"created_at": "2025-08-19T10:34:27.488Z", "deployment_id": "<id>", "description": "likable widow less if cuckoo ack so gosh boohoo", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-24T09:19:28.400Z"}, {"created_at": "2025-01-08T00:53:45.951Z", "deployment_id": "<id>", "description": "save lively ouch till round meaningfully oddly dishonor", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2023-05-07T21:01:22.996Z"}, {"created_at": "2023-04-17T02:32:11.293Z", "deployment_id": "<id>", "description": "tomography how until", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/opt/include", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2025-12-11T13:56:50.064Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-08-27T12:00:34.207Z"}]}
+  updateToolset:
+    speakeasy-default-update-toolset:
+      parameters:
+        path:
+          slug: "<value>"
+        header: {}
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-08-29T14:25:47.167Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-04-22T23:31:14.301Z"}
+  getInstance:
+    speakeasy-default-get-instance:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"environment": {"created_at": "2025-09-06T15:47:55.334Z", "entries": [{"created_at": "2023-10-17T17:29:24.836Z", "name": "<value>", "updated_at": "2023-05-13T16:40:27.328Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-10T09:37:31.701Z"}, "name": "<value>", "tools": []}
+  getToolset:
+    speakeasy-default-get-toolset:
+      parameters:
+        query:
+          slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-09-06T15:47:55.334Z", "http_tools": [{"created_at": "2023-10-17T17:29:24.836Z", "deployment_id": "<id>", "description": "er since uniform", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/namedb", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-10T02:07:05.852Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-04-03T20:31:34.723Z"}
 examplesVersion: 1.0.1
 generatedTests: {}

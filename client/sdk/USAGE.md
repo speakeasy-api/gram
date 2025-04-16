@@ -1,7 +1,6 @@
 <!-- Start SDK Example Usage [usage] -->
 ```typescript
 import { Gram } from "@gram/client";
-import { openAsBlob } from "node:fs";
 
 const gram = new Gram({
   security: {
@@ -14,8 +13,7 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+    contentLength: 342044,
   });
 
   // Handle the result

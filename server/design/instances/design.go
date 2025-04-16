@@ -14,22 +14,15 @@ var _ = Service("instances", func() {
 		Scope("consumer")
 	})
 
-	Method("loadInstance", func() {
-		Description("load all relevant data for an instance of a toolset and environment")
+	Method("getInstance", func() {
+		Description("Load all relevant data for an instance of a toolset and environment")
 
-		Payload(func() {
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-			Attribute("toolset_slug", String, "The slug of the toolset to load")
-			Attribute("environment_slug", String, "The slug of the environment to load")
-			Required("toolset_slug")
-		})
+		Payload(GetInstanceForm)
 
-		Result(InstanceResult)
+		Result(GetInstanceResult)
 
 		HTTP(func() {
-			GET("/rpc/instances.load")
+			GET("/rpc/instances.get")
 			Param("toolset_slug")
 			Param("environment_slug")
 			security.SessionHeader()
@@ -38,12 +31,22 @@ var _ = Service("instances", func() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:extension:x-speakeasy-name-override", "load")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadInstance"}`)
+		Meta("openapi:operationId", "getInstance")
+		Meta("openapi:extension:x-speakeasy-name-override", "getBySlug")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Instance"}`)
 	})
 })
 
-var InstanceResult = Type("InstanceResult", func() {
+var GetInstanceForm = Type("GetInstanceForm", func() {
+	security.SessionPayload()
+	security.ByKeyPayload()
+	security.ProjectPayload()
+	Attribute("toolset_slug", String, "The slug of the toolset to load")
+	Attribute("environment_slug", String, "The slug of the environment to load")
+	Required("toolset_slug")
+})
+
+var GetInstanceResult = Type("GetInstanceResult", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "The description of the toolset")
 	Attribute("tools", ArrayOf(tools.HTTPToolDefinition), "The list of tools")

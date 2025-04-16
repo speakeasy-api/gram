@@ -35,7 +35,7 @@ export type ListEnvironmentsQueryData = components.ListEnvironmentsResult;
  * List all environments for an organization
  */
 export function useListEnvironments(
-  request?: operations.EnvironmentsNumberListEnvironmentsRequest | undefined,
+  request?: operations.ListEnvironmentsRequest | undefined,
   options?: QueryHookOptions<ListEnvironmentsQueryData>,
 ): UseQueryResult<ListEnvironmentsQueryData, Error> {
   const client = useGramContext();
@@ -56,7 +56,7 @@ export function useListEnvironments(
  * List all environments for an organization
  */
 export function useListEnvironmentsSuspense(
-  request?: operations.EnvironmentsNumberListEnvironmentsRequest | undefined,
+  request?: operations.ListEnvironmentsRequest | undefined,
   options?: SuspenseQueryHookOptions<ListEnvironmentsQueryData>,
 ): UseSuspenseQueryResult<ListEnvironmentsQueryData, Error> {
   const client = useGramContext();
@@ -73,7 +73,7 @@ export function useListEnvironmentsSuspense(
 export function prefetchListEnvironments(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.EnvironmentsNumberListEnvironmentsRequest | undefined,
+  request?: operations.ListEnvironmentsRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListEnvironmentsQuery(
@@ -126,7 +126,7 @@ export function invalidateAllListEnvironments(
 
 export function buildListEnvironmentsQuery(
   client$: GramCore,
-  request?: operations.EnvironmentsNumberListEnvironmentsRequest | undefined,
+  request?: operations.ListEnvironmentsRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

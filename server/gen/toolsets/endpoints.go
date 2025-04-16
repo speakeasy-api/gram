@@ -16,11 +16,11 @@ import (
 
 // Endpoints wraps the "toolsets" service endpoints.
 type Endpoints struct {
-	CreateToolset     goa.Endpoint
-	ListToolsets      goa.Endpoint
-	UpdateToolset     goa.Endpoint
-	DeleteToolset     goa.Endpoint
-	GetToolsetDetails goa.Endpoint
+	CreateToolset goa.Endpoint
+	ListToolsets  goa.Endpoint
+	UpdateToolset goa.Endpoint
+	DeleteToolset goa.Endpoint
+	GetToolset    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "toolsets" service with endpoints.
@@ -28,11 +28,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateToolset:     NewCreateToolsetEndpoint(s, a.APIKeyAuth),
-		ListToolsets:      NewListToolsetsEndpoint(s, a.APIKeyAuth),
-		UpdateToolset:     NewUpdateToolsetEndpoint(s, a.APIKeyAuth),
-		DeleteToolset:     NewDeleteToolsetEndpoint(s, a.APIKeyAuth),
-		GetToolsetDetails: NewGetToolsetDetailsEndpoint(s, a.APIKeyAuth),
+		CreateToolset: NewCreateToolsetEndpoint(s, a.APIKeyAuth),
+		ListToolsets:  NewListToolsetsEndpoint(s, a.APIKeyAuth),
+		UpdateToolset: NewUpdateToolsetEndpoint(s, a.APIKeyAuth),
+		DeleteToolset: NewDeleteToolsetEndpoint(s, a.APIKeyAuth),
+		GetToolset:    NewGetToolsetEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -42,7 +42,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListToolsets = m(e.ListToolsets)
 	e.UpdateToolset = m(e.UpdateToolset)
 	e.DeleteToolset = m(e.DeleteToolset)
-	e.GetToolsetDetails = m(e.GetToolsetDetails)
+	e.GetToolset = m(e.GetToolset)
 }
 
 // NewCreateToolsetEndpoint returns an endpoint function that calls the method
@@ -185,11 +185,11 @@ func NewDeleteToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 	}
 }
 
-// NewGetToolsetDetailsEndpoint returns an endpoint function that calls the
-// method "getToolsetDetails" of service "toolsets".
-func NewGetToolsetDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewGetToolsetEndpoint returns an endpoint function that calls the method
+// "getToolset" of service "toolsets".
+func NewGetToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetToolsetDetailsPayload)
+		p := req.(*GetToolsetPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -216,6 +216,6 @@ func NewGetToolsetDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		if err != nil {
 			return nil, err
 		}
-		return s.GetToolsetDetails(ctx, p)
+		return s.GetToolset(ctx, p)
 	}
 }

@@ -19,7 +19,7 @@ export class Environments extends ClientSDK {
    * Create a new environment
    */
   async create(
-    request: operations.EnvironmentsNumberCreateEnvironmentRequest,
+    request: operations.CreateEnvironmentRequest,
     options?: RequestOptions,
   ): Promise<components.Environment> {
     return unwrapAsync(environmentsCreate(
@@ -36,7 +36,7 @@ export class Environments extends ClientSDK {
    * Delete an environment
    */
   async deleteBySlug(
-    request: operations.EnvironmentsNumberDeleteEnvironmentRequest,
+    request: operations.DeleteEnvironmentRequest,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteBySlug(
@@ -53,7 +53,7 @@ export class Environments extends ClientSDK {
    * List all environments for an organization
    */
   async list(
-    request?: operations.EnvironmentsNumberListEnvironmentsRequest | undefined,
+    request?: operations.ListEnvironmentsRequest | undefined,
     options?: RequestOptions,
   ): Promise<components.ListEnvironmentsResult> {
     return unwrapAsync(environmentsList(
@@ -70,7 +70,7 @@ export class Environments extends ClientSDK {
    * Update an environment
    */
   async updateBySlug(
-    request: operations.EnvironmentsNumberUpdateEnvironmentRequest,
+    request: operations.UpdateEnvironmentRequest,
     options?: RequestOptions,
   ): Promise<components.Environment> {
     return unwrapAsync(environmentsUpdateBySlug(

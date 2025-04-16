@@ -35,7 +35,7 @@ export type DeploymentQueryData = components.GetDeploymentResult;
  * Create a deployment to load tool definitions.
  */
 export function useDeployment(
-  request: operations.DeploymentsNumberGetDeploymentRequest,
+  request: operations.GetDeploymentRequest,
   options?: QueryHookOptions<DeploymentQueryData>,
 ): UseQueryResult<DeploymentQueryData, Error> {
   const client = useGramContext();
@@ -56,7 +56,7 @@ export function useDeployment(
  * Create a deployment to load tool definitions.
  */
 export function useDeploymentSuspense(
-  request: operations.DeploymentsNumberGetDeploymentRequest,
+  request: operations.GetDeploymentRequest,
   options?: SuspenseQueryHookOptions<DeploymentQueryData>,
 ): UseSuspenseQueryResult<DeploymentQueryData, Error> {
   const client = useGramContext();
@@ -73,7 +73,7 @@ export function useDeploymentSuspense(
 export function prefetchDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.DeploymentsNumberGetDeploymentRequest,
+  request: operations.GetDeploymentRequest,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildDeploymentQuery(
@@ -128,7 +128,7 @@ export function invalidateAllDeployment(
 
 export function buildDeploymentQuery(
   client$: GramCore,
-  request: operations.DeploymentsNumberGetDeploymentRequest,
+  request: operations.GetDeploymentRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -26,6 +26,7 @@ var _ = Service("assets", func() {
 			SkipRequestBodyEncodeDecode()
 		})
 
+		Meta("openapi:operationId", "uploadOpenAPIv3Asset")
 		Meta("openapi:extension:x-speakeasy-name-override", "uploadOpenAPIv3")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenAPIv3"}`)
 	})

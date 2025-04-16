@@ -1,0 +1,9 @@
+overlay: 1.0.0
+x-speakeasy-jsonpath: rfc9535
+info:
+  title: Modify OpenAPI to generate consumer-facing SDKs
+  version: 0.0.0
+actions:
+  - target: $.paths.*[?(@.operationId != 'getInstance')]
+    update:
+      x-speakeasy-ignore: true

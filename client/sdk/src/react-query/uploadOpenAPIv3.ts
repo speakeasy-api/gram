@@ -18,7 +18,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UploadOpenAPIv3MutationVariables = {
-  request: operations.AssetsNumberUploadOpenAPIv3Request;
+  request: operations.UploadOpenAPIv3AssetRequest;
   options?: RequestOptions;
 };
 

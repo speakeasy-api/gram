@@ -252,30 +252,32 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 	}
 }
 
-// EncodeGetToolsetDetailsResponse returns an encoder for responses returned by
-// the toolsets getToolsetDetails endpoint.
-func EncodeGetToolsetDetailsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetToolsetResponse returns an encoder for responses returned by the
+// toolsets getToolset endpoint.
+func EncodeGetToolsetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*toolsets.ToolsetDetails)
 		enc := encoder(ctx, w)
-		body := NewGetToolsetDetailsResponseBody(res)
+		body := NewGetToolsetResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetToolsetDetailsRequest returns a decoder for requests sent to the
-// toolsets getToolsetDetails endpoint.
-func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+// DecodeGetToolsetRequest returns a decoder for requests sent to the toolsets
+// getToolset endpoint.
+func DecodeGetToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
 			slug             string
 			sessionToken     *string
 			projectSlugInput *string
-
-			params = mux.Vars(r)
+			err              error
 		)
-		slug = params["slug"]
+		slug = r.URL.Query().Get("slug")
+		if slug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -284,7 +286,10 @@ func DecodeGetToolsetDetailsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewGetToolsetDetailsPayload(slug, sessionToken, projectSlugInput)
+		if err != nil {
+			return nil, err
+		}
+		payload := NewGetToolsetPayload(slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

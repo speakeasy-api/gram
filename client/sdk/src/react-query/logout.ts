@@ -25,7 +25,7 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type LogoutQueryData = operations.AuthNumberLogoutResponse | undefined;
+export type LogoutQueryData = operations.LogoutResponse | undefined;
 
 /**
  * logout auth
@@ -34,8 +34,8 @@ export type LogoutQueryData = operations.AuthNumberLogoutResponse | undefined;
  * Logs out the current user by clearing their session.
  */
 export function useLogout(
-  security: operations.AuthNumberLogoutSecurity,
-  request?: operations.AuthNumberLogoutRequest | undefined,
+  security: operations.LogoutSecurity,
+  request?: operations.LogoutRequest | undefined,
   options?: QueryHookOptions<LogoutQueryData>,
 ): UseQueryResult<LogoutQueryData, Error> {
   const client = useGramContext();
@@ -57,8 +57,8 @@ export function useLogout(
  * Logs out the current user by clearing their session.
  */
 export function useLogoutSuspense(
-  security: operations.AuthNumberLogoutSecurity,
-  request?: operations.AuthNumberLogoutRequest | undefined,
+  security: operations.LogoutSecurity,
+  request?: operations.LogoutRequest | undefined,
   options?: SuspenseQueryHookOptions<LogoutQueryData>,
 ): UseSuspenseQueryResult<LogoutQueryData, Error> {
   const client = useGramContext();
@@ -76,8 +76,8 @@ export function useLogoutSuspense(
 export function prefetchLogout(
   queryClient: QueryClient,
   client$: GramCore,
-  security: operations.AuthNumberLogoutSecurity,
-  request?: operations.AuthNumberLogoutRequest | undefined,
+  security: operations.LogoutSecurity,
+  request?: operations.LogoutRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildLogoutQuery(
@@ -123,8 +123,8 @@ export function invalidateAllLogout(
 
 export function buildLogoutQuery(
   client$: GramCore,
-  security: operations.AuthNumberLogoutSecurity,
-  request?: operations.AuthNumberLogoutRequest | undefined,
+  security: operations.LogoutSecurity,
+  request?: operations.LogoutRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

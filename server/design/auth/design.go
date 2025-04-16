@@ -38,6 +38,7 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:operationId", "authCallback")
 		Meta("openapi:extension:x-speakeasy-name-override", "callback")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
@@ -68,6 +69,7 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:operationId", "switchAuthScopes")
 		Meta("openapi:extension:x-speakeasy-name-override", "switchScopes")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SwitchScopes"}`)
 	})
@@ -93,6 +95,7 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:operationId", "logout")
 		Meta("openapi:extension:x-speakeasy-name-override", "logout")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Logout"}`)
 	})
@@ -127,6 +130,7 @@ var _ = Service("auth", func() {
 			})
 		})
 
+		Meta("openapi:operationId", "sessionInfo")
 		Meta("openapi:extension:x-speakeasy-name-override", "info")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionInfo"}`)
 	})

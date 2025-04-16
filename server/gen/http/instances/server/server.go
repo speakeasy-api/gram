@@ -19,8 +19,8 @@ import (
 
 // Server lists the instances service endpoint HTTP handlers.
 type Server struct {
-	Mounts       []*MountPoint
-	LoadInstance http.Handler
+	Mounts      []*MountPoint
+	GetInstance http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -50,9 +50,9 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"LoadInstance", "GET", "/rpc/instances.load"},
+			{"GetInstance", "GET", "/rpc/instances.get"},
 		},
-		LoadInstance: NewLoadInstanceHandler(e.LoadInstance, mux, decoder, encoder, errhandler, formatter),
+		GetInstance: NewGetInstanceHandler(e.GetInstance, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -61,7 +61,7 @@ func (s *Server) Service() string { return "instances" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.LoadInstance = m(s.LoadInstance)
+	s.GetInstance = m(s.GetInstance)
 }
 
 // MethodNames returns the methods served.
@@ -69,7 +69,7 @@ func (s *Server) MethodNames() []string { return instances.MethodNames[:] }
 
 // Mount configures the mux to serve the instances endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountLoadInstanceHandler(mux, h.LoadInstance)
+	MountGetInstanceHandler(mux, h.GetInstance)
 }
 
 // Mount configures the mux to serve the instances endpoints.
@@ -77,21 +77,21 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountLoadInstanceHandler configures the mux to serve the "instances" service
-// "loadInstance" endpoint.
-func MountLoadInstanceHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetInstanceHandler configures the mux to serve the "instances" service
+// "getInstance" endpoint.
+func MountGetInstanceHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/instances.load", otelhttp.WithRouteTag("/rpc/instances.load", f).ServeHTTP)
+	mux.Handle("GET", "/rpc/instances.get", otelhttp.WithRouteTag("/rpc/instances.get", f).ServeHTTP)
 }
 
-// NewLoadInstanceHandler creates a HTTP handler which loads the HTTP request
-// and calls the "instances" service "loadInstance" endpoint.
-func NewLoadInstanceHandler(
+// NewGetInstanceHandler creates a HTTP handler which loads the HTTP request
+// and calls the "instances" service "getInstance" endpoint.
+func NewGetInstanceHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -100,13 +100,13 @@ func NewLoadInstanceHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeLoadInstanceRequest(mux, decoder)
-		encodeResponse = EncodeLoadInstanceResponse(encoder)
+		decodeRequest  = DecodeGetInstanceRequest(mux, decoder)
+		encodeResponse = EncodeGetInstanceResponse(encoder)
 		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "loadInstance")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInstance")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "instances")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function environmentsUpdateBySlug(
   client: GramCore,
-  request: operations.EnvironmentsNumberUpdateEnvironmentRequest,
+  request: operations.UpdateEnvironmentRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function environmentsUpdateBySlug(
 
 async function $do(
   client: GramCore,
-  request: operations.EnvironmentsNumberUpdateEnvironmentRequest,
+  request: operations.UpdateEnvironmentRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -74,9 +74,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.EnvironmentsNumberUpdateEnvironmentRequest$outboundSchema
-        .parse(value),
+    (value) => operations.UpdateEnvironmentRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -114,7 +112,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "environments#updateEnvironment",
+    operationID: "updateEnvironment",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

@@ -1,29 +1,28 @@
 lockVersion: 2.0.0
 id: 1536f638-1fda-4f8e-a2c3-c7ca9e12fb09
 management:
-  docChecksum: 5567b1d46d1df841ccda676b442e2400
+  docChecksum: e009dbe81a6f028b179cacb10289b164
   docVersion: 0.0.1
   speakeasyVersion: 1.531.5
   generationVersion: 2.570.4
-  releaseVersion: 0.3.1
-  configChecksum: cccfcbfce8985e0003705494d6fded28
+  releaseVersion: 0.4.4
+  configChecksum: c64566958471ccc5ee8d1c58126e8398
 features:
   typescript:
     additionalDependencies: 0.1.0
     core: 3.21.6
     defaultEnabledRetries: 0.1.0
-    enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurity: 2.82.13
     globalSecurityCallbacks: 0.1.0
     globalServerURLs: 2.82.4
+    ignores: 2.81.1
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
     responseFormat: 0.2.3
     retries: 2.83.0
     sdkHooks: 0.2.0
-    uploadStreams: 0.1.0
 generatedFiles:
   - .gitattributes
   - .npmignore
@@ -31,110 +30,22 @@ generatedFiles:
   - RUNTIMES.md
   - USAGE.md
   - docs/lib/utils/retryconfig.md
-  - docs/models/components/addopenapiv3sourceresult.md
-  - docs/models/components/asset.md
-  - docs/models/components/createdeploymentrequestbody.md
-  - docs/models/components/createdeploymentresult.md
-  - docs/models/components/createenvironmentform.md
-  - docs/models/components/createkeyform.md
-  - docs/models/components/createtoolsetrequestbody.md
-  - docs/models/components/deployment.md
-  - docs/models/components/deploymentsummary.md
   - docs/models/components/environment.md
   - docs/models/components/environmententry.md
-  - docs/models/components/environmententryinput.md
-  - docs/models/components/getdeploymentresult.md
+  - docs/models/components/getinstanceresult.md
   - docs/models/components/httptooldefinition.md
-  - docs/models/components/inforesponsebody.md
-  - docs/models/components/instanceresult.md
-  - docs/models/components/key.md
-  - docs/models/components/kind.md
-  - docs/models/components/listdeploymentresult.md
-  - docs/models/components/listenvironmentsresult.md
-  - docs/models/components/listkeysresult.md
-  - docs/models/components/listtoolsetsresult.md
-  - docs/models/components/listtoolsresult.md
-  - docs/models/components/openapiv3deploymentasset.md
-  - docs/models/components/openapiv3deploymentassetform.md
-  - docs/models/components/organization.md
-  - docs/models/components/project.md
   - docs/models/components/security.md
-  - docs/models/components/toolsetdetails.md
-  - docs/models/components/updateenvironmentrequestbody.md
-  - docs/models/components/updatetoolsetrequestbody.md
-  - docs/models/components/uploadopenapiv3result.md
-  - docs/models/operations/assetsnumberuploadopenapiv3request.md
-  - docs/models/operations/authnumbercallbackrequest.md
-  - docs/models/operations/authnumbercallbackresponse.md
-  - docs/models/operations/authnumberinforequest.md
-  - docs/models/operations/authnumberinforesponse.md
-  - docs/models/operations/authnumberinfosecurity.md
-  - docs/models/operations/authnumberlogoutrequest.md
-  - docs/models/operations/authnumberlogoutresponse.md
-  - docs/models/operations/authnumberlogoutsecurity.md
-  - docs/models/operations/authnumberswitchscopesrequest.md
-  - docs/models/operations/authnumberswitchscopesresponse.md
-  - docs/models/operations/authnumberswitchscopessecurity.md
-  - docs/models/operations/deploymentsnumberaddopenapiv3sourcerequest.md
-  - docs/models/operations/deploymentsnumbercreatedeploymentrequest.md
-  - docs/models/operations/deploymentsnumbergetdeploymentrequest.md
-  - docs/models/operations/deploymentsnumberlistdeploymentsrequest.md
-  - docs/models/operations/environmentsnumbercreateenvironmentrequest.md
-  - docs/models/operations/environmentsnumberdeleteenvironmentrequest.md
-  - docs/models/operations/environmentsnumberlistenvironmentsrequest.md
-  - docs/models/operations/environmentsnumberupdateenvironmentrequest.md
-  - docs/models/operations/instancesnumberloadinstancerequest.md
-  - docs/models/operations/instancesnumberloadinstancesecurity.md
-  - docs/models/operations/instancesnumberloadinstancesecurityoption1.md
-  - docs/models/operations/instancesnumberloadinstancesecurityoption2.md
-  - docs/models/operations/keysnumbercreatekeyrequest.md
-  - docs/models/operations/keysnumbercreatekeysecurity.md
-  - docs/models/operations/keysnumberlistkeysrequest.md
-  - docs/models/operations/keysnumberlistkeyssecurity.md
-  - docs/models/operations/keysnumberrevokekeyrequest.md
-  - docs/models/operations/keysnumberrevokekeysecurity.md
-  - docs/models/operations/toolsetsnumbercreatetoolsetrequest.md
-  - docs/models/operations/toolsetsnumberdeletetoolsetrequest.md
-  - docs/models/operations/toolsetsnumbergettoolsetdetailsrequest.md
-  - docs/models/operations/toolsetsnumberlisttoolsetsrequest.md
-  - docs/models/operations/toolsetsnumberupdatetoolsetrequest.md
-  - docs/models/operations/toolsnumberlisttoolsrequest.md
-  - docs/sdks/assets/README.md
-  - docs/sdks/auth/README.md
-  - docs/sdks/deployments/README.md
-  - docs/sdks/environments/README.md
+  - docs/models/operations/getinstancerequest.md
+  - docs/models/operations/getinstancesecurity.md
+  - docs/models/operations/getinstancesecurityoption1.md
+  - docs/models/operations/getinstancesecurityoption2.md
   - docs/sdks/gramapi/README.md
   - docs/sdks/instances/README.md
-  - docs/sdks/keys/README.md
-  - docs/sdks/tools/README.md
-  - docs/sdks/toolsets/README.md
   - eslint.config.mjs
   - jsr.json
   - package.json
   - src/core.ts
-  - src/funcs/assetsUploadOpenAPIv3.ts
-  - src/funcs/authCallback.ts
-  - src/funcs/authInfo.ts
-  - src/funcs/authLogout.ts
-  - src/funcs/authSwitchScopes.ts
-  - src/funcs/deploymentsAddOpenAPIv3Source.ts
-  - src/funcs/deploymentsCreate.ts
-  - src/funcs/deploymentsGetById.ts
-  - src/funcs/deploymentsList.ts
-  - src/funcs/environmentsCreate.ts
-  - src/funcs/environmentsDeleteBySlug.ts
-  - src/funcs/environmentsList.ts
-  - src/funcs/environmentsUpdateBySlug.ts
-  - src/funcs/instancesLoad.ts
-  - src/funcs/keysCreate.ts
-  - src/funcs/keysList.ts
-  - src/funcs/keysRevokeById.ts
-  - src/funcs/toolsList.ts
-  - src/funcs/toolsetsCreate.ts
-  - src/funcs/toolsetsDeleteBySlug.ts
-  - src/funcs/toolsetsGetById.ts
-  - src/funcs/toolsetsList.ts
-  - src/funcs/toolsetsUpdateBySlug.ts
+  - src/funcs/instancesGetBySlug.ts
   - src/hooks/hooks.ts
   - src/hooks/index.ts
   - src/hooks/types.ts
@@ -154,76 +65,21 @@ generatedFiles:
   - src/lib/sdks.ts
   - src/lib/security.ts
   - src/lib/url.ts
-  - src/models/components/addopenapiv3sourceresult.ts
-  - src/models/components/asset.ts
-  - src/models/components/createdeploymentrequestbody.ts
-  - src/models/components/createdeploymentresult.ts
-  - src/models/components/createenvironmentform.ts
-  - src/models/components/createkeyform.ts
-  - src/models/components/createtoolsetrequestbody.ts
-  - src/models/components/deployment.ts
-  - src/models/components/deploymentsummary.ts
   - src/models/components/environment.ts
   - src/models/components/environmententry.ts
-  - src/models/components/environmententryinput.ts
-  - src/models/components/getdeploymentresult.ts
+  - src/models/components/getinstanceresult.ts
   - src/models/components/httptooldefinition.ts
   - src/models/components/index.ts
-  - src/models/components/inforesponsebody.ts
-  - src/models/components/instanceresult.ts
-  - src/models/components/key.ts
-  - src/models/components/listdeploymentresult.ts
-  - src/models/components/listenvironmentsresult.ts
-  - src/models/components/listkeysresult.ts
-  - src/models/components/listtoolsetsresult.ts
-  - src/models/components/listtoolsresult.ts
-  - src/models/components/openapiv3deploymentasset.ts
-  - src/models/components/openapiv3deploymentassetform.ts
-  - src/models/components/organization.ts
-  - src/models/components/project.ts
   - src/models/components/security.ts
-  - src/models/components/toolsetdetails.ts
-  - src/models/components/updateenvironmentrequestbody.ts
-  - src/models/components/updatetoolsetrequestbody.ts
-  - src/models/components/uploadopenapiv3result.ts
   - src/models/errors/apierror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
   - src/models/errors/sdkvalidationerror.ts
-  - src/models/operations/assetsnumberuploadopenapiv3.ts
-  - src/models/operations/authnumbercallback.ts
-  - src/models/operations/authnumberinfo.ts
-  - src/models/operations/authnumberlogout.ts
-  - src/models/operations/authnumberswitchscopes.ts
-  - src/models/operations/deploymentsnumberaddopenapiv3source.ts
-  - src/models/operations/deploymentsnumbercreatedeployment.ts
-  - src/models/operations/deploymentsnumbergetdeployment.ts
-  - src/models/operations/deploymentsnumberlistdeployments.ts
-  - src/models/operations/environmentsnumbercreateenvironment.ts
-  - src/models/operations/environmentsnumberdeleteenvironment.ts
-  - src/models/operations/environmentsnumberlistenvironments.ts
-  - src/models/operations/environmentsnumberupdateenvironment.ts
+  - src/models/operations/getinstance.ts
   - src/models/operations/index.ts
-  - src/models/operations/instancesnumberloadinstance.ts
-  - src/models/operations/keysnumbercreatekey.ts
-  - src/models/operations/keysnumberlistkeys.ts
-  - src/models/operations/keysnumberrevokekey.ts
-  - src/models/operations/toolsetsnumbercreatetoolset.ts
-  - src/models/operations/toolsetsnumberdeletetoolset.ts
-  - src/models/operations/toolsetsnumbergettoolsetdetails.ts
-  - src/models/operations/toolsetsnumberlisttoolsets.ts
-  - src/models/operations/toolsetsnumberupdatetoolset.ts
-  - src/models/operations/toolsnumberlisttools.ts
-  - src/sdk/assets.ts
-  - src/sdk/auth.ts
-  - src/sdk/deployments.ts
-  - src/sdk/environments.ts
   - src/sdk/index.ts
   - src/sdk/instances.ts
-  - src/sdk/keys.ts
   - src/sdk/sdk.ts
-  - src/sdk/tools.ts
-  - src/sdk/toolsets.ts
   - src/types/async.ts
   - src/types/blobs.ts
   - src/types/constdatetime.ts
@@ -387,5 +243,23 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2023-10-11T13:18:21.498Z", "http_tools": [{"created_at": "2023-10-03T01:38:33.695Z", "deployment_id": "<id>", "description": "energetically under an pish", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Applications", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-28T13:20:29.259Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-06T02:30:28.396Z"}
+  loadInstance:
+    speakeasy-default-load-instance:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"environment": {"created_at": "2025-04-30T10:11:49.833Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-07-22T09:00:14.525Z"}, "name": "<value>", "tools": [{"created_at": "2025-04-27T15:39:41.657Z", "deployment_id": "<id>", "description": "qua ew whitewash", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Library", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2025-04-14T01:05:16.425Z"}, {"created_at": "2023-11-25T13:02:35.894Z", "deployment_id": "<id>", "description": "steeple randomize uh-huh heartfelt sweetly yippee rim shadowbox not specific", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/X11R6", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2025-06-11T15:26:29.539Z"}]}
+  getInstance:
+    speakeasy-default-get-instance:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"environment": {"created_at": "2025-09-06T15:47:55.334Z", "entries": [{"created_at": "2023-10-17T17:29:24.836Z", "name": "<value>", "updated_at": "2023-05-13T16:40:27.328Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-10T09:37:31.701Z"}, "name": "<value>", "tools": []}
 examplesVersion: 1.0.1
 generatedTests: {}

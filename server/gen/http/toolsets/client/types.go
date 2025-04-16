@@ -99,9 +99,9 @@ type UpdateToolsetResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// GetToolsetDetailsResponseBody is the type of the "toolsets" service
-// "getToolsetDetails" endpoint HTTP response body.
-type GetToolsetDetailsResponseBody struct {
+// GetToolsetResponseBody is the type of the "toolsets" service "getToolset"
+// endpoint HTTP response body.
+type GetToolsetResponseBody struct {
 	// The ID of the toolset
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this toolset belongs to
@@ -291,9 +291,9 @@ func NewUpdateToolsetToolsetDetailsOK(body *UpdateToolsetResponseBody) *toolsets
 	return v
 }
 
-// NewGetToolsetDetailsToolsetDetailsOK builds a "toolsets" service
-// "getToolsetDetails" endpoint result from a HTTP "OK" response.
-func NewGetToolsetDetailsToolsetDetailsOK(body *GetToolsetDetailsResponseBody) *toolsets.ToolsetDetails {
+// NewGetToolsetToolsetDetailsOK builds a "toolsets" service "getToolset"
+// endpoint result from a HTTP "OK" response.
+func NewGetToolsetToolsetDetailsOK(body *GetToolsetResponseBody) *toolsets.ToolsetDetails {
 	v := &toolsets.ToolsetDetails{
 		ID:                     *body.ID,
 		ProjectID:              *body.ProjectID,
@@ -421,9 +421,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	return
 }
 
-// ValidateGetToolsetDetailsResponseBody runs the validations defined on
-// GetToolsetDetailsResponseBody
-func ValidateGetToolsetDetailsResponseBody(body *GetToolsetDetailsResponseBody) (err error) {
+// ValidateGetToolsetResponseBody runs the validations defined on
+// GetToolsetResponseBody
+func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

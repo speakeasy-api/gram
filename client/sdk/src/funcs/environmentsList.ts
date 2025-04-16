@@ -32,7 +32,7 @@ import { Result } from "../types/fp.js";
  */
 export function environmentsList(
   client: GramCore,
-  request?: operations.EnvironmentsNumberListEnvironmentsRequest | undefined,
+  request?: operations.ListEnvironmentsRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -55,7 +55,7 @@ export function environmentsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.EnvironmentsNumberListEnvironmentsRequest | undefined,
+  request?: operations.ListEnvironmentsRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -75,8 +75,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.EnvironmentsNumberListEnvironmentsRequest$outboundSchema
-        .optional().parse(value),
+      operations.ListEnvironmentsRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -104,7 +103,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "environments#listEnvironments",
+    operationID: "listEnvironments",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,

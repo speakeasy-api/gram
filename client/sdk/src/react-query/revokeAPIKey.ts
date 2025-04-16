@@ -17,8 +17,8 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeAPIKeyMutationVariables = {
-  security: operations.KeysNumberRevokeKeySecurity;
-  request: operations.KeysNumberRevokeKeyRequest;
+  security: operations.RevokeAPIKeySecurity;
+  request: operations.RevokeAPIKeyRequest;
   options?: RequestOptions;
 };
 

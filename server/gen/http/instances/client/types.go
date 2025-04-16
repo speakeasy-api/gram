@@ -12,9 +12,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// LoadInstanceResponseBody is the type of the "instances" service
-// "loadInstance" endpoint HTTP response body.
-type LoadInstanceResponseBody struct {
+// GetInstanceResponseBody is the type of the "instances" service "getInstance"
+// endpoint HTTP response body.
+type GetInstanceResponseBody struct {
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The description of the toolset
@@ -98,10 +98,10 @@ type EnvironmentEntryResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// NewLoadInstanceInstanceResultOK builds a "instances" service "loadInstance"
-// endpoint result from a HTTP "OK" response.
-func NewLoadInstanceInstanceResultOK(body *LoadInstanceResponseBody) *instances.InstanceResult {
-	v := &instances.InstanceResult{
+// NewGetInstanceResultOK builds a "instances" service "getInstance" endpoint
+// result from a HTTP "OK" response.
+func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanceResult {
+	v := &instances.GetInstanceResult{
 		Name:        *body.Name,
 		Description: body.Description,
 	}
@@ -120,9 +120,9 @@ func NewLoadInstanceInstanceResultOK(body *LoadInstanceResponseBody) *instances.
 	return v
 }
 
-// ValidateLoadInstanceResponseBody runs the validations defined on
-// LoadInstanceResponseBody
-func ValidateLoadInstanceResponseBody(body *LoadInstanceResponseBody) (err error) {
+// ValidateGetInstanceResponseBody runs the validations defined on
+// GetInstanceResponseBody
+func ValidateGetInstanceResponseBody(body *GetInstanceResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

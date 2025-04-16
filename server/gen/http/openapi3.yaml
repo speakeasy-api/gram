@@ -10,7 +10,7 @@ paths:
     /rpc/assets.uploadOpenAPIv3:
         post:
             description: Upload an OpenAPI v3 document to Gram.
-            operationId: assets#uploadOpenAPIv3
+            operationId: uploadOpenAPIv3Asset
             parameters:
                 - allowEmptyValue: true
                   in: header
@@ -58,7 +58,7 @@ paths:
     /rpc/auth.callback:
         get:
             description: Handles the authentication callback.
-            operationId: auth#callback
+            operationId: authCallback
             parameters:
                 - allowEmptyValue: true
                   description: The shared token for authentication from the speakeasy system
@@ -96,7 +96,7 @@ paths:
     /rpc/auth.info:
         get:
             description: Provides information about the current authentication status.
-            operationId: auth#info
+            operationId: sessionInfo
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -134,7 +134,7 @@ paths:
     /rpc/auth.logout:
         get:
             description: Logs out the current user by clearing their session.
-            operationId: auth#logout
+            operationId: logout
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -163,7 +163,7 @@ paths:
     /rpc/auth.switchScopes:
         post:
             description: Switches the authentication scope to a different organization.
-            operationId: auth#switchScopes
+            operationId: switchAuthScopes
             parameters:
                 - allowEmptyValue: true
                   description: The organization slug to switch scopes
@@ -211,7 +211,7 @@ paths:
     /rpc/deployments.addOpenAPIv3Source:
         post:
             description: Create a new deployment with an additional OpenAPI 3.x document.
-            operationId: deployments#addOpenAPIv3Source
+            operationId: addOpenAPIv3ToDeployment
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -252,7 +252,7 @@ paths:
     /rpc/deployments.create:
         post:
             description: Create a deployment to load tool definitions.
-            operationId: deployments#createDeployment
+            operationId: createDeployment
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -303,7 +303,7 @@ paths:
     /rpc/deployments.get:
         get:
             description: Create a deployment to load tool definitions.
-            operationId: deployments#getDeployment
+            operationId: getDeployment
             parameters:
                 - allowEmptyValue: true
                   description: The ID of the deployment
@@ -346,7 +346,7 @@ paths:
     /rpc/deployments.list:
         get:
             description: List all deployments in descending order of creation.
-            operationId: deployments#listDeployments
+            operationId: listDeployments
             parameters:
                 - allowEmptyValue: true
                   description: The cursor to fetch results from
@@ -388,7 +388,7 @@ paths:
     /rpc/environments.create:
         post:
             description: Create a new environment
-            operationId: environments#createEnvironment
+            operationId: createEnvironment
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -429,7 +429,7 @@ paths:
     /rpc/environments.delete/{slug}:
         delete:
             description: Delete an environment
-            operationId: environments#deleteEnvironment
+            operationId: deleteEnvironment
             parameters:
                 - description: The slug of the environment to delete
                   in: path
@@ -467,7 +467,7 @@ paths:
     /rpc/environments.list:
         get:
             description: List all environments for an organization
-            operationId: environments#listEnvironments
+            operationId: listEnvironments
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -502,7 +502,7 @@ paths:
     /rpc/environments.update/{slug}:
         post:
             description: Update an environment
-            operationId: environments#updateEnvironment
+            operationId: updateEnvironment
             parameters:
                 - description: The slug of the environment to update
                   in: path
@@ -547,10 +547,10 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateEnvironment
-    /rpc/instances.load:
+    /rpc/instances.get:
         get:
-            description: load all relevant data for an instance of a toolset and environment
-            operationId: instances#loadInstance
+            description: Load all relevant data for an instance of a toolset and environment
+            operationId: getInstance
             parameters:
                 - allowEmptyValue: true
                   description: The slug of the toolset to load
@@ -593,23 +593,23 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/InstanceResult'
+                                $ref: '#/components/schemas/GetInstanceResult'
                     description: OK response.
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: loadInstance instances
+            summary: getInstance instances
             tags:
                 - instances
-            x-speakeasy-name-override: load
+            x-speakeasy-name-override: getBySlug
             x-speakeasy-react-hook:
-                name: LoadInstance
+                name: Instance
     /rpc/keys.create:
         post:
             description: Create a new api key
-            operationId: keys#createKey
+            operationId: createAPIKey
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -642,7 +642,7 @@ paths:
     /rpc/keys.list:
         get:
             description: List all api keys for an organization
-            operationId: keys#listKeys
+            operationId: listAPIKeys
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -669,7 +669,7 @@ paths:
     /rpc/keys.revoke/{id}:
         delete:
             description: Revoke a api key
-            operationId: keys#revokeKey
+            operationId: revokeAPIKey
             parameters:
                 - description: The ID of the key to revoke
                   in: path
@@ -699,7 +699,7 @@ paths:
     /rpc/tools.list:
         get:
             description: List all tools for a project
-            operationId: tools#listTools
+            operationId: listTools
             parameters:
                 - allowEmptyValue: true
                   description: The cursor to fetch results from
@@ -741,7 +741,7 @@ paths:
     /rpc/toolsets.create:
         post:
             description: Create a new toolset with associated tools
-            operationId: toolsets#createToolset
+            operationId: createToolset
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -782,7 +782,7 @@ paths:
     /rpc/toolsets.delete/{slug}:
         delete:
             description: Delete a toolset by its ID
-            operationId: toolsets#deleteToolset
+            operationId: deleteToolset
             parameters:
                 - description: The slug of the toolset
                   in: path
@@ -817,13 +817,14 @@ paths:
             x-speakeasy-name-override: deleteBySlug
             x-speakeasy-react-hook:
                 name: DeleteToolset
-    /rpc/toolsets.get/{slug}:
+    /rpc/toolsets.get:
         get:
             description: Get detailed information about a toolset including full HTTP tool definitions
-            operationId: toolsets#getToolsetDetails
+            operationId: getToolset
             parameters:
-                - description: The slug of the toolset
-                  in: path
+                - allowEmptyValue: true
+                  description: The slug of the toolset
+                  in: query
                   name: slug
                   required: true
                   schema:
@@ -853,16 +854,16 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: getToolsetDetails toolsets
+            summary: getToolset toolsets
             tags:
                 - toolsets
-            x-speakeasy-name-override: getById
+            x-speakeasy-name-override: getBySlug
             x-speakeasy-react-hook:
                 name: Toolset
     /rpc/toolsets.list:
         get:
             description: List all toolsets for a project
-            operationId: toolsets#listToolsets
+            operationId: listToolsets
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -897,7 +898,7 @@ paths:
     /rpc/toolsets.update/{slug}:
         post:
             description: Update a toolset's properties including name, description, and HTTP tools
-            operationId: toolsets#updateToolset
+            operationId: updateToolset
             parameters:
                 - description: The slug of the toolset to update
                   in: path
@@ -1369,6 +1370,48 @@ components:
                 - user_id
                 - openapiv3_assets
                 - status
+        GetInstanceForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                environment_slug:
+                    type: string
+                    description: The slug of the environment to load
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+                toolset_slug:
+                    type: string
+                    description: The slug of the toolset to load
+            required:
+                - toolset_slug
+        GetInstanceResult:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: The description of the toolset
+                environment:
+                    $ref: '#/components/schemas/Environment'
+                name:
+                    type: string
+                    description: The name of the toolset
+                relevant_environment_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables that are relevant to the toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HTTPToolDefinition'
+                    description: The list of tools
+            required:
+                - name
+                - tools
+                - environment
         HTTPToolDefinition:
             type: object
             properties:
@@ -1455,31 +1498,6 @@ components:
                 - user_email
                 - active_organization_id
                 - organizations
-        InstanceResult:
-            type: object
-            properties:
-                description:
-                    type: string
-                    description: The description of the toolset
-                environment:
-                    $ref: '#/components/schemas/Environment'
-                name:
-                    type: string
-                    description: The name of the toolset
-                relevant_environment_variables:
-                    type: array
-                    items:
-                        type: string
-                    description: The environment variables that are relevant to the toolset
-                tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The list of tools
-            required:
-                - name
-                - tools
-                - environment
         Key:
             type: object
             properties:

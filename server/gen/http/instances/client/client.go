@@ -17,9 +17,9 @@ import (
 
 // Client lists the instances service endpoint HTTP clients.
 type Client struct {
-	// LoadInstance Doer is the HTTP client used to make requests to the
-	// loadInstance endpoint.
-	LoadInstanceDoer goahttp.Doer
+	// GetInstance Doer is the HTTP client used to make requests to the getInstance
+	// endpoint.
+	GetInstanceDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -41,7 +41,7 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoadInstanceDoer:    doer,
+		GetInstanceDoer:     doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -50,15 +50,15 @@ func NewClient(
 	}
 }
 
-// LoadInstance returns an endpoint that makes HTTP requests to the instances
-// service loadInstance server.
-func (c *Client) LoadInstance() goa.Endpoint {
+// GetInstance returns an endpoint that makes HTTP requests to the instances
+// service getInstance server.
+func (c *Client) GetInstance() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeLoadInstanceRequest(c.encoder)
-		decodeResponse = DecodeLoadInstanceResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetInstanceRequest(c.encoder)
+		decodeResponse = DecodeGetInstanceResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildLoadInstanceRequest(ctx, v)
+		req, err := c.BuildGetInstanceRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -66,9 +66,9 @@ func (c *Client) LoadInstance() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.LoadInstanceDoer.Do(req)
+		resp, err := c.GetInstanceDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("instances", "loadInstance", err)
+			return nil, goahttp.ErrRequestError("instances", "getInstance", err)
 		}
 		return decodeResponse(resp)
 	}

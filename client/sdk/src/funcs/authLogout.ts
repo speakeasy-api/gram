@@ -31,12 +31,12 @@ import { Result } from "../types/fp.js";
  */
 export function authLogout(
   client: GramCore,
-  security: operations.AuthNumberLogoutSecurity,
-  request?: operations.AuthNumberLogoutRequest | undefined,
+  security: operations.LogoutSecurity,
+  request?: operations.LogoutRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.AuthNumberLogoutResponse | undefined,
+    operations.LogoutResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -56,13 +56,13 @@ export function authLogout(
 
 async function $do(
   client: GramCore,
-  security: operations.AuthNumberLogoutSecurity,
-  request?: operations.AuthNumberLogoutRequest | undefined,
+  security: operations.LogoutSecurity,
+  request?: operations.LogoutRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.AuthNumberLogoutResponse | undefined,
+      operations.LogoutResponse | undefined,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -76,8 +76,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.AuthNumberLogoutRequest$outboundSchema.optional().parse(value),
+    (value) => operations.LogoutRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,7 +107,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "auth#logout",
+    operationID: "logout",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -150,7 +149,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.AuthNumberLogoutResponse | undefined,
+    operations.LogoutResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -159,7 +158,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.nil(200, operations.AuthNumberLogoutResponse$inboundSchema.optional(), {
+    M.nil(200, operations.LogoutResponse$inboundSchema.optional(), {
       hdrs: true,
     }),
     M.fail("4XX"),

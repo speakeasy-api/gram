@@ -15,21 +15,21 @@ import (
 
 // Client is the "toolsets" service client.
 type Client struct {
-	CreateToolsetEndpoint     goa.Endpoint
-	ListToolsetsEndpoint      goa.Endpoint
-	UpdateToolsetEndpoint     goa.Endpoint
-	DeleteToolsetEndpoint     goa.Endpoint
-	GetToolsetDetailsEndpoint goa.Endpoint
+	CreateToolsetEndpoint goa.Endpoint
+	ListToolsetsEndpoint  goa.Endpoint
+	UpdateToolsetEndpoint goa.Endpoint
+	DeleteToolsetEndpoint goa.Endpoint
+	GetToolsetEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolsetDetails goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset goa.Endpoint) *Client {
 	return &Client{
-		CreateToolsetEndpoint:     createToolset,
-		ListToolsetsEndpoint:      listToolsets,
-		UpdateToolsetEndpoint:     updateToolset,
-		DeleteToolsetEndpoint:     deleteToolset,
-		GetToolsetDetailsEndpoint: getToolsetDetails,
+		CreateToolsetEndpoint: createToolset,
+		ListToolsetsEndpoint:  listToolsets,
+		UpdateToolsetEndpoint: updateToolset,
+		DeleteToolsetEndpoint: deleteToolset,
+		GetToolsetEndpoint:    getToolset,
 	}
 }
 
@@ -69,11 +69,10 @@ func (c *Client) DeleteToolset(ctx context.Context, p *DeleteToolsetPayload) (er
 	return
 }
 
-// GetToolsetDetails calls the "getToolsetDetails" endpoint of the "toolsets"
-// service.
-func (c *Client) GetToolsetDetails(ctx context.Context, p *GetToolsetDetailsPayload) (res *ToolsetDetails, err error) {
+// GetToolset calls the "getToolset" endpoint of the "toolsets" service.
+func (c *Client) GetToolset(ctx context.Context, p *GetToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
-	ires, err = c.GetToolsetDetailsEndpoint(ctx, p)
+	ires, err = c.GetToolsetEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

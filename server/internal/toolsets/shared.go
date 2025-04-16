@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
 	"github.com/speakeasy-api/gram/internal/conv"
-	tools_repo "github.com/speakeasy-api/gram/internal/tools/repo"
+	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/tools/security"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
@@ -18,13 +18,13 @@ import (
 // Shared service for aggregating toolset details
 type Toolsets struct {
 	repo     *repo.Queries
-	toolRepo *tools_repo.Queries
+	toolRepo *toolsRepo.Queries
 }
 
 func NewToolsets(db *pgxpool.Pool) *Toolsets {
 	return &Toolsets{
 		repo:     repo.New(db),
-		toolRepo: tools_repo.New(db),
+		toolRepo: toolsRepo.New(db),
 	}
 }
 
@@ -135,12 +135,12 @@ func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []
 }
 
 type HTTPToolExecutionInfo struct {
-	Tool     tools_repo.HttpToolDefinition
+	Tool     toolsRepo.HttpToolDefinition
 	Security []repo.HttpSecurity
 }
 
 func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
-	tool, err := t.toolRepo.GetHTTPToolDefinitionByID(ctx, tools_repo.GetHTTPToolDefinitionByIDParams{
+	tool, err := t.toolRepo.GetHTTPToolDefinitionByID(ctx, toolsRepo.GetHTTPToolDefinitionByIDParams{
 		ID:        id,
 		ProjectID: projectID,
 	})

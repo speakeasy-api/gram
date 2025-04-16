@@ -7,6 +7,20 @@ sources:
         tags:
             - latest
             - 0.0.1
+    Gram Internal:
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:cd062416b66be99a917680f1d500e3628ce88648b4678273e9ab5b560b35be54
+        sourceBlobDigest: sha256:a124d135783fabdc12e70daa9ad4034b94d679ccddca4994053ae1d3474dbb6b
+        tags:
+            - latest
+            - 0.0.1
+    Gram Public:
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:abfab1aeb4df53935b66a27ee7371adcfb120586b45ff190e5454e7f92ba57a7
+        sourceBlobDigest: sha256:c00f117fdee5ab6b1aa1c922547d446950f37ecadc4394f3b6fbeb6f6c4a8e8c
+        tags:
+            - latest
+            - 0.0.1
     gram-api:
         sourceNamespace: gram-api-description
         sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
@@ -23,32 +37,40 @@ targets:
         codeSamplesNamespace: gram-api-description-typescript-code-samples
         codeSamplesRevisionDigest: sha256:8eb8d7950761e56bc70b4069b7a5b716ef287e35c48511d34d01c14689fab6a2
     gram-internal:
-        source: Gram API Description
+        source: Gram Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:2f96b6673b7806a0758477a8e2fe99fb6677f9656e36e04b946bed0338253b8b
-        sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
+        sourceRevisionDigest: sha256:cd062416b66be99a917680f1d500e3628ce88648b4678273e9ab5b560b35be54
+        sourceBlobDigest: sha256:a124d135783fabdc12e70daa9ad4034b94d679ccddca4994053ae1d3474dbb6b
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:1f85a26467e7acd07c32f5448201787f83825a799e1ebf0e4f9712fb9688c426
+        codeSamplesRevisionDigest: sha256:aa1313d2467d07d2f71c7043eb02699e4669e50905e6ae44e6df0c17324810be
     gram-public:
-        source: Gram API Description
+        source: Gram Public
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:1c2dfd934c12c4986896cb48e0e93a5e3ed51b520dfda87bba306777e47d0dd0
-        sourceBlobDigest: sha256:7fc47974f4b47f10d4080e4a445615b61afda799cebe5163cf9a685163b40ec6
+        sourceRevisionDigest: sha256:abfab1aeb4df53935b66a27ee7371adcfb120586b45ff190e5454e7f92ba57a7
+        sourceBlobDigest: sha256:c00f117fdee5ab6b1aa1c922547d446950f37ecadc4394f3b6fbeb6f6c4a8e8c
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest
     sources:
-        Gram API Description:
+        Gram Internal:
             inputs:
                 - location: server/gen/http/openapi3.yaml
             overlays:
                 - location: overlays/goa.yaml
             registry:
                 location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
+        Gram Public:
+            inputs:
+                - location: server/gen/http/openapi3.yaml
+            overlays:
+                - location: overlays/goa.yaml
+                - location: overlays/public-sdk.yaml
+            registry:
+                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
     targets:
         gram-internal:
             target: typescript
-            source: Gram API Description
+            source: Gram Internal
             output: client/sdk
             codeSamples:
                 registry:
@@ -58,5 +80,5 @@ workflow:
                 blocking: false
         gram-public:
             target: typescript
-            source: Gram API Description
+            source: Gram Public
             output: sdks/typescript

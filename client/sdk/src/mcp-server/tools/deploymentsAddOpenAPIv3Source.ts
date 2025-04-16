@@ -7,7 +7,7 @@ import * as operations from "../../models/operations/index.js";
 import { formatResult, ToolDefinition } from "../tools.js";
 
 const args = {
-  request: operations.DeploymentsNumberAddOpenAPIv3SourceRequest$inboundSchema,
+  request: operations.AddOpenAPIv3ToDeploymentRequest$inboundSchema,
 };
 
 export const tool$deploymentsAddOpenAPIv3Source: ToolDefinition<typeof args> = {

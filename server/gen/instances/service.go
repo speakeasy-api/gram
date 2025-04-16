@@ -16,8 +16,8 @@ import (
 // Consumer APIs for interacting with all relevant data for an instance of a
 // toolset and environment.
 type Service interface {
-	// load all relevant data for an instance of a toolset and environment
-	LoadInstance(context.Context, *LoadInstancePayload) (res *InstanceResult, err error)
+	// Load all relevant data for an instance of a toolset and environment
+	GetInstance(context.Context, *GetInstanceForm) (res *GetInstanceResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -40,7 +40,7 @@ const ServiceName = "instances"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"loadInstance"}
+var MethodNames = [1]string{"getInstance"}
 
 // Model representing an environment
 type Environment struct {
@@ -76,6 +76,33 @@ type EnvironmentEntry struct {
 	UpdatedAt string
 }
 
+// GetInstanceForm is the payload type of the instances service getInstance
+// method.
+type GetInstanceForm struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The slug of the toolset to load
+	ToolsetSlug string
+	// The slug of the environment to load
+	EnvironmentSlug *string
+}
+
+// GetInstanceResult is the result type of the instances service getInstance
+// method.
+type GetInstanceResult struct {
+	// The name of the toolset
+	Name string
+	// The description of the toolset
+	Description *string
+	// The list of tools
+	Tools []*HTTPToolDefinition
+	// The environment variables that are relevant to the toolset
+	RelevantEnvironmentVariables []string
+	// The environment
+	Environment *Environment
+}
+
 type HTTPToolDefinition struct {
 	// The ID of the HTTP tool
 	ID string
@@ -109,31 +136,4 @@ type HTTPToolDefinition struct {
 	CreatedAt string
 	// The last update date of the tool.
 	UpdatedAt string
-}
-
-// InstanceResult is the result type of the instances service loadInstance
-// method.
-type InstanceResult struct {
-	// The name of the toolset
-	Name string
-	// The description of the toolset
-	Description *string
-	// The list of tools
-	Tools []*HTTPToolDefinition
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string
-	// The environment
-	Environment *Environment
-}
-
-// LoadInstancePayload is the payload type of the instances service
-// loadInstance method.
-type LoadInstancePayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// The slug of the toolset to load
-	ToolsetSlug string
-	// The slug of the environment to load
-	EnvironmentSlug *string
 }

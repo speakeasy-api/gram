@@ -33,9 +33,9 @@ type Client struct {
 	// deleteToolset endpoint.
 	DeleteToolsetDoer goahttp.Doer
 
-	// GetToolsetDetails Doer is the HTTP client used to make requests to the
-	// getToolsetDetails endpoint.
-	GetToolsetDetailsDoer goahttp.Doer
+	// GetToolset Doer is the HTTP client used to make requests to the getToolset
+	// endpoint.
+	GetToolsetDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -57,16 +57,16 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateToolsetDoer:     doer,
-		ListToolsetsDoer:      doer,
-		UpdateToolsetDoer:     doer,
-		DeleteToolsetDoer:     doer,
-		GetToolsetDetailsDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		CreateToolsetDoer:   doer,
+		ListToolsetsDoer:    doer,
+		UpdateToolsetDoer:   doer,
+		DeleteToolsetDoer:   doer,
+		GetToolsetDoer:      doer,
+		RestoreResponseBody: restoreBody,
+		scheme:              scheme,
+		host:                host,
+		decoder:             dec,
+		encoder:             enc,
 	}
 }
 
@@ -166,15 +166,15 @@ func (c *Client) DeleteToolset() goa.Endpoint {
 	}
 }
 
-// GetToolsetDetails returns an endpoint that makes HTTP requests to the
-// toolsets service getToolsetDetails server.
-func (c *Client) GetToolsetDetails() goa.Endpoint {
+// GetToolset returns an endpoint that makes HTTP requests to the toolsets
+// service getToolset server.
+func (c *Client) GetToolset() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetToolsetDetailsRequest(c.encoder)
-		decodeResponse = DecodeGetToolsetDetailsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetToolsetRequest(c.encoder)
+		decodeResponse = DecodeGetToolsetResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetToolsetDetailsRequest(ctx, v)
+		req, err := c.BuildGetToolsetRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -182,9 +182,9 @@ func (c *Client) GetToolsetDetails() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetToolsetDetailsDoer.Do(req)
+		resp, err := c.GetToolsetDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("toolsets", "getToolsetDetails", err)
+			return nil, goahttp.ErrRequestError("toolsets", "getToolset", err)
 		}
 		return decodeResponse(resp)
 	}

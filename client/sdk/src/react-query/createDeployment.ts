@@ -18,7 +18,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateDeploymentMutationVariables = {
-  request: operations.DeploymentsNumberCreateDeploymentRequest;
+  request: operations.CreateDeploymentRequest;
   options?: RequestOptions;
 };
 

@@ -4,7 +4,7 @@
 
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
-import { toolsetsGetById } from "../funcs/toolsetsGetById.js";
+import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -20,7 +20,7 @@ export class Toolsets extends ClientSDK {
    * Create a new toolset with associated tools
    */
   async create(
-    request: operations.ToolsetsNumberCreateToolsetRequest,
+    request: operations.CreateToolsetRequest,
     options?: RequestOptions,
   ): Promise<components.ToolsetDetails> {
     return unwrapAsync(toolsetsCreate(
@@ -37,7 +37,7 @@ export class Toolsets extends ClientSDK {
    * Delete a toolset by its ID
    */
   async deleteBySlug(
-    request: operations.ToolsetsNumberDeleteToolsetRequest,
+    request: operations.DeleteToolsetRequest,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(toolsetsDeleteBySlug(
@@ -48,16 +48,16 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
-   * getToolsetDetails toolsets
+   * getToolset toolsets
    *
    * @remarks
    * Get detailed information about a toolset including full HTTP tool definitions
    */
-  async getById(
-    request: operations.ToolsetsNumberGetToolsetDetailsRequest,
+  async getBySlug(
+    request: operations.GetToolsetRequest,
     options?: RequestOptions,
   ): Promise<components.ToolsetDetails> {
-    return unwrapAsync(toolsetsGetById(
+    return unwrapAsync(toolsetsGetBySlug(
       this,
       request,
       options,
@@ -71,7 +71,7 @@ export class Toolsets extends ClientSDK {
    * List all toolsets for a project
    */
   async list(
-    request?: operations.ToolsetsNumberListToolsetsRequest | undefined,
+    request?: operations.ListToolsetsRequest | undefined,
     options?: RequestOptions,
   ): Promise<components.ListToolsetsResult> {
     return unwrapAsync(toolsetsList(
@@ -88,7 +88,7 @@ export class Toolsets extends ClientSDK {
    * Update a toolset's properties including name, description, and HTTP tools
    */
   async updateBySlug(
-    request: operations.ToolsetsNumberUpdateToolsetRequest,
+    request: operations.UpdateToolsetRequest,
     options?: RequestOptions,
   ): Promise<components.ToolsetDetails> {
     return unwrapAsync(toolsetsUpdateBySlug(

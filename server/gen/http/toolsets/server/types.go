@@ -99,9 +99,9 @@ type UpdateToolsetResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// GetToolsetDetailsResponseBody is the type of the "toolsets" service
-// "getToolsetDetails" endpoint HTTP response body.
-type GetToolsetDetailsResponseBody struct {
+// GetToolsetResponseBody is the type of the "toolsets" service "getToolset"
+// endpoint HTTP response body.
+type GetToolsetResponseBody struct {
 	// The ID of the toolset
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this toolset belongs to
@@ -266,10 +266,10 @@ func NewUpdateToolsetResponseBody(res *toolsets.ToolsetDetails) *UpdateToolsetRe
 	return body
 }
 
-// NewGetToolsetDetailsResponseBody builds the HTTP response body from the
-// result of the "getToolsetDetails" endpoint of the "toolsets" service.
-func NewGetToolsetDetailsResponseBody(res *toolsets.ToolsetDetails) *GetToolsetDetailsResponseBody {
-	body := &GetToolsetDetailsResponseBody{
+// NewGetToolsetResponseBody builds the HTTP response body from the result of
+// the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetResponseBody(res *toolsets.ToolsetDetails) *GetToolsetResponseBody {
+	body := &GetToolsetResponseBody{
 		ID:                     res.ID,
 		ProjectID:              res.ProjectID,
 		OrganizationID:         res.OrganizationID,
@@ -359,10 +359,9 @@ func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput
 	return v
 }
 
-// NewGetToolsetDetailsPayload builds a toolsets service getToolsetDetails
-// endpoint payload.
-func NewGetToolsetDetailsPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.GetToolsetDetailsPayload {
-	v := &toolsets.GetToolsetDetailsPayload{}
+// NewGetToolsetPayload builds a toolsets service getToolset endpoint payload.
+func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
+	v := &toolsets.GetToolsetPayload{}
 	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

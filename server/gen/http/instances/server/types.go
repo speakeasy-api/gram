@@ -11,9 +11,9 @@ import (
 	instances "github.com/speakeasy-api/gram/gen/instances"
 )
 
-// LoadInstanceResponseBody is the type of the "instances" service
-// "loadInstance" endpoint HTTP response body.
-type LoadInstanceResponseBody struct {
+// GetInstanceResponseBody is the type of the "instances" service "getInstance"
+// endpoint HTTP response body.
+type GetInstanceResponseBody struct {
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
 	// The description of the toolset
@@ -97,10 +97,10 @@ type EnvironmentEntryResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// NewLoadInstanceResponseBody builds the HTTP response body from the result of
-// the "loadInstance" endpoint of the "instances" service.
-func NewLoadInstanceResponseBody(res *instances.InstanceResult) *LoadInstanceResponseBody {
-	body := &LoadInstanceResponseBody{
+// NewGetInstanceResponseBody builds the HTTP response body from the result of
+// the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceResponseBody {
+	body := &GetInstanceResponseBody{
 		Name:        res.Name,
 		Description: res.Description,
 	}
@@ -124,10 +124,9 @@ func NewLoadInstanceResponseBody(res *instances.InstanceResult) *LoadInstanceRes
 	return body
 }
 
-// NewLoadInstancePayload builds a instances service loadInstance endpoint
-// payload.
-func NewLoadInstancePayload(toolsetSlug string, environmentSlug *string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.LoadInstancePayload {
-	v := &instances.LoadInstancePayload{}
+// NewGetInstanceForm builds a instances service getInstance endpoint payload.
+func NewGetInstanceForm(toolsetSlug string, environmentSlug *string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
+	v := &instances.GetInstanceForm{}
 	v.ToolsetSlug = toolsetSlug
 	v.EnvironmentSlug = environmentSlug
 	v.SessionToken = sessionToken

@@ -7,7 +7,7 @@ import * as operations from "../../models/operations/index.js";
 import { formatResult, ToolDefinition } from "../tools.js";
 
 const args = {
-  request: operations.AssetsNumberUploadOpenAPIv3Request$inboundSchema,
+  request: operations.UploadOpenAPIv3AssetRequest$inboundSchema,
 };
 
 export const tool$assetsUploadOpenAPIv3: ToolDefinition<typeof args> = {

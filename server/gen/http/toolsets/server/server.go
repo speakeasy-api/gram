@@ -19,12 +19,12 @@ import (
 
 // Server lists the toolsets service endpoint HTTP handlers.
 type Server struct {
-	Mounts            []*MountPoint
-	CreateToolset     http.Handler
-	ListToolsets      http.Handler
-	UpdateToolset     http.Handler
-	DeleteToolset     http.Handler
-	GetToolsetDetails http.Handler
+	Mounts        []*MountPoint
+	CreateToolset http.Handler
+	ListToolsets  http.Handler
+	UpdateToolset http.Handler
+	DeleteToolset http.Handler
+	GetToolset    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -58,13 +58,13 @@ func New(
 			{"ListToolsets", "GET", "/rpc/toolsets.list"},
 			{"UpdateToolset", "POST", "/rpc/toolsets.update/{slug}"},
 			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete/{slug}"},
-			{"GetToolsetDetails", "GET", "/rpc/toolsets.get/{slug}"},
+			{"GetToolset", "GET", "/rpc/toolsets.get"},
 		},
-		CreateToolset:     NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
-		ListToolsets:      NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
-		UpdateToolset:     NewUpdateToolsetHandler(e.UpdateToolset, mux, decoder, encoder, errhandler, formatter),
-		DeleteToolset:     NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
-		GetToolsetDetails: NewGetToolsetDetailsHandler(e.GetToolsetDetails, mux, decoder, encoder, errhandler, formatter),
+		CreateToolset: NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
+		ListToolsets:  NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
+		UpdateToolset: NewUpdateToolsetHandler(e.UpdateToolset, mux, decoder, encoder, errhandler, formatter),
+		DeleteToolset: NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
+		GetToolset:    NewGetToolsetHandler(e.GetToolset, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -77,7 +77,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListToolsets = m(s.ListToolsets)
 	s.UpdateToolset = m(s.UpdateToolset)
 	s.DeleteToolset = m(s.DeleteToolset)
-	s.GetToolsetDetails = m(s.GetToolsetDetails)
+	s.GetToolset = m(s.GetToolset)
 }
 
 // MethodNames returns the methods served.
@@ -89,7 +89,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListToolsetsHandler(mux, h.ListToolsets)
 	MountUpdateToolsetHandler(mux, h.UpdateToolset)
 	MountDeleteToolsetHandler(mux, h.DeleteToolset)
-	MountGetToolsetDetailsHandler(mux, h.GetToolsetDetails)
+	MountGetToolsetHandler(mux, h.GetToolset)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -301,21 +301,21 @@ func NewDeleteToolsetHandler(
 	})
 }
 
-// MountGetToolsetDetailsHandler configures the mux to serve the "toolsets"
-// service "getToolsetDetails" endpoint.
-func MountGetToolsetDetailsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetToolsetHandler configures the mux to serve the "toolsets" service
+// "getToolset" endpoint.
+func MountGetToolsetHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/toolsets.get/{slug}", otelhttp.WithRouteTag("/rpc/toolsets.get/{slug}", f).ServeHTTP)
+	mux.Handle("GET", "/rpc/toolsets.get", otelhttp.WithRouteTag("/rpc/toolsets.get", f).ServeHTTP)
 }
 
-// NewGetToolsetDetailsHandler creates a HTTP handler which loads the HTTP
-// request and calls the "toolsets" service "getToolsetDetails" endpoint.
-func NewGetToolsetDetailsHandler(
+// NewGetToolsetHandler creates a HTTP handler which loads the HTTP request and
+// calls the "toolsets" service "getToolset" endpoint.
+func NewGetToolsetHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -324,13 +324,13 @@ func NewGetToolsetDetailsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGetToolsetDetailsRequest(mux, decoder)
-		encodeResponse = EncodeGetToolsetDetailsResponse(encoder)
+		decodeRequest  = DecodeGetToolsetRequest(mux, decoder)
+		encodeResponse = EncodeGetToolsetResponse(encoder)
 		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getToolsetDetails")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getToolset")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

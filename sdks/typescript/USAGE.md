@@ -1,19 +1,17 @@
 <!-- Start SDK Example Usage [usage] -->
 ```typescript
 import { GramAPI } from "@gram/sdk";
-import { openAsBlob } from "node:fs";
 
-const gramAPI = new GramAPI({
-  security: {
-    projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
-    sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
-  },
-});
+const gramAPI = new GramAPI();
 
 async function run() {
-  const result = await gramAPI.assets.uploadOpenAPIv3({
-    contentLength: 924456,
-    requestBody: await openAsBlob("example.file"),
+  const result = await gramAPI.instances.getBySlug({
+    option1: {
+      projectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+      sessionHeaderGramSession: "<YOUR_API_KEY_HERE>",
+    },
+  }, {
+    toolsetSlug: "<value>",
   });
 
   // Handle the result

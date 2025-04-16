@@ -7,11 +7,11 @@ Consumer APIs for interacting with all relevant data for an instance of a toolse
 
 ### Available Operations
 
-* [load](#load) - loadInstance instances
+* [getBySlug](#getbyslug) - getInstance instances
 
-## load
+## getBySlug
 
-load all relevant data for an instance of a toolset and environment
+Load all relevant data for an instance of a toolset and environment
 
 ### Example Usage
 
@@ -21,7 +21,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.instances.load({
+  const result = await gram.instances.getBySlug({
     option1: {
       projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
       sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
@@ -43,14 +43,14 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { instancesLoad } from "@gram/client/funcs/instancesLoad.js";
+import { instancesGetBySlug } from "@gram/client/funcs/instancesGetBySlug.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await instancesLoad(gram, {
+  const res = await instancesGetBySlug(gram, {
     option1: {
       projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
       sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
@@ -85,34 +85,34 @@ associated utilities.
 ```tsx
 import {
   // Query hooks for fetching data.
-  useLoadInstance,
-  useLoadInstanceSuspense,
+  useInstance,
+  useInstanceSuspense,
 
   // Utility for prefetching data during server-side rendering and in React
   // Server Components that will be immediately available to client components
   // using the hooks.
-  prefetchLoadInstance,
+  prefetchInstance,
   
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
-  invalidateLoadInstance,
-  invalidateAllLoadInstance,
-} from "@gram/client/react-query/instancesLoad.js";
+  invalidateInstance,
+  invalidateAllInstance,
+} from "@gram/client/react-query/instancesGetBySlug.js";
 ```
 
 ### Parameters
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.InstancesNumberLoadInstanceRequest](../../models/operations/instancesnumberloadinstancerequest.md)                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.InstancesNumberLoadInstanceSecurity](../../models/operations/instancesnumberloadinstancesecurity.md)                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `request`                                                                                                                                                                      | [operations.GetInstanceRequest](../../models/operations/getinstancerequest.md)                                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.GetInstanceSecurity](../../models/operations/getinstancesecurity.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[components.InstanceResult](../../models/components/instanceresult.md)\>**
+**Promise\<[components.GetInstanceResult](../../models/components/getinstanceresult.md)\>**
 
 ### Errors
 
