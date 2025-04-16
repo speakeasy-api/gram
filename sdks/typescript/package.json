@@ -1,6 +1,6 @@
 {
   "name": "@gram/sdk",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",

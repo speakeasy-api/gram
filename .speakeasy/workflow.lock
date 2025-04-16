@@ -9,15 +9,15 @@ sources:
             - 0.0.1
     Gram Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:cd062416b66be99a917680f1d500e3628ce88648b4678273e9ab5b560b35be54
-        sourceBlobDigest: sha256:a124d135783fabdc12e70daa9ad4034b94d679ccddca4994053ae1d3474dbb6b
+        sourceRevisionDigest: sha256:95b875f6e7e3df227a1cc598503575f519eb3e283bd4559f35f44620f83290bb
+        sourceBlobDigest: sha256:53e4bcafdf7c76fa2cdd9c7159e26a61aa33b2af82542f76c8877c7629b712f3
         tags:
             - latest
             - 0.0.1
     Gram Public:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:abfab1aeb4df53935b66a27ee7371adcfb120586b45ff190e5454e7f92ba57a7
-        sourceBlobDigest: sha256:c00f117fdee5ab6b1aa1c922547d446950f37ecadc4394f3b6fbeb6f6c4a8e8c
+        sourceRevisionDigest: sha256:b200d5698cd8182db17a9bd6a8ee03bd7cfee0b4ec32a7e7fa1afa892bd972c2
+        sourceBlobDigest: sha256:467ab43f1e19569613b1478f23db74348e6add29a3768d3863362375caa08c74
         tags:
             - latest
             - 0.0.1
@@ -39,15 +39,15 @@ targets:
     gram-internal:
         source: Gram Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:cd062416b66be99a917680f1d500e3628ce88648b4678273e9ab5b560b35be54
-        sourceBlobDigest: sha256:a124d135783fabdc12e70daa9ad4034b94d679ccddca4994053ae1d3474dbb6b
+        sourceRevisionDigest: sha256:95b875f6e7e3df227a1cc598503575f519eb3e283bd4559f35f44620f83290bb
+        sourceBlobDigest: sha256:53e4bcafdf7c76fa2cdd9c7159e26a61aa33b2af82542f76c8877c7629b712f3
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:aa1313d2467d07d2f71c7043eb02699e4669e50905e6ae44e6df0c17324810be
+        codeSamplesRevisionDigest: sha256:589897ef257143737caaf18970a218b6d67c6fc1c996ebb43237c81a34d53bbd
     gram-public:
         source: Gram Public
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:abfab1aeb4df53935b66a27ee7371adcfb120586b45ff190e5454e7f92ba57a7
-        sourceBlobDigest: sha256:c00f117fdee5ab6b1aa1c922547d446950f37ecadc4394f3b6fbeb6f6c4a8e8c
+        sourceRevisionDigest: sha256:b200d5698cd8182db17a9bd6a8ee03bd7cfee0b4ec32a7e7fa1afa892bd972c2
+        sourceBlobDigest: sha256:467ab43f1e19569613b1478f23db74348e6add29a3768d3863362375caa08c74
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest

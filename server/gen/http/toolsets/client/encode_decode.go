@@ -175,17 +175,7 @@ func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, re
 // BuildUpdateToolsetRequest instantiates a HTTP request object with method and
 // path set to call the "toolsets" service "updateToolset" endpoint
 func (c *Client) BuildUpdateToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
-	var (
-		slug string
-	)
-	{
-		p, ok := v.(*toolsets.UpdateToolsetPayload)
-		if !ok {
-			return nil, goahttp.ErrInvalidType("toolsets", "updateToolset", "*toolsets.UpdateToolsetPayload", v)
-		}
-		slug = p.Slug
-	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateToolsetToolsetsPath(slug)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateToolsetToolsetsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("toolsets", "updateToolset", u.String(), err)
@@ -213,6 +203,9 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("slug", p.Slug)
+		req.URL.RawQuery = values.Encode()
 		body := NewUpdateToolsetRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("toolsets", "updateToolset", err)
@@ -264,17 +257,7 @@ func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 // BuildDeleteToolsetRequest instantiates a HTTP request object with method and
 // path set to call the "toolsets" service "deleteToolset" endpoint
 func (c *Client) BuildDeleteToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
-	var (
-		slug string
-	)
-	{
-		p, ok := v.(*toolsets.DeleteToolsetPayload)
-		if !ok {
-			return nil, goahttp.ErrInvalidType("toolsets", "deleteToolset", "*toolsets.DeleteToolsetPayload", v)
-		}
-		slug = p.Slug
-	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteToolsetToolsetsPath(slug)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteToolsetToolsetsPath()}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("toolsets", "deleteToolset", u.String(), err)
@@ -302,6 +285,9 @@ func EncodeDeleteToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("slug", p.Slug)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

@@ -55,8 +55,8 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateEnvironment", "POST", "/rpc/environments.create"},
 			{"ListEnvironments", "GET", "/rpc/environments.list"},
-			{"UpdateEnvironment", "POST", "/rpc/environments.update/{slug}"},
-			{"DeleteEnvironment", "DELETE", "/rpc/environments.delete/{slug}"},
+			{"UpdateEnvironment", "POST", "/rpc/environments.update"},
+			{"DeleteEnvironment", "DELETE", "/rpc/environments.delete"},
 		},
 		CreateEnvironment: NewCreateEnvironmentHandler(e.CreateEnvironment, mux, decoder, encoder, errhandler, formatter),
 		ListEnvironments:  NewListEnvironmentsHandler(e.ListEnvironments, mux, decoder, encoder, errhandler, formatter),
@@ -203,7 +203,7 @@ func MountUpdateEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/environments.update/{slug}", otelhttp.WithRouteTag("/rpc/environments.update/{slug}", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/environments.update", otelhttp.WithRouteTag("/rpc/environments.update", f).ServeHTTP)
 }
 
 // NewUpdateEnvironmentHandler creates a HTTP handler which loads the HTTP
@@ -254,7 +254,7 @@ func MountDeleteEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/environments.delete/{slug}", otelhttp.WithRouteTag("/rpc/environments.delete/{slug}", f).ServeHTTP)
+	mux.Handle("DELETE", "/rpc/environments.delete", otelhttp.WithRouteTag("/rpc/environments.delete", f).ServeHTTP)
 }
 
 // NewDeleteEnvironmentHandler creates a HTTP handler which loads the HTTP

@@ -175,10 +175,11 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			slug             string
 			sessionToken     *string
 			projectSlugInput *string
-
-			params = mux.Vars(r)
 		)
-		slug = params["slug"]
+		slug = r.URL.Query().Get("slug")
+		if slug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -186,6 +187,9 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		projectSlugInputRaw := r.Header.Get("Gram-Project")
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return nil, err
 		}
 		payload := NewUpdateEnvironmentPayload(&body, slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
@@ -224,10 +228,12 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			slug             string
 			sessionToken     *string
 			projectSlugInput *string
-
-			params = mux.Vars(r)
+			err              error
 		)
-		slug = params["slug"]
+		slug = r.URL.Query().Get("slug")
+		if slug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -235,6 +241,9 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		projectSlugInputRaw := r.Header.Get("Gram-Project")
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return nil, err
 		}
 		payload := NewDeleteEnvironmentPayload(slug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {

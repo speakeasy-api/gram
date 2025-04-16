@@ -65,7 +65,7 @@ var _ = Service("toolsets", func() {
 
 		HTTP(func() {
 			Param("slug")
-			POST("/rpc/toolsets.update/{slug}")
+			POST("/rpc/toolsets.update")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -90,7 +90,7 @@ var _ = Service("toolsets", func() {
 			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()
-			DELETE("/rpc/toolsets.delete/{slug}")
+			DELETE("/rpc/toolsets.delete")
 			Response(StatusNoContent)
 		})
 

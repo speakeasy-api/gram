@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: b0c26d0ad0c91744121e15984f229faf
+  docChecksum: e08ab85e2d448b7ad26ffbeb7b7b13b0
   docVersion: 0.0.1
   speakeasyVersion: 1.531.5
   generationVersion: 2.570.4
-  releaseVersion: 0.8.1
-  configChecksum: 9aa1fe4744e28792a2b5197e21cac04f
+  releaseVersion: 0.8.2
+  configChecksum: 45795fbb035339ee4962b51f5cd128ab
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -511,6 +511,8 @@ examples:
       parameters:
         path:
           slug: "<value>"
+        query:
+          slug: "<value>"
         header: {}
   listEnvironments:
     speakeasy-default-list-environments:
@@ -521,6 +523,8 @@ examples:
     speakeasy-default-update-environment:
       parameters:
         path:
+          slug: "<value>"
+        query:
           slug: "<value>"
         header: {}
       requestBody:
@@ -554,6 +558,8 @@ examples:
       parameters:
         path:
           id: "<id>"
+        query:
+          id: "<id>"
         header: {}
   listTools:
     speakeasy-default-list-tools:
@@ -571,6 +577,8 @@ examples:
     speakeasy-default-delete-toolset:
       parameters:
         path:
+          slug: "<value>"
+        query:
           slug: "<value>"
         header: {}
   describeToolset:
@@ -591,6 +599,8 @@ examples:
     speakeasy-default-update-toolset:
       parameters:
         path:
+          slug: "<value>"
+        query:
           slug: "<value>"
         header: {}
       requestBody:

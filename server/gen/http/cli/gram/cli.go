@@ -65,8 +65,8 @@ func UsageExamples() string {
       "organization_id": "Earum consequatur officiis eum eum beatae."
    }' --session-token "Aspernatur inventore voluptatem." --project-slug-input "Magnam magni vero consequuntur quis est."` + "\n" +
 		os.Args[0] + ` keys create-key --body '{
-      "name": "Qui quisquam rerum odit distinctio accusantium."
-   }' --session-token "Ut minus."` + "\n" +
+      "name": "Eius pariatur."
+   }' --session-token "Sunt voluptas in."` + "\n" +
 		""
 }
 
@@ -141,12 +141,12 @@ func ParseEndpoint(
 
 		environmentsUpdateEnvironmentFlags                = flag.NewFlagSet("update-environment", flag.ExitOnError)
 		environmentsUpdateEnvironmentBodyFlag             = environmentsUpdateEnvironmentFlags.String("body", "REQUIRED", "")
-		environmentsUpdateEnvironmentSlugFlag             = environmentsUpdateEnvironmentFlags.String("slug", "REQUIRED", "The slug of the environment to update")
+		environmentsUpdateEnvironmentSlugFlag             = environmentsUpdateEnvironmentFlags.String("slug", "REQUIRED", "")
 		environmentsUpdateEnvironmentSessionTokenFlag     = environmentsUpdateEnvironmentFlags.String("session-token", "", "")
 		environmentsUpdateEnvironmentProjectSlugInputFlag = environmentsUpdateEnvironmentFlags.String("project-slug-input", "", "")
 
 		environmentsDeleteEnvironmentFlags                = flag.NewFlagSet("delete-environment", flag.ExitOnError)
-		environmentsDeleteEnvironmentSlugFlag             = environmentsDeleteEnvironmentFlags.String("slug", "REQUIRED", "The slug of the environment to delete")
+		environmentsDeleteEnvironmentSlugFlag             = environmentsDeleteEnvironmentFlags.String("slug", "REQUIRED", "")
 		environmentsDeleteEnvironmentSessionTokenFlag     = environmentsDeleteEnvironmentFlags.String("session-token", "", "")
 		environmentsDeleteEnvironmentProjectSlugInputFlag = environmentsDeleteEnvironmentFlags.String("project-slug-input", "", "")
 
@@ -160,7 +160,7 @@ func ParseEndpoint(
 		keysListKeysSessionTokenFlag = keysListKeysFlags.String("session-token", "", "")
 
 		keysRevokeKeyFlags            = flag.NewFlagSet("revoke-key", flag.ExitOnError)
-		keysRevokeKeyIDFlag           = keysRevokeKeyFlags.String("id", "REQUIRED", "The ID of the key to revoke")
+		keysRevokeKeyIDFlag           = keysRevokeKeyFlags.String("id", "REQUIRED", "")
 		keysRevokeKeySessionTokenFlag = keysRevokeKeyFlags.String("session-token", "", "")
 
 		toolsFlags = flag.NewFlagSet("tools", flag.ContinueOnError)
@@ -192,12 +192,12 @@ func ParseEndpoint(
 
 		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
 		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
-		toolsetsUpdateToolsetSlugFlag             = toolsetsUpdateToolsetFlags.String("slug", "REQUIRED", "The slug of the toolset to update")
+		toolsetsUpdateToolsetSlugFlag             = toolsetsUpdateToolsetFlags.String("slug", "REQUIRED", "")
 		toolsetsUpdateToolsetSessionTokenFlag     = toolsetsUpdateToolsetFlags.String("session-token", "", "")
 		toolsetsUpdateToolsetProjectSlugInputFlag = toolsetsUpdateToolsetFlags.String("project-slug-input", "", "")
 
 		toolsetsDeleteToolsetFlags                = flag.NewFlagSet("delete-toolset", flag.ExitOnError)
-		toolsetsDeleteToolsetSlugFlag             = toolsetsDeleteToolsetFlags.String("slug", "REQUIRED", "The slug of the toolset")
+		toolsetsDeleteToolsetSlugFlag             = toolsetsDeleteToolsetFlags.String("slug", "REQUIRED", "")
 		toolsetsDeleteToolsetSessionTokenFlag     = toolsetsDeleteToolsetFlags.String("session-token", "", "")
 		toolsetsDeleteToolsetProjectSlugInputFlag = toolsetsDeleteToolsetFlags.String("project-slug-input", "", "")
 
@@ -777,16 +777,16 @@ func environmentsUpdateEnvironmentUsage() {
 
 Update an environment
     -body JSON: 
-    -slug STRING: The slug of the environment to update
+    -slug STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
     %[1]s environments update-environment --body '{
-      "description": "Itaque fugit fugiat fuga quia fuga.",
+      "description": "Quo qui dolor.",
       "entries_to_remove": [
-         "Autem ut velit ab.",
-         "Nostrum iste."
+         "Aut nisi odio officiis.",
+         "Officiis dolor."
       ],
       "entries_to_update": [
          {
@@ -802,8 +802,8 @@ Example:
             "value": "Doloribus eum ut cumque."
          }
       ],
-      "name": "Nihil tempora aut nisi odio officiis."
-   }' --slug "Atque a accusamus qui." --session-token "Corrupti labore est nisi fuga dolores ipsa." --project-slug-input "Pariatur impedit dolor eligendi unde."
+      "name": "Itaque fugit fugiat fuga quia fuga."
+   }' --slug "Ut velit ab sit nostrum iste eum." --session-token "A accusamus qui quidem corrupti." --project-slug-input "Est nisi fuga dolores."
 `, os.Args[0])
 }
 
@@ -811,12 +811,12 @@ func environmentsDeleteEnvironmentUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] environments delete-environment -slug STRING -session-token STRING -project-slug-input STRING
 
 Delete an environment
-    -slug STRING: The slug of the environment to delete
+    -slug STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
-    %[1]s environments delete-environment --slug "Est perspiciatis eius." --session-token "Quo sunt voluptas." --project-slug-input "Cupiditate unde magni dolorem."
+    %[1]s environments delete-environment --slug "Aliquid iusto." --session-token "In qui occaecati optio ea qui." --project-slug-input "Voluptatum illo modi aut aliquid qui est."
 `, os.Args[0])
 }
 
@@ -844,8 +844,8 @@ Create a new api key
 
 Example:
     %[1]s keys create-key --body '{
-      "name": "Qui quisquam rerum odit distinctio accusantium."
-   }' --session-token "Ut minus."
+      "name": "Eius pariatur."
+   }' --session-token "Sunt voluptas in."
 `, os.Args[0])
 }
 
@@ -856,7 +856,7 @@ List all api keys for an organization
     -session-token STRING: 
 
 Example:
-    %[1]s keys list-keys --session-token "Blanditiis asperiores ratione quo."
+    %[1]s keys list-keys --session-token "Qui labore ut ad error."
 `, os.Args[0])
 }
 
@@ -864,11 +864,11 @@ func keysRevokeKeyUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] keys revoke-key -id STRING -session-token STRING
 
 Revoke a api key
-    -id STRING: The ID of the key to revoke
+    -id STRING: 
     -session-token STRING: 
 
 Example:
-    %[1]s keys revoke-key --id "Aut inventore vero vero enim incidunt." --session-token "Est repellendus consectetur velit impedit eum rem."
+    %[1]s keys revoke-key --id "Consequatur voluptatem aut nemo." --session-token "Officia ut exercitationem aut inventore vero vero."
 `, os.Args[0])
 }
 
@@ -894,7 +894,7 @@ List all tools for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s tools list-tools --cursor "Soluta voluptas ullam perspiciatis eos sit." --session-token "Ratione dolores eos ipsa velit." --project-slug-input "Omnis optio."
+    %[1]s tools list-tools --cursor "Incidunt qui est repellendus consectetur velit." --session-token "Eum rem porro soluta voluptas ullam perspiciatis." --project-slug-input "Sit qui ratione dolores eos ipsa."
 `, os.Args[0])
 }
 
@@ -923,7 +923,7 @@ Load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances get-instance --toolset-slug "Quas nesciunt rerum nam." --environment-slug "Ipsa distinctio." --session-token "Numquam non aliquid quae minus." --project-slug-input "Voluptatem cum ipsam voluptatem illum minima nobis." --apikey-token "Consequatur hic maxime unde dolorem provident."
+    %[1]s instances get-instance --toolset-slug "Unde voluptates ipsa qui adipisci odit." --environment-slug "Ut quas nesciunt." --session-token "Nam aliquid ipsa distinctio veritatis numquam." --project-slug-input "Aliquid quae minus." --apikey-token "Voluptatem cum ipsam voluptatem illum minima nobis."
 `, os.Args[0])
 }
 
@@ -954,16 +954,16 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_slug": "Vero autem tempora dolorem.",
-      "description": "Voluptatum harum qui non.",
+      "default_environment_slug": "Quos rerum aut ut ipsum atque.",
+      "description": "Dolorem perspiciatis deleniti iste aliquid commodi.",
       "http_tool_names": [
-         "Ipsa consequatur velit in.",
-         "Quos rerum aut ut ipsum atque.",
-         "Animi expedita saepe expedita laudantium dolores qui.",
-         "Voluptatem in."
+         "Aut natus porro.",
+         "Rerum eum.",
+         "Harum qui non accusantium quas ipsa.",
+         "Velit in."
       ],
-      "name": "Porro quia rerum."
-   }' --session-token "Quibusdam dolorem enim rem natus aut molestiae." --project-slug-input "Repellat enim possimus quis inventore."
+      "name": "Consequatur eum saepe delectus vel suscipit mollitia."
+   }' --session-token "Animi expedita saepe expedita laudantium dolores qui." --project-slug-input "Voluptatem in."
 `, os.Args[0])
 }
 
@@ -975,7 +975,7 @@ List all toolsets for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Voluptatem et quis vero ipsa." --project-slug-input "Quaerat consectetur optio explicabo occaecati."
+    %[1]s toolsets list-toolsets --session-token "Tempora ut." --project-slug-input "Sed iusto ea provident."
 `, os.Args[0])
 }
 
@@ -984,20 +984,21 @@ func toolsetsUpdateToolsetUsage() {
 
 Update a toolset's properties including name, description, and HTTP tools
     -body JSON: 
-    -slug STRING: The slug of the toolset to update
+    -slug STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "default_environment_slug": "Facere eum temporibus veniam eos fugit.",
-      "description": "Non cum.",
+      "default_environment_slug": "Eligendi qui quibusdam non enim.",
+      "description": "Et omnis ut.",
       "http_tool_names": [
-         "Quasi ut quia consequatur beatae.",
-         "Reprehenderit cum est."
+         "Omnis est soluta quis dignissimos.",
+         "Quo quia.",
+         "Tenetur excepturi consequatur ratione autem et pariatur."
       ],
-      "name": "Pariatur rerum."
-   }' --slug "Quidem dolores est officia ducimus doloribus temporibus." --session-token "Facere velit eius esse." --project-slug-input "Molestiae magni voluptatem dolore quidem totam."
+      "name": "Repellendus quia."
+   }' --slug "Dolores non." --session-token "Ex facere." --project-slug-input "Temporibus veniam eos fugit nisi iusto quasi."
 `, os.Args[0])
 }
 
@@ -1005,12 +1006,12 @@ func toolsetsDeleteToolsetUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets delete-toolset -slug STRING -session-token STRING -project-slug-input STRING
 
 Delete a toolset by its ID
-    -slug STRING: The slug of the toolset
+    -slug STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "Pariatur perferendis quia architecto et quis." --session-token "Similique id vel." --project-slug-input "Amet error incidunt."
+    %[1]s toolsets delete-toolset --slug "Sed expedita qui." --session-token "Dolorum ad suscipit voluptates." --project-slug-input "Soluta nulla debitis illo doloremque accusantium."
 `, os.Args[0])
 }
 
@@ -1023,6 +1024,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset --slug "Velit sed aut." --session-token "Quae beatae." --project-slug-input "Consequuntur et consequatur aut."
+    %[1]s toolsets get-toolset --slug "Consequatur quasi quae iste aut." --session-token "Ipsum rem deleniti et." --project-slug-input "Perferendis quia architecto et quis ea."
 `, os.Args[0])
 }

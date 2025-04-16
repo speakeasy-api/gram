@@ -7,10 +7,6 @@
 
 package server
 
-import (
-	"fmt"
-)
-
 // CreateKeyKeysPath returns the URL path to the keys service createKey HTTP endpoint.
 func CreateKeyKeysPath() string {
 	return "/rpc/keys.create"
@@ -22,6 +18,6 @@ func ListKeysKeysPath() string {
 }
 
 // RevokeKeyKeysPath returns the URL path to the keys service revokeKey HTTP endpoint.
-func RevokeKeyKeysPath(id string) string {
-	return fmt.Sprintf("/rpc/keys.revoke/%v", id)
+func RevokeKeyKeysPath() string {
+	return "/rpc/keys.revoke"
 }

@@ -7,10 +7,6 @@
 
 package client
 
-import (
-	"fmt"
-)
-
 // CreateToolsetToolsetsPath returns the URL path to the toolsets service createToolset HTTP endpoint.
 func CreateToolsetToolsetsPath() string {
 	return "/rpc/toolsets.create"
@@ -22,13 +18,13 @@ func ListToolsetsToolsetsPath() string {
 }
 
 // UpdateToolsetToolsetsPath returns the URL path to the toolsets service updateToolset HTTP endpoint.
-func UpdateToolsetToolsetsPath(slug string) string {
-	return fmt.Sprintf("/rpc/toolsets.update/%v", slug)
+func UpdateToolsetToolsetsPath() string {
+	return "/rpc/toolsets.update"
 }
 
 // DeleteToolsetToolsetsPath returns the URL path to the toolsets service deleteToolset HTTP endpoint.
-func DeleteToolsetToolsetsPath(slug string) string {
-	return fmt.Sprintf("/rpc/toolsets.delete/%v", slug)
+func DeleteToolsetToolsetsPath() string {
+	return "/rpc/toolsets.delete"
 }
 
 // GetToolsetToolsetsPath returns the URL path to the toolsets service getToolset HTTP endpoint.

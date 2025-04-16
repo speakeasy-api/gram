@@ -66,7 +66,7 @@ var _ = Service("environments", func() {
 		Result(Environment)
 
 		HTTP(func() {
-			POST("/rpc/environments.update/{slug}")
+			POST("/rpc/environments.update")
 			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -89,7 +89,7 @@ var _ = Service("environments", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/environments.delete/{slug}")
+			DELETE("/rpc/environments.delete")
 			Param("slug")
 			security.SessionHeader()
 			security.ProjectHeader()

@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -85,14 +85,11 @@ async function $do(
     explode: true,
   });
 
-  const pathParams = {
-    slug: encodeSimple("slug", payload.slug, {
-      explode: false,
-      charEncoding: "percent",
-    }),
-  };
+  const path = pathToFunc("/rpc/environments.update")();
 
-  const path = pathToFunc("/rpc/environments.update/{slug}")(pathParams);
+  const query = encodeFormQuery({
+    "slug": payload.slug,
+  });
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,6 +127,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);

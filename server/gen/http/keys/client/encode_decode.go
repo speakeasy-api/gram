@@ -167,17 +167,7 @@ func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restor
 // BuildRevokeKeyRequest instantiates a HTTP request object with method and
 // path set to call the "keys" service "revokeKey" endpoint
 func (c *Client) BuildRevokeKeyRequest(ctx context.Context, v any) (*http.Request, error) {
-	var (
-		id string
-	)
-	{
-		p, ok := v.(*keys.RevokeKeyPayload)
-		if !ok {
-			return nil, goahttp.ErrInvalidType("keys", "revokeKey", "*keys.RevokeKeyPayload", v)
-		}
-		id = p.ID
-	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeKeyKeysPath(id)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeKeyKeysPath()}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("keys", "revokeKey", u.String(), err)
@@ -201,6 +191,9 @@ func EncodeRevokeKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

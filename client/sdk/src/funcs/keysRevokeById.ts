@@ -4,7 +4,7 @@
 
 import * as z from "zod";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -86,14 +86,11 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent",
-    }),
-  };
+  const path = pathToFunc("/rpc/keys.revoke")();
 
-  const path = pathToFunc("/rpc/keys.revoke/{id}")(pathParams);
+  const query = encodeFormQuery({
+    "id": payload.id,
+  });
 
   const headers = new Headers(compactMap({
     Accept: "*/*",
@@ -133,6 +130,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);

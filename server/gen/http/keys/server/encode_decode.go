@@ -127,13 +127,18 @@ func DecodeRevokeKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		var (
 			id           string
 			sessionToken *string
-
-			params = mux.Vars(r)
+			err          error
 		)
-		id = params["id"]
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return nil, err
 		}
 		payload := NewRevokeKeyPayload(id, sessionToken)
 		if payload.SessionToken != nil {

@@ -61,7 +61,7 @@ var _ = Service("keys", func() {
 
 		HTTP(func() {
 			Param("id")
-			DELETE("/rpc/keys.revoke/{id}")
+			DELETE("/rpc/keys.revoke")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

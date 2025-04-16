@@ -175,17 +175,7 @@ func DecodeListEnvironmentsResponse(decoder func(*http.Response) goahttp.Decoder
 // BuildUpdateEnvironmentRequest instantiates a HTTP request object with method
 // and path set to call the "environments" service "updateEnvironment" endpoint
 func (c *Client) BuildUpdateEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
-	var (
-		slug string
-	)
-	{
-		p, ok := v.(*environments.UpdateEnvironmentPayload)
-		if !ok {
-			return nil, goahttp.ErrInvalidType("environments", "updateEnvironment", "*environments.UpdateEnvironmentPayload", v)
-		}
-		slug = p.Slug
-	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateEnvironmentEnvironmentsPath(slug)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateEnvironmentEnvironmentsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("environments", "updateEnvironment", u.String(), err)
@@ -213,6 +203,9 @@ func EncodeUpdateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("slug", p.Slug)
+		req.URL.RawQuery = values.Encode()
 		body := NewUpdateEnvironmentRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("environments", "updateEnvironment", err)
@@ -264,17 +257,7 @@ func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 // BuildDeleteEnvironmentRequest instantiates a HTTP request object with method
 // and path set to call the "environments" service "deleteEnvironment" endpoint
 func (c *Client) BuildDeleteEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
-	var (
-		slug string
-	)
-	{
-		p, ok := v.(*environments.DeleteEnvironmentPayload)
-		if !ok {
-			return nil, goahttp.ErrInvalidType("environments", "deleteEnvironment", "*environments.DeleteEnvironmentPayload", v)
-		}
-		slug = p.Slug
-	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteEnvironmentEnvironmentsPath(slug)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteEnvironmentEnvironmentsPath()}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("environments", "deleteEnvironment", u.String(), err)
@@ -302,6 +285,9 @@ func EncodeDeleteEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("slug", p.Slug)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

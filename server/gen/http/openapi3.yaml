@@ -426,13 +426,14 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateEnvironment
-    /rpc/environments.delete/{slug}:
+    /rpc/environments.delete:
         delete:
             description: Delete an environment
             operationId: deleteEnvironment
             parameters:
-                - description: The slug of the environment to delete
-                  in: path
+                - allowEmptyValue: true
+                  description: The slug of the environment to delete
+                  in: query
                   name: slug
                   required: true
                   schema:
@@ -499,13 +500,14 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListEnvironments
-    /rpc/environments.update/{slug}:
+    /rpc/environments.update:
         post:
             description: Update an environment
             operationId: updateEnvironment
             parameters:
-                - description: The slug of the environment to update
-                  in: path
+                - allowEmptyValue: true
+                  description: The slug of the environment to update
+                  in: query
                   name: slug
                   required: true
                   schema:
@@ -666,13 +668,14 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListAPIKeys
-    /rpc/keys.revoke/{id}:
+    /rpc/keys.revoke:
         delete:
             description: Revoke a api key
             operationId: revokeAPIKey
             parameters:
-                - description: The ID of the key to revoke
-                  in: path
+                - allowEmptyValue: true
+                  description: The ID of the key to revoke
+                  in: query
                   name: id
                   required: true
                   schema:
@@ -779,13 +782,14 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateToolset
-    /rpc/toolsets.delete/{slug}:
+    /rpc/toolsets.delete:
         delete:
             description: Delete a toolset by its ID
             operationId: deleteToolset
             parameters:
-                - description: The slug of the toolset
-                  in: path
+                - allowEmptyValue: true
+                  description: The slug of the toolset
+                  in: query
                   name: slug
                   required: true
                   schema:
@@ -895,13 +899,14 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListToolsets
-    /rpc/toolsets.update/{slug}:
+    /rpc/toolsets.update:
         post:
             description: Update a toolset's properties including name, description, and HTTP tools
             operationId: updateToolset
             parameters:
-                - description: The slug of the toolset to update
-                  in: path
+                - allowEmptyValue: true
+                  description: The slug of the toolset to update
+                  in: query
                   name: slug
                   required: true
                   schema:

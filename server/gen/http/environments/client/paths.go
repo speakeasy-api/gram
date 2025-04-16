@@ -7,10 +7,6 @@
 
 package client
 
-import (
-	"fmt"
-)
-
 // CreateEnvironmentEnvironmentsPath returns the URL path to the environments service createEnvironment HTTP endpoint.
 func CreateEnvironmentEnvironmentsPath() string {
 	return "/rpc/environments.create"
@@ -22,11 +18,11 @@ func ListEnvironmentsEnvironmentsPath() string {
 }
 
 // UpdateEnvironmentEnvironmentsPath returns the URL path to the environments service updateEnvironment HTTP endpoint.
-func UpdateEnvironmentEnvironmentsPath(slug string) string {
-	return fmt.Sprintf("/rpc/environments.update/%v", slug)
+func UpdateEnvironmentEnvironmentsPath() string {
+	return "/rpc/environments.update"
 }
 
 // DeleteEnvironmentEnvironmentsPath returns the URL path to the environments service deleteEnvironment HTTP endpoint.
-func DeleteEnvironmentEnvironmentsPath(slug string) string {
-	return fmt.Sprintf("/rpc/environments.delete/%v", slug)
+func DeleteEnvironmentEnvironmentsPath() string {
+	return "/rpc/environments.delete"
 }
