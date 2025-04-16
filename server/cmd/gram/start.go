@@ -256,7 +256,7 @@ func newStartCommand() *cli.Command {
 
 			mux := goahttp.NewMuxer()
 
-			mux.Use(middleware.CORSMiddleware)
+			mux.Use(middleware.DevCORSMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
 			mux.Use(middleware.SessionMiddleware)
 
