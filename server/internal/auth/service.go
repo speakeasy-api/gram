@@ -81,6 +81,21 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	activeOrganizationID := ""
 	if len(userInfo.Organizations) > 0 {
 		activeOrganizationID = userInfo.Organizations[0].OrganizationID
+
+		// For admins we allow you to override the active organization returned by header if present
+		// Otherwise we default speakeasy-self being the active organization if present
+		if userInfo.Admin {
+			adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx)
+			if adminOverride == "" {
+				adminOverride = "speakeasy-self"
+			}
+			for _, org := range userInfo.Organizations {
+				if org.OrganizationSlug == adminOverride {
+					activeOrganizationID = org.OrganizationID
+					break
+				}
+			}
+		}
 	}
 
 	session := sessions.Session{
@@ -182,6 +197,15 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, err
+	}
+
+	// For admins we only return the active organization to avoid overloaded returns
+	if userInfo.Admin {
+		for _, org := range userInfo.Organizations {
+			if org.OrganizationID == authCtx.ActiveOrganizationID {
+				userInfo.Organizations = []gen.Organization{org}
+			}
+		}
 	}
 
 	// Fully unpack the userInfo object
