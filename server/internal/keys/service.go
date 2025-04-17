@@ -3,6 +3,7 @@ package keys
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -23,23 +24,39 @@ import (
 	"github.com/speakeasy-api/gram/internal/middleware"
 )
 
+const keyPrefix = "gram"
+
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	auth   *auth.Auth
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	repo      *repo.Queries
+	auth      *auth.Auth
+	keyPrefix string
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, env string) *Service {
+	var keyEnv string
+	switch env {
+	case "local":
+		keyEnv = "local"
+	case "test":
+		keyEnv = "test"
+	case "prod":
+		keyEnv = "live"
+	default:
+		keyEnv = "local"
+	}
+	fullKeyPrefix := fmt.Sprintf("%s_%s_", keyPrefix, keyEnv)
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/internal/keys"),
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
-		auth:   auth.New(logger, db, sessions),
+		tracer:    otel.Tracer("github.com/speakeasy-api/gram/internal/keys"),
+		logger:    logger,
+		db:        db,
+		repo:      repo.New(db),
+		auth:      auth.New(logger, db, sessions),
+		keyPrefix: fullKeyPrefix,
 	}
 }
 
@@ -58,7 +75,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		return nil, errors.New("auth not found in context")
 	}
 
-	token, err := generateKey()
+	token, err := s.generateKey()
 	if err != nil {
 		return nil, err
 	}

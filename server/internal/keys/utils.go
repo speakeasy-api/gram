@@ -7,7 +7,6 @@ import (
 
 type APIKeyScopes string
 
-const keyPrefix = "gram_"
 const randomKeyLength = 64
 
 const (
@@ -15,11 +14,11 @@ const (
 	APIKeyScopesProducer APIKeyScopes = "producer" // allows api key access a tool producer
 )
 
-func generateKey() (string, error) {
+func (s *Service) generateKey() (string, error) {
 	randomBytes := make([]byte, randomKeyLength/2) // there are 2 hex chars per byte, we can guarantee output of 64 chars this way
 	_, err := rand.Read(randomBytes)
 	if err != nil {
 		return "", err
 	}
-	return keyPrefix + hex.EncodeToString(randomBytes), nil
+	return s.keyPrefix + hex.EncodeToString(randomBytes), nil
 }
