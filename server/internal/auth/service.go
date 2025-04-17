@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
@@ -19,6 +21,12 @@ import (
 	srv "github.com/speakeasy-api/gram/gen/http/auth/server"
 )
 
+type AuthConfigurations struct {
+	SpeakeasyServerAddress string
+	GramServerURL          string
+	SignInRedirectURL      string
+}
+
 // Service for gram dashboard authentication endpoints
 type Service struct {
 	tracer   trace.Tracer
@@ -26,17 +34,32 @@ type Service struct {
 	db       *pgxpool.Pool
 	sessions *sessions.Manager
 	projects *projects.Service
+	cfg      AuthConfigurations
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cfg AuthConfigurations) *Service {
 	return &Service{
 		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
 		logger:   logger,
 		db:       db,
 		sessions: sessions,
 		projects: projects.NewService(logger, db),
+		cfg:      cfg,
+	}
+}
+
+func FormSignInRedirectURL(env string) string {
+	switch env {
+	case "local":
+		return "http://localhost:5173/"
+	case "test":
+		return "" // TODO: Fill in once hosted
+	case "prod":
+		return "" // TODO: Fill in once hosted
+	default:
+		return ""
 	}
 }
 
@@ -49,11 +72,45 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) Callback(context.Context, *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
-	// TODO: Exchange sharedToken with speakeasy backend for user information OIDC. Token will either be a JWT userID or another short term redis backed token
-	// TODO: Populate an auth session from that information, redirect back to gram
-	// TODO: This will call GET api.speakeasy.com/v1/gram/info/{userID}
-	return &gen.CallbackResult{}, nil //nolint:exhaustruct // not yet implemented
+func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
+	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(payload.IDToken)
+	if err != nil {
+		return nil, err
+	}
+
+	activeOrganizationID := ""
+	if len(userInfo.Organizations) > 0 {
+		activeOrganizationID = userInfo.Organizations[0].OrganizationID
+	}
+
+	session := sessions.Session{
+		SessionID:            payload.IDToken,
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: activeOrganizationID,
+	}
+
+	if err := s.sessions.StoreSession(ctx, session); err != nil {
+		return nil, err
+	}
+
+	return &gen.CallbackResult{
+		Location:      s.cfg.SignInRedirectURL,
+		SessionToken:  session.SessionID,
+		SessionCookie: session.SessionID,
+	}, nil
+}
+
+func (s *Service) Login(context.Context) (res *gen.LoginResult, err error) {
+	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+
+	values := url.Values{}
+	values.Add("return_url", returnAddress+"/rpc/auth.callback")
+
+	location := s.cfg.SpeakeasyServerAddress + "/v1/speakeasy_provider/login?" + values.Encode()
+
+	return &gen.LoginResult{
+		Location: location,
+	}, nil
 }
 
 func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {
@@ -62,7 +119,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, errors.New("session not found in context")
 	}
 
-	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +174,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, errors.New("session not found in context")
 	}
 
-	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, err
 	}

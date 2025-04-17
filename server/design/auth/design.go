@@ -15,8 +15,8 @@ var _ = Service("auth", func() {
 		NoSecurity()
 
 		Payload(func() {
-			Attribute("shared_token", String, "The shared token for authentication from the speakeasy system")
-			Required("shared_token")
+			Attribute("id_token", String, "The id token for authentication from the speakeasy system")
+			Required("id_token")
 		})
 
 		Result(func() {
@@ -28,7 +28,7 @@ var _ = Service("auth", func() {
 
 		HTTP(func() {
 			GET("/rpc/auth.callback")
-			Param("shared_token")
+			Param("id_token")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
@@ -40,6 +40,30 @@ var _ = Service("auth", func() {
 
 		Meta("openapi:operationId", "authCallback")
 		Meta("openapi:extension:x-speakeasy-name-override", "callback")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
+
+	Method("login", func() {
+		Description("Proxies to auth login through speakeasy oidc.")
+
+		NoSecurity()
+
+		Result(func() {
+			Attribute("location", String, "The URL to redirect to after authentication")
+			Required("location")
+		})
+
+		HTTP(func() {
+			GET("/rpc/auth.login")
+
+			Response(StatusTemporaryRedirect, func() {
+				Header("location:Location", String, func() {
+				})
+			})
+		})
+
+		Meta("openapi:operationId", "authLogin")
+		Meta("openapi:extension:x-speakeasy-name-override", "login")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 

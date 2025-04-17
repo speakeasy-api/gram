@@ -21,6 +21,9 @@ type Client struct {
 	// endpoint.
 	CallbackDoer goahttp.Doer
 
+	// Login Doer is the HTTP client used to make requests to the login endpoint.
+	LoginDoer goahttp.Doer
+
 	// SwitchScopes Doer is the HTTP client used to make requests to the
 	// switchScopes endpoint.
 	SwitchScopesDoer goahttp.Doer
@@ -52,6 +55,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CallbackDoer:        doer,
+		LoginDoer:           doer,
 		SwitchScopesDoer:    doer,
 		LogoutDoer:          doer,
 		InfoDoer:            doer,
@@ -82,6 +86,25 @@ func (c *Client) Callback() goa.Endpoint {
 		resp, err := c.CallbackDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auth", "callback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Login returns an endpoint that makes HTTP requests to the auth service login
+// server.
+func (c *Client) Login() goa.Endpoint {
+	var (
+		decodeResponse = DecodeLoginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLoginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LoginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "login", err)
 		}
 		return decodeResponse(resp)
 	}

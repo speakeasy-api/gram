@@ -13,13 +13,13 @@ import (
 
 // BuildCallbackPayload builds the payload for the auth callback endpoint from
 // CLI flags.
-func BuildCallbackPayload(authCallbackSharedToken string) (*auth.CallbackPayload, error) {
-	var sharedToken string
+func BuildCallbackPayload(authCallbackIDToken string) (*auth.CallbackPayload, error) {
+	var idToken string
 	{
-		sharedToken = authCallbackSharedToken
+		idToken = authCallbackIDToken
 	}
 	v := &auth.CallbackPayload{}
-	v.SharedToken = sharedToken
+	v.IDToken = idToken
 
 	return v, nil
 }

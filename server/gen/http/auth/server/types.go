@@ -56,9 +56,9 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 }
 
 // NewCallbackPayload builds a auth service callback endpoint payload.
-func NewCallbackPayload(sharedToken string) *auth.CallbackPayload {
+func NewCallbackPayload(idToken string) *auth.CallbackPayload {
 	v := &auth.CallbackPayload{}
-	v.SharedToken = sharedToken
+	v.IDToken = idToken
 
 	return v
 }

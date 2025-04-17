@@ -127,7 +127,12 @@ export function ProjectMenu() {
             item={{
               title: "Logout",
               icon: IconLogout,
-              onClick: () => {
+              onClick: async () => {
+                await fetch('http://localhost:8080/rpc/auth.logout', {
+                  method: 'GET',
+                  credentials: 'include',
+                });
+                window.location.href = "/login";
                 setOpen(false);
               },
             }}

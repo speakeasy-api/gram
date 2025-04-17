@@ -3,7 +3,7 @@ import "./App.css"; // Import this second to override certain values in moonshin
 
 import { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { RootLayout } from "./components/root-layout.tsx";
+import { AppLayout } from "./components/app-layout.tsx";
 import { AppRoute, ROUTES } from "./routes.ts";
 import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { ThemeContext } from "./components/ui/theme-toggle.tsx";
@@ -35,7 +35,9 @@ export default function App() {
           <AuthProvider>
             <BrowserRouter>
               <Routes>
-                <Route path="/" element={<RootLayout />}>
+                {/* Register these unauthenticated paths outside of root layout */}
+                {routesWithSubroutes(ROUTES.unauthenticatedRoutes)}
+                <Route path="/" element={<AppLayout />}>
                   <Route
                     path={ROUTES.primaryCTA.url}
                     element={<ROUTES.primaryCTA.component />}

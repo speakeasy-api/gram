@@ -48,6 +48,15 @@ func NewCallbackResultTemporaryRedirect(location string, sessionToken string, se
 	return v
 }
 
+// NewLoginResultTemporaryRedirect builds a "auth" service "login" endpoint
+// result from a HTTP "TemporaryRedirect" response.
+func NewLoginResultTemporaryRedirect(location string) *auth.LoginResult {
+	v := &auth.LoginResult{}
+	v.Location = location
+
+	return v
+}
+
 // NewSwitchScopesResultOK builds a "auth" service "switchScopes" endpoint
 // result from a HTTP "OK" response.
 func NewSwitchScopesResultOK(sessionToken string, sessionCookie string) *auth.SwitchScopesResult {

@@ -22,7 +22,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Quos rerum aut ut ipsum atque.\",\n      \"description\": \"Dolorem perspiciatis deleniti iste aliquid commodi.\",\n      \"http_tool_names\": [\n         \"Aut natus porro.\",\n         \"Rerum eum.\",\n         \"Harum qui non accusantium quas ipsa.\",\n         \"Velit in.\"\n      ],\n      \"name\": \"Consequatur eum saepe delectus vel suscipit mollitia.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Provident delectus voluptate omnis modi est.\",\n      \"description\": \"Aliquid quae minus.\",\n      \"http_tool_names\": [\n         \"Cum ipsam voluptatem illum.\",\n         \"Nobis doloremque.\",\n         \"Hic maxime unde.\"\n      ],\n      \"name\": \"Nam aliquid ipsa distinctio veritatis numquam.\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -84,7 +84,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Eligendi qui quibusdam non enim.\",\n      \"description\": \"Et omnis ut.\",\n      \"http_tool_names\": [\n         \"Omnis est soluta quis dignissimos.\",\n         \"Quo quia.\",\n         \"Tenetur excepturi consequatur ratione autem et pariatur.\"\n      ],\n      \"name\": \"Repellendus quia.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Autem perspiciatis.\",\n      \"description\": \"Autem ut et voluptatem corrupti sequi.\",\n      \"http_tool_names\": [\n         \"Rem aut provident nihil officiis non.\",\n         \"Qui asperiores eveniet impedit necessitatibus est.\"\n      ],\n      \"name\": \"Quasi libero mollitia.\"\n   }'")
 		}
 	}
 	var slug string

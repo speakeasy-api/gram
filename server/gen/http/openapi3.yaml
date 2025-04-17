@@ -61,12 +61,12 @@ paths:
             operationId: authCallback
             parameters:
                 - allowEmptyValue: true
-                  description: The shared token for authentication from the speakeasy system
+                  description: The id token for authentication from the speakeasy system
                   in: query
-                  name: shared_token
+                  name: id_token
                   required: true
                   schema:
-                    description: The shared token for authentication from the speakeasy system
+                    description: The id token for authentication from the speakeasy system
                     type: string
             responses:
                 "307":
@@ -131,6 +131,25 @@ paths:
             x-speakeasy-name-override: info
             x-speakeasy-react-hook:
                 name: SessionInfo
+    /rpc/auth.login:
+        get:
+            description: Proxies to auth login through speakeasy oidc.
+            operationId: authLogin
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: The URL to redirect to after authentication
+                            schema:
+                                description: The URL to redirect to after authentication
+                                type: string
+            summary: login auth
+            tags:
+                - auth
+            x-speakeasy-name-override: login
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/auth.logout:
         get:
             description: Logs out the current user by clearing their session.

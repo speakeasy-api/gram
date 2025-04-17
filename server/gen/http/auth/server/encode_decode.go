@@ -42,19 +42,30 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			sharedToken string
-			err         error
+			idToken string
+			err     error
 		)
-		sharedToken = r.URL.Query().Get("shared_token")
-		if sharedToken == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("shared_token", "query string"))
+		idToken = r.URL.Query().Get("id_token")
+		if idToken == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id_token", "query string"))
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewCallbackPayload(sharedToken)
+		payload := NewCallbackPayload(idToken)
 
 		return payload, nil
+	}
+}
+
+// EncodeLoginResponse returns an encoder for responses returned by the auth
+// login endpoint.
+func EncodeLoginResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*auth.LoginResult)
+		w.Header().Set("Location", res.Location)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		return nil
 	}
 }
 

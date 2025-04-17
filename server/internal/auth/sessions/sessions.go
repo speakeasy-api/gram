@@ -27,20 +27,24 @@ type localEnvFile map[string]struct {
 }
 
 type Manager struct {
-	logger        *slog.Logger
-	sessionCache  cache.Cache[Session]
-	userInfoCache cache.Cache[CachedUserInfo]
-	localEnvFile  localEnvFile
-	unsafeLocal   bool
+	logger                 *slog.Logger
+	sessionCache           cache.Cache[Session]
+	userInfoCache          cache.Cache[CachedUserInfo]
+	localEnvFile           localEnvFile
+	unsafeLocal            bool
+	speakeasyServerAddress string
+	speakeasySecretKey     string
 }
 
-func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix) *Manager {
+func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string) *Manager {
 	return &Manager{
-		logger:        logger.With(slog.String("component", "sessions")),
-		sessionCache:  cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
-		userInfoCache: cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
-		localEnvFile:  localEnvFile{},
-		unsafeLocal:   false,
+		logger:                 logger.With(slog.String("component", "sessions")),
+		sessionCache:           cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
+		userInfoCache:          cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
+		localEnvFile:           localEnvFile{},
+		unsafeLocal:            false,
+		speakeasyServerAddress: speakeasyServerAddress,
+		speakeasySecretKey:     speakeasySecretKey,
 	}
 }
 
@@ -64,11 +68,13 @@ func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cac
 	}
 
 	return &Manager{
-		logger:        logger.With(slog.String("component", "sessions")),
-		sessionCache:  cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
-		userInfoCache: cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
-		localEnvFile:  data,
-		unsafeLocal:   true,
+		logger:                 logger.With(slog.String("component", "sessions")),
+		sessionCache:           cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
+		userInfoCache:          cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
+		localEnvFile:           data,
+		unsafeLocal:            true,
+		speakeasyServerAddress: "",
+		speakeasySecretKey:     "",
 	}, nil
 }
 
@@ -96,10 +102,6 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		return ctx, errors.New("session token is invalid")
 	}
 
-	if _, ok := s.HasAccessToOrganization(ctx, session.UserID, session.ActiveOrganizationID); !ok {
-		return ctx, errors.New("user does not have access to organization")
-	}
-
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		SessionID:            &session.SessionID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
@@ -107,7 +109,15 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		ProjectID:            nil,
 	})
 
+	if _, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID); !ok {
+		return ctx, errors.New("user does not have access to organization")
+	}
+
 	return ctx, nil
+}
+
+func (s *Manager) StoreSession(ctx context.Context, session Session) error {
+	return s.sessionCache.Store(ctx, session)
 }
 
 func (s *Manager) UpdateSession(ctx context.Context, session Session) error {

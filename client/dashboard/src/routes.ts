@@ -18,6 +18,7 @@ import Settings from "./pages/settings/Settings";
 import Environments from "./pages/environments/Environments";
 import { EnvironmentsRoot } from "./pages/environments/Environments";
 import EnvironmentPage from "./pages/environments/Environment";
+import Login from "./pages/login/Login";
 
 export const SanboxIcon = IconMessageChatbot;
 
@@ -33,6 +34,11 @@ export type AppRoute = {
 };
 
 export const ROUTES = {
+  unauthenticatedRoutes: [{
+    title: "Login",
+    url: "/login",
+    component: Login,
+  }],
   primaryCTA: {
     title: "Sandbox",
     url: "/sandbox",

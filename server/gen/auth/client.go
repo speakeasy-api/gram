@@ -16,15 +16,17 @@ import (
 // Client is the "auth" service client.
 type Client struct {
 	CallbackEndpoint     goa.Endpoint
+	LoginEndpoint        goa.Endpoint
 	SwitchScopesEndpoint goa.Endpoint
 	LogoutEndpoint       goa.Endpoint
 	InfoEndpoint         goa.Endpoint
 }
 
 // NewClient initializes a "auth" service client given the endpoints.
-func NewClient(callback, switchScopes, logout, info goa.Endpoint) *Client {
+func NewClient(callback, login, switchScopes, logout, info goa.Endpoint) *Client {
 	return &Client{
 		CallbackEndpoint:     callback,
+		LoginEndpoint:        login,
 		SwitchScopesEndpoint: switchScopes,
 		LogoutEndpoint:       logout,
 		InfoEndpoint:         info,
@@ -39,6 +41,16 @@ func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *Callbac
 		return
 	}
 	return ires.(*CallbackResult), nil
+}
+
+// Login calls the "login" endpoint of the "auth" service.
+func (c *Client) Login(ctx context.Context) (res *LoginResult, err error) {
+	var ires any
+	ires, err = c.LoginEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*LoginResult), nil
 }
 
 // SwitchScopes calls the "switchScopes" endpoint of the "auth" service.

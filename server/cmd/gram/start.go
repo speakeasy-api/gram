@@ -56,7 +56,13 @@ func newStartCommand() *cli.Command {
 				Value:   ":8080",
 				Usage:   "HTTP address to listen on",
 				EnvVars: []string{"GRAM_SERVER_ADDRESS"},
-			}, //
+			},
+			&cli.StringFlag{
+				Name:     "environment",
+				Usage:    "The current server environment", // local, test, prod
+				Required: true,
+				EnvVars:  []string{"GRAM_ENVIRONMENT"},
+			},
 			&cli.StringFlag{
 				Name:    "control-address",
 				Value:   ":8081",
@@ -72,6 +78,18 @@ func newStartCommand() *cli.Command {
 				Name:     "database-url",
 				Usage:    "Database URL",
 				EnvVars:  []string{"GRAM_DATABASE_URL"},
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "speakeasy-server-address",
+				Usage:    "Speakeasy server address",
+				EnvVars:  []string{"SPEAKEASY_SERVER_ADDRESS"},
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "speakeasy-secret-key",
+				Usage:    "Speakeasy secret key",
+				EnvVars:  []string{"SPEAKEASY_SECRET_KEY"},
 				Required: true,
 			},
 			&cli.BoolFlag{
@@ -148,6 +166,18 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			var serverURL string
+			switch c.String("environment") {
+			case "local":
+				serverURL = fmt.Sprintf("http://localhost%s", c.String("address"))
+			case "test":
+				serverURL = "" // TODO: Fill in once hosted
+			case "prod":
+				serverURL = "" // TODO: Fill in once hosted
+			default:
+				return fmt.Errorf("invalid environment: %s", c.String("environment"))
+			}
+
 			db, err := pgxpool.NewWithConfig(ctx, poolcfg)
 			if err != nil {
 				return err
@@ -218,7 +248,7 @@ func newStartCommand() *cli.Command {
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), redisClient, cache.SuffixNone)
+				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"))
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
 				s, err := sessions.NewUnsafeManager(logger.With(slog.String("component", "sessions")), redisClient, cache.Suffix("gram-local"), localEnvPath)
@@ -259,7 +289,11 @@ func newStartCommand() *cli.Command {
 			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 				chatService.HandleCompletion(w, r)
 			})
-			auth.Attach(mux, auth.NewService(logger.With(slog.String("component", "auth")), db, sessionManager))
+			auth.Attach(mux, auth.NewService(logger.With(slog.String("component", "auth")), db, sessionManager, auth.AuthConfigurations{
+				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
+				GramServerURL:          serverURL,
+				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("environment")),
+			}))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))

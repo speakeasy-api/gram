@@ -21,6 +21,7 @@ import (
 type Server struct {
 	Mounts       []*MountPoint
 	Callback     http.Handler
+	Login        http.Handler
 	SwitchScopes http.Handler
 	Logout       http.Handler
 	Info         http.Handler
@@ -54,11 +55,13 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Callback", "GET", "/rpc/auth.callback"},
+			{"Login", "GET", "/rpc/auth.login"},
 			{"SwitchScopes", "POST", "/rpc/auth.switchScopes"},
 			{"Logout", "GET", "/rpc/auth.logout"},
 			{"Info", "GET", "/rpc/auth.info"},
 		},
 		Callback:     NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Login:        NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		SwitchScopes: NewSwitchScopesHandler(e.SwitchScopes, mux, decoder, encoder, errhandler, formatter),
 		Logout:       NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
 		Info:         NewInfoHandler(e.Info, mux, decoder, encoder, errhandler, formatter),
@@ -71,6 +74,7 @@ func (s *Server) Service() string { return "auth" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Callback = m(s.Callback)
+	s.Login = m(s.Login)
 	s.SwitchScopes = m(s.SwitchScopes)
 	s.Logout = m(s.Logout)
 	s.Info = m(s.Info)
@@ -82,6 +86,7 @@ func (s *Server) MethodNames() []string { return auth.MethodNames[:] }
 // Mount configures the mux to serve the auth endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCallbackHandler(mux, h.Callback)
+	MountLoginHandler(mux, h.Login)
 	MountSwitchScopesHandler(mux, h.SwitchScopes)
 	MountLogoutHandler(mux, h.Logout)
 	MountInfoHandler(mux, h.Info)
@@ -131,6 +136,50 @@ func NewCallbackHandler(
 			return
 		}
 		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
+// MountLoginHandler configures the mux to serve the "auth" service "login"
+// endpoint.
+func MountLoginHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/auth.login", otelhttp.WithRouteTag("/rpc/auth.login", f).ServeHTTP)
+}
+
+// NewLoginHandler creates a HTTP handler which loads the HTTP request and
+// calls the "auth" service "login" endpoint.
+func NewLoginHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeLoginResponse(encoder)
+		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "login")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
+		var err error
+		res, err := endpoint(ctx, nil)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil {
 				errhandler(ctx, w, err)

@@ -5,7 +5,11 @@ import {
   Project,
 } from "@gram/client/models/components";
 import { useContext } from "react";
-import { useListEnvironmentsSuspense, useListToolsetsSuspense, useSessionInfoSuspense } from "@gram/client/react-query";
+import {
+  useListEnvironmentsSuspense,
+  useListToolsetsSuspense,
+  useSessionInfo,
+} from "@gram/client/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import { GramLogo } from "@/components/gram-logo";
 
@@ -116,20 +120,20 @@ const ErrorFallback = ({ error }: { error: Error }) => {
   );
 };
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const FullScreenLoader = () => {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <GramLogo animate className="scale-125" />
-      </div>
-    );
-  };
+const FullScreenLoader = () => {
+  return (
+    <div className="flex justify-center items-center h-screen">
+      <GramLogo animate className="scale-125" />
+    </div>
+  );
+};
 
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <MinimumSuspense fallback={<FullScreenLoader />}>
         <AuthHandler>
-          <PrefetchedQueries>{children}</PrefetchedQueries>
+          {children}
         </AuthHandler>
       </MinimumSuspense>
     </ErrorBoundary>
@@ -152,26 +156,42 @@ const PrefetchedQueries = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
-  const sessionResponse = useSessionInfoSuspense({
-    sessionHeaderGramSession: "", // We are using cookies instead, so this won't get set
-  });
+  const sessionResponse = useSessionInfo(
+    { sessionHeaderGramSession: "" }, // from cookies
+    undefined, 
+    {
+      refetchOnWindowFocus: false,
+      retries: {
+        strategy: "none",
+      },
+    }
+  );
 
-  const sessionId = sessionResponse.data.headers["gram-session"]?.[0];
+  const { data, isLoading, error } = sessionResponse;
 
-  if (!sessionId) {
-    throw new Error("Session ID not found");
+  if (isLoading) {
+    return <FullScreenLoader/>;
   }
 
-  console.log(sessionId);
+  const sessionId = data?.headers["gram-session"]?.[0]
+
+  if (error || !sessionId) {
+    return (
+      <SessionContext.Provider value={emptySession}>
+        {children}
+      </SessionContext.Provider>
+    );
+  }
 
   const session: Session = {
-    ...sessionResponse.data.result,
+    ...data.result,
     session: sessionId,
   };
 
   return (
     <SessionContext.Provider value={session}>
-      {children}
+      <PrefetchedQueries>{children}</PrefetchedQueries>
     </SessionContext.Provider>
   );
 };
+

@@ -2,23 +2,96 @@ package sessions
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"time"
 
 	"github.com/speakeasy-api/gram/gen/auth"
 )
 
-func (s *Manager) GetUserInfoFromSpeakeasy() (*CachedUserInfo, error) {
-	// This function is currently empty and needs to be implemented
-	// TODO: This will call GET api.speakeasy.com/v1/gram/info/{userID}
-	return nil, fmt.Errorf("not implemented")
+type speakeasyProviderUser struct {
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	DisplayName  string    `json:"display_name"`
+	PhotoURL     *string   `json:"photo_url"`
+	GithubHandle *string   `json:"github_handle"`
+	Admin        bool      `json:"admin"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type speakeasyProviderOrganization struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	AccountType string    `json:"account_type"`
+}
+
+type validateTokenResponse struct {
+	User          speakeasyProviderUser           `json:"user"`
+	Organizations []speakeasyProviderOrganization `json:"organizations"`
+}
+
+func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", s.speakeasyServerAddress+"/v1/speakeasy_provider/validate", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
+	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logger.ErrorContext(context.Background(), "failed to make request", slog.String("error", err.Error()))
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			s.logger.ErrorContext(context.Background(), "failed to close response body", slog.String("error", err.Error()))
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var validateResp validateTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&validateResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	organizations := make([]auth.Organization, len(validateResp.Organizations))
+	for i, org := range validateResp.Organizations {
+		organizations[i] = auth.Organization{
+			OrganizationID:   org.ID,
+			OrganizationName: org.Name,
+			OrganizationSlug: org.Slug,
+			AccountType:      org.AccountType,
+			Projects:         []*auth.Project{}, // filled in from gram server
+		}
+	}
+
+	return &CachedUserInfo{
+		UserID:        validateResp.User.ID,
+		Email:         validateResp.User.Email,
+		Organizations: organizations,
+	}, nil
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
 	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, Organizations: []auth.Organization{}, Email: ""})
 }
 
-func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, error) {
+func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*CachedUserInfo, error) {
 	if userInfo, err := s.userInfoCache.Get(ctx, UserInfoCacheKey(userID)); err == nil {
 		return &userInfo, nil
 	}
@@ -29,7 +102,7 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserIn
 	if s.unsafeLocal {
 		userInfo, err = s.GetUserInfoFromLocalEnvFile(userID)
 	} else {
-		userInfo, err = s.GetUserInfoFromSpeakeasy()
+		userInfo, err = s.GetUserInfoFromSpeakeasy(sessionID)
 	}
 	if err != nil {
 		return nil, err
@@ -42,8 +115,8 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserIn
 	return userInfo, err
 }
 
-func (s *Manager) HasAccessToOrganization(ctx context.Context, userID, organizationID string) (*auth.Organization, bool) {
-	userInfo, err := s.GetUserInfo(ctx, userID)
+func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.Organization, bool) {
+	userInfo, err := s.GetUserInfo(ctx, userID, sessionID)
 	if err != nil {
 		return nil, false
 	}

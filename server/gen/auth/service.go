@@ -17,6 +17,8 @@ import (
 type Service interface {
 	// Handles the authentication callback.
 	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
+	// Proxies to auth login through speakeasy oidc.
+	Login(context.Context) (res *LoginResult, err error)
 	// Switches the authentication scope to a different organization.
 	SwitchScopes(context.Context, *SwitchScopesPayload) (res *SwitchScopesResult, err error)
 	// Logs out the current user by clearing their session.
@@ -45,12 +47,12 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"callback", "switchScopes", "logout", "info"}
+var MethodNames = [5]string{"callback", "login", "switchScopes", "logout", "info"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
-	// The shared token for authentication from the speakeasy system
-	SharedToken string
+	// The id token for authentication from the speakeasy system
+	IDToken string
 }
 
 // CallbackResult is the result type of the auth service callback method.
@@ -78,6 +80,12 @@ type InfoResult struct {
 	SessionToken string
 	// The authentication session
 	SessionCookie string
+}
+
+// LoginResult is the result type of the auth service login method.
+type LoginResult struct {
+	// The URL to redirect to after authentication
+	Location string
 }
 
 // LogoutPayload is the payload type of the auth service logout method.

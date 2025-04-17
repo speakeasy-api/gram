@@ -12,6 +12,11 @@ func CallbackAuthPath() string {
 	return "/rpc/auth.callback"
 }
 
+// LoginAuthPath returns the URL path to the auth service login HTTP endpoint.
+func LoginAuthPath() string {
+	return "/rpc/auth.login"
+}
+
 // SwitchScopesAuthPath returns the URL path to the auth service switchScopes HTTP endpoint.
 func SwitchScopesAuthPath() string {
 	return "/rpc/auth.switchScopes"

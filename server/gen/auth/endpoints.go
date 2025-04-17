@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "auth" service endpoints.
 type Endpoints struct {
 	Callback     goa.Endpoint
+	Login        goa.Endpoint
 	SwitchScopes goa.Endpoint
 	Logout       goa.Endpoint
 	Info         goa.Endpoint
@@ -28,6 +29,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Callback:     NewCallbackEndpoint(s),
+		Login:        NewLoginEndpoint(s),
 		SwitchScopes: NewSwitchScopesEndpoint(s, a.APIKeyAuth),
 		Logout:       NewLogoutEndpoint(s, a.APIKeyAuth),
 		Info:         NewInfoEndpoint(s, a.APIKeyAuth),
@@ -37,6 +39,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "auth" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Callback = m(e.Callback)
+	e.Login = m(e.Login)
 	e.SwitchScopes = m(e.SwitchScopes)
 	e.Logout = m(e.Logout)
 	e.Info = m(e.Info)
@@ -48,6 +51,14 @@ func NewCallbackEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*CallbackPayload)
 		return s.Callback(ctx, p)
+	}
+}
+
+// NewLoginEndpoint returns an endpoint function that calls the method "login"
+// of service "auth".
+func NewLoginEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.Login(ctx)
 	}
 }
 

@@ -43,7 +43,7 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			return goahttp.ErrInvalidType("auth", "callback", "*auth.CallbackPayload", v)
 		}
 		values := req.URL.Query()
-		values.Add("shared_token", p.SharedToken)
+		values.Add("id_token", p.IDToken)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -107,6 +107,61 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "callback", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildLoginRequest instantiates a HTTP request object with method and path
+// set to call the "auth" service "login" endpoint
+func (c *Client) BuildLoginRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LoginAuthPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auth", "login", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeLoginResponse returns a decoder for responses returned by the auth
+// login endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusTemporaryRedirect:
+			var (
+				location string
+				err      error
+			)
+			locationRaw := resp.Header.Get("Location")
+			if locationRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
+			}
+			location = locationRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			res := NewLoginResultTemporaryRedirect(location)
+			return res, nil
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("auth", "login", resp.StatusCode, string(body))
 		}
 	}
 }
