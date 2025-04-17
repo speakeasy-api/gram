@@ -70,19 +70,32 @@ func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, err
 	}
 
 	organizations := make([]auth.Organization, len(validateResp.Organizations))
+	var nonFreeOrganizations []auth.Organization
 	for i, org := range validateResp.Organizations {
-		organizations[i] = auth.Organization{
+		authOrg := auth.Organization{
 			OrganizationID:   org.ID,
 			OrganizationName: org.Name,
 			OrganizationSlug: org.Slug,
 			AccountType:      org.AccountType,
 			Projects:         []*auth.Project{}, // filled in from gram server
 		}
+
+		organizations[i] = authOrg
+
+		if org.AccountType != "free" {
+			nonFreeOrganizations = append(nonFreeOrganizations, authOrg)
+		}
+	}
+
+	// If applicable we will only utilize non-free organizations
+	if len(nonFreeOrganizations) > 0 {
+		organizations = nonFreeOrganizations
 	}
 
 	return &CachedUserInfo{
 		UserID:        validateResp.User.ID,
 		Email:         validateResp.User.Email,
+		Admin:         validateResp.User.Admin,
 		Organizations: organizations,
 	}, nil
 }

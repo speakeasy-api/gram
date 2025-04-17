@@ -16,8 +16,9 @@ type AuthContext struct {
 }
 
 const (
-	SessionTokenContextKey contextKey = "sessionTokenKey"
-	SessionValueContextKey contextKey = "sessionValueKey"
+	SessionTokenContextKey  contextKey = "sessionTokenKey"
+	SessionValueContextKey  contextKey = "sessionValueKey"
+	AdminOverrideContextKey contextKey = "adminOverrideKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -26,6 +27,15 @@ func SetSessionTokenInContext(ctx context.Context, value string) context.Context
 
 func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(SessionTokenContextKey).(string)
+	return value, ok
+}
+
+func SetAdminOverrideInContext(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, AdminOverrideContextKey, value)
+}
+
+func GetAdminOverrideFromContext(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(AdminOverrideContextKey).(string)
 	return value, ok
 }
 

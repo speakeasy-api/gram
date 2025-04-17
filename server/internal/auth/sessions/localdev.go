@@ -19,6 +19,7 @@ func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, e
 	result := &CachedUserInfo{
 		UserID:        userID,
 		Email:         userInfo.UserEmail,
+		Admin:         userInfo.Admin,
 		Organizations: make([]auth.Organization, len(userInfo.Organizations)),
 	}
 

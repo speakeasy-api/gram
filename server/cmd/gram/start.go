@@ -284,6 +284,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.DevCORSMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
 			mux.Use(middleware.SessionMiddleware)
+			mux.Use(middleware.AdminOverrideMiddleware)
 
 			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"))
 			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
