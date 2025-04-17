@@ -158,6 +158,11 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, errors.New("session not found in context")
 	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
+		return nil, err
+	}
+
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
