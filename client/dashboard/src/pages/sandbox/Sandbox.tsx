@@ -258,14 +258,16 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
   );
 
   const tools = Object.fromEntries(
-    instance.data?.tools.map((tool) => [
-      tool.name,
-      {
-        id: tool.id,
-        description: tool.description,
-        parameters: jsonSchema(JSON.parse(tool.schema)),
-      },
-    ]) ?? []
+    instance.data?.tools.map((tool) => {
+      return [
+        tool.name,
+        {
+          id: tool.id,
+          description: tool.description,
+          parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
+        },
+      ];
+    }) ?? []
   );
 
   const openai = createOpenAI({

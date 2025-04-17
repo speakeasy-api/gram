@@ -53,7 +53,9 @@ export class VercelAdapter {
 
     for (const toolData of instance.tools) {
       tools[toolData.name] = tool({
-        parameters: jsonSchema(JSON.parse(toolData.schema)),
+        parameters: jsonSchema(
+          toolData.schema ? JSON.parse(toolData.schema) : {}
+        ),
         description: toolData.description,
         execute: async function callTool(args, { abortSignal }) {
           const security: Record<string, string> = {
