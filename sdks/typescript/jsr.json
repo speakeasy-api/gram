@@ -2,7 +2,7 @@
 
 {
   "name": "@gram/sdk",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "exports": {
     ".": "./src/index.ts",    
     "./models/errors": "./src/models/errors/index.ts",    

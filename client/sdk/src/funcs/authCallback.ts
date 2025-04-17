@@ -85,7 +85,7 @@ async function $do(
   const path = pathToFunc("/rpc/auth.callback")();
 
   const query = encodeFormQuery({
-    "shared_token": payload.shared_token,
+    "id_token": payload.id_token,
   });
 
   const headers = new Headers(compactMap({

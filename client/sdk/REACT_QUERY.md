@@ -57,7 +57,7 @@ import { useAuthCallback } from "@gram/client/react-query/authCallback.js";
 
 export function Example() {
   const { data, error, status } = useAuthCallback({
-    sharedToken: "<value>",
+    idToken: "<value>",
   });
 
   // Render the UI here...
@@ -77,7 +77,7 @@ export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
   const { data, error, status } = useAuthCallback(
     {
-      sharedToken: "<value>",
+      idToken: "<value>",
     },
     {
       // TanStack Query options:
@@ -267,7 +267,7 @@ export function App() {
 
 function Example() {
   const { data } = useAuthCallbackSuspense({
-    sharedToken: "<value>",
+    idToken: "<value>",
   });
 
   // Render the UI here...
@@ -300,7 +300,7 @@ export default async function Page() {
   });
 
   await prefetchAuthCallback(queryClient, gram, {
-    sharedToken: "<value>",
+    idToken: "<value>",
   });
 
   return (

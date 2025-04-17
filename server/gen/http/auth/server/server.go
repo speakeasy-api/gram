@@ -57,7 +57,7 @@ func New(
 			{"Callback", "GET", "/rpc/auth.callback"},
 			{"Login", "GET", "/rpc/auth.login"},
 			{"SwitchScopes", "POST", "/rpc/auth.switchScopes"},
-			{"Logout", "GET", "/rpc/auth.logout"},
+			{"Logout", "POST", "/rpc/auth.logout"},
 			{"Info", "GET", "/rpc/auth.info"},
 		},
 		Callback:     NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -252,7 +252,7 @@ func MountLogoutHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/auth.logout", otelhttp.WithRouteTag("/rpc/auth.logout", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/auth.logout", otelhttp.WithRouteTag("/rpc/auth.logout", f).ServeHTTP)
 }
 
 // NewLogoutHandler creates a HTTP handler which loads the HTTP request and

@@ -151,7 +151,7 @@ paths:
             x-speakeasy-react-hook:
                 disabled: true
     /rpc/auth.logout:
-        get:
+        post:
             description: Logs out the current user by clearing their session.
             operationId: logout
             parameters:

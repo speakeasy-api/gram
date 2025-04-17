@@ -3,14 +3,9 @@
  */
 
 import {
-  InvalidateQueryFilters,
-  QueryClient,
-  QueryFunctionContext,
-  QueryKey,
-  useQuery,
-  UseQueryResult,
-  useSuspenseQuery,
-  UseSuspenseQueryResult,
+  MutationKey,
+  useMutation,
+  UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
 import { authLogout } from "../funcs/authLogout.js";
@@ -19,36 +14,15 @@ import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { MutationHookOptions } from "./_types.js";
 
-export type LogoutQueryData = operations.LogoutResponse | undefined;
+export type LogoutMutationVariables = {
+  security: operations.LogoutSecurity;
+  request?: operations.LogoutRequest | undefined;
+  options?: RequestOptions;
+};
 
-/**
- * logout auth
- *
- * @remarks
- * Logs out the current user by clearing their session.
- */
-export function useLogout(
-  security: operations.LogoutSecurity,
-  request?: operations.LogoutRequest | undefined,
-  options?: QueryHookOptions<LogoutQueryData>,
-): UseQueryResult<LogoutQueryData, Error> {
-  const client = useGramContext();
-  return useQuery({
-    ...buildLogoutQuery(
-      client,
-      security,
-      request,
-      options,
-    ),
-    ...options,
-  });
-}
+export type LogoutMutationData = operations.LogoutResponse | undefined;
 
 /**
  * logout auth
@@ -56,89 +30,52 @@ export function useLogout(
  * @remarks
  * Logs out the current user by clearing their session.
  */
-export function useLogoutSuspense(
-  security: operations.LogoutSecurity,
-  request?: operations.LogoutRequest | undefined,
-  options?: SuspenseQueryHookOptions<LogoutQueryData>,
-): UseSuspenseQueryResult<LogoutQueryData, Error> {
-  const client = useGramContext();
-  return useSuspenseQuery({
-    ...buildLogoutQuery(
-      client,
-      security,
-      request,
-      options,
-    ),
-    ...options,
-  });
-}
-
-export function prefetchLogout(
-  queryClient: QueryClient,
-  client$: GramCore,
-  security: operations.LogoutSecurity,
-  request?: operations.LogoutRequest | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildLogoutQuery(
-      client$,
-      security,
-      request,
-    ),
-  });
-}
-
-export function setLogoutData(
-  client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
-  data: LogoutQueryData,
-): LogoutQueryData | undefined {
-  const key = queryKeyLogout(...queryKeyBase);
-
-  return client.setQueryData<LogoutQueryData>(key, data);
-}
-
-export function invalidateLogout(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+export function useLogoutMutation(
+  options?: MutationHookOptions<
+    LogoutMutationData,
+    Error,
+    LogoutMutationVariables
   >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "auth", "logout", ...queryKeyBase],
+): UseMutationResult<LogoutMutationData, Error, LogoutMutationVariables> {
+  const client = useGramContext();
+  return useMutation({
+    ...buildLogoutMutation(client, options),
+    ...options,
   });
 }
 
-export function invalidateAllLogout(
-  client: QueryClient,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "auth", "logout"],
-  });
+export function mutationKeyLogout(): MutationKey {
+  return ["@gram/client", "auth", "logout"];
 }
 
-export function buildLogoutQuery(
+export function buildLogoutMutation(
   client$: GramCore,
-  security: operations.LogoutSecurity,
-  request?: operations.LogoutRequest | undefined,
-  options?: RequestOptions,
+  hookOptions?: RequestOptions,
 ): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<LogoutQueryData>;
+  mutationKey: MutationKey;
+  mutationFn: (
+    variables: LogoutMutationVariables,
+  ) => Promise<LogoutMutationData>;
 } {
   return {
-    queryKey: queryKeyLogout({ gramSession: request?.gramSession }),
-    queryFn: async function logoutQueryFn(ctx): Promise<LogoutQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+    mutationKey: mutationKeyLogout(),
+    mutationFn: function logoutMutationFn({
+      security,
+      request,
+      options,
+    }): Promise<LogoutMutationData> {
       const mergedOptions = {
+        ...hookOptions,
         ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
+        fetchOptions: {
+          ...hookOptions?.fetchOptions,
+          ...options?.fetchOptions,
+          signal: combineSignals(
+            hookOptions?.fetchOptions?.signal,
+            options?.fetchOptions?.signal,
+          ),
+        },
       };
-
       return unwrapAsync(authLogout(
         client$,
         security,
@@ -147,10 +84,4 @@ export function buildLogoutQuery(
       ));
     },
   };
-}
-
-export function queryKeyLogout(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "auth", "logout", parameters];
 }

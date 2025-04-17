@@ -13,6 +13,7 @@ import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
 import { Separator } from "./ui/separator.tsx";
 import { Project } from "@gram/client/models/components";
+import { useLogoutMutation } from "@gram/client/react-query";
 
 // Add this helper function to generate colors from project label
 function getProjectColors(label: string): {
@@ -73,6 +74,7 @@ export function ProjectMenu() {
   const session = useSession();
   const organization = useOrganization();
   const project = useProject();
+  const logoutMutation = useLogoutMutation();
 
   const [open, setOpen] = React.useState(false);
 
@@ -128,9 +130,10 @@ export function ProjectMenu() {
               title: "Logout",
               icon: IconLogout,
               onClick: async () => {
-                await fetch('http://localhost:8080/rpc/auth.logout', {
-                  method: 'GET',
-                  credentials: 'include',
+                await logoutMutation.mutateAsync({
+                  security: {
+                    sessionHeaderGramSession: "",
+                  },
                 });
                 window.location.href = "/login";
                 setOpen(false);

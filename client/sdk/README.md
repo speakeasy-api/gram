@@ -288,6 +288,7 @@ run();
 
 * [callback](docs/sdks/auth/README.md#callback) - callback auth
 * [info](docs/sdks/auth/README.md#info) - info auth
+* [login](docs/sdks/auth/README.md#login) - login auth
 * [logout](docs/sdks/auth/README.md#logout) - logout auth
 * [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
@@ -349,6 +350,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
 - [`authInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`authLogin`](docs/sdks/auth/README.md#login) - login auth
 - [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`deploymentsAddOpenAPIv3Source`](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
@@ -409,7 +411,7 @@ To learn about this feature and how to get started, check
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
-- [`useLogout`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth

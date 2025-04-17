@@ -15,6 +15,7 @@ import { MCPScope } from "./scopes.js";
 import { createRegisterTool } from "./tools.js";
 import { tool$assetsUploadOpenAPIv3 } from "./tools/assetsUploadOpenAPIv3.js";
 import { tool$authCallback } from "./tools/authCallback.js";
+import { tool$authLogin } from "./tools/authLogin.js";
 import { tool$deploymentsAddOpenAPIv3Source } from "./tools/deploymentsAddOpenAPIv3Source.js";
 import { tool$deploymentsCreate } from "./tools/deploymentsCreate.js";
 import { tool$deploymentsGetById } from "./tools/deploymentsGetById.js";
@@ -40,7 +41,7 @@ export function createMCPServer(deps: {
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.8.2",
+    version: "0.8.3",
   });
 
   const client = new GramCore({
@@ -72,6 +73,7 @@ export function createMCPServer(deps: {
 
   tool(tool$assetsUploadOpenAPIv3);
   tool(tool$authCallback);
+  tool(tool$authLogin);
   tool(tool$deploymentsAddOpenAPIv3Source);
   tool(tool$deploymentsCreate);
   tool(tool$deploymentsGetById);

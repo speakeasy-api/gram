@@ -6,12 +6,12 @@
 import { AuthCallbackRequest } from "@gram/client/models/operations";
 
 let value: AuthCallbackRequest = {
-  sharedToken: "<value>",
+  idToken: "<value>",
 };
 ```
 
 ## Fields
 
-| Field                                                         | Type                                                          | Required                                                      | Description                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
-| `sharedToken`                                                 | *string*                                                      | :heavy_check_mark:                                            | The shared token for authentication from the speakeasy system |
+| Field                                                     | Type                                                      | Required                                                  | Description                                               |
+| --------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| `idToken`                                                 | *string*                                                  | :heavy_check_mark:                                        | The id token for authentication from the speakeasy system |

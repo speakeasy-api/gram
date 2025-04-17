@@ -3,12 +3,10 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
-import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { resolveSecurity } from "../lib/security.js";
+import { extractSecurity, resolveGlobalSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import { APIError } from "../models/errors/apierror.js";
 import {
@@ -24,19 +22,17 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * logout auth
+ * login auth
  *
  * @remarks
- * Logs out the current user by clearing their session.
+ * Proxies to auth login through speakeasy oidc.
  */
-export function authLogout(
+export function authLogin(
   client: GramCore,
-  security: operations.LogoutSecurity,
-  request?: operations.LogoutRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.LogoutResponse | undefined,
+    operations.AuthLoginResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -48,21 +44,17 @@ export function authLogout(
 > {
   return new APIPromise($do(
     client,
-    security,
-    request,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.LogoutSecurity,
-  request?: operations.LogoutRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.LogoutResponse | undefined,
+      operations.AuthLoginResponse | undefined,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -74,45 +66,23 @@ async function $do(
     APICall,
   ]
 > {
-  const parsed = safeParse(
-    request,
-    (value) => operations.LogoutRequest$outboundSchema.optional().parse(value),
-    "Input validation failed",
-  );
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/auth.logout")();
+  const path = pathToFunc("/rpc/auth.login")();
 
   const headers = new Headers(compactMap({
     Accept: "*/*",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
-  const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
-      },
-    ],
-  );
+  const securityInput = await extractSecurity(client._options.security);
+  const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "logout",
-    oAuth2Scopes: null,
+    operationID: "authLogin",
+    oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: security,
+    securitySource: client._options.security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -121,11 +91,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    body: body,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
@@ -149,7 +118,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.LogoutResponse | undefined,
+    operations.AuthLoginResponse | undefined,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -158,7 +127,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.nil(200, operations.LogoutResponse$inboundSchema.optional(), {
+    M.nil(307, operations.AuthLoginResponse$inboundSchema.optional(), {
       hdrs: true,
     }),
     M.fail("4XX"),

@@ -4,6 +4,7 @@
 
 import { authCallback } from "../funcs/authCallback.js";
 import { authInfo } from "../funcs/authInfo.js";
+import { authLogin } from "../funcs/authLogin.js";
 import { authLogout } from "../funcs/authLogout.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -43,6 +44,21 @@ export class Auth extends ClientSDK {
       this,
       security,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * login auth
+   *
+   * @remarks
+   * Proxies to auth login through speakeasy oidc.
+   */
+  async login(
+    options?: RequestOptions,
+  ): Promise<operations.AuthLoginResponse | undefined> {
+    return unwrapAsync(authLogin(
+      this,
       options,
     ));
   }

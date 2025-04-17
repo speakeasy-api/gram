@@ -4,6 +4,7 @@
 
 export * from "./addopenapiv3todeployment.js";
 export * from "./authcallback.js";
+export * from "./authlogin.js";
 export * from "./createapikey.js";
 export * from "./createdeployment.js";
 export * from "./createenvironment.js";

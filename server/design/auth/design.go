@@ -111,7 +111,7 @@ var _ = Service("auth", func() {
 		})
 
 		HTTP(func() {
-			GET("/rpc/auth.logout")
+			POST("/rpc/auth.logout")
 			security.SessionHeader()
 
 			Response(StatusOK, func() {

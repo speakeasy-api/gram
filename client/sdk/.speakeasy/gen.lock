@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: e08ab85e2d448b7ad26ffbeb7b7b13b0
+  docChecksum: c0e26058604b80e47c09a9548864a937
   docVersion: 0.0.1
-  speakeasyVersion: 1.531.5
-  generationVersion: 2.570.4
-  releaseVersion: 0.8.2
-  configChecksum: 45795fbb035339ee4962b51f5cd128ab
+  speakeasyVersion: 1.535.1
+  generationVersion: 2.585.2
+  releaseVersion: 0.8.3
+  configChecksum: 1b4f13f470a3d5d4a05b6810680062f6
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -18,7 +18,7 @@ features:
     globalSecurity: 2.82.13
     globalSecurityCallbacks: 0.1.0
     globalServerURLs: 2.82.4
-    mcpServer: 0.9.1
+    mcpServer: 0.9.2
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -72,6 +72,7 @@ generatedFiles:
   - docs/models/operations/addopenapiv3todeploymentrequest.md
   - docs/models/operations/authcallbackrequest.md
   - docs/models/operations/authcallbackresponse.md
+  - docs/models/operations/authloginresponse.md
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createdeploymentrequest.md
@@ -121,6 +122,7 @@ generatedFiles:
   - src/funcs/assetsUploadOpenAPIv3.ts
   - src/funcs/authCallback.ts
   - src/funcs/authInfo.ts
+  - src/funcs/authLogin.ts
   - src/funcs/authLogout.ts
   - src/funcs/authSwitchScopes.ts
   - src/funcs/deploymentsAddOpenAPIv3Source.ts
@@ -176,6 +178,7 @@ generatedFiles:
   - src/mcp-server/tools.ts
   - src/mcp-server/tools/assetsUploadOpenAPIv3.ts
   - src/mcp-server/tools/authCallback.ts
+  - src/mcp-server/tools/authLogin.ts
   - src/mcp-server/tools/deploymentsAddOpenAPIv3Source.ts
   - src/mcp-server/tools/deploymentsCreate.ts
   - src/mcp-server/tools/deploymentsGetById.ts
@@ -228,6 +231,7 @@ generatedFiles:
   - src/models/errors/sdkvalidationerror.ts
   - src/models/operations/addopenapiv3todeployment.ts
   - src/models/operations/authcallback.ts
+  - src/models/operations/authlogin.ts
   - src/models/operations/createapikey.ts
   - src/models/operations/createdeployment.ts
   - src/models/operations/createenvironment.ts
@@ -461,6 +465,7 @@ examples:
       parameters:
         query:
           shared_token: "<value>"
+          id_token: "<value>"
   sessionInfo:
     speakeasy-default-session-info:
       responses:
@@ -626,5 +631,6 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-09-06T15:47:55.334Z", "http_tools": [{"created_at": "2023-10-17T17:29:24.836Z", "deployment_id": "<id>", "description": "er since uniform", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/namedb", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-10T02:07:05.852Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-04-03T20:31:34.723Z"}
+  authLogin: {}
 examplesVersion: 1.0.1
 generatedTests: {}

@@ -10,9 +10,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AuthCallbackRequest = {
   /**
-   * The shared token for authentication from the speakeasy system
+   * The id token for authentication from the speakeasy system
    */
-  sharedToken: string;
+  idToken: string;
 };
 
 export type AuthCallbackResponse = {
@@ -25,16 +25,16 @@ export const AuthCallbackRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  shared_token: z.string(),
+  id_token: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    "shared_token": "sharedToken",
+    "id_token": "idToken",
   });
 });
 
 /** @internal */
 export type AuthCallbackRequest$Outbound = {
-  shared_token: string;
+  id_token: string;
 };
 
 /** @internal */
@@ -43,10 +43,10 @@ export const AuthCallbackRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   AuthCallbackRequest
 > = z.object({
-  sharedToken: z.string(),
+  idToken: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    sharedToken: "shared_token",
+    idToken: "id_token",
   });
 });
 

@@ -265,7 +265,7 @@ func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, re
 // set to call the "auth" service "logout" endpoint
 func (c *Client) BuildLogoutRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LogoutAuthPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("auth", "logout", u.String(), err)
 	}
