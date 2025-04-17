@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -170,6 +171,12 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", toolName))
 	defer span.End()
 
+	if err := protectSSRF(ctx, logger, req.URL); err != nil {
+		logger.ErrorContext(ctx, "blocked SSRF request", slog.String("error", err.Error()))
+		http.Error(w, "blocked SSRF request", http.StatusForbidden)
+		return
+	}
+
 	// TODO: This is temporary while in development
 	bodyBytes, _ := io.ReadAll(req.Body)
 	// Restore the body so it can be read again in the actual request
@@ -266,6 +273,39 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 			logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
 		}
 	}
+}
+
+func protectSSRF(ctx context.Context, logger *slog.Logger, parsed *url.URL) error {
+	host := parsed.Hostname()
+	// Block localhost explicitly
+	if host == "localhost" || strings.HasPrefix(host, "localhost.") {
+		logger.WarnContext(ctx, "blocked localhost", slog.String("url", parsed.String()))
+		return errors.New("localhost is not allowed")
+	}
+
+	// If host is an IP, block private ranges
+	ip := net.ParseIP(host)
+	if ip != nil {
+		privateCIDRs := []string{
+			"127.0.0.0/8",
+			"10.0.0.0/8",
+			"172.16.0.0/12",
+			"192.168.0.0/16",
+			"169.254.0.0/16",
+			"::1/128",
+			"fc00::/7",
+			"fe80::/10",
+		}
+
+		for _, cidr := range privateCIDRs {
+			if _, block, err := net.ParseCIDR(cidr); err == nil && block.Contains(ip) {
+				logger.WarnContext(ctx, "blocked private IP", slog.String("ip", ip.String()), slog.String("url", parsed.String()))
+				return errors.New("internal IP is not allowed")
+			}
+		}
+	}
+
+	return nil
 }
 
 func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars map[string]string) string {
