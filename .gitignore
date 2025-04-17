@@ -1,5 +1,5 @@
 mise.local.toml
-.tsbuildinfo
+*.tsbuildinfo
 node_modules
 bin
 junit-report.xml
