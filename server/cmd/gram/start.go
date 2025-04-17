@@ -79,11 +79,6 @@ func newStartCommand() *cli.Command {
 				Usage:   "Enable OpenTelemetry observability",
 				EnvVars: []string{"GRAM_ENABLE_OTEL"},
 			},
-			&cli.BoolFlag{
-				Name:    "trace-queries",
-				Usage:   "Trace database queries",
-				EnvVars: []string{"GRAM_TRACE_QUERIES"},
-			},
 			&cli.StringFlag{
 				Name:     "assets-backend",
 				Usage:    "The backend to use for managing assets",
