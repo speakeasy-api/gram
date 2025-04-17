@@ -1,24 +1,27 @@
-import { GramLogo } from "@/components/gram-logo";
-import { Page } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
+import { Page } from "@/components/page-layout"
+import { LoginSection } from "./components/login-section"
+import { PromptsSection } from "./components/prompt-section"
+import { useSession } from "@/contexts/Auth";
+import { Navigate } from "react-router-dom";
 
 export default function Login() {
-  const handleLogin = async () => {
-    window.location.href = 'http://localhost:8080/rpc/auth.login';
-  };
+  const session = useSession();
+  if (session.session !== "") { // we are logged in, redirect to the home page
+    return <Navigate to="/" />
+  }
 
   return (
     <Page>
-      <div className="flex flex-col justify-center items-center h-screen gap-8">
-        <GramLogo animate className="scale-125" />
-        <Button 
-          onClick={handleLogin}
-          variant="default"
-          size="lg"
-        >
-          Login
-        </Button>
-      </div>
+      <main
+        className="flex min-h-screen flex-col md:flex-row"
+        style={{
+          /* Apply the main font family from CSS variables */
+          fontFamily: "var(--font-dm-sans)",
+        }}
+      >
+        <LoginSection />
+        <PromptsSection />
+      </main>
     </Page>
-  );
+  )
 }
