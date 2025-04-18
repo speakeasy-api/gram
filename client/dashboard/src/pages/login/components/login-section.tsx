@@ -2,8 +2,12 @@
 
 import { GramLogo } from "@/components/gram-logo";
 import { Button } from "@/components/ui/button";
+import { useSearchParams } from "react-router-dom";
 
 export function LoginSection() {
+  const [searchParams] = useSearchParams();
+  const signinError = searchParams.get("signin_error");
+
   const handleLogin = async () => {
     window.location.href = "http://localhost:8080/rpc/auth.login";
   };
@@ -18,6 +22,12 @@ export function LoginSection() {
         <p className="text-gray-600 text-center max-w-sm text-[22px] tracking-wide font-light mb-16">
           Your AI-powered chat assistant for calling APIs with natural language
         </p>
+
+        {signinError && (
+          <p className="text-red-600 text-center mb-4">
+            login error: {decodeURIComponent(signinError)}
+          </p>
+        )}
 
         <Button
           className="w-80 py-6 text-lg text-white font-mono font-light tracking-wide uppercase"

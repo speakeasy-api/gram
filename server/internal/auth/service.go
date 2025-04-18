@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -73,9 +74,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
+	redirectWithError := func(err error) (*gen.CallbackResult, error) {
+		s.logger.ErrorContext(ctx, "signin error", slog.String("error", err.Error()))
+		return &gen.CallbackResult{
+			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			SessionToken:  "",
+			SessionCookie: "",
+		}, nil
+	}
 	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(payload.IDToken)
 	if err != nil {
-		return nil, err
+		return redirectWithError(err)
 	}
 
 	activeOrganizationID := ""
@@ -105,7 +114,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
-		return nil, err
+		return redirectWithError(err)
 	}
 
 	return &gen.CallbackResult{
