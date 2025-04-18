@@ -1,7 +1,7 @@
 import React from "react";
 import { Combobox } from "./ui/combobox.tsx";
 import { Heading } from "./ui/heading.tsx";
-import { ChevronsUpDown, PlusIcon } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
 import { Button } from "./ui/button.tsx";
 import { IconLogout } from "@tabler/icons-react";

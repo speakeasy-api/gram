@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,7 +72,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) (*gen.Key, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil {
 		return nil, errors.New("auth not found in context")
 	}
 
@@ -80,13 +81,20 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		return nil, err
 	}
 
+	var projectID uuid.NullUUID
+	if authCtx.ProjectID != nil {
+		projectID = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+	} else {
+		projectID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
+	}
+
 	createdKey, err := s.repo.CreateAPIKey(ctx, repo.CreateAPIKeyParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            payload.Name,
 		Token:           token,
 		Scopes:          []string{string(APIKeyScopesConsumer)}, // this is the only default scopes for now
 		CreatedByUserID: authCtx.UserID,
-		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ProjectID:       projectID,
 	})
 	if err != nil {
 		return nil, err
@@ -123,7 +131,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 			Name:            key.Name,
 			OrganizationID:  key.OrganizationID,
 			ProjectID:       conv.FromNullableUUID(key.ProjectID),
-			Token:           key.Token,
+			Token:           redactedKey(key.Token),
 			Scopes:          key.Scopes,
 			CreatedByUserID: key.CreatedByUserID,
 			CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
@@ -148,4 +156,8 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func redactedKey(key string) string {
+	return key[:15] + strings.Repeat("*", 3)
 }
