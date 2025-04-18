@@ -9,7 +9,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
 import { useEnvironments } from "./Environments";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack, Table } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
 import { useEffect, useState } from "react";
 import { DeleteButton } from "@/components/delete-button";
@@ -23,7 +23,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { useListToolsets, useToolset } from "@gram/client/react-query/index.js";
 
 interface EntryDialogProps {
@@ -422,26 +421,56 @@ export default function EnvironmentPage() {
         </Stack>
 
         {Object.keys(entries).length > 0 && (
-          <div className="mt-6 rounded-md border">
-            <div className="grid grid-cols-2 bg-muted px-4 py-2">
-              <Type className="font-medium">Name</Type>
-              <Type className="font-medium">Value</Type>
-            </div>
-            <div className="divide-y">
-              {Object.values(entries).map((entry) => (
-                <div key={entry.name} className="px-4">
-                  <EntryItem
-                    entry={entry}
-                    onEdit={() => {
-                      setEditingEntry(entry);
-                      setDialogOpen(true);
-                    }}
-                    removeEntry={removeEntry}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+          <Table
+            columns={[
+              {
+                key: "name",
+                header: "Name",
+                width: "1fr",
+                render: (entry: EnvironmentEntry) => (
+                  <Type variant="body" className="truncate">
+                    {entry.name}
+                  </Type>
+                ),
+              },
+              {
+                key: "value",
+                header: "Value",
+                width: "1fr",
+                render: (entry: EnvironmentEntry) => (
+                  <Type variant="body" className="truncate">
+                    {entry.value}
+                  </Type>
+                ),
+              },
+              {
+                key: "actions",
+                header: "",
+                width: "100px",
+                render: (entry: EnvironmentEntry) => (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4 p-0"
+                      onClick={() => {
+                        setEditingEntry(entry);
+                        setDialogOpen(true);
+                      }}
+                    >
+                      <PencilIcon className="h-3 w-3" />
+                    </Button>
+                    <DeleteButton
+                      tooltip="Remove Entry"
+                      onClick={() => removeEntry(entry)}
+                    />
+                  </div>
+                ),
+              },
+            ]}
+            data={Object.values(entries)}
+            rowKey={(row) => row.name}
+          />
         )}
 
         <EntryDialog
@@ -459,49 +488,5 @@ export default function EnvironmentPage() {
         />
       </Page.Body>
     </Page>
-  );
-}
-
-function EntryItem({
-  entry,
-  onEdit,
-  removeEntry,
-  isNew,
-}: {
-  entry: EnvironmentEntry;
-  onEdit: () => void;
-  removeEntry?: (entry: EnvironmentEntry) => void;
-  isNew?: boolean;
-}) {
-  return (
-    <div className="grid grid-cols-2 items-center py-3 group/entry">
-      <div className="pr-4">
-        <Type className={cn("truncate", isNew && "text-muted-foreground")}>
-          {entry.name}
-        </Type>
-      </div>
-      <div className="flex items-center gap-2 pr-4">
-        <Type
-          className={cn("truncate flex-1", isNew && "text-muted-foreground")}
-        >
-          {entry.value}
-        </Type>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-4 w-4 p-0 opacity-0 group-hover/entry:opacity-100"
-          onClick={onEdit}
-        >
-          <PencilIcon className="h-3 w-3" />
-        </Button>
-        {removeEntry && (
-          <DeleteButton
-            tooltip="Remove Entry"
-            onClick={() => removeEntry(entry)}
-            className="opacity-0 group-hover/entry:opacity-100"
-          />
-        )}
-      </div>
-    </div>
   );
 }
