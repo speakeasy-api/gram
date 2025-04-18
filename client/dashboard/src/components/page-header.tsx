@@ -41,10 +41,11 @@ function PageHeaderBreadcrumbs() {
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
       const isCurrentPage = url === location.pathname;
+      const title = segment.toLowerCase() === 'sdk' ? 'SDK' : segment;
 
       return {
         url,
-        title: segment,
+        title,
         isCurrentPage,
       };
     });

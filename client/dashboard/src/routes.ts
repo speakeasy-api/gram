@@ -4,6 +4,7 @@ import {
   IconCode,
   IconMessageChatbot,
   IconUpload,
+  IconWorld,
 } from "@tabler/icons-react";
 import { IconSettings } from "@tabler/icons-react";
 import { IconBlocks, IconTools } from "@tabler/icons-react";
@@ -19,6 +20,7 @@ import Environments from "./pages/environments/Environments";
 import { EnvironmentsRoot } from "./pages/environments/Environments";
 import EnvironmentPage from "./pages/environments/Environment";
 import Login from "./pages/login/Login";
+import SDK from "./pages/sdk/SDK";
 
 export const SanboxIcon = IconMessageChatbot;
 
@@ -75,7 +77,7 @@ export const ROUTES = {
     {
       title: "Environments",
       url: "/environments",
-      icon: IconCode,
+      icon: IconWorld,
       component: EnvironmentsRoot,
       indexComponent: Environments,
       subPages: [
@@ -85,6 +87,12 @@ export const ROUTES = {
           component: EnvironmentPage,
         },
       ],
+    },
+    {
+      title: "SDK",
+      url: "/sdk",
+      icon: IconCode,
+      component: SDK,
     },
   ],
   navSecondary: [
