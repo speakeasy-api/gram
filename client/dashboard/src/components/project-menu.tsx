@@ -157,14 +157,15 @@ function ProjectSelector() {
     icon: <ProjectAvatar project={project} className="h-4 w-4" />,
   }));
 
-  projectWithIcons?.push({
-    value: "new-project",
-    label: "New Project",
-    icon: <PlusIcon className="h-4 w-4" />,
-    projectId: "new-project",
-    projectName: "New Project",
-    projectSlug: "new-project",
-  });
+  // TODO: Removing new project icon until we need a flow for this
+  // projectWithIcons?.push({
+  //   value: "new-project",
+  //   label: "New Project",
+  //   icon: <PlusIcon className="h-4 w-4" />,
+  //   projectId: "new-project",
+  //   projectName: "New Project",
+  //   projectSlug: "new-project",
+  // });
 
   const selected = projectWithIcons?.find(
     (p) => p.projectId === project.projectId
