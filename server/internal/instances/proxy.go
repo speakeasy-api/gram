@@ -164,18 +164,18 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 
 	processSecurity(ctx, logger, req, toolExecutionInfo, envVars)
 
+	if err := protectSSRF(ctx, logger, req.URL); err != nil {
+		logger.ErrorContext(ctx, "blocked SSRF request", slog.String("error", err.Error()))
+		http.Error(w, "blocked SSRF request", http.StatusForbidden)
+		return
+	}
+
 	reverseProxyRequest(ctx, tracer, logger, toolExecutionInfo.Tool.Name, w, req)
 }
 
 func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, toolName string, w http.ResponseWriter, req *http.Request) {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", toolName))
 	defer span.End()
-
-	if err := protectSSRF(ctx, logger, req.URL); err != nil {
-		logger.ErrorContext(ctx, "blocked SSRF request", slog.String("error", err.Error()))
-		http.Error(w, "blocked SSRF request", http.StatusForbidden)
-		return
-	}
 
 	// TODO: This is temporary while in development
 	bodyBytes, _ := io.ReadAll(req.Body)
@@ -236,6 +236,11 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 	for _, cookie := range resp.Cookies() {
 		http.SetCookie(w, cookie)
 	}
+
+	// Remove CORS headers
+	resp.Header.Del("Access-Control-Allow-Origin")
+	resp.Header.Del("Access-Control-Allow-Methods")
+	resp.Header.Del("Access-Control-Allow-Headers")
 
 	// Copy status code
 	w.WriteHeader(resp.StatusCode)
