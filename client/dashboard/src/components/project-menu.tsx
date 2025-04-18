@@ -90,11 +90,11 @@ export function ProjectMenu() {
           <Stack direction={"horizontal"} gap={3} align="center">
             <ProjectAvatar project={project} className="h-8 w-8 rounded-md" />
             <Stack align="start">
-              <Heading variant="h5" className="mb-[-2px]">
-                {project?.projectSlug ?? "Select Project"}
+              <Heading variant="h5" className="mb-[-2px] normal-case">
+                {organization?.organizationSlug}
               </Heading>
               <Type variant="small" muted className="truncate max-w-[120px]">
-                {organization?.organizationSlug}
+                {project?.projectSlug ?? "Select Project"}
               </Type>
             </Stack>
           </Stack>
