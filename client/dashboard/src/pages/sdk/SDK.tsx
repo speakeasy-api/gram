@@ -54,12 +54,13 @@ export default function SDK() {
               value={language}
               onChange={(e) => handleLanguageChange(e.target.value as Language)}
             >
-              <option value="typescript">TypeScript</option>
-              <option value="python">Python</option>
+              {Object.keys(FRAMEWORKS).map(lang => (
+                <option key={lang} value={lang}>{lang}</option>
+              ))}
             </select>
 
             <select
-              className="px-4 py-2 rounded border"
+              className="px-4 py-2 rounded border min-w-[200px]"
               value={framework}
               onChange={(e) => setFramework(e.target.value as Framework)}
             >
