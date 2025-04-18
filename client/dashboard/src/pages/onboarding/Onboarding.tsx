@@ -8,7 +8,6 @@ import {
   Deployment,
   UploadOpenAPIv3Result,
 } from "@gram/client/models/components";
-import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -89,17 +88,12 @@ export function OnboardingContent({
 
     setCreatingDeployment(true);
 
-    const deployment = await client.deployments.create({
-      idempotencyKey: uuidv4(),
-      createDeploymentRequestBody: {
-        openapiv3Assets: [
-          {
-            assetId: asset.asset.id,
-            name: apiName,
-            slug: apiName.replace(" ", "-").toLowerCase(),
-          },
-        ],
-      },
+    const deployment = await client.deployments.addOpenAPIv3Source({
+      openAPIv3DeploymentAssetForm: {
+        assetId: asset.asset.id,
+        name: apiName,
+        slug: apiName.replace(" ", "-").toLowerCase(),
+      }
     });
 
     console.log("Deployment created:", deployment);
