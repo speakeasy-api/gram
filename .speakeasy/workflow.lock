@@ -9,14 +9,14 @@ sources:
             - 0.0.1
     Gram Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:1884801ba8a46c7a95675c3cb80ab33a86d44aa6566c55a4a34a90b2658f9033
+        sourceRevisionDigest: sha256:aa1b5388b6d52a5d58a4e3c82624bc6c1f11f8dfd34ecefe4e21d031bb590dd8
         sourceBlobDigest: sha256:9eb3b940b2b2986900858c0dcb0985ad4cf5c837fdeaee8472c8dabfb93b80f9
         tags:
             - latest
             - 0.0.1
     Gram Public:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:3e10c8b0b44c21ed671029477ed19185efcae22240b2ab83eb136a1ffaa504cb
+        sourceRevisionDigest: sha256:f12c391ec35d9a93c7846deaeb3e681ae6a54baedbaf384e5ef4c0ac1962fee5
         sourceBlobDigest: sha256:a01e9f7558cca44d744e34a3196ec9cc7d9cd66d7287293c26af81330e1bb063
         tags:
             - latest
@@ -39,14 +39,24 @@ targets:
     gram-internal:
         source: Gram Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:1884801ba8a46c7a95675c3cb80ab33a86d44aa6566c55a4a34a90b2658f9033
+        sourceRevisionDigest: sha256:aa1b5388b6d52a5d58a4e3c82624bc6c1f11f8dfd34ecefe4e21d031bb590dd8
         sourceBlobDigest: sha256:9eb3b940b2b2986900858c0dcb0985ad4cf5c837fdeaee8472c8dabfb93b80f9
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:af176843d61a18f0481d88ad677fc9778e68f6ecccc9385ec6312ea0f4395cd9
+        codeSamplesRevisionDigest: sha256:2f4415fdb94c0f812bae5ab324069338931bea316585482849de299cf9375b74
     gram-public:
         source: Gram Public
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:3e10c8b0b44c21ed671029477ed19185efcae22240b2ab83eb136a1ffaa504cb
+        sourceRevisionDigest: sha256:b200d5698cd8182db17a9bd6a8ee03bd7cfee0b4ec32a7e7fa1afa892bd972c2
+        sourceBlobDigest: sha256:467ab43f1e19569613b1478f23db74348e6add29a3768d3863362375caa08c74
+    gram-public-py:
+        source: Gram Public
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:f12c391ec35d9a93c7846deaeb3e681ae6a54baedbaf384e5ef4c0ac1962fee5
+        sourceBlobDigest: sha256:a01e9f7558cca44d744e34a3196ec9cc7d9cd66d7287293c26af81330e1bb063
+    gram-public-ts:
+        source: Gram Public
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:f12c391ec35d9a93c7846deaeb3e681ae6a54baedbaf384e5ef4c0ac1962fee5
         sourceBlobDigest: sha256:a01e9f7558cca44d744e34a3196ec9cc7d9cd66d7287293c26af81330e1bb063
 workflow:
     workflowVersion: 1.0.0
@@ -78,7 +88,11 @@ workflow:
                 labelOverride:
                     fixedValue: Typescript (SDK)
                 blocking: false
-        gram-public:
+        gram-public-py:
+            target: python
+            source: Gram Public
+            output: sdks/python
+        gram-public-ts:
             target: typescript
             source: Gram Public
             output: sdks/typescript
