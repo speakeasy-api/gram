@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 import functools
 import json
-from typing import Any, List, Optional
+from typing import Any, Optional, Union
 
 import httpx
 from agents import FunctionTool, Tool, RunContextWrapper
@@ -10,56 +11,80 @@ from gram_ai.models.getinstanceresult import GetInstanceResult
 from gram_ai.utils.retries import BackoffStrategy, Retries, RetryConfig, retry_async
 
 
+@dataclass
+class GramOpenAIAgentsCall:
+    tool_id: str
+    project: str
+    toolset: str
+    environment: Optional[str] = None
+
+
 class GramOpenAIAgents:
+    api_key: str
+    _cache: dict[tuple[str, str, Union[str, None]], list[Tool]] = {}
+
     def __init__(
         self,
         *,
         api_key: str,
+    ):
+        self.api_key = api_key
+        self.client = GramAPI(server_url="http://localhost:8080")
+
+    def _fetch_tools(
+        self,
         project: str,
         toolset: str,
         environment: Optional[str] = None,
-    ):
-        self.api_key = api_key
-        self.project = project
-        self.toolset = toolset
-        self.environment = environment
-
-        self.client = GramAPI(server_url="http://localhost:8080")
-        self.instance = self.refetch()
-
-    def refetch(self) -> GetInstanceResult:
-        self.instance = self.client.instances.get_by_slug(
+    ) -> GetInstanceResult:
+        return self.client.instances.get_by_slug(
             security={
                 "option2": {
                     "apikey_header_gram_key": self.api_key,
-                    "project_slug_header_gram_project": self.project,
+                    "project_slug_header_gram_project": project,
                 }
             },
-            toolset_slug=self.toolset,
-            environment_slug=self.environment,
+            toolset_slug=toolset,
+            environment_slug=environment,
         )
-        return self.instance
 
-    @property
-    def tools(self) -> List[Tool]:
-        return [
+    def tools(
+        self,
+        project: str,
+        toolset: str,
+        environment: Optional[str] = None,
+    ) -> list[Tool]:
+        key = (project, toolset, environment)
+        if key in self._cache:
+            return self._cache[key]
+
+        instance = self._fetch_tools(project, toolset, environment)
+
+        result: list[Tool] = [
             FunctionTool(
                 name=tool.name,
                 description=tool.description,
                 params_json_schema=json.loads(tool.schema_) if tool.schema_ else {},
                 strict_json_schema=False,
-                on_invoke_tool=functools.partial(self.invoke_tool, tool.id),
+                on_invoke_tool=functools.partial(
+                    self._invoke_tool,
+                    GramOpenAIAgentsCall(tool.id, project, toolset, environment),
+                ),
             )
-            for tool in self.instance.tools
+            for tool in instance.tools
         ]
 
-    async def invoke_tool(
-        self, tool_id: str, _ctx: RunContextWrapper[Any], data: str
+        self._cache[key] = result
+
+        return result
+
+    async def _invoke_tool(
+        self, tool_call: GramOpenAIAgentsCall, _ctx: RunContextWrapper[Any], data: str
     ) -> str:
         url = "http://localhost:8080/rpc/instances.invoke/tool"
-        params = {"tool_id": tool_id}
-        if self.environment:
-            params["environment_slug"] = self.environment
+        params = {"tool_id": tool_call.tool_id}
+        if tool_call.environment:
+            params["environment_slug"] = tool_call.environment
 
         req = httpx.Request(
             "POST",
@@ -67,8 +92,8 @@ class GramOpenAIAgents:
             params=params,
             headers={
                 "gram-key": self.api_key,
-                "gram-project": self.project,
-                "user-agent": f"@gram-ai/for/openai-agents python {VERSION}",
+                "gram-project": tool_call.project,
+                "user-agent": f"gram-ai/openai-agents python {VERSION}",
                 "content-type": "application/json",
             },
             content=data,
@@ -100,3 +125,6 @@ _retry_policy = Retries(
     ),
     status_codes=["429", "5XX"],
 )
+
+
+__all__ = ["GramOpenAIAgents"]

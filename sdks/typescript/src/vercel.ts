@@ -6,48 +6,60 @@ import { GetInstanceResult } from "./models/components/getinstanceresult.js";
 import { unwrapAsync } from "./types/fp.js";
 import { jsonSchema, tool, ToolSet } from "ai";
 
-type VercelAdapterConfig = {
-  apiKey: string;
+export type GramInstanceRequest = {
   project: string;
   toolset: string;
   environment?: string;
 };
 
 export class VercelAdapter {
+  readonly #apiKey: string;
+  readonly #cache: Map<string, ToolSet> = new Map();
   readonly #core: GramAPICore;
-  readonly #config: VercelAdapterConfig;
-  #instancePromise: Promise<GetInstanceResult>;
 
-  constructor(config: VercelAdapterConfig) {
-    this.#core = new GramAPICore();
-    this.#config = config;
-    this.#instancePromise = this.refetch();
+  constructor(apiKey: string) {
+    this.#apiKey = apiKey;
+    this.#core = new GramAPICore({
+      serverURL: "http://localhost:8080",
+    });
   }
 
-  async refetch(): Promise<GetInstanceResult> {
-    this.#instancePromise = unwrapAsync(
+  async #fetchInstance(
+    project: string,
+    toolset: string,
+    environment?: string | undefined
+  ): Promise<GetInstanceResult> {
+    return unwrapAsync(
       instancesGetBySlug(
         this.#core,
         {
           option2: {
-            apikeyHeaderGramKey: this.#config.apiKey,
-            projectSlugHeaderGramProject: this.#config.project,
+            apikeyHeaderGramKey: this.#apiKey,
+            projectSlugHeaderGramProject: project,
           },
         },
         {
-          toolsetSlug: this.#config.toolset,
-          environmentSlug: this.#config.environment,
+          toolsetSlug: toolset,
+          environmentSlug: environment,
         }
       )
     );
-
-    return this.#instancePromise;
   }
 
-  async tools(): Promise<ToolSet> {
+  async tools({
+    project,
+    toolset,
+    environment,
+  }: GramInstanceRequest): Promise<ToolSet> {
+    const key = `${project}:${toolset}:${environment || ""}`;
+
+    if (this.#cache.has(key)) {
+      return this.#cache.get(key)!;
+    }
+
     const client = this.#core;
-    const config = this.#config;
-    const instance = await this.#instancePromise;
+    const apiKey = this.#apiKey;
+    const instance = await this.#fetchInstance(project, toolset, environment);
 
     const tools: ToolSet = {};
 
@@ -59,15 +71,15 @@ export class VercelAdapter {
         description: toolData.description,
         execute: async function callTool(args, { abortSignal }) {
           const security: Record<string, string> = {
-            "gram-key": config.apiKey,
-            "gram-project": config.project,
+            "gram-key": apiKey,
+            "gram-project": project,
           };
           const headers: Record<string, string> = { ...security };
 
           if (isBrowserLike) {
             headers[
               "user-agent"
-            ] = `@gram-ai/for/vercel ${SDK_METADATA.sdkVersion}`;
+            ] = `gram-ai/vercel typescript ${SDK_METADATA.sdkVersion}`;
           }
 
           const retryConfig = {
@@ -79,8 +91,8 @@ export class VercelAdapter {
             "http://localhost:8080/rpc/instances.invoke/tool"
           );
           url.searchParams.set("tool_id", toolData.id);
-          if (config.environment) {
-            url.searchParams.set("environment_slug", config.environment);
+          if (environment) {
+            url.searchParams.set("environment_slug", environment);
           }
           const request = new Request(url, {
             method: "POST",
@@ -126,6 +138,8 @@ export class VercelAdapter {
         },
       });
     }
+
+    this.#cache.set(key, tools);
 
     return tools;
   }
