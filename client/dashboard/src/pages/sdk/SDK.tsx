@@ -12,11 +12,58 @@ type Framework = typeof FRAMEWORKS[keyof typeof FRAMEWORKS][number];
 
 const CODE_SAMPLES = {
   typescript: {
-    'Vercel AI SDK': `// COMING SOON - Vercel AI SDK TypeScript Sample`,
+    'Vercel AI SDK': `import { generateText } from 'ai';
+import { VercelAdapter } from '@gram/sdk/vercel';
+
+const key = "<GRAM_API_KEY>"
+const vercelAdapter = new VercelAdapter(key);
+
+const tools = await vercelAdapter.tools({
+    project="default",
+    toolset="my-toolset",
+    environment="local",
+});
+
+const result = await generateText({
+  model: 'gpt-4',
+  tools,
+  prompt: 'Write a propmpt using tools.',
+});
+
+console.log(result.output);`,
     'LangChain': `// COMING SOON - LangChain TypeScript Sample`
   },
   python: {
-    'OpenAI Agents SDK': `# COMING SOON - OpenAI Agents SDK Python Sample`,
+    'OpenAI Agents SDK': `import asyncio
+from agents import Agent, Runner
+from gram_ai.openai_agents import GramOpenAIAgents
+
+key = "<GRAM_API_KEY>"
+
+gram = GramOpenAIAgents(
+    api_key=key,
+)
+
+agent = Agent(
+    name="Assistant",
+    tools=gram.tools(
+        project="default",
+        toolset="my-toolset",
+        environment="local",
+    ),
+)
+
+
+async def main():
+    result = await Runner.run(
+        agent,
+        "Write a propmpt using tools.",
+    )
+    print(result.final_output)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())`,
     'LangChain': `# COMING SOON - LangChain Python Sample`
   }
 } as const;
