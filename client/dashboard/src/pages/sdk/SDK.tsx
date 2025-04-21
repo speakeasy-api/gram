@@ -27,7 +27,7 @@ const tools = await vercelAdapter.tools({
 const result = await generateText({
   model: 'gpt-4',
   tools,
-  prompt: 'Write a propmpt using tools.',
+  prompt: 'Write a prompt using tools.',
 });
 
 console.log(result.output);`,
@@ -61,7 +61,7 @@ const agentExecutor = new AgentExecutor({
 });
 
 const result = await agentExecutor.invoke({
-  input: "Write a propmpt using tools.",
+  input: "Write a prompt using tools.",
 });
 console.log(result.output);`
   },
@@ -89,7 +89,7 @@ agent = Agent(
 async def main():
     result = await Runner.run(
         agent,
-        "Write a propmpt using tools.",
+        "Write a prompt using tools.",
     )
     print(result.final_output)
 
@@ -125,7 +125,7 @@ executor = AgentExecutor(
 )
 
 result = executor.invoke({
-    "input": "Write a propmpt using tools.",
+    "input": "Write a prompt using tools.",
 })
 
 print(result["output"])`
