@@ -31,7 +31,39 @@ const result = await generateText({
 });
 
 console.log(result.output);`,
-    'LangChain': `// COMING SOON - LangChain TypeScript Sample`
+    'LangChain': `import { ChatOpenAI } from "@langchain/openai";
+import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
+import { LangchainAdapter } from "@gram/sdk/langchain";
+
+const key = "<GRAM_API_KEY>"
+const langchainAdapter = new LangchainAdapter(key);
+
+const tools = await langchainAdapter.tools({
+  project: "default",
+  toolset: "my-toolset",
+  environment: "local",
+});
+
+const llm = new ChatOpenAI({
+  modelName: "gpt-4-turbo",
+  temperature: 0,
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const agent = await createToolCallingAgent({
+  llm,
+  tools,
+});
+
+const agentExecutor = new AgentExecutor({
+  agent,
+  tools,
+});
+
+const result = await agentExecutor.invoke({
+  input: "Write a propmpt using tools.",
+});
+console.log(result.output);`
   },
   python: {
     'OpenAI Agents SDK': `import asyncio
@@ -64,7 +96,39 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())`,
-    'LangChain': `# COMING SOON - LangChain Python Sample`
+    'LangChain': `from langchain_openai import ChatOpenAI
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from gram_ai.langchain import GramLangchain
+
+key = "<GRAM_API_KEY>"
+adapter = GramLangchain(key)
+
+tools = adapter.tools(
+    project="default",
+    toolset="my-toolset",
+    environment="local",
+)
+
+llm = ChatOpenAI(
+    model="gpt-4-turbo",
+    temperature=0,
+)
+
+agent = create_tool_calling_agent(
+    llm=llm,
+    tools=tools,
+)
+
+executor = AgentExecutor(
+    agent=agent,
+    tools=tools,
+)
+
+result = executor.invoke({
+    "input": "Write a propmpt using tools.",
+})
+
+print(result["output"])`
   }
 } as const;
 

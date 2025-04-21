@@ -7,7 +7,7 @@ export default function Integrations() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <h1>Integrations</h1>
+        <h1 className="font-bold mb-4">Coming Soon!</h1>
       </Page.Body>
     </Page>
   );
