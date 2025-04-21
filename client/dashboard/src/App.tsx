@@ -14,18 +14,16 @@ export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   const applyTheme = (theme: "light" | "dark") => {
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    const root = document.documentElement;
+    if (root.classList.contains(theme)) return;
+    root.classList.add(theme);
+    root.classList.remove(theme === "dark" ? "light" : "dark");
     setTheme(theme);
   };
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      applyTheme("dark");
-    }
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyTheme(prefersDark ? "dark" : "light");
   }, []);
 
   return (
