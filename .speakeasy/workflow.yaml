@@ -27,7 +27,11 @@ targets:
             labelOverride:
                 fixedValue: Typescript (SDK)
             blocking: false
-    gram-public:
+    gram-public-ts:
         target: typescript
         source: Gram Public
         output: sdks/typescript
+    gram-public-py:
+        target: python
+        source: Gram Public
+        output: sdks/python

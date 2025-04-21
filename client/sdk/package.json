@@ -1,6 +1,6 @@
 {
   "name": "@gram/client",
-  "version": "0.8.3",
+  "version": "0.8.6",
   "author": "Speakeasy",
   "type": "module",
   "bin": {

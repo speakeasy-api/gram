@@ -1,0 +1,9 @@
+.venv/
+venv/
+src/*.egg-info/
+__pycache__/
+.pytest_cache/
+.python-version
+.DS_Store
+pyrightconfig.json
+.speakeasy/reports
