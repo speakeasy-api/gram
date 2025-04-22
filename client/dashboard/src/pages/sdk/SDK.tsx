@@ -2,9 +2,13 @@ import { Page } from "@/components/page-layout";
 import { useState } from "react";
 import { CodeSnippet } from "@speakeasy-api/moonshine";
 
+const VERCEL_AI_SDK = 'Vercel AI SDK' as const;
+const LANGCHAIN = 'LangChain' as const;
+const OPENAI_AGENTS_SDK = 'OpenAI Agents SDK' as const;
+
 const FRAMEWORKS = {
-  typescript: ['Vercel AI SDK', 'LangChain'] as const,
-  python: ['OpenAI Agents SDK', 'LangChain'] as const
+  typescript: [VERCEL_AI_SDK, LANGCHAIN] as const,
+  python: [OPENAI_AGENTS_SDK, LANGCHAIN] as const
 } as const;
 
 type Language = keyof typeof FRAMEWORKS;
@@ -12,76 +16,94 @@ type Framework = typeof FRAMEWORKS[keyof typeof FRAMEWORKS][number];
 
 const CODE_SAMPLES = {
   typescript: {
-    'Vercel AI SDK': `import { generateText } from 'ai';
-import { VercelAdapter } from '@gram/sdk/vercel';
+    [VERCEL_AI_SDK]: `import { generateText } from 'ai';
+import { VercelAdapter } from "@gram/sdk/vercel";
+import { createOpenAI } from "@ai-sdk/openai";
 
-const key = "<GRAM_API_KEY>"
+const key = "<GRAM_API_KEY>";
 const vercelAdapter = new VercelAdapter(key);
 
+const openai = createOpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
 const tools = await vercelAdapter.tools({
-    project="default",
-    toolset="my-toolset",
-    environment="local",
+    project: "default",
+    toolset: "my-toolset",
+    environment: "default"
 });
 
 const result = await generateText({
-  model: 'gpt-4',
-  tools,
-  prompt: 'Write a prompt using tools.',
+    model: openai('gpt-4'),
+    tools,
+    maxSteps: 5,
+    prompt: 'Can you tell me about my tools?'
 });
 
-console.log(result.output);`,
-    'LangChain': `import { ChatOpenAI } from "@langchain/openai";
-import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
-import { LangchainAdapter } from "@gram/sdk/langchain";
+console.log(result.text);`,
+    [LANGCHAIN]: `import { LangchainAdapter } from "@gram/sdk/langchain";
+import { ChatOpenAI } from "@langchain/openai";
+import { createOpenAIFunctionsAgent, AgentExecutor } from "langchain/agents";
+import { pull } from "langchain/hub";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 
-const key = "<GRAM_API_KEY>"
+const key = "<GRAM_API_KEY>";
 const langchainAdapter = new LangchainAdapter(key);
+
+const llm = new ChatOpenAI({
+  modelName: "gpt-4",
+  temperature: 0,
+  openAIApiKey: process.env.OPENAI_API_KEY,
+});
 
 const tools = await langchainAdapter.tools({
   project: "default",
   toolset: "my-toolset",
-  environment: "local",
+  environment: "default",
 });
 
-const llm = new ChatOpenAI({
-  modelName: "gpt-4-turbo",
-  temperature: 0,
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const prompt = await pull<ChatPromptTemplate>(
+  "hwchase17/openai-functions-agent"
+);
 
-const agent = await createToolCallingAgent({
+const agent = await createOpenAIFunctionsAgent({
   llm,
   tools,
+  prompt
 });
 
-const agentExecutor = new AgentExecutor({
+const executor = new AgentExecutor({
   agent,
   tools,
+  verbose: false,
 });
 
-const result = await agentExecutor.invoke({
-  input: "Write a prompt using tools.",
+const result = await executor.invoke({
+  input: "Can you tell me about my tools?",
 });
+
 console.log(result.output);`
   },
   python: {
-    'OpenAI Agents SDK': `import asyncio
-from agents import Agent, Runner
+    [OPENAI_AGENTS_SDK]: `import asyncio
+import os
+from agents import Agent, Runner, set_default_openai_key
 from gram_ai.openai_agents import GramOpenAIAgents
 
-key = "<GRAM_API_KEY>"
+gram = GramLangchain(api_key=key)
 
 gram = GramOpenAIAgents(
     api_key=key,
 )
+
+set_default_openai_key(os.getenv("OPENAI_API_KEY"))
 
 agent = Agent(
     name="Assistant",
     tools=gram.tools(
         project="default",
         toolset="my-toolset",
-        environment="local",
+        environment="default",
     ),
 )
 
@@ -89,46 +111,50 @@ agent = Agent(
 async def main():
     result = await Runner.run(
         agent,
-        "Write a prompt using tools.",
+        "Can you tell me about my tools?",
     )
     print(result.final_output)
 
 
 if __name__ == "__main__":
     asyncio.run(main())`,
-    'LangChain': `from langchain_openai import ChatOpenAI
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+    [LANGCHAIN]: `import asyncio
+import os
+from langchain import hub
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_openai_functions_agent
 from gram_ai.langchain import GramLangchain
 
 key = "<GRAM_API_KEY>"
-adapter = GramLangchain(key)
 
-tools = adapter.tools(
-    project="default",
-    toolset="my-toolset",
-    environment="local",
-)
+gram = GramLangchain(api_key=key)
 
 llm = ChatOpenAI(
-    model="gpt-4-turbo",
+    model="gpt-4",
     temperature=0,
+    openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
-agent = create_tool_calling_agent(
-    llm=llm,
-    tools=tools,
+tools = gram.tools(
+    project="default",
+    toolset="my-toolset",
+    environment="default",
 )
 
-executor = AgentExecutor(
-    agent=agent,
-    tools=tools,
-)
+prompt = hub.pull("hwchase17/openai-functions-agent")
 
-result = executor.invoke({
-    "input": "Write a prompt using tools.",
-})
+agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
 
-print(result["output"])`
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
+
+async def main():
+    response = await agent_executor.ainvoke({
+        "input": "Can you tell me about my tools?"
+    })
+    print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())`
   }
 } as const;
 
