@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,7 +31,7 @@ func NewToolsets(db *pgxpool.Pool) *Toolsets {
 
 func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectID uuid.UUID) (*gen.ToolsetDetails, error) {
 	toolset, err := t.repo.GetToolset(ctx, repo.GetToolsetParams{
-		Slug:      slug,
+		Slug:      strings.ToLower(slug),
 		ProjectID: projectID,
 	})
 	if err != nil {

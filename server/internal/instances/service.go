@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -72,7 +73,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, errors.New("project ID is required")
 	}
 
-	toolset, err := s.toolset.LoadToolsetDetails(ctx, payload.ToolsetSlug, *authCtx.ProjectID)
+	toolset, err := s.toolset.LoadToolsetDetails(ctx, strings.ToLower(payload.ToolsetSlug), *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +86,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	if payload.EnvironmentSlug != nil {
 		envModel, err = s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 			ProjectID: *authCtx.ProjectID,
-			Slug:      *payload.EnvironmentSlug,
+			Slug:      strings.ToLower(*payload.EnvironmentSlug),
 		})
 	} else {
 		envModel, err = s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
@@ -206,7 +207,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 
 	envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 		ProjectID: *authCtx.ProjectID,
-		Slug:      environmentSlug,
+		Slug:      strings.ToLower(environmentSlug),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

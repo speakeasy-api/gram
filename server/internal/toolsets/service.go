@@ -77,13 +77,13 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	if payload.DefaultEnvironmentSlug != nil {
 		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      *payload.DefaultEnvironmentSlug,
+			Slug:      strings.ToLower(*payload.DefaultEnvironmentSlug),
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to find environment: %w", err)
 		}
-		createToolParams.DefaultEnvironmentSlug = conv.ToPGText(*payload.DefaultEnvironmentSlug)
+		createToolParams.DefaultEnvironmentSlug = conv.ToPGText(strings.ToLower(*payload.DefaultEnvironmentSlug))
 	} else {
 		environments, err := s.environmentRepo.ListEnvironments(ctx, *authCtx.ProjectID)
 		if err != nil {
@@ -147,7 +147,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	// First get the existing toolset
 	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
-		Slug:      payload.Slug,
+		Slug:      strings.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
@@ -156,7 +156,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	// Convert update params
 	updateParams := repo.UpdateToolsetParams{
-		Slug:                   payload.Slug,
+		Slug:                   strings.ToLower(payload.Slug),
 		Description:            existingToolset.Description,
 		Name:                   existingToolset.Name,
 		DefaultEnvironmentSlug: existingToolset.DefaultEnvironmentSlug,
@@ -172,13 +172,13 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	if payload.DefaultEnvironmentSlug != nil {
 		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      *payload.DefaultEnvironmentSlug,
+			Slug:      strings.ToLower(*payload.DefaultEnvironmentSlug),
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to find environment: %w", err)
 		}
-		updateParams.DefaultEnvironmentSlug = conv.ToPGText(*payload.DefaultEnvironmentSlug)
+		updateParams.DefaultEnvironmentSlug = conv.ToPGText(strings.ToLower(*payload.DefaultEnvironmentSlug))
 	}
 
 	// Convert set back to slice
@@ -207,7 +207,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 
 	return s.repo.DeleteToolset(ctx, repo.DeleteToolsetParams{
-		Slug:      payload.Slug,
+		Slug:      strings.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
 }

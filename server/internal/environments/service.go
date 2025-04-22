@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -168,7 +169,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 
 	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
-		Slug:      payload.Slug,
+		Slug:      strings.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
@@ -176,7 +177,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	}
 
 	updateInput := repo.UpdateEnvironmentParams{
-		Slug:        payload.Slug,
+		Slug:        strings.ToLower(payload.Slug),
 		ProjectID:   *authCtx.ProjectID,
 		Name:        environment.Name,
 		Description: environment.Description,
@@ -252,7 +253,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 	}
 
 	return s.repo.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{
-		Slug:      payload.Slug,
+		Slug:      strings.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
 }
