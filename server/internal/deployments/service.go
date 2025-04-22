@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -304,7 +305,7 @@ func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, d
 			DeploymentID: deploymentID,
 			AssetID:      assetID,
 			Name:         a.Name,
-			Slug:         a.Slug,
+			Slug:         strings.ToLower(a.Slug),
 		})
 		if err != nil {
 			return nil, oops.E(err, "error adding openapi v3 asset to deployment", "failed to add openapi v3 asset to deployment").Log(ctx, logger)
@@ -523,7 +524,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 			DeploymentID: d.Deployment.ID,
 			AssetID:      assetID,
 			Name:         form.Name,
-			Slug:         form.Slug,
+			Slug:         strings.ToLower(form.Slug),
 		})
 		if err != nil {
 			return nil, oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
@@ -564,7 +565,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 			DeploymentID: newID,
 			AssetID:      assetID,
 			Name:         form.Name,
-			Slug:         form.Slug,
+			Slug:         strings.ToLower(form.Slug),
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
