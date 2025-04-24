@@ -35,6 +35,14 @@ class GramLangchain:
         self.api_key = api_key
         self.client = GramAPI(server_url="http://localhost:8080")
 
+    async def _do_http_async(self, req: httpx.Request) -> httpx.Response:
+        async with httpx.AsyncClient() as client:
+            return await client.send(req)
+
+    def _do_http_sync(self, req: httpx.Request) -> httpx.Response:
+        with httpx.Client() as client:
+            return client.send(req)
+
     def _fetch_tools(
         self,
         project: str,
@@ -99,37 +107,37 @@ class GramLangchain:
     def _create_tool_function(self, tool_call: GramLangchainCall):
         async def wrapper(**kwargs):
             url, params, headers, data = self._prepare_request(tool_call, **kwargs)
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    url=url,
-                    params=params,
-                    headers=headers,
-                    json=data,
-                )
-                response = await retry_async(
-                    functools.partial(client.send, response.request),
-                    _retry_policy
-                )
-                response.raise_for_status()
-                return response.text
+            req = httpx.Request(
+                method="POST",
+                url=url,
+                params=params,
+                headers=headers,
+                json=data,
+            )
+            response = await retry_async(
+                functools.partial(self._do_http_async, req),
+                _retry_policy
+            )
+            response.raise_for_status()
+            return response.text
         return wrapper
 
     def _create_sync_tool_function(self, tool_call: GramLangchainCall):
         def wrapper(**kwargs):
             url, params, headers, data = self._prepare_request(tool_call, **kwargs)
-            with httpx.Client() as client:
-                response = client.post(
-                    url=url,
-                    params=params,
-                    headers=headers,
-                    json=data,
-                )
-                response = retry(
-                    functools.partial(client.send, response.request),
-                    _retry_policy
-                )
-                response.raise_for_status()
-                return response.text
+            req = httpx.Request(
+                method="POST",
+                url=url,
+                params=params,
+                headers=headers,
+                json=data,
+            )
+            response = retry(
+                functools.partial(self._do_http_sync, req),
+                _retry_policy
+            )
+            response.raise_for_status()
+            return response.text
         return wrapper
 
 
