@@ -59,12 +59,13 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 
 const listAllHttpToolDefinitions = `-- name: ListAllHttpToolDefinitions :many
 WITH latest_deployment AS (
-    SELECT id, max(seq)
+    SELECT id
     FROM deployments
-    WHERE project_id = $1
-    GROUP BY id
+    WHERE deployments.project_id = $1
+    ORDER BY seq DESC
+    LIMIT 1
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, latest_deployment.id, max
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, latest_deployment.id
 FROM http_tool_definitions
 INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
 WHERE http_tool_definitions.project_id = $1 
@@ -105,7 +106,6 @@ type ListAllHttpToolDefinitionsRow struct {
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
 	ID_2                uuid.UUID
-	Max                 interface{}
 }
 
 func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHttpToolDefinitionsParams) ([]ListAllHttpToolDefinitionsRow, error) {
@@ -143,7 +143,6 @@ func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHtt
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.ID_2,
-			&i.Max,
 		); err != nil {
 			return nil, err
 		}

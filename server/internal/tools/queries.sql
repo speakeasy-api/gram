@@ -1,9 +1,10 @@
 -- name: ListAllHttpToolDefinitions :many
 WITH latest_deployment AS (
-    SELECT id, max(seq)
+    SELECT id
     FROM deployments
-    WHERE project_id = @project_id
-    GROUP BY id
+    WHERE deployments.project_id = @project_id
+    ORDER BY seq DESC
+    LIMIT 1
 )
 SELECT *
 FROM http_tool_definitions
