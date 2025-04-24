@@ -283,6 +283,9 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
       model: openai("gpt-4o"),
       messages: JSON.parse(init?.body as string).messages,
       tools,
+      system:
+        "You are a helpful assistant that can answer questions and help with tasks. The current date is " +
+        new Date().toISOString(),
       experimental_transform: smoothStream({
         delayInMs: 20, // Looks a little smoother
       }),
