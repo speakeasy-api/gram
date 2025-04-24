@@ -2,17 +2,18 @@ import { Page } from "@/components/page-layout";
 import { useState } from "react";
 import { CodeSnippet } from "@speakeasy-api/moonshine";
 
-const VERCEL_AI_SDK = 'Vercel AI SDK' as const;
-const LANGCHAIN = 'LangChain' as const;
-const OPENAI_AGENTS_SDK = 'OpenAI Agents SDK' as const;
+const VERCEL_AI_SDK = "Vercel AI SDK" as const;
+const LANGCHAIN = "LangChain" as const;
+const OPENAI_AGENTS_SDK = "OpenAI Agents SDK" as const;
+const FUNCION_CALLING = "Funcion Calling" as const;
 
 const FRAMEWORKS = {
-  typescript: [VERCEL_AI_SDK, LANGCHAIN] as const,
-  python: [OPENAI_AGENTS_SDK, LANGCHAIN] as const
+  typescript: [VERCEL_AI_SDK, LANGCHAIN, FUNCION_CALLING] as const,
+  python: [OPENAI_AGENTS_SDK, LANGCHAIN, FUNCION_CALLING] as const,
 } as const;
 
 type Language = keyof typeof FRAMEWORKS;
-type Framework = typeof FRAMEWORKS[keyof typeof FRAMEWORKS][number];
+type Framework = (typeof FRAMEWORKS)[keyof typeof FRAMEWORKS][number];
 
 const CODE_SAMPLES = {
   typescript: {
@@ -82,7 +83,25 @@ const result = await executor.invoke({
   input: "Can you tell me about my tools?",
 });
 
-console.log(result.output);`
+console.log(result.output);`,
+    [FUNCION_CALLING]: `import { FunctionCallingAdapter } from "@gram/sdk/functioncalling";
+
+const key = process.env.GRAM_API_KEY ?? "";
+
+// vanilla client that matches the function calling interface for direct use with model provider APIs
+const functionCallingAdapter = new FunctionCallingAdapter(key);
+
+const tools = await functionCallingAdapter.tools({
+  project: "default",
+  toolset: "my-toolset",
+  environment: "default",
+});
+
+// exposes name, description, parameters, and an execute and aexcute (async) function
+console.log(tools[0].name)
+console.log(tools[0].description)
+console.log(tools[0].parameters)
+console.log(tools[0].execute)`,
   },
   python: {
     [OPENAI_AGENTS_SDK]: `import asyncio
@@ -154,25 +173,47 @@ async def main():
     print(response)
 
 if __name__ == "__main__":
-    asyncio.run(main())`
-  }
+    asyncio.run(main())`,
+    [FUNCION_CALLING]: `import os
+from gram_ai.functioncalling import GramFunctionCalling
+
+key = "<GRAM_API_KEY>"
+
+# vanilla client that matches the function calling interface for direct use with model provider APIs
+gram = GramFunctionCalling(api_key=key)
+
+tools = gram.tools(
+    project="default",
+    toolset="my-toolset",
+    environment="default",
+)
+
+# exposes name, description, parameters, and an execute and aexecute (async) function
+print(tools[0].name)
+print(tools[0].description)
+print(tools[0].parameters)
+print(tools[0].execute)
+print(tools[0].aexecute)`,
+  },
 } as const;
 
 export default function SDK() {
-  const [language, setLanguage] = useState<Language>('typescript');
-  const [framework, setFramework] = useState<Framework>('Vercel AI SDK');
+  const [language, setLanguage] = useState<Language>("python");
+  const [framework, setFramework] = useState<Framework>(OPENAI_AGENTS_SDK);
 
   const getCodeSample = () => {
-    return CODE_SAMPLES[language][framework as keyof (typeof CODE_SAMPLES)[typeof language]];
+    return CODE_SAMPLES[language][
+      framework as keyof (typeof CODE_SAMPLES)[typeof language]
+    ];
   };
 
   const handleLanguageChange = (newLanguage: Language) => {
     setLanguage(newLanguage);
     // If the current framework exists in the new language, keep it
-    if (FRAMEWORKS[newLanguage].some(f => f === framework)) {
+    if (FRAMEWORKS[newLanguage].some((f) => f === framework)) {
       return;
     }
-    
+
     setFramework(FRAMEWORKS[newLanguage][0]);
   };
 
@@ -183,16 +224,21 @@ export default function SDK() {
       </Page.Header>
       <Page.Body>
         <div className="flex justify-between items-center mb-2">
-          <h2>Use Gram toolsets to build agentic workflows in many popular frameworks</h2>
-          
+          <h2>
+            Use Gram toolsets to build agentic workflows in many popular
+            frameworks
+          </h2>
+
           <div className="flex gap-2">
-            <select 
+            <select
               className="px-4 py-2 rounded border"
               value={language}
               onChange={(e) => handleLanguageChange(e.target.value as Language)}
             >
-              {Object.keys(FRAMEWORKS).map(lang => (
-                <option key={lang} value={lang}>{lang}</option>
+              {Object.keys(FRAMEWORKS).map((lang) => (
+                <option key={lang} value={lang}>
+                  {lang}
+                </option>
               ))}
             </select>
 
@@ -201,8 +247,10 @@ export default function SDK() {
               value={framework}
               onChange={(e) => setFramework(e.target.value as Framework)}
             >
-              {FRAMEWORKS[language].map(fw => (
-                <option key={fw} value={fw}>{fw}</option>
+              {FRAMEWORKS[language].map((fw) => (
+                <option key={fw} value={fw}>
+                  {fw}
+                </option>
               ))}
             </select>
           </div>
