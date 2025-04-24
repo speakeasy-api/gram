@@ -175,7 +175,7 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())`,
     [FUNCION_CALLING]: `import os
-from gram_ai.functioncalling import GramFunctionCalling
+from gram_ai.function_calling import GramFunctionCalling
 
 key = "<GRAM_API_KEY>"
 
