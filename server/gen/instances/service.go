@@ -138,4 +138,5 @@ type HTTPToolDefinition struct {
 	UpdatedAt string
 }
 
+// A short url-friendly label that uniquely identifies a resource.
 type Slug string

@@ -127,6 +127,7 @@ type ListEnvironmentsResult struct {
 	Environments []*Environment
 }
 
+// A short url-friendly label that uniquely identifies a resource.
 type Slug string
 
 // UpdateEnvironmentPayload is the payload type of the environments service

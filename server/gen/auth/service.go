@@ -113,6 +113,7 @@ type Project struct {
 	ProjectSlug Slug
 }
 
+// A short url-friendly label that uniquely identifies a resource.
 type Slug string
 
 // SwitchScopesPayload is the payload type of the auth service switchScopes

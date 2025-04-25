@@ -220,4 +220,5 @@ type OpenAPIv3DeploymentAssetForm struct {
 	Slug Slug
 }
 
+// A short url-friendly label that uniquely identifies a resource.
 type Slug string

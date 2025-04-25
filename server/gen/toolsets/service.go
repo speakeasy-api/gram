@@ -131,6 +131,7 @@ type ListToolsetsResult struct {
 	Toolsets []*ToolsetDetails
 }
 
+// A short url-friendly label that uniquely identifies a resource.
 type Slug string
 
 // ToolsetDetails is the result type of the toolsets service createToolset
