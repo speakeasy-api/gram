@@ -1,10 +1,12 @@
 package tools
 
 import (
+	. "goa.design/goa/v3/dsl"
+
 	"github.com/speakeasy-api/gram/design/environments"
 	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 	"github.com/speakeasy-api/gram/design/tools"
-	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("instances", func() {
@@ -41,8 +43,8 @@ var GetInstanceForm = Type("GetInstanceForm", func() {
 	security.SessionPayload()
 	security.ByKeyPayload()
 	security.ProjectPayload()
-	Attribute("toolset_slug", String, "The slug of the toolset to load")
-	Attribute("environment_slug", String, "The slug of the environment to load")
+	Attribute("toolset_slug", shared.Slug, "The slug of the toolset to load")
+	Attribute("environment_slug", shared.Slug, "The slug of the environment to load")
 	Required("toolset_slug")
 })
 

@@ -2,6 +2,7 @@ package toolsets
 
 import (
 	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -80,8 +81,8 @@ var _ = Service("toolsets", func() {
 		Description("Delete a toolset by its ID")
 
 		Payload(func() {
-			Attribute("slug", String, "The slug of the toolset")
 			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -103,8 +104,8 @@ var _ = Service("toolsets", func() {
 		Description("Get detailed information about a toolset including full HTTP tool definitions")
 
 		Payload(func() {
-			Attribute("slug", String, "The slug of the toolset")
 			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -129,7 +130,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("http_tool_names", ArrayOf(String), "List of HTTP tool names to include")
-	Attribute("default_environment_slug", String, "The slug of the environment to use as the default for the toolset")
+	Attribute("default_environment_slug", shared.Slug, "The slug of the environment to use as the default for the toolset")
 	security.ProjectPayload()
 	Required("name")
 })
@@ -140,10 +141,10 @@ var ListToolsetsResult = Type("ListToolsetsResult", func() {
 })
 
 var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
-	Attribute("slug", String, "The slug of the toolset to update")
+	Attribute("slug", shared.Slug, "The slug of the toolset to update")
 	Attribute("name", String, "The new name of the toolset")
 	Attribute("description", String, "The new description of the toolset")
-	Attribute("default_environment_slug", String, "The slug of the environment to use as the default for the toolset")
+	Attribute("default_environment_slug", shared.Slug, "The slug of the environment to use as the default for the toolset")
 	Attribute("http_tool_names", ArrayOf(String), "List of HTTP tool names to include")
 	security.ProjectPayload()
 	Required("slug")

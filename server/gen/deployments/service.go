@@ -57,7 +57,7 @@ type AddOpenAPIv3SourcePayload struct {
 	// The name to give the document as it will be displayed in UIs.
 	Name string
 	// The slug to give the document as it will be displayed in URLs.
-	Slug string
+	Slug Slug
 }
 
 // AddOpenAPIv3SourceResult is the result type of the deployments service
@@ -208,7 +208,7 @@ type OpenAPIv3DeploymentAsset struct {
 	// The name to give the document as it will be displayed in UIs.
 	Name string
 	// The slug to give the document as it will be displayed in URLs.
-	Slug string
+	Slug Slug
 }
 
 type OpenAPIv3DeploymentAssetForm struct {
@@ -217,5 +217,7 @@ type OpenAPIv3DeploymentAssetForm struct {
 	// The name to give the document as it will be displayed in UIs.
 	Name string
 	// The slug to give the document as it will be displayed in URLs.
-	Slug string
+	Slug Slug
 }
+
+type Slug string

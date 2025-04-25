@@ -231,7 +231,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			orgProjects = append(orgProjects, &gen.Project{
 				ProjectID:   project.ID.String(),
 				ProjectName: project.Name,
-				ProjectSlug: project.Slug,
+				ProjectSlug: gen.Slug(project.Slug),
 			})
 		}
 

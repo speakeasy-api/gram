@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -193,15 +195,18 @@ type ToolsetDetailsResponseBody struct {
 // of the "createToolset" endpoint of the "toolsets" service.
 func NewCreateToolsetResponseBody(res *toolsets.ToolsetDetails) *CreateToolsetResponseBody {
 	body := &CreateToolsetResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		OrganizationID:         res.OrganizationID,
-		Name:                   res.Name,
-		Slug:                   res.Slug,
-		Description:            res.Description,
-		DefaultEnvironmentSlug: res.DefaultEnvironmentSlug,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
+		ID:             res.ID,
+		ProjectID:      res.ProjectID,
+		OrganizationID: res.OrganizationID,
+		Name:           res.Name,
+		Slug:           string(res.Slug),
+		Description:    res.Description,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
@@ -239,15 +244,18 @@ func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsets
 // of the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetResponseBody(res *toolsets.ToolsetDetails) *UpdateToolsetResponseBody {
 	body := &UpdateToolsetResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		OrganizationID:         res.OrganizationID,
-		Name:                   res.Name,
-		Slug:                   res.Slug,
-		Description:            res.Description,
-		DefaultEnvironmentSlug: res.DefaultEnvironmentSlug,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
+		ID:             res.ID,
+		ProjectID:      res.ProjectID,
+		OrganizationID: res.OrganizationID,
+		Name:           res.Name,
+		Slug:           string(res.Slug),
+		Description:    res.Description,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
@@ -270,15 +278,18 @@ func NewUpdateToolsetResponseBody(res *toolsets.ToolsetDetails) *UpdateToolsetRe
 // the "getToolset" endpoint of the "toolsets" service.
 func NewGetToolsetResponseBody(res *toolsets.ToolsetDetails) *GetToolsetResponseBody {
 	body := &GetToolsetResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		OrganizationID:         res.OrganizationID,
-		Name:                   res.Name,
-		Slug:                   res.Slug,
-		Description:            res.Description,
-		DefaultEnvironmentSlug: res.DefaultEnvironmentSlug,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
+		ID:             res.ID,
+		ProjectID:      res.ProjectID,
+		OrganizationID: res.OrganizationID,
+		Name:           res.Name,
+		Slug:           string(res.Slug),
+		Description:    res.Description,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
@@ -301,9 +312,12 @@ func NewGetToolsetResponseBody(res *toolsets.ToolsetDetails) *GetToolsetResponse
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
 	v := &toolsets.CreateToolsetPayload{
-		Name:                   *body.Name,
-		Description:            body.Description,
-		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
+		Name:        *body.Name,
+		Description: body.Description,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
@@ -331,9 +345,12 @@ func NewListToolsetsPayload(sessionToken *string, projectSlugInput *string) *too
 // payload.
 func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessionToken *string, projectSlugInput *string) *toolsets.UpdateToolsetPayload {
 	v := &toolsets.UpdateToolsetPayload{
-		Name:                   body.Name,
-		Description:            body.Description,
-		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
+		Name:        body.Name,
+		Description: body.Description,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
@@ -341,7 +358,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 			v.HTTPToolNames[i] = val
 		}
 	}
-	v.Slug = slug
+	v.Slug = toolsets.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -352,7 +369,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 // payload.
 func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.DeleteToolsetPayload {
 	v := &toolsets.DeleteToolsetPayload{}
-	v.Slug = slug
+	v.Slug = toolsets.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -362,7 +379,7 @@ func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput
 // NewGetToolsetPayload builds a toolsets service getToolset endpoint payload.
 func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
 	v := &toolsets.GetToolsetPayload{}
-	v.Slug = slug
+	v.Slug = toolsets.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -374,6 +391,28 @@ func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *s
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
+	}
+	return
+}
+
+// ValidateUpdateToolsetRequestBody runs the validations defined on
+// UpdateToolsetRequestBody
+func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error) {
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
 	}
 	return
 }

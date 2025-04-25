@@ -1,8 +1,10 @@
 package auth
 
 import (
-	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 )
 
 var _ = Service("auth", func() {
@@ -163,7 +165,7 @@ var _ = Service("auth", func() {
 var Project = Type("Project", func() {
 	Attribute("project_id", String)
 	Attribute("project_name", String)
-	Attribute("project_slug", String)
+	Attribute("project_slug", shared.Slug)
 	Required("project_id", "project_name", "project_slug")
 })
 

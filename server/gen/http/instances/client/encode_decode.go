@@ -54,9 +54,9 @@ func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			req.Header.Set("Gram-Key", head)
 		}
 		values := req.URL.Query()
-		values.Add("toolset_slug", p.ToolsetSlug)
+		values.Add("toolset_slug", string(p.ToolsetSlug))
 		if p.EnvironmentSlug != nil {
-			values.Add("environment_slug", *p.EnvironmentSlug)
+			values.Add("environment_slug", string(*p.EnvironmentSlug))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -140,7 +140,7 @@ func unmarshalEnvironmentResponseBodyToInstancesEnvironment(v *EnvironmentRespon
 		OrganizationID: *v.OrganizationID,
 		ProjectID:      *v.ProjectID,
 		Name:           *v.Name,
-		Slug:           *v.Slug,
+		Slug:           instances.Slug(*v.Slug),
 		Description:    v.Description,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,

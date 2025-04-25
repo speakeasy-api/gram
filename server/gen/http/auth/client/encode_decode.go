@@ -461,7 +461,7 @@ func unmarshalProjectResponseBodyToAuthProject(v *ProjectResponseBody) *auth.Pro
 	res := &auth.Project{
 		ProjectID:   *v.ProjectID,
 		ProjectName: *v.ProjectName,
-		ProjectSlug: *v.ProjectSlug,
+		ProjectSlug: auth.Slug(*v.ProjectSlug),
 	}
 
 	return res

@@ -53,7 +53,7 @@ type Environment struct {
 	// The name of the environment
 	Name string
 	// The slug identifier for the environment
-	Slug string
+	Slug Slug
 	// The description of the environment
 	Description *string
 	// List of environment entries
@@ -83,9 +83,9 @@ type GetInstanceForm struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// The slug of the toolset to load
-	ToolsetSlug string
+	ToolsetSlug Slug
 	// The slug of the environment to load
-	EnvironmentSlug *string
+	EnvironmentSlug *Slug
 }
 
 // GetInstanceResult is the result type of the instances service getInstance
@@ -137,3 +137,5 @@ type HTTPToolDefinition struct {
 	// The last update date of the tool.
 	UpdatedAt string
 }
+
+type Slug string

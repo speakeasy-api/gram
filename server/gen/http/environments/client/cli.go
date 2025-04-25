@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	environments "github.com/speakeasy-api/gram/gen/environments"
 	goa "goa.design/goa/v3/pkg"
@@ -23,7 +24,7 @@ func BuildCreateEnvironmentPayload(environmentsCreateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsCreateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Et a sit voluptas ut.\",\n      \"entries\": [\n         {\n            \"name\": \"Est alias adipisci deserunt ad vel.\",\n            \"value\": \"Laudantium vel sit odit.\"\n         },\n         {\n            \"name\": \"Est alias adipisci deserunt ad vel.\",\n            \"value\": \"Laudantium vel sit odit.\"\n         }\n      ],\n      \"name\": \"Laborum at.\",\n      \"organization_id\": \"Sit enim fugiat reiciendis nisi ad excepturi.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Magnam qui aut enim.\",\n      \"entries\": [\n         {\n            \"name\": \"Qui distinctio eum qui.\",\n            \"value\": \"Molestiae debitis maiores.\"\n         },\n         {\n            \"name\": \"Qui distinctio eum qui.\",\n            \"value\": \"Molestiae debitis maiores.\"\n         },\n         {\n            \"name\": \"Qui distinctio eum qui.\",\n            \"value\": \"Molestiae debitis maiores.\"\n         }\n      ],\n      \"name\": \"Minima molestiae et tenetur sed.\",\n      \"organization_id\": \"Doloribus aperiam expedita consequatur perferendis velit est.\"\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
@@ -93,7 +94,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	{
 		err = json.Unmarshal([]byte(environmentsUpdateEnvironmentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Ullam eum vitae voluptatum sint animi eos.\",\n      \"entries_to_remove\": [\n         \"Qui id qui iusto voluptate.\",\n         \"Maiores qui harum eos repellendus reprehenderit est.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Est alias adipisci deserunt ad vel.\",\n            \"value\": \"Laudantium vel sit odit.\"\n         },\n         {\n            \"name\": \"Est alias adipisci deserunt ad vel.\",\n            \"value\": \"Laudantium vel sit odit.\"\n         }\n      ],\n      \"name\": \"Repellat aut.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"Perferendis dolorum odit.\",\n      \"entries_to_remove\": [\n         \"Qui veniam.\",\n         \"Ipsa sit omnis molestias nulla.\",\n         \"Ut expedita ipsa similique.\",\n         \"Facilis et voluptatem atque accusantium.\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"Qui distinctio eum qui.\",\n            \"value\": \"Molestiae debitis maiores.\"\n         },\n         {\n            \"name\": \"Qui distinctio eum qui.\",\n            \"value\": \"Molestiae debitis maiores.\"\n         }\n      ],\n      \"name\": \"Perferendis hic expedita.\"\n   }'")
 		}
 		if body.EntriesToUpdate == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries_to_update", "body"))
@@ -108,6 +109,13 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	var slug string
 	{
 		slug = environmentsUpdateEnvironmentSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	var sessionToken *string
 	{
@@ -141,7 +149,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	} else {
 		v.EntriesToRemove = []string{}
 	}
-	v.Slug = slug
+	v.Slug = environments.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -151,9 +159,17 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 // BuildDeleteEnvironmentPayload builds the payload for the environments
 // deleteEnvironment endpoint from CLI flags.
 func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, environmentsDeleteEnvironmentSessionToken string, environmentsDeleteEnvironmentProjectSlugInput string) (*environments.DeleteEnvironmentPayload, error) {
+	var err error
 	var slug string
 	{
 		slug = environmentsDeleteEnvironmentSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	var sessionToken *string
 	{
@@ -168,7 +184,7 @@ func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, env
 		}
 	}
 	v := &environments.DeleteEnvironmentPayload{}
-	v.Slug = slug
+	v.Slug = environments.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

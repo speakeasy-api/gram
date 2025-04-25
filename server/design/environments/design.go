@@ -1,8 +1,10 @@
 package environments
 
 import (
-	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 )
 
 var _ = Service("environments", func() {
@@ -82,7 +84,7 @@ var _ = Service("environments", func() {
 		Description("Delete an environment")
 
 		Payload(func() {
-			Attribute("slug", String, "The slug of the environment to delete")
+			Attribute("slug", shared.Slug, "The slug of the environment to delete")
 			Required("slug")
 			security.SessionPayload()
 			security.ProjectPayload()
@@ -142,7 +144,7 @@ var CreateEnvironmentForm = Type("CreateEnvironmentForm", func() {
 var UpdateEnvironmentForm = Type("UpdateEnvironmentForm", func() {
 	Description("Form for updating an environment")
 
-	Attribute("slug", String, "The slug of the environment to update")
+	Attribute("slug", shared.Slug, "The slug of the environment to update")
 	Attribute("description", String, "The description of the environment")
 	Attribute("name", String, "The name of the environment")
 	Attribute("entries_to_update", ArrayOf(EnvironmentEntryInput), "List of environment entries to update or create")

@@ -86,7 +86,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			Name:                tool.Name,
 			Summary:             tool.Summary,
 			Description:         tool.Description,
-			Openapiv3Operation:  conv.FromPGText(tool.Openapiv3Operation),
+			Openapiv3Operation:  conv.FromPGText[string](tool.Openapiv3Operation),
 			Tags:                tool.Tags,
 			Security:            conv.FromBytes(tool.Security),
 			HTTPMethod:          tool.HttpMethod,

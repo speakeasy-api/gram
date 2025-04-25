@@ -456,7 +456,8 @@ paths:
                   name: slug
                   required: true
                   schema:
-                    description: The slug of the environment to delete
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -530,7 +531,8 @@ paths:
                   name: slug
                   required: true
                   schema:
-                    description: The slug of the environment to update
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -579,14 +581,16 @@ paths:
                   name: toolset_slug
                   required: true
                   schema:
-                    description: The slug of the toolset to load
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     type: string
                 - allowEmptyValue: true
                   description: The slug of the environment to load
                   in: query
                   name: environment_slug
                   schema:
-                    description: The slug of the environment to load
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -812,7 +816,8 @@ paths:
                   name: slug
                   required: true
                   schema:
-                    description: The slug of the toolset
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -851,7 +856,8 @@ paths:
                   name: slug
                   required: true
                   schema:
-                    description: The slug of the toolset
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -929,7 +935,8 @@ paths:
                   name: slug
                   required: true
                   schema:
-                    description: The slug of the toolset to update
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -980,7 +987,8 @@ components:
                     description: The name to give the document as it will be displayed in UIs.
                 slug:
                     type: string
-                    description: The slug to give the document as it will be displayed in URLs.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
             required:
                 - asset_id
                 - name
@@ -1130,7 +1138,8 @@ components:
             properties:
                 default_environment_slug:
                     type: string
-                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 description:
                     type: string
                     description: Description of the toolset
@@ -1152,6 +1161,8 @@ components:
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 description:
                     type: string
                     description: Description of the toolset
@@ -1276,7 +1287,8 @@ components:
                     description: The project ID this environment belongs to
                 slug:
                     type: string
-                    description: The slug identifier for the environment
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 updated_at:
                     type: string
                     description: When the environment was last updated
@@ -1401,14 +1413,16 @@ components:
                     type: string
                 environment_slug:
                     type: string
-                    description: The slug of the environment to load
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 project_slug_input:
                     type: string
                 session_token:
                     type: string
                 toolset_slug:
                     type: string
-                    description: The slug of the toolset to load
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
             required:
                 - toolset_slug
         GetInstanceResult:
@@ -1641,7 +1655,8 @@ components:
                     description: The name to give the document as it will be displayed in UIs.
                 slug:
                     type: string
-                    description: The slug to give the document as it will be displayed in URLs.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
             required:
                 - id
                 - asset_id
@@ -1658,7 +1673,8 @@ components:
                     description: The name to give the document as it will be displayed in UIs.
                 slug:
                     type: string
-                    description: The slug to give the document as it will be displayed in URLs.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
             required:
                 - asset_id
                 - name
@@ -1693,6 +1709,8 @@ components:
                     type: string
                 project_slug:
                     type: string
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
             required:
                 - project_id
                 - project_name
@@ -1706,7 +1724,8 @@ components:
                     format: date-time
                 default_environment_slug:
                     type: string
-                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 description:
                     type: string
                     description: Description of the toolset
@@ -1734,7 +1753,8 @@ components:
                     description: The environment variables that are relevant to the toolset
                 slug:
                     type: string
-                    description: The slug of the toolset
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -1769,7 +1789,8 @@ components:
                     description: The name of the environment
                 slug:
                     type: string
-                    description: The slug of the environment to update
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
             description: Form for updating an environment
             required:
                 - slug
@@ -1802,7 +1823,8 @@ components:
             properties:
                 default_environment_slug:
                     type: string
-                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 description:
                     type: string
                     description: The new description of the toolset
@@ -1818,7 +1840,8 @@ components:
                     type: string
                 slug:
                     type: string
-                    description: The slug of the toolset to update
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
             required:
                 - slug
         UpdateToolsetRequestBody:
@@ -1827,6 +1850,8 @@ components:
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 description:
                     type: string
                     description: The new description of the toolset

@@ -110,8 +110,10 @@ type Organization struct {
 type Project struct {
 	ProjectID   string
 	ProjectName string
-	ProjectSlug string
+	ProjectSlug Slug
 }
+
+type Slug string
 
 // SwitchScopesPayload is the payload type of the auth service switchScopes
 // method.

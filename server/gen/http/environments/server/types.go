@@ -141,7 +141,7 @@ func NewCreateEnvironmentResponseBody(res *environments.Environment) *CreateEnvi
 		OrganizationID: res.OrganizationID,
 		ProjectID:      res.ProjectID,
 		Name:           res.Name,
-		Slug:           res.Slug,
+		Slug:           string(res.Slug),
 		Description:    res.Description,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -180,7 +180,7 @@ func NewUpdateEnvironmentResponseBody(res *environments.Environment) *UpdateEnvi
 		OrganizationID: res.OrganizationID,
 		ProjectID:      res.ProjectID,
 		Name:           res.Name,
-		Slug:           res.Slug,
+		Slug:           string(res.Slug),
 		Description:    res.Description,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -239,7 +239,7 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string
 	for i, val := range body.EntriesToRemove {
 		v.EntriesToRemove[i] = val
 	}
-	v.Slug = slug
+	v.Slug = environments.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -250,7 +250,7 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string
 // endpoint payload.
 func NewDeleteEnvironmentPayload(slug string, sessionToken *string, projectSlugInput *string) *environments.DeleteEnvironmentPayload {
 	v := &environments.DeleteEnvironmentPayload{}
-	v.Slug = slug
+	v.Slug = environments.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	environments "github.com/speakeasy-api/gram/gen/environments"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -186,7 +188,7 @@ func NewCreateEnvironmentEnvironmentOK(body *CreateEnvironmentResponseBody) *env
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
 		Name:           *body.Name,
-		Slug:           *body.Slug,
+		Slug:           environments.Slug(*body.Slug),
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
@@ -219,7 +221,7 @@ func NewUpdateEnvironmentEnvironmentOK(body *UpdateEnvironmentResponseBody) *env
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
 		Name:           *body.Name,
-		Slug:           *body.Slug,
+		Slug:           environments.Slug(*body.Slug),
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
@@ -258,6 +260,14 @@ func ValidateCreateEnvironmentResponseBody(body *CreateEnvironmentResponseBody) 
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	for _, e := range body.Entries {
 		if e != nil {
@@ -317,6 +327,14 @@ func ValidateUpdateEnvironmentResponseBody(body *UpdateEnvironmentResponseBody) 
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	for _, e := range body.Entries {
 		if e != nil {
@@ -384,6 +402,14 @@ func ValidateEnvironmentResponseBody(body *EnvironmentResponseBody) (err error) 
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	for _, e := range body.Entries {
 		if e != nil {

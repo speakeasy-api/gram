@@ -138,7 +138,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		securitySchemes[key] = sec
 	}
 
-	globalServerEnvVar := strcase.ToSNAKE(docInfo.Slug + "_SERVER_URL")
+	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
 	globalDefaultServer := s.extractDefaultServer(ctx, logger, tx, projectID, deploymentID, docInfo, v3Model.Model.Servers)
 
 	for path, pathItem := range v3Model.Model.Paths.PathItems.FromOldest() {
@@ -611,7 +611,7 @@ func serializeSecurity(security []*base.SecurityRequirement) ([]byte, error) {
 }
 
 func securitySchemesFromOpenAPIv3(doc v3.Document, task openapiV3Task) (map[string]*repo.CreateHTTPSecurityParams, []error) {
-	slug := task.docInfo.Slug
+	slug := string(task.docInfo.Slug)
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil || doc.Components.SecuritySchemes.Len() == 0 {
 		return nil, nil
 	}

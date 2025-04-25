@@ -204,7 +204,7 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("slug", p.Slug)
+		values.Add("slug", string(p.Slug))
 		req.URL.RawQuery = values.Encode()
 		body := NewUpdateToolsetRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -286,7 +286,7 @@ func EncodeDeleteToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("slug", p.Slug)
+		values.Add("slug", string(p.Slug))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -351,7 +351,7 @@ func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("slug", p.Slug)
+		values.Add("slug", string(p.Slug))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -431,15 +431,18 @@ func unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(v *HTTP
 // *ToolsetDetailsResponseBody.
 func unmarshalToolsetDetailsResponseBodyToToolsetsToolsetDetails(v *ToolsetDetailsResponseBody) *toolsets.ToolsetDetails {
 	res := &toolsets.ToolsetDetails{
-		ID:                     *v.ID,
-		ProjectID:              *v.ProjectID,
-		OrganizationID:         *v.OrganizationID,
-		Name:                   *v.Name,
-		Slug:                   *v.Slug,
-		Description:            v.Description,
-		DefaultEnvironmentSlug: v.DefaultEnvironmentSlug,
-		CreatedAt:              *v.CreatedAt,
-		UpdatedAt:              *v.UpdatedAt,
+		ID:             *v.ID,
+		ProjectID:      *v.ProjectID,
+		OrganizationID: *v.OrganizationID,
+		Name:           *v.Name,
+		Slug:           toolsets.Slug(*v.Slug),
+		Description:    v.Description,
+		CreatedAt:      *v.CreatedAt,
+		UpdatedAt:      *v.UpdatedAt,
+	}
+	if v.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*v.DefaultEnvironmentSlug)
+		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if v.RelevantEnvironmentVariables != nil {
 		res.RelevantEnvironmentVariables = make([]string, len(v.RelevantEnvironmentVariables))

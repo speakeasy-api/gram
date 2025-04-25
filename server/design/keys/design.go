@@ -1,8 +1,9 @@
 package keys
 
 import (
-	"github.com/speakeasy-api/gram/design/security"
 	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/design/security"
 )
 
 var _ = Service("keys", func() {

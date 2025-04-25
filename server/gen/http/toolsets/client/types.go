@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -193,9 +195,12 @@ type ToolsetDetailsResponseBody struct {
 // the "createToolset" endpoint of the "toolsets" service.
 func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolsetRequestBody {
 	body := &CreateToolsetRequestBody{
-		Name:                   p.Name,
-		Description:            p.Description,
-		DefaultEnvironmentSlug: p.DefaultEnvironmentSlug,
+		Name:        p.Name,
+		Description: p.Description,
+	}
+	if p.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*p.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if p.HTTPToolNames != nil {
 		body.HTTPToolNames = make([]string, len(p.HTTPToolNames))
@@ -210,9 +215,12 @@ func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolse
 // the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolsetRequestBody {
 	body := &UpdateToolsetRequestBody{
-		Name:                   p.Name,
-		Description:            p.Description,
-		DefaultEnvironmentSlug: p.DefaultEnvironmentSlug,
+		Name:        p.Name,
+		Description: p.Description,
+	}
+	if p.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*p.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if p.HTTPToolNames != nil {
 		body.HTTPToolNames = make([]string, len(p.HTTPToolNames))
@@ -227,15 +235,18 @@ func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolse
 // endpoint result from a HTTP "OK" response.
 func NewCreateToolsetToolsetDetailsOK(body *CreateToolsetResponseBody) *toolsets.ToolsetDetails {
 	v := &toolsets.ToolsetDetails{
-		ID:                     *body.ID,
-		ProjectID:              *body.ProjectID,
-		OrganizationID:         *body.OrganizationID,
-		Name:                   *body.Name,
-		Slug:                   *body.Slug,
-		Description:            body.Description,
-		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
-		CreatedAt:              *body.CreatedAt,
-		UpdatedAt:              *body.UpdatedAt,
+		ID:             *body.ID,
+		ProjectID:      *body.ProjectID,
+		OrganizationID: *body.OrganizationID,
+		Name:           *body.Name,
+		Slug:           toolsets.Slug(*body.Slug),
+		Description:    body.Description,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.RelevantEnvironmentVariables != nil {
 		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
@@ -267,15 +278,18 @@ func NewListToolsetsResultOK(body *ListToolsetsResponseBody) *toolsets.ListTools
 // endpoint result from a HTTP "OK" response.
 func NewUpdateToolsetToolsetDetailsOK(body *UpdateToolsetResponseBody) *toolsets.ToolsetDetails {
 	v := &toolsets.ToolsetDetails{
-		ID:                     *body.ID,
-		ProjectID:              *body.ProjectID,
-		OrganizationID:         *body.OrganizationID,
-		Name:                   *body.Name,
-		Slug:                   *body.Slug,
-		Description:            body.Description,
-		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
-		CreatedAt:              *body.CreatedAt,
-		UpdatedAt:              *body.UpdatedAt,
+		ID:             *body.ID,
+		ProjectID:      *body.ProjectID,
+		OrganizationID: *body.OrganizationID,
+		Name:           *body.Name,
+		Slug:           toolsets.Slug(*body.Slug),
+		Description:    body.Description,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.RelevantEnvironmentVariables != nil {
 		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
@@ -295,15 +309,18 @@ func NewUpdateToolsetToolsetDetailsOK(body *UpdateToolsetResponseBody) *toolsets
 // endpoint result from a HTTP "OK" response.
 func NewGetToolsetToolsetDetailsOK(body *GetToolsetResponseBody) *toolsets.ToolsetDetails {
 	v := &toolsets.ToolsetDetails{
-		ID:                     *body.ID,
-		ProjectID:              *body.ProjectID,
-		OrganizationID:         *body.OrganizationID,
-		Name:                   *body.Name,
-		Slug:                   *body.Slug,
-		Description:            body.Description,
-		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
-		CreatedAt:              *body.CreatedAt,
-		UpdatedAt:              *body.UpdatedAt,
+		ID:             *body.ID,
+		ProjectID:      *body.ProjectID,
+		OrganizationID: *body.OrganizationID,
+		Name:           *body.Name,
+		Slug:           toolsets.Slug(*body.Slug),
+		Description:    body.Description,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.RelevantEnvironmentVariables != nil {
 		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
@@ -345,6 +362,22 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
 	}
 	for _, e := range body.HTTPTools {
 		if e != nil {
@@ -405,6 +438,22 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
+	}
 	for _, e := range body.HTTPTools {
 		if e != nil {
 			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
@@ -447,6 +496,22 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
 	}
 	for _, e := range body.HTTPTools {
 		if e != nil {
@@ -538,6 +603,22 @@ func ValidateToolsetDetailsResponseBody(body *ToolsetDetailsResponseBody) (err e
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
 	}
 	for _, e := range body.HTTPTools {
 		if e != nil {

@@ -2,6 +2,8 @@ package environments
 
 import (
 	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/design/shared"
 )
 
 var Environment = Type("Environment", func() {
@@ -11,7 +13,7 @@ var Environment = Type("Environment", func() {
 	Attribute("organization_id", String, "The organization ID this environment belongs to")
 	Attribute("project_id", String, "The project ID this environment belongs to")
 	Attribute("name", String, "The name of the environment")
-	Attribute("slug", String, "The slug identifier for the environment")
+	Attribute("slug", shared.Slug, "The slug identifier for the environment")
 	Attribute("description", String, "The description of the environment")
 	Attribute("entries", ArrayOf(EnvironmentEntry), "List of environment entries")
 	Attribute("created_at", String, func() {

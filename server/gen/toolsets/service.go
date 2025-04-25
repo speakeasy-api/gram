@@ -60,7 +60,7 @@ type CreateToolsetPayload struct {
 	// List of HTTP tool names to include
 	HTTPToolNames []string
 	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string
+	DefaultEnvironmentSlug *Slug
 	ProjectSlugInput       *string
 }
 
@@ -68,7 +68,7 @@ type CreateToolsetPayload struct {
 // deleteToolset method.
 type DeleteToolsetPayload struct {
 	// The slug of the toolset
-	Slug             string
+	Slug             Slug
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -77,7 +77,7 @@ type DeleteToolsetPayload struct {
 // method.
 type GetToolsetPayload struct {
 	// The slug of the toolset
-	Slug             string
+	Slug             Slug
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -131,6 +131,8 @@ type ListToolsetsResult struct {
 	Toolsets []*ToolsetDetails
 }
 
+type Slug string
+
 // ToolsetDetails is the result type of the toolsets service createToolset
 // method.
 type ToolsetDetails struct {
@@ -143,11 +145,11 @@ type ToolsetDetails struct {
 	// The name of the toolset
 	Name string
 	// The slug of the toolset
-	Slug string
+	Slug Slug
 	// Description of the toolset
 	Description *string
 	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string
+	DefaultEnvironmentSlug *Slug
 	// The environment variables that are relevant to the toolset
 	RelevantEnvironmentVariables []string
 	// The HTTP tools in this toolset
@@ -163,13 +165,13 @@ type ToolsetDetails struct {
 type UpdateToolsetPayload struct {
 	SessionToken *string
 	// The slug of the toolset to update
-	Slug string
+	Slug Slug
 	// The new name of the toolset
 	Name *string
 	// The new description of the toolset
 	Description *string
 	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string
+	DefaultEnvironmentSlug *Slug
 	// List of HTTP tool names to include
 	HTTPToolNames    []string
 	ProjectSlugInput *string

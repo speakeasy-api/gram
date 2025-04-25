@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -273,7 +275,7 @@ func NewAddOpenAPIv3SourcePayload(body *AddOpenAPIv3SourceRequestBody, sessionTo
 	v := &deployments.AddOpenAPIv3SourcePayload{
 		AssetID: *body.AssetID,
 		Name:    *body.Name,
-		Slug:    *body.Slug,
+		Slug:    deployments.Slug(*body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -317,6 +319,14 @@ func ValidateAddOpenAPIv3SourceRequestBody(body *AddOpenAPIv3SourceRequestBody) 
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
 	return
 }
 
@@ -331,6 +341,14 @@ func ValidateOpenAPIv3DeploymentAssetFormRequestBody(body *OpenAPIv3DeploymentAs
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	return
 }

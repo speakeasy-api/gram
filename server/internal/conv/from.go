@@ -21,11 +21,13 @@ func FromNullableUUID(u uuid.NullUUID) *string {
 	return &val
 }
 
-func FromPGText(t pgtype.Text) *string {
+func FromPGText[T ~string](t pgtype.Text) *T {
 	if !t.Valid {
 		return nil
 	}
-	return &t.String
+
+	val := T(t.String)
+	return &val
 }
 
 func ToPGText(t string) pgtype.Text {
@@ -57,4 +59,8 @@ func ToSlug(s string) string {
 	s = dashCollapseRegex.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-") // trim leading and trailing dashes
 	return s
+}
+
+func ToLower[T ~string](s T) string {
+	return strings.ToLower(string(s))
 }

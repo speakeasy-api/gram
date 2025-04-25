@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -193,7 +195,7 @@ func NewAddOpenAPIv3SourceRequestBody(p *deployments.AddOpenAPIv3SourcePayload) 
 	body := &AddOpenAPIv3SourceRequestBody{
 		AssetID: p.AssetID,
 		Name:    p.Name,
-		Slug:    p.Slug,
+		Slug:    string(p.Slug),
 	}
 	return body
 }
@@ -348,6 +350,24 @@ func ValidateOpenAPIv3DeploymentAssetResponseBody(body *OpenAPIv3DeploymentAsset
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	return
+}
+
+// ValidateOpenAPIv3DeploymentAssetFormRequestBody runs the validations defined
+// on OpenAPIv3DeploymentAssetFormRequestBody
+func ValidateOpenAPIv3DeploymentAssetFormRequestBody(body *OpenAPIv3DeploymentAssetFormRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	if utf8.RuneCountInString(body.Slug) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
 	}
 	return
 }

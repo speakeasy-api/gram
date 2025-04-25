@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	environments "github.com/speakeasy-api/gram/gen/environments"
 	goahttp "goa.design/goa/v3/http"
@@ -180,6 +181,10 @@ func DecodeUpdateEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -233,6 +238,10 @@ func DecodeDeleteEnvironmentRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		slug = r.URL.Query().Get("slug")
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -299,7 +308,7 @@ func marshalEnvironmentsEnvironmentToEnvironmentResponseBody(v *environments.Env
 		OrganizationID: v.OrganizationID,
 		ProjectID:      v.ProjectID,
 		Name:           v.Name,
-		Slug:           v.Slug,
+		Slug:           string(v.Slug),
 		Description:    v.Description,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,

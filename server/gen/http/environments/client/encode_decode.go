@@ -204,7 +204,7 @@ func EncodeUpdateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("slug", p.Slug)
+		values.Add("slug", string(p.Slug))
 		req.URL.RawQuery = values.Encode()
 		body := NewUpdateEnvironmentRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -286,7 +286,7 @@ func EncodeDeleteEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("slug", p.Slug)
+		values.Add("slug", string(p.Slug))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -365,7 +365,7 @@ func unmarshalEnvironmentResponseBodyToEnvironmentsEnvironment(v *EnvironmentRes
 		OrganizationID: *v.OrganizationID,
 		ProjectID:      *v.ProjectID,
 		Name:           *v.Name,
-		Slug:           *v.Slug,
+		Slug:           environments.Slug(*v.Slug),
 		Description:    v.Description,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,

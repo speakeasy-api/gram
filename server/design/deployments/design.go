@@ -2,6 +2,7 @@ package deployments
 
 import (
 	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -170,7 +171,7 @@ var OpenAPIv3DeploymentAsset = Type("OpenAPIv3DeploymentAsset", func() {
 	Attribute("name", String, func() {
 		Description("The name to give the document as it will be displayed in UIs.")
 	})
-	Attribute("slug", String, func() {
+	Attribute("slug", shared.Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
 	})
 })
@@ -233,7 +234,7 @@ var OpenAPIv3DeploymentAssetForm = Type("OpenAPIv3DeploymentAssetForm", func() {
 	Attribute("name", String, func() {
 		Description("The name to give the document as it will be displayed in UIs.")
 	})
-	Attribute("slug", String, func() {
+	Attribute("slug", shared.Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
 	})
 })

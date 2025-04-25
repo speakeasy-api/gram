@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	auth "github.com/speakeasy-api/gram/gen/auth"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -157,6 +159,14 @@ func ValidateProjectResponseBody(body *ProjectResponseBody) (err error) {
 	}
 	if body.ProjectSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
+	}
+	if body.ProjectSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.project_slug", *body.ProjectSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.ProjectSlug != nil {
+		if utf8.RuneCountInString(*body.ProjectSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.project_slug", *body.ProjectSlug, utf8.RuneCountInString(*body.ProjectSlug), 40, false))
+		}
 	}
 	return
 }

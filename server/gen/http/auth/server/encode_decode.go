@@ -237,7 +237,7 @@ func marshalAuthProjectToProjectResponseBody(v *auth.Project) *ProjectResponseBo
 	res := &ProjectResponseBody{
 		ProjectID:   v.ProjectID,
 		ProjectName: v.ProjectName,
-		ProjectSlug: v.ProjectSlug,
+		ProjectSlug: string(v.ProjectSlug),
 	}
 
 	return res

@@ -73,7 +73,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, errors.New("project ID is required")
 	}
 
-	toolset, err := s.toolset.LoadToolsetDetails(ctx, strings.ToLower(payload.ToolsetSlug), *authCtx.ProjectID)
+	toolset, err := s.toolset.LoadToolsetDetails(ctx, conv.ToLower(payload.ToolsetSlug), *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,12 +86,12 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	if payload.EnvironmentSlug != nil {
 		envModel, err = s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 			ProjectID: *authCtx.ProjectID,
-			Slug:      strings.ToLower(*payload.EnvironmentSlug),
+			Slug:      conv.ToLower(*payload.EnvironmentSlug),
 		})
 	} else {
 		envModel, err = s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 			ProjectID: *authCtx.ProjectID,
-			Slug:      *toolset.DefaultEnvironmentSlug,
+			Slug:      string(*toolset.DefaultEnvironmentSlug),
 		})
 	}
 	if err != nil {
@@ -118,8 +118,8 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		OrganizationID: envModel.OrganizationID,
 		ProjectID:      envModel.ProjectID.String(),
 		Name:           envModel.Name,
-		Slug:           envModel.Slug,
-		Description:    conv.FromPGText(envModel.Description),
+		Slug:           gen.Slug(envModel.Slug),
+		Description:    conv.FromPGText[string](envModel.Description),
 		Entries:        genEntries,
 		CreatedAt:      envModel.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      envModel.UpdatedAt.Time.Format(time.RFC3339),

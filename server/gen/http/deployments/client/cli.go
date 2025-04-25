@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetDeploymentPayload builds the payload for the deployments
@@ -49,7 +51,17 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Perferendis voluptatem maxime illo libero corporis.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Qui suscipit eaque ex perferendis assumenda.\",\n            \"name\": \"Delectus ex consequuntur est sit dolores non.\",\n            \"slug\": \"Ipsum nesciunt natus amet est optio est.\"\n         },\n         {\n            \"asset_id\": \"Qui suscipit eaque ex perferendis assumenda.\",\n            \"name\": \"Delectus ex consequuntur est sit dolores non.\",\n            \"slug\": \"Ipsum nesciunt natus amet est optio est.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Quod ut sapiente nulla autem ratione nulla.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         },\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         },\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         },\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         }\n      ]\n   }'")
+		}
+		for _, e := range body.Openapiv3Assets {
+			if e != nil {
+				if err2 := ValidateOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -96,7 +108,14 @@ func BuildAddOpenAPIv3SourcePayload(deploymentsAddOpenAPIv3SourceBody string, de
 	{
 		err = json.Unmarshal([]byte(deploymentsAddOpenAPIv3SourceBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Earum animi quisquam nihil.\",\n      \"name\": \"Esse rerum iusto eos consequatur et.\",\n      \"slug\": \"Veniam sint eum porro et.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Aut quae et alias.\",\n      \"name\": \"Totam necessitatibus debitis.\",\n      \"slug\": \"lsd\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -114,7 +133,7 @@ func BuildAddOpenAPIv3SourcePayload(deploymentsAddOpenAPIv3SourceBody string, de
 	v := &deployments.AddOpenAPIv3SourcePayload{
 		AssetID: body.AssetID,
 		Name:    body.Name,
-		Slug:    body.Slug,
+		Slug:    deployments.Slug(body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

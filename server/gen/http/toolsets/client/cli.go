@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildCreateToolsetPayload builds the payload for the toolsets createToolset
@@ -22,7 +24,18 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Provident delectus voluptate omnis modi est.\",\n      \"description\": \"Aliquid quae minus.\",\n      \"http_tool_names\": [\n         \"Cum ipsam voluptatem illum.\",\n         \"Nobis doloremque.\",\n         \"Hic maxime unde.\"\n      ],\n      \"name\": \"Nam aliquid ipsa distinctio veritatis numquam.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"hl6\",\n      \"description\": \"Sunt quas.\",\n      \"http_tool_names\": [\n         \"Occaecati aut autem voluptatum doloribus.\",\n         \"Aliquam consequuntur qui magnam sit aliquid.\",\n         \"Est doloribus esse.\",\n         \"Voluptatem nostrum velit omnis temporibus.\"\n      ],\n      \"name\": \"Nobis dolores quos nisi.\"\n   }'")
+		}
+		if body.DefaultEnvironmentSlug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		}
+		if body.DefaultEnvironmentSlug != nil {
+			if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -38,9 +51,12 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 		}
 	}
 	v := &toolsets.CreateToolsetPayload{
-		Name:                   body.Name,
-		Description:            body.Description,
-		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
+		Name:        body.Name,
+		Description: body.Description,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
@@ -84,12 +100,30 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"Autem perspiciatis.\",\n      \"description\": \"Autem ut et voluptatem corrupti sequi.\",\n      \"http_tool_names\": [\n         \"Rem aut provident nihil officiis non.\",\n         \"Qui asperiores eveniet impedit necessitatibus est.\"\n      ],\n      \"name\": \"Quasi libero mollitia.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"1iy\",\n      \"description\": \"Et exercitationem.\",\n      \"http_tool_names\": [\n         \"Rerum doloribus.\",\n         \"Laudantium laboriosam.\",\n         \"Est ratione ratione eligendi officia qui.\"\n      ],\n      \"name\": \"At ipsum voluptas et et.\"\n   }'")
+		}
+		if body.DefaultEnvironmentSlug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		}
+		if body.DefaultEnvironmentSlug != nil {
+			if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var slug string
 	{
 		slug = toolsetsUpdateToolsetSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	var sessionToken *string
 	{
@@ -104,9 +138,12 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		}
 	}
 	v := &toolsets.UpdateToolsetPayload{
-		Name:                   body.Name,
-		Description:            body.Description,
-		DefaultEnvironmentSlug: body.DefaultEnvironmentSlug,
+		Name:        body.Name,
+		Description: body.Description,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
@@ -114,7 +151,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 			v.HTTPToolNames[i] = val
 		}
 	}
-	v.Slug = slug
+	v.Slug = toolsets.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -124,9 +161,17 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 // BuildDeleteToolsetPayload builds the payload for the toolsets deleteToolset
 // endpoint from CLI flags.
 func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteToolsetSessionToken string, toolsetsDeleteToolsetProjectSlugInput string) (*toolsets.DeleteToolsetPayload, error) {
+	var err error
 	var slug string
 	{
 		slug = toolsetsDeleteToolsetSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	var sessionToken *string
 	{
@@ -141,7 +186,7 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 		}
 	}
 	v := &toolsets.DeleteToolsetPayload{}
-	v.Slug = slug
+	v.Slug = toolsets.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -151,9 +196,17 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 // BuildGetToolsetPayload builds the payload for the toolsets getToolset
 // endpoint from CLI flags.
 func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSessionToken string, toolsetsGetToolsetProjectSlugInput string) (*toolsets.GetToolsetPayload, error) {
+	var err error
 	var slug string
 	{
 		slug = toolsetsGetToolsetSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	var sessionToken *string
 	{
@@ -168,7 +221,7 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 		}
 	}
 	v := &toolsets.GetToolsetPayload{}
-	v.Slug = slug
+	v.Slug = toolsets.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

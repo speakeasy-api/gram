@@ -127,8 +127,11 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 // NewGetInstanceForm builds a instances service getInstance endpoint payload.
 func NewGetInstanceForm(toolsetSlug string, environmentSlug *string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
 	v := &instances.GetInstanceForm{}
-	v.ToolsetSlug = toolsetSlug
-	v.EnvironmentSlug = environmentSlug
+	v.ToolsetSlug = instances.Slug(toolsetSlug)
+	if environmentSlug != nil {
+		tmpenvironmentSlug := instances.Slug(*environmentSlug)
+		v.EnvironmentSlug = &tmpenvironmentSlug
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ApikeyToken = apikeyToken

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
 	goahttp "goa.design/goa/v3/http"
@@ -166,6 +167,10 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			}
 			return nil, goa.DecodePayloadError(err.Error())
 		}
+		err = ValidateUpdateToolsetRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
 
 		var (
 			slug             string
@@ -175,6 +180,10 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		slug = r.URL.Query().Get("slug")
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -229,6 +238,10 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		slug = r.URL.Query().Get("slug")
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -286,6 +299,10 @@ func DecodeGetToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		slug = r.URL.Query().Get("slug")
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -356,15 +373,18 @@ func marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *toolse
 // *toolsets.ToolsetDetails.
 func marshalToolsetsToolsetDetailsToToolsetDetailsResponseBody(v *toolsets.ToolsetDetails) *ToolsetDetailsResponseBody {
 	res := &ToolsetDetailsResponseBody{
-		ID:                     v.ID,
-		ProjectID:              v.ProjectID,
-		OrganizationID:         v.OrganizationID,
-		Name:                   v.Name,
-		Slug:                   v.Slug,
-		Description:            v.Description,
-		DefaultEnvironmentSlug: v.DefaultEnvironmentSlug,
-		CreatedAt:              v.CreatedAt,
-		UpdatedAt:              v.UpdatedAt,
+		ID:             v.ID,
+		ProjectID:      v.ProjectID,
+		OrganizationID: v.OrganizationID,
+		Name:           v.Name,
+		Slug:           string(v.Slug),
+		Description:    v.Description,
+		CreatedAt:      v.CreatedAt,
+		UpdatedAt:      v.UpdatedAt,
+	}
+	if v.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*v.DefaultEnvironmentSlug)
+		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if v.RelevantEnvironmentVariables != nil {
 		res.RelevantEnvironmentVariables = make([]string, len(v.RelevantEnvironmentVariables))

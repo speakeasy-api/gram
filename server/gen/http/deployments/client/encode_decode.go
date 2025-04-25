@@ -347,7 +347,7 @@ func unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3Deployme
 		ID:      *v.ID,
 		AssetID: *v.AssetID,
 		Name:    *v.Name,
-		Slug:    *v.Slug,
+		Slug:    deployments.Slug(*v.Slug),
 	}
 
 	return res
@@ -363,7 +363,7 @@ func marshalDeploymentsOpenAPIv3DeploymentAssetFormToOpenAPIv3DeploymentAssetFor
 	res := &OpenAPIv3DeploymentAssetFormRequestBody{
 		AssetID: v.AssetID,
 		Name:    v.Name,
-		Slug:    v.Slug,
+		Slug:    string(v.Slug),
 	}
 
 	return res
@@ -379,7 +379,7 @@ func marshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3Deploym
 	res := &deployments.OpenAPIv3DeploymentAssetForm{
 		AssetID: v.AssetID,
 		Name:    v.Name,
-		Slug:    v.Slug,
+		Slug:    deployments.Slug(v.Slug),
 	}
 
 	return res

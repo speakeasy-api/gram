@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -99,7 +98,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 			ID:      r.DeploymentsOpenapiv3Asset.ID.String(),
 			AssetID: r.DeploymentsOpenapiv3Asset.AssetID.String(),
 			Name:    r.DeploymentsOpenapiv3Asset.Name,
-			Slug:    r.DeploymentsOpenapiv3Asset.Slug,
+			Slug:    gen.Slug(r.DeploymentsOpenapiv3Asset.Slug),
 		})
 	}
 
@@ -111,11 +110,11 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		UserID:          deployment.UserID,
 		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
 		Status:          rows[0].Status,
-		ExternalID:      conv.FromPGText(deployment.ExternalID),
-		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
-		GithubRepo:      conv.FromPGText(deployment.GithubRepo),
-		GithubPr:        conv.FromPGText(deployment.GithubPr),
-		GithubSha:       conv.FromPGText(deployment.GithubSha),
+		ExternalID:      conv.FromPGText[string](deployment.ExternalID),
+		ExternalURL:     conv.FromPGText[string](deployment.ExternalUrl),
+		GithubRepo:      conv.FromPGText[string](deployment.GithubRepo),
+		GithubPr:        conv.FromPGText[string](deployment.GithubPr),
+		GithubSha:       conv.FromPGText[string](deployment.GithubSha),
 		Openapiv3Assets: assets,
 	}, nil
 }
@@ -264,11 +263,11 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		ProjectID:       deployment.ProjectID.String(),
 		UserID:          deployment.UserID,
 		Status:          status,
-		ExternalID:      conv.FromPGText(deployment.ExternalID),
-		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
-		GithubSha:       conv.FromPGText(deployment.GithubSha),
-		GithubPr:        conv.FromPGText(deployment.GithubPr),
-		GithubRepo:      conv.FromPGText(deployment.GithubRepo),
+		ExternalID:      conv.FromPGText[string](deployment.ExternalID),
+		ExternalURL:     conv.FromPGText[string](deployment.ExternalUrl),
+		GithubSha:       conv.FromPGText[string](deployment.GithubSha),
+		GithubPr:        conv.FromPGText[string](deployment.GithubPr),
+		GithubRepo:      conv.FromPGText[string](deployment.GithubRepo),
 		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
 		Openapiv3Assets: deploymentAssets,
 	}
@@ -305,7 +304,7 @@ func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, d
 			DeploymentID: deploymentID,
 			AssetID:      assetID,
 			Name:         a.Name,
-			Slug:         strings.ToLower(a.Slug),
+			Slug:         conv.ToLower(a.Slug),
 		})
 		if err != nil {
 			return nil, oops.E(err, "error adding openapi v3 asset to deployment", "failed to add openapi v3 asset to deployment").Log(ctx, logger)
@@ -317,7 +316,7 @@ func (s *Service) addOpenAPIv3Documents(ctx context.Context, tx *repo.Queries, d
 			ID:      dasset.ID.String(),
 			AssetID: dasset.AssetID.String(),
 			Name:    dasset.Name,
-			Slug:    dasset.Slug,
+			Slug:    gen.Slug(dasset.Slug),
 		})
 	}
 
@@ -524,7 +523,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 			DeploymentID: d.Deployment.ID,
 			AssetID:      assetID,
 			Name:         form.Name,
-			Slug:         strings.ToLower(form.Slug),
+			Slug:         conv.ToLower(form.Slug),
 		})
 		if err != nil {
 			return nil, oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
@@ -565,7 +564,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 			DeploymentID: newID,
 			AssetID:      assetID,
 			Name:         form.Name,
-			Slug:         strings.ToLower(form.Slug),
+			Slug:         conv.ToLower(form.Slug),
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
@@ -606,7 +605,7 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 			ID:      r.DeploymentsOpenapiv3Asset.ID.String(),
 			AssetID: r.DeploymentsOpenapiv3Asset.AssetID.String(),
 			Name:    r.DeploymentsOpenapiv3Asset.Name,
-			Slug:    r.DeploymentsOpenapiv3Asset.Slug,
+			Slug:    gen.Slug(r.DeploymentsOpenapiv3Asset.Slug),
 		})
 	}
 
@@ -617,11 +616,11 @@ func (s *Service) AddOpenAPIv3Source(ctx context.Context, form *gen.AddOpenAPIv3
 		ProjectID:       deployment.ProjectID.String(),
 		UserID:          deployment.UserID,
 		Status:          stat.Status,
-		ExternalID:      conv.FromPGText(deployment.ExternalID),
-		ExternalURL:     conv.FromPGText(deployment.ExternalUrl),
-		GithubSha:       conv.FromPGText(deployment.GithubSha),
-		GithubPr:        conv.FromPGText(deployment.GithubPr),
-		GithubRepo:      conv.FromPGText(deployment.GithubRepo),
+		ExternalID:      conv.FromPGText[string](deployment.ExternalID),
+		ExternalURL:     conv.FromPGText[string](deployment.ExternalUrl),
+		GithubSha:       conv.FromPGText[string](deployment.GithubSha),
+		GithubPr:        conv.FromPGText[string](deployment.GithubPr),
+		GithubRepo:      conv.FromPGText[string](deployment.GithubRepo),
 		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
 		Openapiv3Assets: assets,
 	}
