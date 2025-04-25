@@ -83,9 +83,7 @@ export class LangchainAdapter {
           retryConnectionErrors: true,
         } as const;
 
-        const url = new URL(
-          "http://localhost:8080/rpc/instances.invoke/tool"
-        );
+        const url = new URL("http://localhost:8080/rpc/instances.invoke/tool");
         url.searchParams.set("tool_id", toolData.id);
         if (environment) {
           url.searchParams.set("environment_slug", environment);
@@ -140,7 +138,7 @@ export class LangchainAdapter {
         {
           name: toolData.name,
           description: toolData.description,
-          schema
+          schema,
         }
       );
 

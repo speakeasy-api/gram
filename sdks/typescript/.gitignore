@@ -1,3 +1,5 @@
+.speakeasy/temp/
+.DS_Store
 /models
 /models/errors
 /types

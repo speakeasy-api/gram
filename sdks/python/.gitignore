@@ -1,3 +1,5 @@
+README-PYPI.md
+.speakeasy/temp/
 .venv/
 venv/
 src/*.egg-info/

@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: d192341d-75ae-49e8-9011-4fa299dfcf9e
 management:
-  docChecksum: e254791cb6b2713ecd38b1ce0083302d
+  docChecksum: 40f34d58092fb8fdb7174c1126047dea
   docVersion: 0.0.1
-  speakeasyVersion: 1.535.1
-  generationVersion: 2.585.2
-  releaseVersion: 0.1.4
-  configChecksum: 26e146ea76a6dbfdc4767500b97fe800
+  speakeasyVersion: 1.537.1
+  generationVersion: 2.588.4
+  releaseVersion: 0.2.0
+  configChecksum: 49ac226b525646a9c56c3deb6edc6e69
 features:
   python:
     additionalDependencies: 1.0.0
-    core: 5.14.0
+    core: 5.15.0
     defaultEnabledRetries: 0.2.0
     envVarSecurityUsage: 0.3.2
     flattening: 3.1.1
@@ -69,6 +69,7 @@ generatedFiles:
   - src/gram_ai/types/basemodel.py
   - src/gram_ai/utils/__init__.py
   - src/gram_ai/utils/annotations.py
+  - src/gram_ai/utils/datetimes.py
   - src/gram_ai/utils/enums.py
   - src/gram_ai/utils/eventstreaming.py
   - src/gram_ai/utils/forms.py

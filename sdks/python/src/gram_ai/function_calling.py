@@ -7,7 +7,13 @@ import httpx
 
 from gram_ai import VERSION, GramAPI
 from gram_ai.models.getinstanceresult import GetInstanceResult
-from gram_ai.utils.retries import BackoffStrategy, Retries, RetryConfig, retry_async, retry
+from gram_ai.utils.retries import (
+    BackoffStrategy,
+    Retries,
+    RetryConfig,
+    retry_async,
+    retry,
+)
 
 
 @dataclass
@@ -86,35 +92,42 @@ class GramFunctionCalling:
             func = self._create_sync_tool_function(tool_call)
             async_func = self._create_tool_function(tool_call)
 
-            tools.append(GramFunctionCallingTool(
-                name=tool.name,
-                description=tool.description,
-                parameters=schema,
-                execute=func,
-                aexecute=async_func
-            ))
+            tools.append(
+                GramFunctionCallingTool(
+                    name=tool.name,
+                    description=tool.description,
+                    parameters=schema,
+                    execute=func,
+                    aexecute=async_func,
+                )
+            )
 
         self._cache[key] = tools
         return tools
 
-    def _prepare_request(self, tool_call: GramFunctionCallingCall, input: str):
+    def _prepare_request(self, tool_call: GramFunctionCallingCall, inp: str):
         url = "http://localhost:8080/rpc/instances.invoke/tool"
         params = {"tool_id": tool_call.tool_id}
         if tool_call.environment:
             params["environment_slug"] = tool_call.environment
-        
-        json_input = json.loads(input)
 
-        return url, params, {
-            "gram-key": self.api_key,
-            "gram-project": tool_call.project,
-            "user-agent": f"gram-ai/openai-agents python {VERSION}",
-            "content-type": "application/json",
-        }, json_input
+        json_input = json.loads(inp)
+
+        return (
+            url,
+            params,
+            {
+                "gram-key": self.api_key,
+                "gram-project": tool_call.project,
+                "user-agent": f"gram-ai/openai-agents python {VERSION}",
+                "content-type": "application/json",
+            },
+            json_input,
+        )
 
     def _create_tool_function(self, tool_call: GramFunctionCallingCall):
-        async def wrapper(input: str):
-            url, params, headers, data = self._prepare_request(tool_call, input)
+        async def wrapper(inp: str):
+            url, params, headers, data = self._prepare_request(tool_call, inp)
             req = httpx.Request(
                 method="POST",
                 url=url,
@@ -123,16 +136,16 @@ class GramFunctionCalling:
                 json=data,
             )
             response = await retry_async(
-                functools.partial(self._do_http_async, req),
-                _retry_policy
+                functools.partial(self._do_http_async, req), _retry_policy
             )
             response.raise_for_status()
             return response.text
+
         return wrapper
 
     def _create_sync_tool_function(self, tool_call: GramFunctionCallingCall):
-        def wrapper(input: str):
-            url, params, headers, data = self._prepare_request(tool_call, input)
+        def wrapper(inp: str):
+            url, params, headers, data = self._prepare_request(tool_call, inp)
             req = httpx.Request(
                 method="POST",
                 url=url,
@@ -140,12 +153,10 @@ class GramFunctionCalling:
                 headers=headers,
                 json=data,
             )
-            response = retry(
-                functools.partial(self._do_http_sync, req),
-                _retry_policy
-            )
+            response = retry(functools.partial(self._do_http_sync, req), _retry_policy)
             response.raise_for_status()
             return response.text
+
         return wrapper
 
 

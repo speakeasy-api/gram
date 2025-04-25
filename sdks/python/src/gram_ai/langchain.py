@@ -1,18 +1,24 @@
 from dataclasses import dataclass
 import functools
 import json
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import httpx
 
 from langchain_core.tools import (
     StructuredTool,
-    Tool,
+    BaseTool,
 )
 
 from gram_ai import VERSION, GramAPI
 from gram_ai.models.getinstanceresult import GetInstanceResult
-from gram_ai.utils.retries import BackoffStrategy, Retries, RetryConfig, retry_async, retry
+from gram_ai.utils.retries import (
+    BackoffStrategy,
+    Retries,
+    RetryConfig,
+    retry_async,
+    retry,
+)
 
 
 @dataclass
@@ -25,7 +31,7 @@ class GramLangchainCall:
 
 class GramLangchain:
     api_key: str
-    _cache: dict[tuple[str, str, Union[str, None]], list[Tool]] = {}
+    _cache: dict[tuple[str, str, Union[str, None]], list[BaseTool]] = {}
 
     def __init__(
         self,
@@ -65,14 +71,14 @@ class GramLangchain:
         project: str,
         toolset: str,
         environment: Optional[str] = None,
-    ) -> list[Tool]:
+    ) -> list[BaseTool]:
         key = (project, toolset, environment)
         if key in self._cache:
             return self._cache[key]
 
         instance = self._fetch_tools(project, toolset, environment)
 
-        result: list[Tool] = [
+        result: list[BaseTool] = [
             StructuredTool(
                 name=tool.name,
                 description=tool.description,
@@ -97,12 +103,17 @@ class GramLangchain:
         if tool_call.environment:
             params["environment_slug"] = tool_call.environment
 
-        return url, params, {
-            "gram-key": self.api_key,
-            "gram-project": tool_call.project,
-            "user-agent": f"gram-ai/openai-agents python {VERSION}",
-            "content-type": "application/json",
-        }, kwargs
+        return (
+            url,
+            params,
+            {
+                "gram-key": self.api_key,
+                "gram-project": tool_call.project,
+                "user-agent": f"gram-ai/openai-agents python {VERSION}",
+                "content-type": "application/json",
+            },
+            kwargs,
+        )
 
     def _create_tool_function(self, tool_call: GramLangchainCall):
         async def wrapper(**kwargs):
@@ -115,11 +126,11 @@ class GramLangchain:
                 json=data,
             )
             response = await retry_async(
-                functools.partial(self._do_http_async, req),
-                _retry_policy
+                functools.partial(self._do_http_async, req), _retry_policy
             )
             response.raise_for_status()
             return response.text
+
         return wrapper
 
     def _create_sync_tool_function(self, tool_call: GramLangchainCall):
@@ -132,12 +143,10 @@ class GramLangchain:
                 headers=headers,
                 json=data,
             )
-            response = retry(
-                functools.partial(self._do_http_sync, req),
-                _retry_policy
-            )
+            response = retry(functools.partial(self._do_http_sync, req), _retry_policy)
             response.raise_for_status()
             return response.text
+
         return wrapper
 
 

@@ -1,6 +1,6 @@
 {
   "name": "@gram/sdk",
-  "version": "0.4.11",
+  "version": "0.4.12",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",
@@ -49,30 +49,25 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@langchain/core": ">=0.3.21",
+    "@langchain/core": "*",
     "ai": "^4",
-    "langchain": "^0.3.23",
     "zod": ">= 3"
   },
   "peerDependenciesMeta": {
-    "ai": {
-      "optional": true
-    },
-    "@langchain/core": {
-      "optional": true
-    },
-    "langchain": {
-      "optional": true
-    }
+    "@langchain/core": {"optional":true},
+    "ai": {"optional":true}
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
-    "@langchain/core": "^0.3.21",
+    "@langchain/core": "^0.3.48",
     "ai": "^4.3.8",
     "eslint": "^9.19.0",
     "globals": "^15.14.0",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.22.0",
     "zod": "^3.23.4"
+  },
+  "dependencies": {
+    
   }
 }

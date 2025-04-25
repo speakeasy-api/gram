@@ -46,9 +46,6 @@ export type Environment = {
    * The project ID this environment belongs to
    */
   projectId: string;
-  /**
-   * The slug identifier for the environment
-   */
   slug: string;
   /**
    * When the environment was last updated
