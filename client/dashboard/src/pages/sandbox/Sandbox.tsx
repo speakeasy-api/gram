@@ -283,6 +283,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
       model: openai("gpt-4o"),
       messages: JSON.parse(init?.body as string).messages,
       tools,
+      temperature: 0.5,
       system:
         "You are a helpful assistant that can answer questions and help with tasks. The current date is " +
         new Date().toISOString(),
@@ -339,7 +340,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
 
       console.log("tool result", result);
 
-      return result;
+      return result || "";
     },
   });
 
