@@ -1,6 +1,6 @@
 {
   "name": "@gram/sdk",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",
@@ -49,7 +49,7 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@langchain/core": "*",
+    "@langchain/core": ">=0.3.21",
     "ai": "^4",
     "zod": ">= 3"
   },
