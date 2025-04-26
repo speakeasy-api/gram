@@ -19,11 +19,11 @@ import (
 
 // Server lists the deployments service endpoint HTTP handlers.
 type Server struct {
-	Mounts             []*MountPoint
-	GetDeployment      http.Handler
-	CreateDeployment   http.Handler
-	AddOpenAPIv3Source http.Handler
-	ListDeployments    http.Handler
+	Mounts           []*MountPoint
+	GetDeployment    http.Handler
+	CreateDeployment http.Handler
+	Evolve           http.Handler
+	ListDeployments  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -55,13 +55,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetDeployment", "GET", "/rpc/deployments.get"},
 			{"CreateDeployment", "POST", "/rpc/deployments.create"},
-			{"AddOpenAPIv3Source", "POST", "/rpc/deployments.addOpenAPIv3Source"},
+			{"Evolve", "POST", "/rpc/deployments.evolve"},
 			{"ListDeployments", "GET", "/rpc/deployments.list"},
 		},
-		GetDeployment:      NewGetDeploymentHandler(e.GetDeployment, mux, decoder, encoder, errhandler, formatter),
-		CreateDeployment:   NewCreateDeploymentHandler(e.CreateDeployment, mux, decoder, encoder, errhandler, formatter),
-		AddOpenAPIv3Source: NewAddOpenAPIv3SourceHandler(e.AddOpenAPIv3Source, mux, decoder, encoder, errhandler, formatter),
-		ListDeployments:    NewListDeploymentsHandler(e.ListDeployments, mux, decoder, encoder, errhandler, formatter),
+		GetDeployment:    NewGetDeploymentHandler(e.GetDeployment, mux, decoder, encoder, errhandler, formatter),
+		CreateDeployment: NewCreateDeploymentHandler(e.CreateDeployment, mux, decoder, encoder, errhandler, formatter),
+		Evolve:           NewEvolveHandler(e.Evolve, mux, decoder, encoder, errhandler, formatter),
+		ListDeployments:  NewListDeploymentsHandler(e.ListDeployments, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -72,7 +72,7 @@ func (s *Server) Service() string { return "deployments" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetDeployment = m(s.GetDeployment)
 	s.CreateDeployment = m(s.CreateDeployment)
-	s.AddOpenAPIv3Source = m(s.AddOpenAPIv3Source)
+	s.Evolve = m(s.Evolve)
 	s.ListDeployments = m(s.ListDeployments)
 }
 
@@ -83,7 +83,7 @@ func (s *Server) MethodNames() []string { return deployments.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetDeploymentHandler(mux, h.GetDeployment)
 	MountCreateDeploymentHandler(mux, h.CreateDeployment)
-	MountAddOpenAPIv3SourceHandler(mux, h.AddOpenAPIv3Source)
+	MountEvolveHandler(mux, h.Evolve)
 	MountListDeploymentsHandler(mux, h.ListDeployments)
 }
 
@@ -194,21 +194,21 @@ func NewCreateDeploymentHandler(
 	})
 }
 
-// MountAddOpenAPIv3SourceHandler configures the mux to serve the "deployments"
-// service "addOpenAPIv3Source" endpoint.
-func MountAddOpenAPIv3SourceHandler(mux goahttp.Muxer, h http.Handler) {
+// MountEvolveHandler configures the mux to serve the "deployments" service
+// "evolve" endpoint.
+func MountEvolveHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/deployments.addOpenAPIv3Source", otelhttp.WithRouteTag("/rpc/deployments.addOpenAPIv3Source", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/deployments.evolve", otelhttp.WithRouteTag("/rpc/deployments.evolve", f).ServeHTTP)
 }
 
-// NewAddOpenAPIv3SourceHandler creates a HTTP handler which loads the HTTP
-// request and calls the "deployments" service "addOpenAPIv3Source" endpoint.
-func NewAddOpenAPIv3SourceHandler(
+// NewEvolveHandler creates a HTTP handler which loads the HTTP request and
+// calls the "deployments" service "evolve" endpoint.
+func NewEvolveHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -217,13 +217,13 @@ func NewAddOpenAPIv3SourceHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeAddOpenAPIv3SourceRequest(mux, decoder)
-		encodeResponse = EncodeAddOpenAPIv3SourceResponse(encoder)
+		decodeRequest  = DecodeEvolveRequest(mux, decoder)
+		encodeResponse = EncodeEvolveResponse(encoder)
 		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "addOpenAPIv3Source")
+		ctx = context.WithValue(ctx, goa.MethodKey, "evolve")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "deployments")
 		payload, err := decodeRequest(r)
 		if err != nil {

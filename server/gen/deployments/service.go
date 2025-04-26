@@ -19,8 +19,8 @@ type Service interface {
 	GetDeployment(context.Context, *GetDeploymentPayload) (res *GetDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
 	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
-	// Create a new deployment with an additional OpenAPI 3.x document.
-	AddOpenAPIv3Source(context.Context, *AddOpenAPIv3SourcePayload) (res *AddOpenAPIv3SourceResult, err error)
+	// Create a new deployment with an additional tool sources.
+	Evolve(context.Context, *EvolvePayload) (res *EvolveResult, err error)
 	// List all deployments in descending order of creation.
 	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
 }
@@ -45,13 +45,16 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"getDeployment", "createDeployment", "addOpenAPIv3Source", "listDeployments"}
+var MethodNames = [4]string{"getDeployment", "createDeployment", "evolve", "listDeployments"}
 
-// AddOpenAPIv3SourcePayload is the payload type of the deployments service
-// addOpenAPIv3Source method.
-type AddOpenAPIv3SourcePayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+type AddDeploymentPackageForm struct {
+	// The name of the package.
+	Name string
+	// The version of the package.
+	Version *string
+}
+
+type AddOpenAPIv3DeploymentAssetForm struct {
 	// The ID of the uploaded asset.
 	AssetID string
 	// The name to give the document as it will be displayed in UIs.
@@ -60,11 +63,12 @@ type AddOpenAPIv3SourcePayload struct {
 	Slug Slug
 }
 
-// AddOpenAPIv3SourceResult is the result type of the deployments service
-// addOpenAPIv3Source method.
-type AddOpenAPIv3SourceResult struct {
-	// A deployment that was successfully created.
-	Deployment *Deployment
+type AddPackageForm struct {
+	// The name of the package to add.
+	Name string
+	// The version of the package to add. If omitted, the latest version will be
+	// used.
+	Version *string
 }
 
 // CreateDeploymentPayload is the payload type of the deployments service
@@ -86,7 +90,8 @@ type CreateDeploymentPayload struct {
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL     *string
-	Openapiv3Assets []*OpenAPIv3DeploymentAssetForm
+	Openapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
+	Packages        []*AddDeploymentPackageForm
 }
 
 // CreateDeploymentResult is the result type of the deployments service
@@ -126,6 +131,17 @@ type Deployment struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAsset
+	// The packages that were deployed.
+	Packages []*DeploymentPackage
+}
+
+type DeploymentPackage struct {
+	// The ID of the deployment package.
+	ID string
+	// The name of the package.
+	Name string
+	// The version of the package.
+	Version string
 }
 
 type DeploymentSummary struct {
@@ -137,6 +153,25 @@ type DeploymentSummary struct {
 	CreatedAt string
 	// The number of upstream assets.
 	AssetCount int64
+}
+
+// EvolvePayload is the payload type of the deployments service evolve method.
+type EvolvePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the deployment to evolve. If omitted, the latest deployment will
+	// be used.
+	DeploymentID *string
+	// The OpenAPI 3.x documents to add to the new deployment.
+	AddOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
+	// The OpenAPI 3.x documents to add to the deployment.
+	AddPackages []*AddPackageForm
+}
+
+// EvolveResult is the result type of the deployments service evolve method.
+type EvolveResult struct {
+	// A deployment that was successfully created.
+	Deployment *Deployment
 }
 
 // GetDeploymentPayload is the payload type of the deployments service
@@ -180,6 +215,8 @@ type GetDeploymentResult struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAsset
+	// The packages that were deployed.
+	Packages []*DeploymentPackage
 }
 
 // ListDeploymentResult is the result type of the deployments service
@@ -203,15 +240,6 @@ type ListDeploymentsPayload struct {
 type OpenAPIv3DeploymentAsset struct {
 	// The ID of the deployment asset.
 	ID string
-	// The ID of the uploaded asset.
-	AssetID string
-	// The name to give the document as it will be displayed in UIs.
-	Name string
-	// The slug to give the document as it will be displayed in URLs.
-	Slug Slug
-}
-
-type OpenAPIv3DeploymentAssetForm struct {
 	// The ID of the uploaded asset.
 	AssetID string
 	// The name to give the document as it will be displayed in UIs.

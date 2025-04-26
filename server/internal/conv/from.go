@@ -12,6 +12,23 @@ func Ptr[T any](v T) *T {
 	return &v
 }
 
+func PtrValOr[T any](ptr *T, def T) T {
+	if ptr == nil {
+		return def
+	}
+
+	return *ptr
+}
+
+func Default[T comparable](val T, def T) T {
+	var zero T
+	if val == zero {
+		return def
+	}
+
+	return val
+}
+
 func FromNullableUUID(u uuid.NullUUID) *string {
 	if !u.Valid {
 		return nil
@@ -32,6 +49,10 @@ func FromPGText[T ~string](t pgtype.Text) *T {
 
 func ToPGText(t string) pgtype.Text {
 	return pgtype.Text{String: t, Valid: true}
+}
+
+func ToPGTextEmpty(t string) pgtype.Text {
+	return pgtype.Text{String: t, Valid: t != ""}
 }
 
 func PtrToPGText(t *string) pgtype.Text {

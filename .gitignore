@@ -12,3 +12,4 @@ junit-report.xml
 /scratch
 .speakeasy/temp
 mprocs.log
+__debug_bin*

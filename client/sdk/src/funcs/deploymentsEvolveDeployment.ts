@@ -25,18 +25,18 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * addOpenAPIv3Source deployments
+ * evolve deployments
  *
  * @remarks
- * Create a new deployment with an additional OpenAPI 3.x document.
+ * Create a new deployment with an additional tool sources.
  */
-export function deploymentsAddOpenAPIv3Source(
+export function deploymentsEvolveDeployment(
   client: GramCore,
-  request: operations.AddOpenAPIv3ToDeploymentRequest,
+  request: operations.EvolveDeploymentRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.AddOpenAPIv3SourceResult,
+    components.EvolveResult,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -55,12 +55,12 @@ export function deploymentsAddOpenAPIv3Source(
 
 async function $do(
   client: GramCore,
-  request: operations.AddOpenAPIv3ToDeploymentRequest,
+  request: operations.EvolveDeploymentRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.AddOpenAPIv3SourceResult,
+      components.EvolveResult,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -74,19 +74,16 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.AddOpenAPIv3ToDeploymentRequest$outboundSchema.parse(value),
+    (value) => operations.EvolveDeploymentRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.OpenAPIv3DeploymentAssetForm, {
-    explode: true,
-  });
+  const body = encodeJSON("body", payload.EvolveForm, { explode: true });
 
-  const path = pathToFunc("/rpc/deployments.addOpenAPIv3Source")();
+  const path = pathToFunc("/rpc/deployments.evolve")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -106,7 +103,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "addOpenAPIv3ToDeployment",
+    operationID: "evolveDeployment",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,
@@ -144,7 +141,7 @@ async function $do(
   const response = doResult.value;
 
   const [result] = await M.match<
-    components.AddOpenAPIv3SourceResult,
+    components.EvolveResult,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -153,7 +150,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.json(200, components.AddOpenAPIv3SourceResult$inboundSchema),
+    M.json(200, components.EvolveResult$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response);

@@ -14,8 +14,8 @@ let value: Project = {
 
 ## Fields
 
-| Field              | Type               | Required           | Description        |
-| ------------------ | ------------------ | ------------------ | ------------------ |
-| `projectId`        | *string*           | :heavy_check_mark: | N/A                |
-| `projectName`      | *string*           | :heavy_check_mark: | N/A                |
-| `projectSlug`      | *string*           | :heavy_check_mark: | N/A                |
+| Field                                                           | Type                                                            | Required                                                        | Description                                                     |
+| --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| `projectId`                                                     | *string*                                                        | :heavy_check_mark:                                              | N/A                                                             |
+| `projectName`                                                   | *string*                                                        | :heavy_check_mark:                                              | N/A                                                             |
+| `projectSlug`                                                   | *string*                                                        | :heavy_check_mark:                                              | A short url-friendly label that uniquely identifies a resource. |

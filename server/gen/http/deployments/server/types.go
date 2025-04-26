@@ -28,19 +28,21 @@ type CreateDeploymentRequestBody struct {
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
-	ExternalURL     *string                                    `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
-	Openapiv3Assets []*OpenAPIv3DeploymentAssetFormRequestBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
+	ExternalURL     *string                                       `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	Openapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
+	Packages        []*AddDeploymentPackageFormRequestBody        `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
 
-// AddOpenAPIv3SourceRequestBody is the type of the "deployments" service
-// "addOpenAPIv3Source" endpoint HTTP request body.
-type AddOpenAPIv3SourceRequestBody struct {
-	// The ID of the uploaded asset.
-	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
-	// The name to give the document as it will be displayed in UIs.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The slug to give the document as it will be displayed in URLs.
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+// EvolveRequestBody is the type of the "deployments" service "evolve" endpoint
+// HTTP request body.
+type EvolveRequestBody struct {
+	// The ID of the deployment to evolve. If omitted, the latest deployment will
+	// be used.
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The OpenAPI 3.x documents to add to the new deployment.
+	AddOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"add_openapiv3_assets,omitempty" json:"add_openapiv3_assets,omitempty" xml:"add_openapiv3_assets,omitempty"`
+	// The OpenAPI 3.x documents to add to the deployment.
+	AddPackages []*AddPackageFormRequestBody `form:"add_packages,omitempty" json:"add_packages,omitempty" xml:"add_packages,omitempty"`
 }
 
 // GetDeploymentResponseBody is the type of the "deployments" service
@@ -75,6 +77,8 @@ type GetDeploymentResponseBody struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
+	// The packages that were deployed.
+	Packages []*DeploymentPackageResponseBody `form:"packages" json:"packages" xml:"packages"`
 }
 
 // CreateDeploymentResponseBody is the type of the "deployments" service
@@ -84,9 +88,9 @@ type CreateDeploymentResponseBody struct {
 	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
 }
 
-// AddOpenAPIv3SourceResponseBody is the type of the "deployments" service
-// "addOpenAPIv3Source" endpoint HTTP response body.
-type AddOpenAPIv3SourceResponseBody struct {
+// EvolveResponseBody is the type of the "deployments" service "evolve"
+// endpoint HTTP response body.
+type EvolveResponseBody struct {
 	// A deployment that was successfully created.
 	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
 }
@@ -111,6 +115,17 @@ type OpenAPIv3DeploymentAssetResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug to give the document as it will be displayed in URLs.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
+// DeploymentPackageResponseBody is used to define fields on response body
+// types.
+type DeploymentPackageResponseBody struct {
+	// The ID of the deployment package.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the package.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The version of the package.
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // DeploymentResponseBody is used to define fields on response body types.
@@ -144,6 +159,8 @@ type DeploymentResponseBody struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
+	// The packages that were deployed.
+	Packages []*DeploymentPackageResponseBody `form:"packages" json:"packages" xml:"packages"`
 }
 
 // DeploymentSummaryResponseBody is used to define fields on response body
@@ -159,15 +176,33 @@ type DeploymentSummaryResponseBody struct {
 	AssetCount int64 `form:"asset_count" json:"asset_count" xml:"asset_count"`
 }
 
-// OpenAPIv3DeploymentAssetFormRequestBody is used to define fields on request
-// body types.
-type OpenAPIv3DeploymentAssetFormRequestBody struct {
+// AddOpenAPIv3DeploymentAssetFormRequestBody is used to define fields on
+// request body types.
+type AddOpenAPIv3DeploymentAssetFormRequestBody struct {
 	// The ID of the uploaded asset.
 	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
 	// The name to give the document as it will be displayed in UIs.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The slug to give the document as it will be displayed in URLs.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
+// AddDeploymentPackageFormRequestBody is used to define fields on request body
+// types.
+type AddDeploymentPackageFormRequestBody struct {
+	// The name of the package.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The version of the package.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// AddPackageFormRequestBody is used to define fields on request body types.
+type AddPackageFormRequestBody struct {
+	// The name of the package to add.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The version of the package to add. If omitted, the latest version will be
+	// used.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // NewGetDeploymentResponseBody builds the HTTP response body from the result
@@ -195,6 +230,14 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 	} else {
 		body.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
 	}
+	if res.Packages != nil {
+		body.Packages = make([]*DeploymentPackageResponseBody, len(res.Packages))
+		for i, val := range res.Packages {
+			body.Packages[i] = marshalDeploymentsDeploymentPackageToDeploymentPackageResponseBody(val)
+		}
+	} else {
+		body.Packages = []*DeploymentPackageResponseBody{}
+	}
 	return body
 }
 
@@ -208,10 +251,10 @@ func NewCreateDeploymentResponseBody(res *deployments.CreateDeploymentResult) *C
 	return body
 }
 
-// NewAddOpenAPIv3SourceResponseBody builds the HTTP response body from the
-// result of the "addOpenAPIv3Source" endpoint of the "deployments" service.
-func NewAddOpenAPIv3SourceResponseBody(res *deployments.AddOpenAPIv3SourceResult) *AddOpenAPIv3SourceResponseBody {
-	body := &AddOpenAPIv3SourceResponseBody{}
+// NewEvolveResponseBody builds the HTTP response body from the result of the
+// "evolve" endpoint of the "deployments" service.
+func NewEvolveResponseBody(res *deployments.EvolveResult) *EvolveResponseBody {
+	body := &EvolveResponseBody{}
 	if res.Deployment != nil {
 		body.Deployment = marshalDeploymentsDeploymentToDeploymentResponseBody(res.Deployment)
 	}
@@ -257,9 +300,15 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 		ExternalURL: body.ExternalURL,
 	}
 	if body.Openapiv3Assets != nil {
-		v.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAssetForm, len(body.Openapiv3Assets))
+		v.Openapiv3Assets = make([]*deployments.AddOpenAPIv3DeploymentAssetForm, len(body.Openapiv3Assets))
 		for i, val := range body.Openapiv3Assets {
-			v.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm(val)
+			v.Openapiv3Assets[i] = unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(val)
+		}
+	}
+	if body.Packages != nil {
+		v.Packages = make([]*deployments.AddDeploymentPackageForm, len(body.Packages))
+		for i, val := range body.Packages {
+			v.Packages[i] = unmarshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(val)
 		}
 	}
 	v.SessionToken = sessionToken
@@ -269,13 +318,22 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 	return v
 }
 
-// NewAddOpenAPIv3SourcePayload builds a deployments service addOpenAPIv3Source
-// endpoint payload.
-func NewAddOpenAPIv3SourcePayload(body *AddOpenAPIv3SourceRequestBody, sessionToken *string, projectSlugInput *string) *deployments.AddOpenAPIv3SourcePayload {
-	v := &deployments.AddOpenAPIv3SourcePayload{
-		AssetID: *body.AssetID,
-		Name:    *body.Name,
-		Slug:    deployments.Slug(*body.Slug),
+// NewEvolvePayload builds a deployments service evolve endpoint payload.
+func NewEvolvePayload(body *EvolveRequestBody, sessionToken *string, projectSlugInput *string) *deployments.EvolvePayload {
+	v := &deployments.EvolvePayload{
+		DeploymentID: body.DeploymentID,
+	}
+	if body.AddOpenapiv3Assets != nil {
+		v.AddOpenapiv3Assets = make([]*deployments.AddOpenAPIv3DeploymentAssetForm, len(body.AddOpenapiv3Assets))
+		for i, val := range body.AddOpenapiv3Assets {
+			v.AddOpenapiv3Assets[i] = unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(val)
+		}
+	}
+	if body.AddPackages != nil {
+		v.AddPackages = make([]*deployments.AddPackageForm, len(body.AddPackages))
+		for i, val := range body.AddPackages {
+			v.AddPackages[i] = unmarshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -299,7 +357,14 @@ func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlug
 func ValidateCreateDeploymentRequestBody(body *CreateDeploymentRequestBody) (err error) {
 	for _, e := range body.Openapiv3Assets {
 		if e != nil {
-			if err2 := ValidateOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
+			if err2 := ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Packages {
+		if e != nil {
+			if err2 := ValidateAddDeploymentPackageFormRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -307,9 +372,28 @@ func ValidateCreateDeploymentRequestBody(body *CreateDeploymentRequestBody) (err
 	return
 }
 
-// ValidateAddOpenAPIv3SourceRequestBody runs the validations defined on
-// AddOpenAPIv3SourceRequestBody
-func ValidateAddOpenAPIv3SourceRequestBody(body *AddOpenAPIv3SourceRequestBody) (err error) {
+// ValidateEvolveRequestBody runs the validations defined on EvolveRequestBody
+func ValidateEvolveRequestBody(body *EvolveRequestBody) (err error) {
+	for _, e := range body.AddOpenapiv3Assets {
+		if e != nil {
+			if err2 := ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AddPackages {
+		if e != nil {
+			if err2 := ValidateAddPackageFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAddOpenAPIv3DeploymentAssetFormRequestBody runs the validations
+// defined on AddOpenAPIv3DeploymentAssetFormRequestBody
+func ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(body *AddOpenAPIv3DeploymentAssetFormRequestBody) (err error) {
 	if body.AssetID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
 	}
@@ -330,25 +414,20 @@ func ValidateAddOpenAPIv3SourceRequestBody(body *AddOpenAPIv3SourceRequestBody) 
 	return
 }
 
-// ValidateOpenAPIv3DeploymentAssetFormRequestBody runs the validations defined
-// on OpenAPIv3DeploymentAssetFormRequestBody
-func ValidateOpenAPIv3DeploymentAssetFormRequestBody(body *OpenAPIv3DeploymentAssetFormRequestBody) (err error) {
-	if body.AssetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
-	}
+// ValidateAddDeploymentPackageFormRequestBody runs the validations defined on
+// AddDeploymentPackageFormRequestBody
+func ValidateAddDeploymentPackageFormRequestBody(body *AddDeploymentPackageFormRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
-	}
-	if body.Slug != nil {
-		if utf8.RuneCountInString(*body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
-		}
+	return
+}
+
+// ValidateAddPackageFormRequestBody runs the validations defined on
+// AddPackageFormRequestBody
+func ValidateAddPackageFormRequestBody(body *AddPackageFormRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

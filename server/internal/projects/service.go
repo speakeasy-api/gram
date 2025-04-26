@@ -67,6 +67,7 @@ func (s *Service) CreateProject(ctx context.Context, organizationID, name string
 		if strings.Contains(err.Error(), "unique constraint") {
 			return project, errors.New("project slug already exists")
 		}
+		return project, err
 	}
 	return project, nil
 }

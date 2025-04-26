@@ -60,6 +60,33 @@ func (q *Queries) AddDeploymentOpenAPIv3Asset(ctx context.Context, arg AddDeploy
 	return i, err
 }
 
+const addDeploymentPackage = `-- name: AddDeploymentPackage :one
+INSERT INTO deployments_packages (
+  deployment_id
+  , package_id
+  , version_id
+) VALUES (
+  $1,
+  $2,
+  $3
+)
+ON CONFLICT (deployment_id, package_id) DO NOTHING
+RETURNING id
+`
+
+type AddDeploymentPackageParams struct {
+	DeploymentID uuid.UUID
+	PackageID    uuid.UUID
+	VersionID    uuid.UUID
+}
+
+func (q *Queries) AddDeploymentPackage(ctx context.Context, arg AddDeploymentPackageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, addDeploymentPackage, arg.DeploymentID, arg.PackageID, arg.VersionID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const cloneDeployment = `-- name: CloneDeployment :one
 INSERT INTO deployments (
   cloned_from
@@ -134,6 +161,52 @@ func (q *Queries) CloneDeploymentOpenAPIv3Assets(ctx context.Context, arg CloneD
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const cloneDeploymentPackages = `-- name: CloneDeploymentPackages :many
+INSERT INTO deployments_packages (
+  deployment_id
+  , package_id
+  , version_id
+)
+SELECT 
+  $1
+  , current.package_id
+  , current.version_id
+FROM deployments_packages as current
+WHERE current.deployment_id = $2
+RETURNING id, package_id, version_id
+`
+
+type CloneDeploymentPackagesParams struct {
+	CloneDeploymentID    uuid.UUID
+	OriginalDeploymentID uuid.UUID
+}
+
+type CloneDeploymentPackagesRow struct {
+	ID        uuid.UUID
+	PackageID uuid.UUID
+	VersionID uuid.UUID
+}
+
+func (q *Queries) CloneDeploymentPackages(ctx context.Context, arg CloneDeploymentPackagesParams) ([]CloneDeploymentPackagesRow, error) {
+	rows, err := q.db.Query(ctx, cloneDeploymentPackages, arg.CloneDeploymentID, arg.OriginalDeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CloneDeploymentPackagesRow
+	for rows.Next() {
+		var i CloneDeploymentPackagesRow
+		if err := rows.Scan(&i.ID, &i.PackageID, &i.VersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -371,6 +444,59 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 	return i, err
 }
 
+const describeDeploymentPackages = `-- name: DescribeDeploymentPackages :many
+SELECT 
+  deployments_packages.id as deployment_package_id
+  , packages.name as package_name
+  , package_versions.id, package_versions.package_id, package_versions.deployment_id, package_versions.visibility, package_versions.major, package_versions.minor, package_versions.patch, package_versions.prerelease, package_versions.build, package_versions.created_at, package_versions.updated_at, package_versions.deleted_at, package_versions.deleted
+FROM deployments_packages
+INNER JOIN packages ON deployments_packages.package_id = packages.id
+INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
+WHERE deployments_packages.deployment_id = $1
+`
+
+type DescribeDeploymentPackagesRow struct {
+	DeploymentPackageID uuid.UUID
+	PackageName         string
+	PackageVersion      PackageVersion
+}
+
+func (q *Queries) DescribeDeploymentPackages(ctx context.Context, deploymentID uuid.UUID) ([]DescribeDeploymentPackagesRow, error) {
+	rows, err := q.db.Query(ctx, describeDeploymentPackages, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DescribeDeploymentPackagesRow
+	for rows.Next() {
+		var i DescribeDeploymentPackagesRow
+		if err := rows.Scan(
+			&i.DeploymentPackageID,
+			&i.PackageName,
+			&i.PackageVersion.ID,
+			&i.PackageVersion.PackageID,
+			&i.PackageVersion.DeploymentID,
+			&i.PackageVersion.Visibility,
+			&i.PackageVersion.Major,
+			&i.PackageVersion.Minor,
+			&i.PackageVersion.Patch,
+			&i.PackageVersion.Prerelease,
+			&i.PackageVersion.Build,
+			&i.PackageVersion.CreatedAt,
+			&i.PackageVersion.UpdatedAt,
+			&i.PackageVersion.DeletedAt,
+			&i.PackageVersion.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDeployment = `-- name: GetDeployment :one
 WITH latest_status as (
     SELECT deployment_id, status
@@ -507,10 +633,26 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at, deployments_openapiv3_assets.id, deployments_openapiv3_assets.deployment_id, deployments_openapiv3_assets.asset_id, deployments_openapiv3_assets.name, deployments_openapiv3_assets.slug, coalesce(latest_status.status, 'unknown') as status
+SELECT
+  deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at,
+  coalesce(latest_status.status, 'unknown') as status,
+  deployments_openapiv3_assets.id as deployments_openapiv3_asset_id,
+  deployments_openapiv3_assets.asset_id as deployments_openapiv3_asset_store_id,
+  deployments_openapiv3_assets.name as deployments_openapiv3_asset_name,
+  deployments_openapiv3_assets.slug as deployments_openapiv3_asset_slug,
+  deployments_packages.id as deployment_package_id,
+  packages.name as package_name,
+  package_versions.major as package_version_major,
+  package_versions.minor as package_version_minor,
+  package_versions.patch as package_version_patch,
+  package_versions.prerelease as package_version_prerelease,
+  package_versions.build as package_version_build
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
+LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
+LEFT JOIN packages ON deployments_packages.package_id = packages.id
+LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
@@ -520,9 +662,19 @@ type GetDeploymentWithAssetsParams struct {
 }
 
 type GetDeploymentWithAssetsRow struct {
-	Deployment                Deployment
-	DeploymentsOpenapiv3Asset DeploymentsOpenapiv3Asset
-	Status                    string
+	Deployment                       Deployment
+	Status                           string
+	DeploymentsOpenapiv3AssetID      uuid.NullUUID
+	DeploymentsOpenapiv3AssetStoreID uuid.NullUUID
+	DeploymentsOpenapiv3AssetName    pgtype.Text
+	DeploymentsOpenapiv3AssetSlug    pgtype.Text
+	DeploymentPackageID              uuid.NullUUID
+	PackageName                      pgtype.Text
+	PackageVersionMajor              pgtype.Int2
+	PackageVersionMinor              pgtype.Int2
+	PackageVersionPatch              pgtype.Int2
+	PackageVersionPrerelease         pgtype.Text
+	PackageVersionBuild              pgtype.Text
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -549,12 +701,18 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.Deployment.ExternalUrl,
 			&i.Deployment.CreatedAt,
 			&i.Deployment.UpdatedAt,
-			&i.DeploymentsOpenapiv3Asset.ID,
-			&i.DeploymentsOpenapiv3Asset.DeploymentID,
-			&i.DeploymentsOpenapiv3Asset.AssetID,
-			&i.DeploymentsOpenapiv3Asset.Name,
-			&i.DeploymentsOpenapiv3Asset.Slug,
 			&i.Status,
+			&i.DeploymentsOpenapiv3AssetID,
+			&i.DeploymentsOpenapiv3AssetStoreID,
+			&i.DeploymentsOpenapiv3AssetName,
+			&i.DeploymentsOpenapiv3AssetSlug,
+			&i.DeploymentPackageID,
+			&i.PackageName,
+			&i.PackageVersionMajor,
+			&i.PackageVersionMinor,
+			&i.PackageVersionPatch,
+			&i.PackageVersionPrerelease,
+			&i.PackageVersionBuild,
 		); err != nil {
 			return nil, err
 		}

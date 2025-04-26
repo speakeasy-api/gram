@@ -23,6 +23,13 @@ let value: CreateDeploymentResult = {
       },
     ],
     organizationId: "<id>",
+    packages: [
+      {
+        id: "<id>",
+        name: "<value>",
+        version: "<value>",
+      },
+    ],
     projectId: "<id>",
     status: "<value>",
     userId: "<id>",

@@ -294,8 +294,8 @@ run();
 
 ### [deployments](docs/sdks/deployments/README.md)
 
-* [addOpenAPIv3Source](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
+* [evolveDeployment](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 * [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 * [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
 
@@ -353,8 +353,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authLogin`](docs/sdks/auth/README.md#login) - login auth
 - [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
-- [`deploymentsAddOpenAPIv3Source`](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
+- [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
@@ -397,7 +397,6 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
-- [`useAddOpenAPIv3SourceMutation`](docs/sdks/deployments/README.md#addopenapiv3source) - addOpenAPIv3Source deployments
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
@@ -405,6 +404,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+- [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments

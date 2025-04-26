@@ -59,27 +59,27 @@ var _ = Service("deployments", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateDeployment"}`)
 	})
 
-	Method("addOpenAPIv3Source", func() {
-		Description("Create a new deployment with an additional OpenAPI 3.x document.")
+	Method("evolve", func() {
+		Description("Create a new deployment with an additional tool sources.")
 
 		Payload(func() {
-			Extend(AddOpenAPIv3SourceForm)
+			Extend(EvolveForm)
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
-		Result(AddOpenAPIv3SourceResult)
+		Result(EvolveResult)
 
 		HTTP(func() {
-			POST("/rpc/deployments.addOpenAPIv3Source")
+			POST("/rpc/deployments.evolve")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "addOpenAPIv3ToDeployment")
-		Meta("openapi:extension:x-speakeasy-name-override", "addOpenAPIv3Source")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOpenAPIv3Source"}`)
+		Meta("openapi:operationId", "evolveDeployment")
+		Meta("openapi:extension:x-speakeasy-name-override", "evolveDeployment")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EvolveDeployment"}`)
 	})
 
 	Method("listDeployments", func() {
@@ -108,7 +108,7 @@ var _ = Service("deployments", func() {
 })
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status")
+	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status", "packages")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -157,6 +157,10 @@ var Deployment = Type("Deployment", func() {
 	Attribute("openapiv3_assets", ArrayOf(OpenAPIv3DeploymentAsset), func() {
 		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")
 	})
+
+	Attribute("packages", ArrayOf(DeploymentPackage), func() {
+		Description("The packages that were deployed.")
+	})
 })
 
 var OpenAPIv3DeploymentAsset = Type("OpenAPIv3DeploymentAsset", func() {
@@ -173,6 +177,20 @@ var OpenAPIv3DeploymentAsset = Type("OpenAPIv3DeploymentAsset", func() {
 	})
 	Attribute("slug", shared.Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
+	})
+})
+
+var DeploymentPackage = Type("DeploymentPackage", func() {
+	Required("id", "name", "version")
+
+	Attribute("id", String, func() {
+		Description("The ID of the deployment package.")
+	})
+	Attribute("name", String, func() {
+		Description("The name of the package.")
+	})
+	Attribute("version", String, func() {
+		Description("The version of the package.")
 	})
 })
 
@@ -222,10 +240,11 @@ var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 		Description("The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.")
 	})
 
-	Attribute("openapiv3_assets", ArrayOf(OpenAPIv3DeploymentAssetForm))
+	Attribute("openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm))
+	Attribute("packages", ArrayOf(AddDeploymentPackageForm))
 })
 
-var OpenAPIv3DeploymentAssetForm = Type("OpenAPIv3DeploymentAssetForm", func() {
+var AddOpenAPIv3DeploymentAssetForm = Type("AddOpenAPIv3DeploymentAssetForm", func() {
 	Required("asset_id", "name", "slug")
 
 	Attribute("asset_id", String, func() {
@@ -236,6 +255,28 @@ var OpenAPIv3DeploymentAssetForm = Type("OpenAPIv3DeploymentAssetForm", func() {
 	})
 	Attribute("slug", shared.Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
+	})
+})
+
+var AddPackageForm = Type("AddPackageForm", func() {
+	Required("name")
+
+	Attribute("name", String, func() {
+		Description("The name of the package to add.")
+	})
+	Attribute("version", String, func() {
+		Description("The version of the package to add. If omitted, the latest version will be used.")
+	})
+})
+
+var AddDeploymentPackageForm = Type("AddDeploymentPackageForm", func() {
+	Required("name")
+
+	Attribute("name", String, func() {
+		Description("The name of the package.")
+	})
+	Attribute("version", String, func() {
+		Description("The version of the package.")
 	})
 })
 
@@ -269,10 +310,23 @@ var GetDeploymentResult = Type("GetDeploymentResult", func() {
 })
 
 var AddOpenAPIv3SourceForm = Type("AddOpenAPIv3SourceForm", func() {
-	Extend(OpenAPIv3DeploymentAssetForm)
+	Extend(AddOpenAPIv3DeploymentAssetForm)
 })
 
 var AddOpenAPIv3SourceResult = Type("AddOpenAPIv3SourceResult", func() {
+	Attribute("deployment", Deployment, func() {
+		Description("A deployment that was successfully created.")
+		Meta("openapi:example", "false")
+	})
+})
+
+var EvolveForm = Type("EvolveForm", func() {
+	Attribute("deployment_id", String, "The ID of the deployment to evolve. If omitted, the latest deployment will be used.")
+	Attribute("add_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to add to the new deployment.")
+	Attribute("add_packages", ArrayOf(AddPackageForm), "The OpenAPI 3.x documents to add to the deployment.")
+})
+
+var EvolveResult = Type("EvolveResult", func() {
 	Attribute("deployment", Deployment, func() {
 		Description("A deployment that was successfully created.")
 		Meta("openapi:example", "false")

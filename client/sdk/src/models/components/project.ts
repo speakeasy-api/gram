@@ -11,6 +11,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export type Project = {
   projectId: string;
   projectName: string;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
   projectSlug: string;
 };
 

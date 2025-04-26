@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { deploymentsAddOpenAPIv3Source } from "../funcs/deploymentsAddOpenAPIv3Source.js";
+import { deploymentsEvolveDeployment } from "../funcs/deploymentsEvolveDeployment.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -17,57 +17,56 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AddOpenAPIv3SourceMutationVariables = {
-  request: operations.AddOpenAPIv3ToDeploymentRequest;
+export type EvolveDeploymentMutationVariables = {
+  request: operations.EvolveDeploymentRequest;
   options?: RequestOptions;
 };
 
-export type AddOpenAPIv3SourceMutationData =
-  components.AddOpenAPIv3SourceResult;
+export type EvolveDeploymentMutationData = components.EvolveResult;
 
 /**
- * addOpenAPIv3Source deployments
+ * evolve deployments
  *
  * @remarks
- * Create a new deployment with an additional OpenAPI 3.x document.
+ * Create a new deployment with an additional tool sources.
  */
-export function useAddOpenAPIv3SourceMutation(
+export function useEvolveDeploymentMutation(
   options?: MutationHookOptions<
-    AddOpenAPIv3SourceMutationData,
+    EvolveDeploymentMutationData,
     Error,
-    AddOpenAPIv3SourceMutationVariables
+    EvolveDeploymentMutationVariables
   >,
 ): UseMutationResult<
-  AddOpenAPIv3SourceMutationData,
+  EvolveDeploymentMutationData,
   Error,
-  AddOpenAPIv3SourceMutationVariables
+  EvolveDeploymentMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAddOpenAPIv3SourceMutation(client, options),
+    ...buildEvolveDeploymentMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAddOpenAPIv3Source(): MutationKey {
-  return ["@gram/client", "deployments", "addOpenAPIv3Source"];
+export function mutationKeyEvolveDeployment(): MutationKey {
+  return ["@gram/client", "deployments", "evolveDeployment"];
 }
 
-export function buildAddOpenAPIv3SourceMutation(
+export function buildEvolveDeploymentMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AddOpenAPIv3SourceMutationVariables,
-  ) => Promise<AddOpenAPIv3SourceMutationData>;
+    variables: EvolveDeploymentMutationVariables,
+  ) => Promise<EvolveDeploymentMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAddOpenAPIv3Source(),
-    mutationFn: function addOpenAPIv3SourceMutationFn({
+    mutationKey: mutationKeyEvolveDeployment(),
+    mutationFn: function evolveDeploymentMutationFn({
       request,
       options,
-    }): Promise<AddOpenAPIv3SourceMutationData> {
+    }): Promise<EvolveDeploymentMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -80,7 +79,7 @@ export function buildAddOpenAPIv3SourceMutation(
           ),
         },
       };
-      return unwrapAsync(deploymentsAddOpenAPIv3Source(
+      return unwrapAsync(deploymentsEvolveDeployment(
         client$,
         request,
         mergedOptions,

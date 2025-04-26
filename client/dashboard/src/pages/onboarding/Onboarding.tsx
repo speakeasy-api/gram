@@ -88,12 +88,16 @@ export function OnboardingContent({
 
     setCreatingDeployment(true);
 
-    const deployment = await client.deployments.addOpenAPIv3Source({
-      openAPIv3DeploymentAssetForm: {
-        assetId: asset.asset.id,
-        name: apiName,
-        slug: apiName.replace(" ", "-").toLowerCase(),
-      }
+    const deployment = await client.deployments.evolveDeployment({
+      evolveForm: {
+        addOpenapiv3Assets: [
+          {
+            assetId: asset.asset.id,
+            name: apiName,
+            slug: apiName.replace(" ", "-").toLowerCase(),
+          },
+        ],
+      },
     });
 
     console.log("Deployment created:", deployment);

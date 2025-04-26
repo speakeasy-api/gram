@@ -1,0 +1,12 @@
+-- Create "packages" table
+CREATE TABLE "packages" ("id" uuid NOT NULL DEFAULT generate_uuidv7(), "name" character varying(100) NOT NULL, "title" character varying(100) NULL, "summary" character varying(80) NULL, "keywords" character varying(20)[] NOT NULL DEFAULT (ARRAY[]::character varying[])::character varying(20)[], "organization_id" text NOT NULL, "project_id" uuid NOT NULL, "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "deleted_at" timestamptz NULL, "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED, PRIMARY KEY ("id"), CONSTRAINT "packages_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE, CONSTRAINT "packages_keywords_check" CHECK (array_length(keywords, 1) <= 8));
+-- Create index "packages_name_idx" to table: "packages"
+CREATE INDEX "packages_name_idx" ON "packages" ("name");
+-- Create index "packages_organization_id_name_key" to table: "packages"
+CREATE UNIQUE INDEX "packages_organization_id_name_key" ON "packages" ("organization_id", "name") WHERE (deleted IS FALSE);
+-- Create index "packages_project_id_key" to table: "packages"
+CREATE UNIQUE INDEX "packages_project_id_key" ON "packages" ("project_id") WHERE (deleted IS FALSE);
+-- Create "package_versions" table
+CREATE TABLE "package_versions" ("id" uuid NOT NULL DEFAULT generate_uuidv7(), "package_id" uuid NOT NULL, "deployment_id" uuid NOT NULL, "visibility" character varying(20) NOT NULL, "major" smallint NOT NULL, "minor" smallint NOT NULL, "patch" smallint NOT NULL, "suffix" character varying(20) NULL, "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "deleted_at" timestamptz NULL, "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED, PRIMARY KEY ("id"), CONSTRAINT "package_versions_deployment_id_fkey" FOREIGN KEY ("deployment_id") REFERENCES "deployments" ("id") ON UPDATE NO ACTION ON DELETE CASCADE, CONSTRAINT "package_versions_package_id_fkey" FOREIGN KEY ("package_id") REFERENCES "packages" ("id") ON UPDATE NO ACTION ON DELETE CASCADE);
+-- Create index "package_versions_package_id_major_minor_patch_suffix_key" to table: "package_versions"
+CREATE UNIQUE INDEX "package_versions_package_id_major_minor_patch_suffix_key" ON "package_versions" ("package_id", "major", "minor", "patch", "suffix") WHERE (deleted IS FALSE);

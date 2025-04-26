@@ -83,6 +83,13 @@ type DeploymentsOpenapiv3Asset struct {
 	Slug         string
 }
 
+type DeploymentsPackage struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	PackageID    uuid.UUID
+	VersionID    uuid.UUID
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -145,6 +152,36 @@ type HttpToolDefinition struct {
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
+}
+
+type Package struct {
+	ID             uuid.UUID
+	Name           string
+	Title          pgtype.Text
+	Summary        pgtype.Text
+	Keywords       []string
+	OrganizationID string
+	ProjectID      uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type PackageVersion struct {
+	ID           uuid.UUID
+	PackageID    uuid.UUID
+	DeploymentID uuid.UUID
+	Visibility   string
+	Major        int16
+	Minor        int16
+	Patch        int16
+	Prerelease   pgtype.Text
+	Build        pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
 }
 
 type Project struct {

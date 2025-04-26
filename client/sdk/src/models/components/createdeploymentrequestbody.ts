@@ -8,11 +8,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  OpenAPIv3DeploymentAssetForm,
-  OpenAPIv3DeploymentAssetForm$inboundSchema,
-  OpenAPIv3DeploymentAssetForm$Outbound,
-  OpenAPIv3DeploymentAssetForm$outboundSchema,
-} from "./openapiv3deploymentassetform.js";
+  AddDeploymentPackageForm,
+  AddDeploymentPackageForm$inboundSchema,
+  AddDeploymentPackageForm$Outbound,
+  AddDeploymentPackageForm$outboundSchema,
+} from "./adddeploymentpackageform.js";
+import {
+  AddOpenAPIv3DeploymentAssetForm,
+  AddOpenAPIv3DeploymentAssetForm$inboundSchema,
+  AddOpenAPIv3DeploymentAssetForm$Outbound,
+  AddOpenAPIv3DeploymentAssetForm$outboundSchema,
+} from "./addopenapiv3deploymentassetform.js";
 
 export type CreateDeploymentRequestBody = {
   /**
@@ -35,7 +41,8 @@ export type CreateDeploymentRequestBody = {
    * The commit hash that triggered the deployment.
    */
   githubSha?: string | undefined;
-  openapiv3Assets?: Array<OpenAPIv3DeploymentAssetForm> | undefined;
+  openapiv3Assets?: Array<AddOpenAPIv3DeploymentAssetForm> | undefined;
+  packages?: Array<AddDeploymentPackageForm> | undefined;
 };
 
 /** @internal */
@@ -49,8 +56,9 @@ export const CreateDeploymentRequestBody$inboundSchema: z.ZodType<
   github_pr: z.string().optional(),
   github_repo: z.string().optional(),
   github_sha: z.string().optional(),
-  openapiv3_assets: z.array(OpenAPIv3DeploymentAssetForm$inboundSchema)
+  openapiv3_assets: z.array(AddOpenAPIv3DeploymentAssetForm$inboundSchema)
     .optional(),
+  packages: z.array(AddDeploymentPackageForm$inboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     "external_id": "externalId",
@@ -69,7 +77,10 @@ export type CreateDeploymentRequestBody$Outbound = {
   github_pr?: string | undefined;
   github_repo?: string | undefined;
   github_sha?: string | undefined;
-  openapiv3_assets?: Array<OpenAPIv3DeploymentAssetForm$Outbound> | undefined;
+  openapiv3_assets?:
+    | Array<AddOpenAPIv3DeploymentAssetForm$Outbound>
+    | undefined;
+  packages?: Array<AddDeploymentPackageForm$Outbound> | undefined;
 };
 
 /** @internal */
@@ -83,8 +94,9 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodType<
   githubPr: z.string().optional(),
   githubRepo: z.string().optional(),
   githubSha: z.string().optional(),
-  openapiv3Assets: z.array(OpenAPIv3DeploymentAssetForm$outboundSchema)
+  openapiv3Assets: z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)
     .optional(),
+  packages: z.array(AddDeploymentPackageForm$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     externalId: "external_id",

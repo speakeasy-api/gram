@@ -22,7 +22,7 @@ export type OpenAPIv3DeploymentAsset = {
    */
   name: string;
   /**
-   * The slug to give the document as it will be displayed in URLs.
+   * A short url-friendly label that uniquely identifies a resource.
    */
   slug: string;
 };

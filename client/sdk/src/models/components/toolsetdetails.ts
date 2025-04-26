@@ -20,7 +20,7 @@ export type ToolsetDetails = {
    */
   createdAt: Date;
   /**
-   * The slug of the environment to use as the default for the toolset
+   * A short url-friendly label that uniquely identifies a resource.
    */
   defaultEnvironmentSlug?: string | undefined;
   /**
@@ -52,7 +52,7 @@ export type ToolsetDetails = {
    */
   relevantEnvironmentVariables?: Array<string> | undefined;
   /**
-   * The slug of the toolset
+   * A short url-friendly label that uniquely identifies a resource.
    */
   slug: string;
   /**

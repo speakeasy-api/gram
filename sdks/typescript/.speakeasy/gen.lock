@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 1536f638-1fda-4f8e-a2c3-c7ca9e12fb09
 management:
-  docChecksum: 40f34d58092fb8fdb7174c1126047dea
+  docChecksum: ec0480d51e221326cb55b761cf115f4a
   docVersion: 0.0.1
   speakeasyVersion: 1.537.1
   generationVersion: 2.588.4
-  releaseVersion: 0.4.13
-  configChecksum: 2690f62ebcc9ef6f425a463a2ce774c0
+  releaseVersion: 0.4.14
+  configChecksum: 4fdbdbfac3c5b145fd75bfc2d00bd5e5
 features:
   typescript:
     additionalDependencies: 0.1.0

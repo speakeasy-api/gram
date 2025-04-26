@@ -1,4 +1,4 @@
-h1:u2HG1zDyAasvfYJkUkG1lVsjVpwk0oNs1vpMdXlcTf4=
+h1:1lwIdUdYKYKO3ZmGKPg5ecIZg6saGo+TmrdJW1gzhhw=
 20250324233730_initial.sql h1:ExdI+5poxxShu7+YWpjUxaetHFaKmWY+2r/qpE/OgtY=
 20250329045332_speakeasy-link.sql h1:QxaTWSy0BxpQLH5yrT8+59CQjYha/grM1Iahc/Sx4s0=
 20250331230140_add-project-names.sql h1:WNu9qXPXnK+YlZyByjcqULPo+Q4j2wZr76UrK3gE894=
@@ -41,3 +41,6 @@ h1:u2HG1zDyAasvfYJkUkG1lVsjVpwk0oNs1vpMdXlcTf4=
 20250409190812_toolsets-link-to-env-slug.sql h1:OPA+UWz5tyMTCBAr7c2Vg4nU8r4u+ty7Ik62h0X3U1I=
 20250409233347_http_tool_definitions_request_content_type.sql h1:nDFFt7WApjMPVlo+BWj6z7PeWbA7p3LernRLojbJols=
 20250413154244_bounded_strings.sql h1:Y0um0CMHbV5Gu6ANDg0szIM2hLACvd85FT9uq+LIQBE=
+20250422102858_add_packages.sql h1:iR7/ufuvXRXN7BL9Y9SDPklJlW3+lhUKWEu+F8u4BVg=
+20250422103543_add_deployments_packages.sql h1:K96uXu8hnkDpP0rQqoBIAPq98bc31h7Votd9bef87A4=
+20250422111228_package_versions_pre_build.sql h1:wwYRrG5I2A9UdQcE/VEdHf9I+gvdrurH/ZbCFUkK1XQ=

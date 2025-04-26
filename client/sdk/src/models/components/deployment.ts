@@ -8,6 +8,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  DeploymentPackage,
+  DeploymentPackage$inboundSchema,
+  DeploymentPackage$Outbound,
+  DeploymentPackage$outboundSchema,
+} from "./deploymentpackage.js";
+import {
   OpenAPIv3DeploymentAsset,
   OpenAPIv3DeploymentAsset$inboundSchema,
   OpenAPIv3DeploymentAsset$Outbound,
@@ -56,6 +62,10 @@ export type Deployment = {
    */
   organizationId: string;
   /**
+   * The packages that were deployed.
+   */
+  packages: Array<DeploymentPackage>;
+  /**
    * The ID of the project that the deployment belongs to.
    */
   projectId: string;
@@ -85,6 +95,7 @@ export const Deployment$inboundSchema: z.ZodType<
   idempotency_key: z.string().optional(),
   openapiv3_assets: z.array(OpenAPIv3DeploymentAsset$inboundSchema),
   organization_id: z.string(),
+  packages: z.array(DeploymentPackage$inboundSchema),
   project_id: z.string(),
   status: z.string(),
   user_id: z.string(),
@@ -116,6 +127,7 @@ export type Deployment$Outbound = {
   idempotency_key?: string | undefined;
   openapiv3_assets: Array<OpenAPIv3DeploymentAsset$Outbound>;
   organization_id: string;
+  packages: Array<DeploymentPackage$Outbound>;
   project_id: string;
   status: string;
   user_id: string;
@@ -137,6 +149,7 @@ export const Deployment$outboundSchema: z.ZodType<
   idempotencyKey: z.string().optional(),
   openapiv3Assets: z.array(OpenAPIv3DeploymentAsset$outboundSchema),
   organizationId: z.string(),
+  packages: z.array(DeploymentPackage$outboundSchema),
   projectId: z.string(),
   status: z.string(),
   userId: z.string(),

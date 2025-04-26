@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: c0e26058604b80e47c09a9548864a937
+  docChecksum: 161bb054e1900b6b759acfc53a20226e
   docVersion: 0.0.1
-  speakeasyVersion: 1.535.1
-  generationVersion: 2.585.2
-  releaseVersion: 0.8.6
-  configChecksum: 9cf23fc5116b9408871b301208d914a5
+  speakeasyVersion: 1.537.1
+  generationVersion: 2.588.4
+  releaseVersion: 0.8.8
+  configChecksum: 0a1b192a2637b28e751a1d0fc46d33fd
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -37,7 +37,9 @@ generatedFiles:
   - RUNTIMES.md
   - USAGE.md
   - docs/lib/utils/retryconfig.md
-  - docs/models/components/addopenapiv3sourceresult.md
+  - docs/models/components/adddeploymentpackageform.md
+  - docs/models/components/addopenapiv3deploymentassetform.md
+  - docs/models/components/addpackageform.md
   - docs/models/components/asset.md
   - docs/models/components/createdeploymentrequestbody.md
   - docs/models/components/createdeploymentresult.md
@@ -45,10 +47,13 @@ generatedFiles:
   - docs/models/components/createkeyform.md
   - docs/models/components/createtoolsetrequestbody.md
   - docs/models/components/deployment.md
+  - docs/models/components/deploymentpackage.md
   - docs/models/components/deploymentsummary.md
   - docs/models/components/environment.md
   - docs/models/components/environmententry.md
   - docs/models/components/environmententryinput.md
+  - docs/models/components/evolveform.md
+  - docs/models/components/evolveresult.md
   - docs/models/components/getdeploymentresult.md
   - docs/models/components/getinstanceresult.md
   - docs/models/components/httptooldefinition.md
@@ -61,7 +66,6 @@ generatedFiles:
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
   - docs/models/components/openapiv3deploymentasset.md
-  - docs/models/components/openapiv3deploymentassetform.md
   - docs/models/components/organization.md
   - docs/models/components/project.md
   - docs/models/components/security.md
@@ -69,7 +73,6 @@ generatedFiles:
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
   - docs/models/components/uploadopenapiv3result.md
-  - docs/models/operations/addopenapiv3todeploymentrequest.md
   - docs/models/operations/authcallbackrequest.md
   - docs/models/operations/authcallbackresponse.md
   - docs/models/operations/authloginresponse.md
@@ -80,6 +83,7 @@ generatedFiles:
   - docs/models/operations/createtoolsetrequest.md
   - docs/models/operations/deleteenvironmentrequest.md
   - docs/models/operations/deletetoolsetrequest.md
+  - docs/models/operations/evolvedeploymentrequest.md
   - docs/models/operations/getdeploymentrequest.md
   - docs/models/operations/getinstancerequest.md
   - docs/models/operations/getinstancesecurity.md
@@ -125,8 +129,8 @@ generatedFiles:
   - src/funcs/authLogin.ts
   - src/funcs/authLogout.ts
   - src/funcs/authSwitchScopes.ts
-  - src/funcs/deploymentsAddOpenAPIv3Source.ts
   - src/funcs/deploymentsCreate.ts
+  - src/funcs/deploymentsEvolveDeployment.ts
   - src/funcs/deploymentsGetById.ts
   - src/funcs/deploymentsList.ts
   - src/funcs/environmentsCreate.ts
@@ -179,8 +183,8 @@ generatedFiles:
   - src/mcp-server/tools/assetsUploadOpenAPIv3.ts
   - src/mcp-server/tools/authCallback.ts
   - src/mcp-server/tools/authLogin.ts
-  - src/mcp-server/tools/deploymentsAddOpenAPIv3Source.ts
   - src/mcp-server/tools/deploymentsCreate.ts
+  - src/mcp-server/tools/deploymentsEvolveDeployment.ts
   - src/mcp-server/tools/deploymentsGetById.ts
   - src/mcp-server/tools/deploymentsList.ts
   - src/mcp-server/tools/environmentsCreate.ts
@@ -193,7 +197,9 @@ generatedFiles:
   - src/mcp-server/tools/toolsetsGetBySlug.ts
   - src/mcp-server/tools/toolsetsList.ts
   - src/mcp-server/tools/toolsetsUpdateBySlug.ts
-  - src/models/components/addopenapiv3sourceresult.ts
+  - src/models/components/adddeploymentpackageform.ts
+  - src/models/components/addopenapiv3deploymentassetform.ts
+  - src/models/components/addpackageform.ts
   - src/models/components/asset.ts
   - src/models/components/createdeploymentrequestbody.ts
   - src/models/components/createdeploymentresult.ts
@@ -201,10 +207,13 @@ generatedFiles:
   - src/models/components/createkeyform.ts
   - src/models/components/createtoolsetrequestbody.ts
   - src/models/components/deployment.ts
+  - src/models/components/deploymentpackage.ts
   - src/models/components/deploymentsummary.ts
   - src/models/components/environment.ts
   - src/models/components/environmententry.ts
   - src/models/components/environmententryinput.ts
+  - src/models/components/evolveform.ts
+  - src/models/components/evolveresult.ts
   - src/models/components/getdeploymentresult.ts
   - src/models/components/getinstanceresult.ts
   - src/models/components/httptooldefinition.ts
@@ -217,7 +226,6 @@ generatedFiles:
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
   - src/models/components/openapiv3deploymentasset.ts
-  - src/models/components/openapiv3deploymentassetform.ts
   - src/models/components/organization.ts
   - src/models/components/project.ts
   - src/models/components/security.ts
@@ -229,7 +237,6 @@ generatedFiles:
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
   - src/models/errors/sdkvalidationerror.ts
-  - src/models/operations/addopenapiv3todeployment.ts
   - src/models/operations/authcallback.ts
   - src/models/operations/authlogin.ts
   - src/models/operations/createapikey.ts
@@ -238,6 +245,7 @@ generatedFiles:
   - src/models/operations/createtoolset.ts
   - src/models/operations/deleteenvironment.ts
   - src/models/operations/deletetoolset.ts
+  - src/models/operations/evolvedeployment.ts
   - src/models/operations/getdeployment.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/gettoolset.ts
@@ -256,7 +264,6 @@ generatedFiles:
   - src/models/operations/uploadopenapiv3asset.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
-  - src/react-query/addOpenAPIv3Source.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
@@ -264,6 +271,7 @@ generatedFiles:
   - src/react-query/deleteEnvironment.ts
   - src/react-query/deleteToolset.ts
   - src/react-query/deployment.ts
+  - src/react-query/evolveDeployment.ts
   - src/react-query/index.ts
   - src/react-query/instance.ts
   - src/react-query/listAPIKeys.ts
@@ -489,7 +497,7 @@ examples:
         application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
       responses:
         "200":
-          application/json: {"deployment": {"created_at": "2024-06-17T07:14:55.338Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"created_at": "2024-06-17T07:14:55.338Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
   getDeployment:
     speakeasy-default-get-deployment:
       parameters:
@@ -498,7 +506,7 @@ examples:
         header: {}
       responses:
         "200":
-          application/json: {"created_at": "2023-10-30T17:38:07.047Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
+          application/json: {"created_at": "2023-10-30T17:38:07.047Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
   listDeployments:
     speakeasy-default-list-deployments:
       responses:
@@ -632,5 +640,12 @@ examples:
         "200":
           application/json: {"created_at": "2025-09-06T15:47:55.334Z", "http_tools": [{"created_at": "2023-10-17T17:29:24.836Z", "deployment_id": "<id>", "description": "er since uniform", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/namedb", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-10T02:07:05.852Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-04-03T20:31:34.723Z"}
   authLogin: {}
+  evolveDeployment:
+    speakeasy-default-evolve-deployment:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2024-12-30T07:56:41.751Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
 examplesVersion: 1.0.1
 generatedTests: {}

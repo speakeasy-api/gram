@@ -10,7 +10,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"unicode/utf8"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
 	goa "goa.design/goa/v3/pkg"
@@ -51,11 +50,11 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Quod ut sapiente nulla autem ratione nulla.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         },\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         },\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         },\n         {\n            \"asset_id\": \"Qui est et impedit dolore suscipit.\",\n            \"name\": \"Consequuntur enim molestiae et blanditiis fugit.\",\n            \"slug\": \"81n\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Odio consequuntur enim molestiae et blanditiis fugit.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         },\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         },\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         },\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Eaque ex perferendis assumenda.\",\n            \"version\": \"Delectus ex consequuntur est sit dolores non.\"\n         },\n         {\n            \"name\": \"Eaque ex perferendis assumenda.\",\n            \"version\": \"Delectus ex consequuntur est sit dolores non.\"\n         },\n         {\n            \"name\": \"Eaque ex perferendis assumenda.\",\n            \"version\": \"Delectus ex consequuntur est sit dolores non.\"\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.Openapiv3Assets {
 			if e != nil {
-				if err2 := ValidateOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
+				if err2 := ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -88,9 +87,15 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 		ExternalURL: body.ExternalURL,
 	}
 	if body.Openapiv3Assets != nil {
-		v.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAssetForm, len(body.Openapiv3Assets))
+		v.Openapiv3Assets = make([]*deployments.AddOpenAPIv3DeploymentAssetForm, len(body.Openapiv3Assets))
 		for i, val := range body.Openapiv3Assets {
-			v.Openapiv3Assets[i] = marshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm(val)
+			v.Openapiv3Assets[i] = marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(val)
+		}
+	}
+	if body.Packages != nil {
+		v.Packages = make([]*deployments.AddDeploymentPackageForm, len(body.Packages))
+		for i, val := range body.Packages {
+			v.Packages[i] = marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(val)
 		}
 	}
 	v.SessionToken = sessionToken
@@ -100,40 +105,43 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	return v, nil
 }
 
-// BuildAddOpenAPIv3SourcePayload builds the payload for the deployments
-// addOpenAPIv3Source endpoint from CLI flags.
-func BuildAddOpenAPIv3SourcePayload(deploymentsAddOpenAPIv3SourceBody string, deploymentsAddOpenAPIv3SourceSessionToken string, deploymentsAddOpenAPIv3SourceProjectSlugInput string) (*deployments.AddOpenAPIv3SourcePayload, error) {
+// BuildEvolvePayload builds the payload for the deployments evolve endpoint
+// from CLI flags.
+func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveSessionToken string, deploymentsEvolveProjectSlugInput string) (*deployments.EvolvePayload, error) {
 	var err error
-	var body AddOpenAPIv3SourceRequestBody
+	var body EvolveRequestBody
 	{
-		err = json.Unmarshal([]byte(deploymentsAddOpenAPIv3SourceBody), &body)
+		err = json.Unmarshal([]byte(deploymentsEvolveBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Aut quae et alias.\",\n      \"name\": \"Totam necessitatibus debitis.\",\n      \"slug\": \"lsd\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
-		if utf8.RuneCountInString(body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"add_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         },\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         },\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         },\n         {\n            \"asset_id\": \"Voluptatem molestias aperiam molestias voluptatibus.\",\n            \"name\": \"Soluta voluptatibus corrupti perferendis voluptatem maxime illo.\",\n            \"slug\": \"krv\"\n         }\n      ],\n      \"add_packages\": [\n         {\n            \"name\": \"Esse rerum iusto eos consequatur et.\",\n            \"version\": \"Veniam sint eum porro et.\"\n         },\n         {\n            \"name\": \"Esse rerum iusto eos consequatur et.\",\n            \"version\": \"Veniam sint eum porro et.\"\n         },\n         {\n            \"name\": \"Esse rerum iusto eos consequatur et.\",\n            \"version\": \"Veniam sint eum porro et.\"\n         }\n      ],\n      \"deployment_id\": \"Quae ut fuga earum animi.\"\n   }'")
 		}
 	}
 	var sessionToken *string
 	{
-		if deploymentsAddOpenAPIv3SourceSessionToken != "" {
-			sessionToken = &deploymentsAddOpenAPIv3SourceSessionToken
+		if deploymentsEvolveSessionToken != "" {
+			sessionToken = &deploymentsEvolveSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if deploymentsAddOpenAPIv3SourceProjectSlugInput != "" {
-			projectSlugInput = &deploymentsAddOpenAPIv3SourceProjectSlugInput
+		if deploymentsEvolveProjectSlugInput != "" {
+			projectSlugInput = &deploymentsEvolveProjectSlugInput
 		}
 	}
-	v := &deployments.AddOpenAPIv3SourcePayload{
-		AssetID: body.AssetID,
-		Name:    body.Name,
-		Slug:    deployments.Slug(body.Slug),
+	v := &deployments.EvolvePayload{
+		DeploymentID: body.DeploymentID,
+	}
+	if body.AddOpenapiv3Assets != nil {
+		v.AddOpenapiv3Assets = make([]*deployments.AddOpenAPIv3DeploymentAssetForm, len(body.AddOpenapiv3Assets))
+		for i, val := range body.AddOpenapiv3Assets {
+			v.AddOpenapiv3Assets[i] = marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(val)
+		}
+	}
+	if body.AddPackages != nil {
+		v.AddPackages = make([]*deployments.AddPackageForm, len(body.AddPackages))
+		for i, val := range body.AddPackages {
+			v.AddPackages[i] = marshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

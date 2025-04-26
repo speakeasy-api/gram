@@ -227,47 +227,6 @@ paths:
             x-speakeasy-name-override: switchScopes
             x-speakeasy-react-hook:
                 name: SwitchScopes
-    /rpc/deployments.addOpenAPIv3Source:
-        post:
-            description: Create a new deployment with an additional OpenAPI 3.x document.
-            operationId: addOpenAPIv3ToDeployment
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/OpenAPIv3DeploymentAssetForm'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AddOpenAPIv3SourceResult'
-                    description: OK response.
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: addOpenAPIv3Source deployments
-            tags:
-                - deployments
-            x-speakeasy-name-override: addOpenAPIv3Source
-            x-speakeasy-react-hook:
-                name: AddOpenAPIv3Source
     /rpc/deployments.create:
         post:
             description: Create a deployment to load tool definitions.
@@ -319,6 +278,47 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateDeployment
+    /rpc/deployments.evolve:
+        post:
+            description: Create a new deployment with an additional tool sources.
+            operationId: evolveDeployment
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EvolveForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EvolveResult'
+                    description: OK response.
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: evolve deployments
+            tags:
+                - deployments
+            x-speakeasy-name-override: evolveDeployment
+            x-speakeasy-react-hook:
+                name: EvolveDeployment
     /rpc/deployments.get:
         get:
             description: Create a deployment to load tool definitions.
@@ -983,6 +983,35 @@ paths:
                 name: UpdateToolset
 components:
     schemas:
+        AddDeploymentPackageForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The name of the package.
+                version:
+                    type: string
+                    description: The version of the package.
+            required:
+                - name
+        AddOpenAPIv3DeploymentAssetForm:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the uploaded asset.
+                name:
+                    type: string
+                    description: The name to give the document as it will be displayed in UIs.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - asset_id
+                - name
+                - slug
         AddOpenAPIv3SourceForm:
             type: object
             properties:
@@ -1006,6 +1035,17 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        AddPackageForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The name of the package to add.
+                version:
+                    type: string
+                    description: The version of the package to add. If omitted, the latest version will be used.
+            required:
+                - name
         Asset:
             type: object
             properties:
@@ -1076,7 +1116,11 @@ components:
                 openapiv3_assets:
                     type: array
                     items:
-                        $ref: '#/components/schemas/OpenAPIv3DeploymentAssetForm'
+                        $ref: '#/components/schemas/AddOpenAPIv3DeploymentAssetForm'
+                packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddDeploymentPackageForm'
             required:
                 - idempotency_key
         CreateDeploymentRequestBody:
@@ -1104,7 +1148,11 @@ components:
                 openapiv3_assets:
                     type: array
                     items:
-                        $ref: '#/components/schemas/OpenAPIv3DeploymentAssetForm'
+                        $ref: '#/components/schemas/AddOpenAPIv3DeploymentAssetForm'
+                packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddDeploymentPackageForm'
         CreateDeploymentResult:
             type: object
             properties:
@@ -1227,6 +1275,11 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
+                packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentPackage'
+                    description: The packages that were deployed.
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
@@ -1244,6 +1297,23 @@ components:
                 - user_id
                 - openapiv3_assets
                 - status
+                - packages
+        DeploymentPackage:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the deployment package.
+                name:
+                    type: string
+                    description: The name of the package.
+                version:
+                    type: string
+                    description: The version of the package.
+            required:
+                - id
+                - name
+                - version
         DeploymentSummary:
             type: object
             properties:
@@ -1349,6 +1419,27 @@ components:
             required:
                 - name
                 - value
+        EvolveForm:
+            type: object
+            properties:
+                add_openapiv3_assets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddOpenAPIv3DeploymentAssetForm'
+                    description: The OpenAPI 3.x documents to add to the new deployment.
+                add_packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddPackageForm'
+                    description: The OpenAPI 3.x documents to add to the deployment.
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment to evolve. If omitted, the latest deployment will be used.
+        EvolveResult:
+            type: object
+            properties:
+                deployment:
+                    $ref: '#/components/schemas/Deployment'
         GetDeploymentForm:
             type: object
             properties:
@@ -1399,6 +1490,11 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
+                packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentPackage'
+                    description: The packages that were deployed.
                 project_id:
                     type: string
                     description: The ID of the project that the deployment belongs to.
@@ -1416,6 +1512,7 @@ components:
                 - user_id
                 - openapiv3_assets
                 - status
+                - packages
         GetInstanceForm:
             type: object
             properties:
@@ -1672,24 +1769,6 @@ components:
                     maxLength: 40
             required:
                 - id
-                - asset_id
-                - name
-                - slug
-        OpenAPIv3DeploymentAssetForm:
-            type: object
-            properties:
-                asset_id:
-                    type: string
-                    description: The ID of the uploaded asset.
-                name:
-                    type: string
-                    description: The name to give the document as it will be displayed in UIs.
-                slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
-                    maxLength: 40
-            required:
                 - asset_id
                 - name
                 - slug

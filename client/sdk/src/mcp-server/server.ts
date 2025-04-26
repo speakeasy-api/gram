@@ -16,8 +16,8 @@ import { createRegisterTool } from "./tools.js";
 import { tool$assetsUploadOpenAPIv3 } from "./tools/assetsUploadOpenAPIv3.js";
 import { tool$authCallback } from "./tools/authCallback.js";
 import { tool$authLogin } from "./tools/authLogin.js";
-import { tool$deploymentsAddOpenAPIv3Source } from "./tools/deploymentsAddOpenAPIv3Source.js";
 import { tool$deploymentsCreate } from "./tools/deploymentsCreate.js";
+import { tool$deploymentsEvolveDeployment } from "./tools/deploymentsEvolveDeployment.js";
 import { tool$deploymentsGetById } from "./tools/deploymentsGetById.js";
 import { tool$deploymentsList } from "./tools/deploymentsList.js";
 import { tool$environmentsCreate } from "./tools/environmentsCreate.js";
@@ -41,7 +41,7 @@ export function createMCPServer(deps: {
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.8.6",
+    version: "0.8.8",
   });
 
   const client = new GramCore({
@@ -74,8 +74,8 @@ export function createMCPServer(deps: {
   tool(tool$assetsUploadOpenAPIv3);
   tool(tool$authCallback);
   tool(tool$authLogin);
-  tool(tool$deploymentsAddOpenAPIv3Source);
   tool(tool$deploymentsCreate);
+  tool(tool$deploymentsEvolveDeployment);
   tool(tool$deploymentsGetById);
   tool(tool$deploymentsList);
   tool(tool$environmentsCreate);

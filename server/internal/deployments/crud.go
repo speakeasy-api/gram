@@ -1,0 +1,213 @@
+package deployments
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"log/slog"
+
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/internal/oops"
+)
+
+type IdempotencyKey *string
+type DeploymentID uuid.UUID
+type ProjectID uuid.UUID
+
+type addOpenAPIv3 struct {
+	assetID uuid.UUID
+	name    string
+	slug    string
+}
+
+type addPackage struct {
+	packageID uuid.UUID
+	versionID uuid.UUID
+}
+
+type deploymentFields struct {
+	projectID      uuid.UUID
+	userID         string
+	organizationID string
+	githubRepo     string
+	githubPr       string
+	externalID     string
+	externalURL    string
+}
+
+func createDeployment(
+	ctx context.Context,
+	tracer trace.Tracer,
+	logger *slog.Logger,
+	tx *repo.Queries,
+	idempotencyKey IdempotencyKey,
+	fields deploymentFields,
+	newOpenAPIv3 []addOpenAPIv3,
+	newPackages []addPackage,
+) (uuid.UUID, error) {
+	ctx, span := tracer.Start(ctx, "createDeployment")
+	defer span.End()
+	defer span.SetStatus(codes.Ok, "deployment created")
+	key := conv.PtrValOr(idempotencyKey, "")
+	if key == "" {
+		key = uuid.New().String()
+	}
+
+	cmd, err := tx.CreateDeployment(ctx, repo.CreateDeploymentParams{
+		ProjectID:      fields.projectID,
+		UserID:         fields.userID,
+		OrganizationID: fields.organizationID,
+		IdempotencyKey: key,
+
+		GithubRepo:  conv.ToPGTextEmpty(fields.githubRepo),
+		GithubPr:    conv.ToPGTextEmpty(fields.githubPr),
+		ExternalID:  conv.ToPGTextEmpty(fields.externalID),
+		ExternalUrl: conv.ToPGTextEmpty(fields.externalURL),
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return uuid.Nil, oops.E(err, "error creating deployment", "failed to create deployment").Log(ctx, logger)
+	}
+
+	created := cmd.RowsAffected() > 0
+
+	d, err := tx.GetDeploymentByIdempotencyKey(ctx, repo.GetDeploymentByIdempotencyKeyParams{
+		IdempotencyKey: key,
+		ProjectID:      fields.projectID,
+	})
+	if err != nil {
+		return uuid.Nil, oops.E(err, "error reading deployment", "failed to read laatest deployment").Log(ctx, logger)
+	}
+
+	newID := d.Deployment.ID
+	if !created {
+		return newID, nil
+	}
+
+	logger = logger.With(slog.String("deployment_id", d.Deployment.ID.String()))
+	span.SetAttributes(attribute.String("deployment_id", d.Deployment.ID.String()))
+
+	err = amendDeployment(ctx, logger, tx, DeploymentID(newID), newOpenAPIv3, newPackages)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	_, err = tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+		DeploymentID: newID,
+		ProjectID:    fields.projectID,
+		Status:       "created",
+		Event:        "deployment:created",
+		Message:      "Deployment created",
+	})
+	if err != nil {
+		return uuid.Nil, oops.E(err, "error logging deployment creation", "failed to mark deployment as created").Log(ctx, logger)
+	}
+
+	return newID, nil
+}
+
+func cloneDeployment(
+	ctx context.Context,
+	tracer trace.Tracer,
+	logger *slog.Logger,
+	depRepo *repo.Queries,
+	projectID ProjectID,
+	srcDeploymentID DeploymentID,
+
+	newOpenAPIv3 []addOpenAPIv3,
+	newPackages []addPackage,
+) (uuid.UUID, error) {
+	ctx, span := tracer.Start(ctx, "cloneDeployment")
+	defer span.End()
+	defer span.SetStatus(codes.Ok, "deployment cloned")
+
+	srcDepID := uuid.UUID(srcDeploymentID)
+	projID := uuid.UUID(projectID)
+
+	newID, err := depRepo.CloneDeployment(ctx, repo.CloneDeploymentParams{
+		ID:        srcDepID,
+		ProjectID: projID,
+	})
+	if err != nil {
+		return uuid.Nil, oops.E(err, "error cloning deployment", "failed to clone deployment").Log(ctx, logger)
+	}
+
+	logger = logger.With(slog.String("deployment_id", newID.String()))
+	span.SetAttributes(attribute.String("deployment_id", newID.String()))
+
+	_, err = depRepo.CloneDeploymentPackages(ctx, repo.CloneDeploymentPackagesParams{
+		OriginalDeploymentID: srcDepID,
+		CloneDeploymentID:    newID,
+	})
+	if err != nil {
+		return uuid.Nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
+	}
+
+	_, err = depRepo.CloneDeploymentOpenAPIv3Assets(ctx, repo.CloneDeploymentOpenAPIv3AssetsParams{
+		OriginalDeploymentID: srcDepID,
+		CloneDeploymentID:    newID,
+	})
+	if err != nil {
+		return uuid.Nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
+	}
+
+	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), newOpenAPIv3, newPackages)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	_, err = depRepo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+		DeploymentID: newID,
+		ProjectID:    projID,
+		Status:       "created",
+		Event:        "deployment:created",
+		Message:      "Deployment created",
+	})
+	if err != nil {
+		return uuid.Nil, oops.E(err, "error logging deployment creation", "failed to mark deployment as created").Log(ctx, logger)
+	}
+
+	return newID, nil
+}
+
+func amendDeployment(
+	ctx context.Context,
+	logger *slog.Logger,
+	depRepo *repo.Queries,
+	deploymentID DeploymentID,
+
+	newOpenAPIv3 []addOpenAPIv3,
+	newPackages []addPackage,
+) error {
+	id := uuid.UUID(deploymentID)
+
+	for _, a := range newOpenAPIv3 {
+		_, err := depRepo.AddDeploymentOpenAPIv3Asset(ctx, repo.AddDeploymentOpenAPIv3AssetParams{
+			DeploymentID: id,
+			AssetID:      a.assetID,
+			Name:         a.name,
+			Slug:         a.slug,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
+		}
+	}
+
+	for _, p := range newPackages {
+		_, err := depRepo.AddDeploymentPackage(ctx, repo.AddDeploymentPackageParams{
+			DeploymentID: id,
+			PackageID:    p.packageID,
+			VersionID:    p.versionID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return oops.E(err, "error adding deployment package", "failed to add deployment package").Log(ctx, logger)
+		}
+	}
+
+	return nil
+}

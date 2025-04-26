@@ -179,14 +179,13 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
-// BuildAddOpenAPIv3SourceRequest instantiates a HTTP request object with
-// method and path set to call the "deployments" service "addOpenAPIv3Source"
-// endpoint
-func (c *Client) BuildAddOpenAPIv3SourceRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AddOpenAPIv3SourceDeploymentsPath()}
+// BuildEvolveRequest instantiates a HTTP request object with method and path
+// set to call the "deployments" service "evolve" endpoint
+func (c *Client) BuildEvolveRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EvolveDeploymentsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("deployments", "addOpenAPIv3Source", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("deployments", "evolve", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -195,13 +194,13 @@ func (c *Client) BuildAddOpenAPIv3SourceRequest(ctx context.Context, v any) (*ht
 	return req, nil
 }
 
-// EncodeAddOpenAPIv3SourceRequest returns an encoder for requests sent to the
-// deployments addOpenAPIv3Source server.
-func EncodeAddOpenAPIv3SourceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeEvolveRequest returns an encoder for requests sent to the deployments
+// evolve server.
+func EncodeEvolveRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*deployments.AddOpenAPIv3SourcePayload)
+		p, ok := v.(*deployments.EvolvePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("deployments", "addOpenAPIv3Source", "*deployments.AddOpenAPIv3SourcePayload", v)
+			return goahttp.ErrInvalidType("deployments", "evolve", "*deployments.EvolvePayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -211,18 +210,18 @@ func EncodeAddOpenAPIv3SourceRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewAddOpenAPIv3SourceRequestBody(p)
+		body := NewEvolveRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("deployments", "addOpenAPIv3Source", err)
+			return goahttp.ErrEncodingError("deployments", "evolve", err)
 		}
 		return nil
 	}
 }
 
-// DecodeAddOpenAPIv3SourceResponse returns a decoder for responses returned by
-// the deployments addOpenAPIv3Source endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-func DecodeAddOpenAPIv3SourceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+// DecodeEvolveResponse returns a decoder for responses returned by the
+// deployments evolve endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+func DecodeEvolveResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -239,22 +238,22 @@ func DecodeAddOpenAPIv3SourceResponse(decoder func(*http.Response) goahttp.Decod
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body AddOpenAPIv3SourceResponseBody
+				body EvolveResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "addOpenAPIv3Source", err)
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
 			}
-			err = ValidateAddOpenAPIv3SourceResponseBody(&body)
+			err = ValidateEvolveResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "addOpenAPIv3Source", err)
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
 			}
-			res := NewAddOpenAPIv3SourceResultOK(&body)
+			res := NewEvolveResultOK(&body)
 			return res, nil
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("deployments", "addOpenAPIv3Source", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("deployments", "evolve", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -353,14 +352,27 @@ func unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3Deployme
 	return res
 }
 
-// marshalDeploymentsOpenAPIv3DeploymentAssetFormToOpenAPIv3DeploymentAssetFormRequestBody
-// builds a value of type *OpenAPIv3DeploymentAssetFormRequestBody from a value
-// of type *deployments.OpenAPIv3DeploymentAssetForm.
-func marshalDeploymentsOpenAPIv3DeploymentAssetFormToOpenAPIv3DeploymentAssetFormRequestBody(v *deployments.OpenAPIv3DeploymentAssetForm) *OpenAPIv3DeploymentAssetFormRequestBody {
+// unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage builds
+// a value of type *deployments.DeploymentPackage from a value of type
+// *DeploymentPackageResponseBody.
+func unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(v *DeploymentPackageResponseBody) *deployments.DeploymentPackage {
+	res := &deployments.DeploymentPackage{
+		ID:      *v.ID,
+		Name:    *v.Name,
+		Version: *v.Version,
+	}
+
+	return res
+}
+
+// marshalDeploymentsAddOpenAPIv3DeploymentAssetFormToAddOpenAPIv3DeploymentAssetFormRequestBody
+// builds a value of type *AddOpenAPIv3DeploymentAssetFormRequestBody from a
+// value of type *deployments.AddOpenAPIv3DeploymentAssetForm.
+func marshalDeploymentsAddOpenAPIv3DeploymentAssetFormToAddOpenAPIv3DeploymentAssetFormRequestBody(v *deployments.AddOpenAPIv3DeploymentAssetForm) *AddOpenAPIv3DeploymentAssetFormRequestBody {
 	if v == nil {
 		return nil
 	}
-	res := &OpenAPIv3DeploymentAssetFormRequestBody{
+	res := &AddOpenAPIv3DeploymentAssetFormRequestBody{
 		AssetID: v.AssetID,
 		Name:    v.Name,
 		Slug:    string(v.Slug),
@@ -369,17 +381,47 @@ func marshalDeploymentsOpenAPIv3DeploymentAssetFormToOpenAPIv3DeploymentAssetFor
 	return res
 }
 
-// marshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm
-// builds a value of type *deployments.OpenAPIv3DeploymentAssetForm from a
-// value of type *OpenAPIv3DeploymentAssetFormRequestBody.
-func marshalOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsOpenAPIv3DeploymentAssetForm(v *OpenAPIv3DeploymentAssetFormRequestBody) *deployments.OpenAPIv3DeploymentAssetForm {
+// marshalDeploymentsAddDeploymentPackageFormToAddDeploymentPackageFormRequestBody
+// builds a value of type *AddDeploymentPackageFormRequestBody from a value of
+// type *deployments.AddDeploymentPackageForm.
+func marshalDeploymentsAddDeploymentPackageFormToAddDeploymentPackageFormRequestBody(v *deployments.AddDeploymentPackageForm) *AddDeploymentPackageFormRequestBody {
 	if v == nil {
 		return nil
 	}
-	res := &deployments.OpenAPIv3DeploymentAssetForm{
+	res := &AddDeploymentPackageFormRequestBody{
+		Name:    v.Name,
+		Version: v.Version,
+	}
+
+	return res
+}
+
+// marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm
+// builds a value of type *deployments.AddOpenAPIv3DeploymentAssetForm from a
+// value of type *AddOpenAPIv3DeploymentAssetFormRequestBody.
+func marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(v *AddOpenAPIv3DeploymentAssetFormRequestBody) *deployments.AddOpenAPIv3DeploymentAssetForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.AddOpenAPIv3DeploymentAssetForm{
 		AssetID: v.AssetID,
 		Name:    v.Name,
 		Slug:    deployments.Slug(v.Slug),
+	}
+
+	return res
+}
+
+// marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm
+// builds a value of type *deployments.AddDeploymentPackageForm from a value of
+// type *AddDeploymentPackageFormRequestBody.
+func marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(v *AddDeploymentPackageFormRequestBody) *deployments.AddDeploymentPackageForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.AddDeploymentPackageForm{
+		Name:    v.Name,
+		Version: v.Version,
 	}
 
 	return res
@@ -408,6 +450,40 @@ func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentRespons
 	res.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
 	for i, val := range v.Openapiv3Assets {
 		res.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(val)
+	}
+	res.Packages = make([]*deployments.DeploymentPackage, len(v.Packages))
+	for i, val := range v.Packages {
+		res.Packages[i] = unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(val)
+	}
+
+	return res
+}
+
+// marshalDeploymentsAddPackageFormToAddPackageFormRequestBody builds a value
+// of type *AddPackageFormRequestBody from a value of type
+// *deployments.AddPackageForm.
+func marshalDeploymentsAddPackageFormToAddPackageFormRequestBody(v *deployments.AddPackageForm) *AddPackageFormRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AddPackageFormRequestBody{
+		Name:    v.Name,
+		Version: v.Version,
+	}
+
+	return res
+}
+
+// marshalAddPackageFormRequestBodyToDeploymentsAddPackageForm builds a value
+// of type *deployments.AddPackageForm from a value of type
+// *AddPackageFormRequestBody.
+func marshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(v *AddPackageFormRequestBody) *deployments.AddPackageForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.AddPackageForm{
+		Name:    v.Name,
+		Version: v.Version,
 	}
 
 	return res

@@ -15,7 +15,7 @@ generation:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
 typescript:
-  version: 0.4.13
+  version: 0.4.14
   additionalDependencies:
     devDependencies:
       '@langchain/core': ^0.3.48

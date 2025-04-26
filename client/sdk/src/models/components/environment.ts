@@ -47,7 +47,7 @@ export type Environment = {
    */
   projectId: string;
   /**
-   * The slug identifier for the environment
+   * A short url-friendly label that uniquely identifies a resource.
    */
   slug: string;
   /**

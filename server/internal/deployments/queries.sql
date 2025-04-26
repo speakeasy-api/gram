@@ -37,10 +37,26 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT sqlc.embed(deployments), sqlc.embed(deployments_openapiv3_assets), coalesce(latest_status.status, 'unknown') as status
+SELECT
+  sqlc.embed(deployments),
+  coalesce(latest_status.status, 'unknown') as status,
+  deployments_openapiv3_assets.id as deployments_openapiv3_asset_id,
+  deployments_openapiv3_assets.asset_id as deployments_openapiv3_asset_store_id,
+  deployments_openapiv3_assets.name as deployments_openapiv3_asset_name,
+  deployments_openapiv3_assets.slug as deployments_openapiv3_asset_slug,
+  deployments_packages.id as deployment_package_id,
+  packages.name as package_name,
+  package_versions.major as package_version_major,
+  package_versions.minor as package_version_minor,
+  package_versions.patch as package_version_patch,
+  package_versions.prerelease as package_version_prerelease,
+  package_versions.build as package_version_build
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
+LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
+LEFT JOIN packages ON deployments_packages.package_id = packages.id
+LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetLatestDeploymentID :one
@@ -118,6 +134,20 @@ FROM deployments as current
 WHERE current.id = @id AND current.project_id = @project_id
 RETURNING id;
 
+-- name: CloneDeploymentPackages :many
+INSERT INTO deployments_packages (
+  deployment_id
+  , package_id
+  , version_id
+)
+SELECT 
+  @clone_deployment_id
+  , current.package_id
+  , current.version_id
+FROM deployments_packages as current
+WHERE current.deployment_id = @original_deployment_id
+RETURNING id, package_id, version_id;
+
 -- name: CloneDeploymentOpenAPIv3Assets :many
 INSERT INTO deployments_openapiv3_assets (
   deployment_id
@@ -166,6 +196,19 @@ INSERT INTO deployments_openapiv3_assets (
 )
 ON CONFLICT (deployment_id, slug) DO NOTHING
 RETURNING id, asset_id, name, slug;
+
+-- name: AddDeploymentPackage :one
+INSERT INTO deployments_packages (
+  deployment_id
+  , package_id
+  , version_id
+) VALUES (
+  @deployment_id,
+  @package_id,
+  @version_id
+)
+ON CONFLICT (deployment_id, package_id) DO NOTHING
+RETURNING id;
 
 -- name: CreateOpenAPIv3ToolDefinition :one
 INSERT INTO http_tool_definitions (
@@ -232,3 +275,13 @@ INSERT INTO http_security (
   , @env_variables
 )
 RETURNING *;
+
+-- name: DescribeDeploymentPackages :many
+SELECT 
+  deployments_packages.id as deployment_package_id
+  , packages.name as package_name
+  , sqlc.embed(package_versions)
+FROM deployments_packages
+INNER JOIN packages ON deployments_packages.package_id = packages.id
+INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
+WHERE deployments_packages.deployment_id = @deployment_id;

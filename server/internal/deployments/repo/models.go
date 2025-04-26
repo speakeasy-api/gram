@@ -76,3 +76,19 @@ type HttpToolDefinition struct {
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
 }
+
+type PackageVersion struct {
+	ID           uuid.UUID
+	PackageID    uuid.UUID
+	DeploymentID uuid.UUID
+	Visibility   string
+	Major        int16
+	Minor        int16
+	Patch        int16
+	Prerelease   pgtype.Text
+	Build        pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}

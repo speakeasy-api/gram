@@ -102,6 +102,64 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   CONSTRAINT deployment_logs_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS packages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  name VARCHAR(100) NOT NULL,
+  
+  title VARCHAR(100),
+  summary VARCHAR(80),
+  keywords VARCHAR(20)[] NOT NULL DEFAULT ARRAY[]::VARCHAR(20)[] CHECK (array_length(keywords, 1) <= 8),
+
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT packages_pkey PRIMARY KEY (id),
+  CONSTRAINT packages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS packages_name_idx ON packages (name);
+
+-- package name must be unique within an organization
+CREATE UNIQUE INDEX IF NOT EXISTS packages_organization_id_name_key
+ON packages (organization_id, name)
+WHERE deleted IS FALSE;
+
+-- only one active package per project
+CREATE UNIQUE INDEX IF NOT EXISTS packages_project_id_key
+ON packages (project_id)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS package_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  package_id uuid NOT NULL,
+  deployment_id uuid NOT NULL,
+  
+  visibility VARCHAR(20) NOT NULL,
+  major SMALLINT NOT NULL,
+  minor SMALLINT NOT NULL,
+  patch SMALLINT NOT NULL,
+  prerelease VARCHAR(20),
+  build VARCHAR(20),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT package_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT package_versions_package_id_fkey FOREIGN KEY (package_id) REFERENCES packages (id) ON DELETE CASCADE,
+  CONSTRAINT package_versions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS package_versions_package_id_major_minor_patch_prerelease_build_key
+ON package_versions (package_id, major, minor, patch, prerelease, build)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -158,6 +216,21 @@ CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   CONSTRAINT deployments_openapiv3_documents_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
   CONSTRAINT deployments_openapiv3_documents_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE CASCADE,
   CONSTRAINT deployments_openapiv3_documents_deployment_id_slug_key UNIQUE (deployment_id, slug)
+);
+
+CREATE TABLE IF NOT EXISTS deployments_packages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  deployment_id uuid NOT NULL,
+
+  package_id uuid NOT NULL,
+  version_id uuid NOT NULL,
+
+  CONSTRAINT deployments_packages_pkey PRIMARY KEY (id),
+  CONSTRAINT deployments_packages_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT deployments_packages_package_id_fkey FOREIGN key (package_id) REFERENCES packages (id) ON DELETE CASCADE,
+  CONSTRAINT deployments_packages_version_id_fkey FOREIGN key (version_id) REFERENCES package_versions (id) ON DELETE CASCADE,
+  -- a single deployment cannot have duplicate packages
+  CONSTRAINT deployments_packages_deployment_id_package_id_key UNIQUE (deployment_id, package_id)
 );
 
 CREATE TABLE IF NOT EXISTS http_tool_definitions (

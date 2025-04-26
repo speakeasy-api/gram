@@ -24,6 +24,7 @@ class EnvironmentTypedDict(TypedDict):
     project_id: str
     r"""The project ID this environment belongs to"""
     slug: str
+    r"""A short url-friendly label that uniquely identifies a resource."""
     updated_at: datetime
     r"""When the environment was last updated"""
     description: NotRequired[str]
@@ -52,6 +53,7 @@ class Environment(BaseModel):
     r"""The project ID this environment belongs to"""
 
     slug: str
+    r"""A short url-friendly label that uniquely identifies a resource."""
 
     updated_at: datetime
     r"""When the environment was last updated"""

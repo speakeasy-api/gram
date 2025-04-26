@@ -5,7 +5,6 @@
 export { GramProvider, useGramContext } from "./_context.js";
 export * from "./_types.js";
 
-export * from "./addOpenAPIv3Source.js";
 export * from "./createAPIKey.js";
 export * from "./createDeployment.js";
 export * from "./createEnvironment.js";
@@ -13,6 +12,7 @@ export * from "./createToolset.js";
 export * from "./deleteEnvironment.js";
 export * from "./deleteToolset.js";
 export * from "./deployment.js";
+export * from "./evolveDeployment.js";
 export * from "./instance.js";
 export * from "./listAPIKeys.js";
 export * from "./listDeployments.js";

@@ -13,6 +13,7 @@ tool (
 require (
 	cloud.google.com/go/storage v1.51.0
 	github.com/KimMachineGun/automemlimit v0.7.1
+	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/charmbracelet/log v0.4.0
 	github.com/ettle/strcase v0.2.0
 	github.com/go-redis/cache/v9 v9.0.0
