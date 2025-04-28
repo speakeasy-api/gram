@@ -81,6 +81,7 @@ jobs:
           working-directory: server
       - name: Install Go tools
         run: go install tool
+        working-directory: server
       - name: Run code generators
         run: mise run "gen:*"
       - name: Run "go mod tidy"
