@@ -41,7 +41,7 @@ export function createMCPServer(deps: {
 }) {
   const server = new McpServer({
     name: "Gram",
-    version: "0.8.8",
+    version: "0.8.9",
   });
 
   const client = new GramCore({

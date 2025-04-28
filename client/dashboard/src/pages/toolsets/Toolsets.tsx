@@ -29,7 +29,7 @@ import { InputDialog } from "@/components/input-dialog";
 export function useToolsets() {
   const project = useProject();
   const { data: toolsets, refetch } = useListToolsetsSuspense({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
   return Object.assign(toolsets.toolsets, { refetch });
 }
@@ -40,7 +40,7 @@ export const useToolset = () => {
   const project = useProject();
 
   const { data: toolset, refetch: refetchToolset } = useToolsetSuspense({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
     slug: toolsetSlug ?? "",
   });
 
@@ -72,7 +72,7 @@ export default function Toolsets() {
   const createToolset = () => {
     createToolsetMutation.mutate({
       request: {
-        gramProject: project.projectSlug,
+        gramProject: project.slug,
         createToolsetRequestBody: {
           name: toolsetName,
           description: "New Toolset Description",

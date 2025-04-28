@@ -17,26 +17,30 @@ import (
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               *string                     `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	UserEmail            *string                     `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	ActiveOrganizationID *string                     `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
-	Organizations        []*OrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	UserID               *string                          `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	UserEmail            *string                          `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	ActiveOrganizationID *string                          `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
+	Organizations        []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
-// OrganizationResponseBody is used to define fields on response body types.
-type OrganizationResponseBody struct {
-	OrganizationID   *string                `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	OrganizationName *string                `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
-	OrganizationSlug *string                `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
-	AccountType      *string                `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
-	Projects         []*ProjectResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
+// OrganizationEntryResponseBody is used to define fields on response body
+// types.
+type OrganizationEntryResponseBody struct {
+	ID          *string                     `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name        *string                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Slug        *string                     `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	AccountType *string                     `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	Projects    []*ProjectEntryResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
 }
 
-// ProjectResponseBody is used to define fields on response body types.
-type ProjectResponseBody struct {
-	ProjectID   *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+// ProjectEntryResponseBody is used to define fields on response body types.
+type ProjectEntryResponseBody struct {
+	// The ID of the project
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the project
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the project
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
 // NewCallbackResultTemporaryRedirect builds a "auth" service "callback"
@@ -86,9 +90,9 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		UserEmail:            *body.UserEmail,
 		ActiveOrganizationID: *body.ActiveOrganizationID,
 	}
-	v.Organizations = make([]*auth.Organization, len(body.Organizations))
+	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
-		v.Organizations[i] = unmarshalOrganizationResponseBodyToAuthOrganization(val)
+		v.Organizations[i] = unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry(val)
 	}
 	v.SessionToken = sessionToken
 	v.SessionCookie = sessionCookie
@@ -112,7 +116,7 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	for _, e := range body.Organizations {
 		if e != nil {
-			if err2 := ValidateOrganizationResponseBody(e); err2 != nil {
+			if err2 := ValidateOrganizationEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -120,17 +124,17 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	return
 }
 
-// ValidateOrganizationResponseBody runs the validations defined on
-// OrganizationResponseBody
-func ValidateOrganizationResponseBody(body *OrganizationResponseBody) (err error) {
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+// ValidateOrganizationEntryResponseBody runs the validations defined on
+// OrganizationEntryResponseBody
+func ValidateOrganizationEntryResponseBody(body *OrganizationEntryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.OrganizationName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_name", "body"))
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.OrganizationSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_slug", "body"))
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.AccountType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
@@ -140,7 +144,7 @@ func ValidateOrganizationResponseBody(body *OrganizationResponseBody) (err error
 	}
 	for _, e := range body.Projects {
 		if e != nil {
-			if err2 := ValidateProjectResponseBody(e); err2 != nil {
+			if err2 := ValidateProjectEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -148,24 +152,24 @@ func ValidateOrganizationResponseBody(body *OrganizationResponseBody) (err error
 	return
 }
 
-// ValidateProjectResponseBody runs the validations defined on
-// ProjectResponseBody
-func ValidateProjectResponseBody(body *ProjectResponseBody) (err error) {
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+// ValidateProjectEntryResponseBody runs the validations defined on
+// ProjectEntryResponseBody
+func ValidateProjectEntryResponseBody(body *ProjectEntryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ProjectName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.ProjectSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.ProjectSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.project_slug", *body.ProjectSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 	}
-	if body.ProjectSlug != nil {
-		if utf8.RuneCountInString(*body.ProjectSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.project_slug", *body.ProjectSlug, utf8.RuneCountInString(*body.ProjectSlug), 40, false))
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
 		}
 	}
 	return

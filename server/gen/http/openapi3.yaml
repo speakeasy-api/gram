@@ -726,6 +726,74 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
+    /rpc/projects.create:
+        post:
+            description: Create a new project.
+            operationId: createProject
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateProjectRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateProjectResult'
+                    description: OK response.
+            security:
+                - session_header_Gram-Session: []
+            summary: createProject projects
+            tags:
+                - projects
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateProject
+    /rpc/projects.list:
+        get:
+            description: List all projects for an organization.
+            operationId: listProjects
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the organization to list projects for
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: The ID of the organization to list projects for
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListProjectsResult'
+                    description: OK response.
+            security:
+                - session_header_Gram-Session: []
+            summary: listProjects projects
+            tags:
+                - projects
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListProjects
     /rpc/tools.list:
         get:
             description: List all tools for a project
@@ -1189,6 +1257,53 @@ components:
             required:
                 - name
                 - project_id
+        CreateProjectForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The name of the project
+                    maxLength: 40
+                organization_id:
+                    type: string
+                    description: The ID of the organization to create the project in
+                session_token:
+                    type: string
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - organization_id
+                - name
+                - slug
+        CreateProjectRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The name of the project
+                    maxLength: 40
+                organization_id:
+                    type: string
+                    description: The ID of the organization to create the project in
+                slug:
+                    type: string
+                    description: The slug of the project
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - organization_id
+                - name
+                - slug
+        CreateProjectResult:
+            type: object
+            properties:
+                project:
+                    $ref: '#/components/schemas/Project'
+            required:
+                - project
         CreateToolsetForm:
             type: object
             properties:
@@ -1635,7 +1750,7 @@ components:
                 organizations:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Organization'
+                        $ref: '#/components/schemas/OrganizationEntry'
                 user_email:
                     type: string
                 user_id:
@@ -1727,6 +1842,26 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListProjectsPayload:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The ID of the organization to list projects for
+                session_token:
+                    type: string
+            required:
+                - organization_id
+        ListProjectsResult:
+            type: object
+            properties:
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProjectEntry'
+                    description: The list of projects
+            required:
+                - projects
         ListToolsResult:
             type: object
             properties:
@@ -1772,43 +1907,77 @@ components:
                 - asset_id
                 - name
                 - slug
-        Organization:
+        OrganizationEntry:
             type: object
             properties:
                 account_type:
                     type: string
-                organization_id:
+                id:
                     type: string
-                organization_name:
-                    type: string
-                organization_slug:
+                name:
                     type: string
                 projects:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Project'
+                        $ref: '#/components/schemas/ProjectEntry'
+                slug:
+                    type: string
             required:
-                - organization_id
-                - organization_name
-                - organization_slug
+                - id
+                - name
+                - slug
                 - account_type
                 - projects
         Project:
             type: object
             properties:
-                project_id:
+                created_at:
                     type: string
-                project_name:
+                    description: The creation date of the project.
+                    format: date-time
+                id:
                     type: string
-                project_slug:
+                    description: The ID of the project
+                name:
+                    type: string
+                    description: The name of the project
+                organization_id:
+                    type: string
+                    description: The ID of the organization that owns the project
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                updated_at:
+                    type: string
+                    description: The last update date of the project.
+                    format: date-time
+            required:
+                - id
+                - name
+                - slug
+                - organization_id
+                - created_at
+                - updated_at
+        ProjectEntry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the project
+                name:
+                    type: string
+                    description: The name of the project
+                slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     maxLength: 40
             required:
-                - project_id
-                - project_name
-                - project_slug
+                - id
+                - name
+                - slug
         ToolsetDetails:
             type: object
             properties:
@@ -2011,6 +2180,8 @@ tags:
       description: Managing toolset environments.
     - name: keys
       description: Managing system api keys.
+    - name: projects
+      description: Manages projects in Gram.
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: instances

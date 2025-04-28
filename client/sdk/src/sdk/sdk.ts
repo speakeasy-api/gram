@@ -9,6 +9,7 @@ import { Deployments } from "./deployments.js";
 import { Environments } from "./environments.js";
 import { Instances } from "./instances.js";
 import { Keys } from "./keys.js";
+import { Projects } from "./projects.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 
@@ -41,6 +42,11 @@ export class Gram extends ClientSDK {
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
+  }
+
+  private _projects?: Projects;
+  get projects(): Projects {
+    return (this._projects ??= new Projects(this._options));
   }
 
   private _tools?: Tools;

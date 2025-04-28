@@ -48,7 +48,7 @@ export function OnboardingContent({
   const [deployment, setDeployment] = useState<Deployment>();
 
   const { data: tools, refetch: refetchTools } = useListTools({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
 
   const handleUpload = async (file: File) => {
@@ -62,7 +62,7 @@ export function OnboardingContent({
           "content-type": file.type,
           "content-length": file.size.toString(),
           "gram-session": session.session,
-          "gram-project": project.projectSlug,
+          "gram-project": project.slug,
         },
         body: file,
       }).then(async (response) => {

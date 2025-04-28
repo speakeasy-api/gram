@@ -16,16 +16,16 @@ let value: SessionInfoResponse = {
     organizations: [
       {
         accountType: "<value>",
-        organizationId: "<id>",
-        organizationName: "<value>",
-        organizationSlug: "<value>",
+        id: "<id>",
+        name: "<value>",
         projects: [
           {
-            projectId: "<id>",
-            projectName: "<value>",
-            projectSlug: "<value>",
+            id: "<id>",
+            name: "<value>",
+            slug: "<value>",
           },
         ],
+        slug: "<value>",
       },
     ],
     userEmail: "<value>",

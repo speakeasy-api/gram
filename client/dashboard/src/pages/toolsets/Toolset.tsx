@@ -64,7 +64,7 @@ export function ToolsetView({
   const project = useProject();
 
   const toolsetResult = useToolset({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
     slug: toolsetSlug,
   });
 
@@ -100,7 +100,7 @@ export function ToolsetView({
     toolset = { ...toolset, ...changes };
     updateToolsetMutation.mutate({
       request: {
-        gramProject: project.projectSlug,
+        gramProject: project.slug,
         slug: toolset.slug,
         updateToolsetRequestBody: {
           name: changes.name,
@@ -139,7 +139,7 @@ export function ToolsetView({
         ) {
           deleteToolsetMutation.mutate({
             request: {
-              gramProject: project.projectSlug,
+              gramProject: project.slug,
               slug: toolset.slug,
             },
           });
@@ -156,7 +156,7 @@ export function ToolsetView({
     updateToolsetMutation.mutate(
       {
         request: {
-          gramProject: project.projectSlug,
+          gramProject: project.slug,
           slug: toolset.slug,
           updateToolsetRequestBody: {
             httpToolNames: toolNames,
@@ -179,7 +179,7 @@ export function ToolsetView({
 
     updateToolsetMutation.mutate({
       request: {
-        gramProject: project.projectSlug,
+        gramProject: project.slug,
         slug: toolset.slug,
         updateToolsetRequestBody: {
           httpToolNames: toolset.httpTools
@@ -223,7 +223,7 @@ export function ToolsetView({
       updateEnvironmentMutation.mutate(
         {
           request: {
-            gramProject: project.projectSlug,
+            gramProject: project.slug,
             slug: environment.slug,
             updateEnvironmentRequestBody: {
               entriesToUpdate: envVarsToUpdate,
@@ -466,7 +466,7 @@ function AddToolDialog({
   }, [open, toolset.httpTools]);
 
   const tools = useListTools({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
 
   const options = tools.data?.tools.map((tool: HTTPToolDefinition) => ({

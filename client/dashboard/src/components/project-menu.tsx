@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils.ts";
 import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
 import { Separator } from "./ui/separator.tsx";
-import { Project } from "@gram/client/models/components";
+import { ProjectEntry } from "@gram/client/models/components";
 import { useLogoutMutation } from "@gram/client/react-query";
 
 // Add this helper function to generate colors from project label
@@ -56,10 +56,10 @@ function ProjectAvatar({
   project,
   className,
 }: {
-  project: Project;
+  project: ProjectEntry;
   className?: string;
 }) {
-  const colors = getProjectColors(project.projectId);
+  const colors = getProjectColors(project.id);
   return (
     <div
       className={cn("h-6 w-6 rounded-full bg-gradient-to-br", className)}
@@ -91,10 +91,10 @@ export function ProjectMenu() {
             <ProjectAvatar project={project} className="h-8 w-8 rounded-md" />
             <Stack align="start">
               <Heading variant="h5" className="mb-[-2px] normal-case">
-                {organization?.organizationSlug}
+                {organization?.slug}
               </Heading>
               <Type variant="small" muted className="truncate max-w-[120px]">
-                {project?.projectSlug ?? "Select Project"}
+                {project?.slug ?? "Select Project"}
               </Type>
             </Stack>
           </Stack>
@@ -105,7 +105,7 @@ export function ProjectMenu() {
         <div className="flex flex-col gap-2 p-2">
           <Stack gap={1}>
             <Type variant="small" className="px-2">
-              {organization?.organizationSlug}
+              {organization?.slug}
             </Type>
             <Type muted variant="small" className="px-2">
               {session.userEmail}
@@ -152,8 +152,8 @@ function ProjectSelector() {
 
   const projectWithIcons = organization?.projects.map((project) => ({
     ...project,
-    value: project.projectId,
-    label: project.projectSlug,
+    value: project.id,
+    label: project.slug,
     icon: <ProjectAvatar project={project} className="h-4 w-4" />,
   }));
 
@@ -167,9 +167,7 @@ function ProjectSelector() {
   //   projectSlug: "new-project",
   // });
 
-  const selected = projectWithIcons?.find(
-    (p) => p.projectId === project.projectId
-  );
+  const selected = projectWithIcons?.find((p) => p.id === project.id);
 
   const changeProject = (projectId: string) => {
     if (projectId === "new-project") {

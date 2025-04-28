@@ -49,7 +49,7 @@ SELECT id, name, slug, organization_id, created_at, updated_at, deleted_at, dele
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE
-ORDER BY created_at DESC
+ORDER BY id DESC
 `
 
 func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID string) ([]Project, error) {

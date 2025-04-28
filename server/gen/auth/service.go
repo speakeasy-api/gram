@@ -75,7 +75,7 @@ type InfoResult struct {
 	UserID               string
 	UserEmail            string
 	ActiveOrganizationID string
-	Organizations        []*Organization
+	Organizations        []*OrganizationEntry
 	// The authentication session
 	SessionToken string
 	// The authentication session
@@ -99,18 +99,21 @@ type LogoutResult struct {
 	SessionCookie string
 }
 
-type Organization struct {
-	OrganizationID   string
-	OrganizationName string
-	OrganizationSlug string
-	AccountType      string
-	Projects         []*Project
+type OrganizationEntry struct {
+	ID          string
+	Name        string
+	Slug        string
+	AccountType string
+	Projects    []*ProjectEntry
 }
 
-type Project struct {
-	ProjectID   string
-	ProjectName string
-	ProjectSlug Slug
+type ProjectEntry struct {
+	// The ID of the project
+	ID string
+	// The name of the project
+	Name string
+	// The slug of the project
+	Slug Slug
 }
 
 // A short url-friendly label that uniquely identifies a resource.

@@ -9,10 +9,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/projects"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -20,6 +16,13 @@ import (
 
 	gen "github.com/speakeasy-api/gram/gen/auth"
 	srv "github.com/speakeasy-api/gram/gen/http/auth/server"
+	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/conv"
+	envRepo "github.com/speakeasy-api/gram/internal/environments/repo"
+	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 )
 
 type AuthConfigurations struct {
@@ -30,24 +33,26 @@ type AuthConfigurations struct {
 
 // Service for gram dashboard authentication endpoints
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	sessions *sessions.Manager
-	projects *projects.Service
-	cfg      AuthConfigurations
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	sessions     *sessions.Manager
+	cfg          AuthConfigurations
+	projectsRepo *projectsRepo.Queries
+	envRepo      *envRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cfg AuthConfigurations) *Service {
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
-		logger:   logger,
-		db:       db,
-		sessions: sessions,
-		projects: projects.NewService(logger, db),
-		cfg:      cfg,
+		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
+		logger:       logger,
+		db:           db,
+		sessions:     sessions,
+		cfg:          cfg,
+		projectsRepo: projectsRepo.New(db),
+		envRepo:      envRepo.New(db),
 	}
 }
 
@@ -73,6 +78,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.sessions.Authenticate(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
+}
+
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	redirectWithError := func(err error) (*gen.CallbackResult, error) {
 		s.logger.ErrorContext(ctx, "signin error", slog.String("error", err.Error()))
@@ -89,7 +98,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	activeOrganizationID := ""
 	if len(userInfo.Organizations) > 0 {
-		activeOrganizationID = userInfo.Organizations[0].OrganizationID
+		activeOrganizationID = userInfo.Organizations[0].ID
 
 		// For admins we allow you to override the active organization returned by header if present
 		// Otherwise we default speakeasy-self being the active organization if present
@@ -99,8 +108,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				adminOverride = "speakeasy-self"
 			}
 			for _, org := range userInfo.Organizations {
-				if org.OrganizationSlug == adminOverride {
-					activeOrganizationID = org.OrganizationID
+				if org.Slug == adminOverride {
+					activeOrganizationID = org.ID
 					break
 				}
 			}
@@ -151,7 +160,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	if payload.OrganizationID != nil {
 		orgFound := false
 		for _, org := range userInfo.Organizations {
-			if org.OrganizationID == *payload.OrganizationID {
+			if org.ID == *payload.OrganizationID {
 				orgFound = true
 				break
 			}
@@ -211,37 +220,37 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	// For admins we only return the active organization to avoid overloaded returns
 	if userInfo.Admin {
 		for _, org := range userInfo.Organizations {
-			if org.OrganizationID == authCtx.ActiveOrganizationID {
-				userInfo.Organizations = []gen.Organization{org}
+			if org.ID == authCtx.ActiveOrganizationID {
+				userInfo.Organizations = []gen.OrganizationEntry{org}
 			}
 		}
 	}
 
 	// Fully unpack the userInfo object
-	organizations := make([]*gen.Organization, len(userInfo.Organizations))
-	for i, org := range userInfo.Organizations {
+	organizations := make([]*gen.OrganizationEntry, 0, len(userInfo.Organizations))
+	for _, org := range userInfo.Organizations {
 		// TODO: Not the cleanest but a temporary measue while in POC phase.
 		// This may actually be bettter executed from elsewhere
-		projectRows, err := s.projects.GetProjectsOrSetupDefaults(ctx, org.OrganizationID)
+		projectRows, err := s.getProjectsOrSetupDefaults(ctx, org.ID)
 		if err != nil {
 			return nil, err
 		}
-		var orgProjects []*gen.Project
+		var orgProjects []*gen.ProjectEntry
 		for _, project := range projectRows {
-			orgProjects = append(orgProjects, &gen.Project{
-				ProjectID:   project.ID.String(),
-				ProjectName: project.Name,
-				ProjectSlug: gen.Slug(project.Slug),
+			orgProjects = append(orgProjects, &gen.ProjectEntry{
+				ID:   project.ID.String(),
+				Name: project.Name,
+				Slug: gen.Slug(project.Slug),
 			})
 		}
 
-		organizations[i] = &gen.Organization{
-			OrganizationID:   org.OrganizationID,
-			OrganizationName: org.OrganizationName,
-			OrganizationSlug: org.OrganizationSlug,
-			AccountType:      org.AccountType,
-			Projects:         orgProjects,
-		}
+		organizations = append(organizations, &gen.OrganizationEntry{
+			ID:          org.ID,
+			Name:        org.Name,
+			Slug:        org.Slug,
+			AccountType: org.AccountType,
+			Projects:    orgProjects,
+		})
 	}
 
 	return &gen.InfoResult{
@@ -254,6 +263,46 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}, nil
 }
 
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.Authenticate(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
+func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]projectsRepo.Project, error) {
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(err, "error listing projects", "failed to list projects by organization").Log(ctx, s.logger)
+	}
+
+	if len(projects) == 0 {
+		project, err := s.createDefaultProject(ctx, organizationID)
+		if err != nil {
+			return nil, oops.E(err, "error creating default project", "failed to create default project").Log(ctx, s.logger)
+		}
+
+		_, err = s.envRepo.CreateEnvironment(ctx, envRepo.CreateEnvironmentParams{
+			OrganizationID: organizationID,
+			ProjectID:      project.ID,
+			Name:           "Default",
+			Slug:           "default",
+			Description:    conv.ToPGText("Default project for organization"),
+		})
+		if err != nil {
+			return nil, oops.E(err, "error creating default environment", "failed to create default environment").Log(ctx, s.logger)
+		}
+
+		projects = append(projects, project)
+	}
+
+	return projects, nil
+}
+
+func (s *Service) createDefaultProject(ctx context.Context, organizationID string) (projectsRepo.Project, error) {
+	project, err := s.projectsRepo.CreateProject(ctx, projectsRepo.CreateProjectParams{
+		OrganizationID: organizationID,
+		Name:           "Default",
+		Slug:           "default",
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "unique constraint") {
+			return project, errors.New("project slug already exists")
+		}
+		return project, err
+	}
+	return project, nil
 }

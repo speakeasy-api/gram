@@ -94,7 +94,7 @@ export function OnboardingPanel({
 
     // Auto-create a default toolset
     const res = await client.toolsets.create({
-      gramProject: project.projectSlug,
+      gramProject: project.slug,
       createToolsetRequestBody: {
         name: assetName,
         description: `A toolset created from OpenAPI document: ${assetName}`,
@@ -102,12 +102,12 @@ export function OnboardingPanel({
     });
 
     const allTools = await client.tools.list({
-      gramProject: project.projectSlug,
+      gramProject: project.slug,
     });
 
     // Add all tools to the toolset
     await client.toolsets.updateBySlug({
-      gramProject: project.projectSlug,
+      gramProject: project.slug,
       slug: res.slug,
       updateToolsetRequestBody: {
         httpToolNames: allTools.tools.map((tool) => tool.name),
@@ -247,7 +247,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
   const instance = useInstance(
     {},
     {
-      gramProject: project.projectSlug,
+      gramProject: project.slug,
       toolsetSlug: configRef.current.toolsetSlug ?? "",
       environmentSlug: configRef.current.environmentSlug ?? undefined,
     },
@@ -330,7 +330,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
           method: "POST",
           headers: {
             "gram-session": session.session,
-            "gram-project": project.projectSlug,
+            "gram-project": project.slug,
           },
           body: JSON.stringify(toolCall.args),
         }

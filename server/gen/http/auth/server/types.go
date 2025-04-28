@@ -14,26 +14,30 @@ import (
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               string                      `form:"user_id" json:"user_id" xml:"user_id"`
-	UserEmail            string                      `form:"user_email" json:"user_email" xml:"user_email"`
-	ActiveOrganizationID string                      `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
-	Organizations        []*OrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	UserID               string                           `form:"user_id" json:"user_id" xml:"user_id"`
+	UserEmail            string                           `form:"user_email" json:"user_email" xml:"user_email"`
+	ActiveOrganizationID string                           `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
+	Organizations        []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
-// OrganizationResponseBody is used to define fields on response body types.
-type OrganizationResponseBody struct {
-	OrganizationID   string                 `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	OrganizationName string                 `form:"organization_name" json:"organization_name" xml:"organization_name"`
-	OrganizationSlug string                 `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
-	AccountType      string                 `form:"account_type" json:"account_type" xml:"account_type"`
-	Projects         []*ProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
+// OrganizationEntryResponseBody is used to define fields on response body
+// types.
+type OrganizationEntryResponseBody struct {
+	ID          string                      `form:"id" json:"id" xml:"id"`
+	Name        string                      `form:"name" json:"name" xml:"name"`
+	Slug        string                      `form:"slug" json:"slug" xml:"slug"`
+	AccountType string                      `form:"account_type" json:"account_type" xml:"account_type"`
+	Projects    []*ProjectEntryResponseBody `form:"projects" json:"projects" xml:"projects"`
 }
 
-// ProjectResponseBody is used to define fields on response body types.
-type ProjectResponseBody struct {
-	ProjectID   string `form:"project_id" json:"project_id" xml:"project_id"`
-	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
-	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+// ProjectEntryResponseBody is used to define fields on response body types.
+type ProjectEntryResponseBody struct {
+	// The ID of the project
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the project
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the project
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
 // NewInfoResponseBody builds the HTTP response body from the result of the
@@ -45,12 +49,12 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		ActiveOrganizationID: res.ActiveOrganizationID,
 	}
 	if res.Organizations != nil {
-		body.Organizations = make([]*OrganizationResponseBody, len(res.Organizations))
+		body.Organizations = make([]*OrganizationEntryResponseBody, len(res.Organizations))
 		for i, val := range res.Organizations {
-			body.Organizations[i] = marshalAuthOrganizationToOrganizationResponseBody(val)
+			body.Organizations[i] = marshalAuthOrganizationEntryToOrganizationEntryResponseBody(val)
 		}
 	} else {
-		body.Organizations = []*OrganizationResponseBody{}
+		body.Organizations = []*OrganizationEntryResponseBody{}
 	}
 	return body
 }

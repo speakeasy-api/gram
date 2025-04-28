@@ -10,16 +10,16 @@ let value: InfoResponseBody = {
   organizations: [
     {
       accountType: "<value>",
-      organizationId: "<id>",
-      organizationName: "<value>",
-      organizationSlug: "<value>",
+      id: "<id>",
+      name: "<value>",
       projects: [
         {
-          projectId: "<id>",
-          projectName: "<value>",
-          projectSlug: "<value>",
+          id: "<id>",
+          name: "<value>",
+          slug: "<value>",
         },
       ],
+      slug: "<value>",
     },
   ],
   userEmail: "<value>",
@@ -29,9 +29,9 @@ let value: InfoResponseBody = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `activeOrganizationId`                                               | *string*                                                             | :heavy_check_mark:                                                   | N/A                                                                  |
-| `organizations`                                                      | [components.Organization](../../models/components/organization.md)[] | :heavy_check_mark:                                                   | N/A                                                                  |
-| `userEmail`                                                          | *string*                                                             | :heavy_check_mark:                                                   | N/A                                                                  |
-| `userId`                                                             | *string*                                                             | :heavy_check_mark:                                                   | N/A                                                                  |
+| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `activeOrganizationId`                                                         | *string*                                                                       | :heavy_check_mark:                                                             | N/A                                                                            |
+| `organizations`                                                                | [components.OrganizationEntry](../../models/components/organizationentry.md)[] | :heavy_check_mark:                                                             | N/A                                                                            |
+| `userEmail`                                                                    | *string*                                                                       | :heavy_check_mark:                                                             | N/A                                                                            |
+| `userId`                                                                       | *string*                                                                       | :heavy_check_mark:                                                             | N/A                                                                            |

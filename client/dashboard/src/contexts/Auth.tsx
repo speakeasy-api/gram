@@ -1,8 +1,8 @@
 import { createContext, Suspense, useState, useEffect } from "react";
 import {
   InfoResponseBody,
-  Organization,
-  Project,
+  OrganizationEntry,
+  ProjectEntry,
 } from "@gram/client/models/components";
 import { useContext } from "react";
 import {
@@ -40,27 +40,27 @@ export const useProject = () => {
     throw new Error("No projects found");
   }
 
-  const [activeProject, setActiveProject] = useState<Project>(defaultProject);
+  const [activeProject, setActiveProject] =
+    useState<ProjectEntry>(defaultProject);
 
   const switchProject = (projectId: string) => {
     setActiveProject(
-      organization.projects.find((p) => p.projectId === projectId) ??
-        defaultProject
+      organization.projects.find((p) => p.id === projectId) ?? defaultProject
     );
   };
 
   return Object.assign(activeProject, {
-    organizationId: organization.organizationId,
+    organizationId: organization.id,
     switchProject,
   });
 };
 
-export const useOrganization = (): Organization => {
+export const useOrganization = (): OrganizationEntry => {
   const session = useSession();
 
   const organization =
     session.organizations.find(
-      (org) => org.organizationId === session.activeOrganizationId
+      (org) => org.id === session.activeOrganizationId
     ) ?? session.organizations[0];
 
   if (!organization) {
@@ -132,9 +132,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <MinimumSuspense fallback={<FullScreenLoader />}>
-        <AuthHandler>
-          {children}
-        </AuthHandler>
+        <AuthHandler>{children}</AuthHandler>
       </MinimumSuspense>
     </ErrorBoundary>
   );
@@ -145,11 +143,11 @@ const PrefetchedQueries = ({ children }: { children: React.ReactNode }) => {
   const project = useProject();
 
   useListToolsetsSuspense({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
 
   useListEnvironmentsSuspense({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
 
   return children;
@@ -158,7 +156,7 @@ const PrefetchedQueries = ({ children }: { children: React.ReactNode }) => {
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const sessionResponse = useSessionInfo(
     { sessionHeaderGramSession: "" }, // from cookies
-    undefined, 
+    undefined,
     {
       refetchOnWindowFocus: false,
       retries: {
@@ -170,10 +168,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { data, isLoading, error } = sessionResponse;
 
   if (isLoading) {
-    return <FullScreenLoader/>;
+    return <FullScreenLoader />;
   }
 
-  const sessionId = data?.headers["gram-session"]?.[0]
+  const sessionId = data?.headers["gram-session"]?.[0];
 
   if (error || !sessionId) {
     return (
@@ -194,4 +192,3 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     </SessionContext.Provider>
   );
 };
-

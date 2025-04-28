@@ -8,15 +8,15 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  Organization,
-  Organization$inboundSchema,
-  Organization$Outbound,
-  Organization$outboundSchema,
-} from "./organization.js";
+  OrganizationEntry,
+  OrganizationEntry$inboundSchema,
+  OrganizationEntry$Outbound,
+  OrganizationEntry$outboundSchema,
+} from "./organizationentry.js";
 
 export type InfoResponseBody = {
   activeOrganizationId: string;
-  organizations: Array<Organization>;
+  organizations: Array<OrganizationEntry>;
   userEmail: string;
   userId: string;
 };
@@ -28,7 +28,7 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   active_organization_id: z.string(),
-  organizations: z.array(Organization$inboundSchema),
+  organizations: z.array(OrganizationEntry$inboundSchema),
   user_email: z.string(),
   user_id: z.string(),
 }).transform((v) => {
@@ -42,7 +42,7 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
 /** @internal */
 export type InfoResponseBody$Outbound = {
   active_organization_id: string;
-  organizations: Array<Organization$Outbound>;
+  organizations: Array<OrganizationEntry$Outbound>;
   user_email: string;
   user_id: string;
 };
@@ -54,7 +54,7 @@ export const InfoResponseBody$outboundSchema: z.ZodType<
   InfoResponseBody
 > = z.object({
   activeOrganizationId: z.string(),
-  organizations: z.array(Organization$outboundSchema),
+  organizations: z.array(OrganizationEntry$outboundSchema),
   userEmail: z.string(),
   userId: z.string(),
 }).transform((v) => {

@@ -14,12 +14,17 @@ import {
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
 import { useProject } from "@/contexts/Auth";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 
 function DeploymentCards() {
   const project = useProject();
   const { data: deployments } = useListDeploymentsSuspense({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
   const latestDeploymentId = deployments.items?.[0]?.id;
 
@@ -56,7 +61,7 @@ function LoadingCards() {
 
 function ToolsTooltipContent({ tools }: { tools: HTTPToolDefinition[] }) {
   if (tools.length === 0) return null;
-  
+
   return (
     <Stack gap={1}>
       {tools.map((tool) => (
@@ -69,11 +74,11 @@ function ToolsTooltipContent({ tools }: { tools: HTTPToolDefinition[] }) {
 function DeploymentTools({ deploymentId }: { deploymentId: string }) {
   const project = useProject();
   const { data: deployment } = useDeploymentSuspense({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
     id: deploymentId,
   });
   const { data: toolsData } = useListToolsSuspense({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
 
   if (!deployment?.openapiv3Assets?.length) {
@@ -95,10 +100,15 @@ function DeploymentTools({ deploymentId }: { deploymentId: string }) {
         {deployment.openapiv3Assets.map(
           (asset: GetDeploymentResult["openapiv3Assets"][0]) => {
             const tools = toolsByDocument[asset.id] || [];
-            const latestToolTimestamp = tools.length > 0 
-              ? new Date(Math.max(...tools.map(t => new Date(t.createdAt).getTime())))
-              : null;
-            
+            const latestToolTimestamp =
+              tools.length > 0
+                ? new Date(
+                    Math.max(
+                      ...tools.map((t) => new Date(t.createdAt).getTime())
+                    )
+                  )
+                : null;
+
             return (
               <Card key={asset.id}>
                 <Card.Header>
@@ -148,8 +158,7 @@ function DeploymentTools({ deploymentId }: { deploymentId: string }) {
                     </Type>
                   )}
                 </Card.Header>
-                <Card.Content>
-                </Card.Content>
+                <Card.Content></Card.Content>
               </Card>
             );
           }
@@ -174,7 +183,6 @@ export default function Home() {
   );
 }
 
-
 function groupToolsByDocument(tools: HTTPToolDefinition[]) {
   return tools.reduce<Record<string, HTTPToolDefinition[]>>((groups, tool) => {
     const docId = tool.openapiv3DocumentId;
@@ -187,4 +195,3 @@ function groupToolsByDocument(tools: HTTPToolDefinition[]) {
     return groups;
   }, {});
 }
-

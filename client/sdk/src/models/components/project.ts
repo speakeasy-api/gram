@@ -9,33 +9,61 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type Project = {
-  projectId: string;
-  projectName: string;
+  /**
+   * The creation date of the project.
+   */
+  createdAt: Date;
+  /**
+   * The ID of the project
+   */
+  id: string;
+  /**
+   * The name of the project
+   */
+  name: string;
+  /**
+   * The ID of the organization that owns the project
+   */
+  organizationId: string;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
-  projectSlug: string;
+  slug: string;
+  /**
+   * The last update date of the project.
+   */
+  updatedAt: Date;
 };
 
 /** @internal */
 export const Project$inboundSchema: z.ZodType<Project, z.ZodTypeDef, unknown> =
   z.object({
-    project_id: z.string(),
-    project_name: z.string(),
-    project_slug: z.string(),
+    created_at: z.string().datetime({ offset: true }).transform(v =>
+      new Date(v)
+    ),
+    id: z.string(),
+    name: z.string(),
+    organization_id: z.string(),
+    slug: z.string(),
+    updated_at: z.string().datetime({ offset: true }).transform(v =>
+      new Date(v)
+    ),
   }).transform((v) => {
     return remap$(v, {
-      "project_id": "projectId",
-      "project_name": "projectName",
-      "project_slug": "projectSlug",
+      "created_at": "createdAt",
+      "organization_id": "organizationId",
+      "updated_at": "updatedAt",
     });
   });
 
 /** @internal */
 export type Project$Outbound = {
-  project_id: string;
-  project_name: string;
-  project_slug: string;
+  created_at: string;
+  id: string;
+  name: string;
+  organization_id: string;
+  slug: string;
+  updated_at: string;
 };
 
 /** @internal */
@@ -44,14 +72,17 @@ export const Project$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   Project
 > = z.object({
-  projectId: z.string(),
-  projectName: z.string(),
-  projectSlug: z.string(),
+  createdAt: z.date().transform(v => v.toISOString()),
+  id: z.string(),
+  name: z.string(),
+  organizationId: z.string(),
+  slug: z.string(),
+  updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
-    projectId: "project_id",
-    projectName: "project_name",
-    projectSlug: "project_slug",
+    createdAt: "created_at",
+    organizationId: "organization_id",
+    updatedAt: "updated_at",
   });
 });
 

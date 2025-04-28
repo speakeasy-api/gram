@@ -317,6 +317,11 @@ run();
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 
+### [projects](docs/sdks/projects/README.md)
+
+* [create](docs/sdks/projects/README.md#create) - createProject projects
+* [list](docs/sdks/projects/README.md#list) - listProjects projects
+
 ### [tools](docs/sdks/tools/README.md)
 
 * [list](docs/sdks/tools/README.md#list) - listTools tools
@@ -365,6 +370,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
+- [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
@@ -400,6 +407,7 @@ To learn about this feature and how to get started, check
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
@@ -409,6 +417,7 @@ To learn about this feature and how to get started, check
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth

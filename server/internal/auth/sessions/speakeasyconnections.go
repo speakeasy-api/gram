@@ -69,15 +69,15 @@ func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, err
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	organizations := make([]auth.Organization, len(validateResp.Organizations))
-	var nonFreeOrganizations []auth.Organization
+	organizations := make([]auth.OrganizationEntry, len(validateResp.Organizations))
+	var nonFreeOrganizations []auth.OrganizationEntry
 	for i, org := range validateResp.Organizations {
-		authOrg := auth.Organization{
-			OrganizationID:   org.ID,
-			OrganizationName: org.Name,
-			OrganizationSlug: org.Slug,
-			AccountType:      org.AccountType,
-			Projects:         []*auth.Project{}, // filled in from gram server
+		authOrg := auth.OrganizationEntry{
+			ID:          org.ID,
+			Name:        org.Name,
+			Slug:        org.Slug,
+			AccountType: org.AccountType,
+			Projects:    []*auth.ProjectEntry{}, // filled in from gram server
 		}
 
 		organizations[i] = authOrg
@@ -101,7 +101,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, err
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, Organizations: []auth.Organization{}, Email: "", Admin: false})
+	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false})
 }
 
 func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*CachedUserInfo, error) {
@@ -128,14 +128,14 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 	return userInfo, err
 }
 
-func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.Organization, bool) {
+func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.OrganizationEntry, bool) {
 	userInfo, err := s.GetUserInfo(ctx, userID, sessionID)
 	if err != nil {
 		return nil, false
 	}
 
 	for _, org := range userInfo.Organizations {
-		if org.OrganizationID == organizationID {
+		if org.ID == organizationID {
 			return &org, true
 		}
 	}

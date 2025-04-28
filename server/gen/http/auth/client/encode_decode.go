@@ -438,30 +438,31 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 	}
 }
 
-// unmarshalOrganizationResponseBodyToAuthOrganization builds a value of type
-// *auth.Organization from a value of type *OrganizationResponseBody.
-func unmarshalOrganizationResponseBodyToAuthOrganization(v *OrganizationResponseBody) *auth.Organization {
-	res := &auth.Organization{
-		OrganizationID:   *v.OrganizationID,
-		OrganizationName: *v.OrganizationName,
-		OrganizationSlug: *v.OrganizationSlug,
-		AccountType:      *v.AccountType,
+// unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry builds a value
+// of type *auth.OrganizationEntry from a value of type
+// *OrganizationEntryResponseBody.
+func unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry(v *OrganizationEntryResponseBody) *auth.OrganizationEntry {
+	res := &auth.OrganizationEntry{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Slug:        *v.Slug,
+		AccountType: *v.AccountType,
 	}
-	res.Projects = make([]*auth.Project, len(v.Projects))
+	res.Projects = make([]*auth.ProjectEntry, len(v.Projects))
 	for i, val := range v.Projects {
-		res.Projects[i] = unmarshalProjectResponseBodyToAuthProject(val)
+		res.Projects[i] = unmarshalProjectEntryResponseBodyToAuthProjectEntry(val)
 	}
 
 	return res
 }
 
-// unmarshalProjectResponseBodyToAuthProject builds a value of type
-// *auth.Project from a value of type *ProjectResponseBody.
-func unmarshalProjectResponseBodyToAuthProject(v *ProjectResponseBody) *auth.Project {
-	res := &auth.Project{
-		ProjectID:   *v.ProjectID,
-		ProjectName: *v.ProjectName,
-		ProjectSlug: auth.Slug(*v.ProjectSlug),
+// unmarshalProjectEntryResponseBodyToAuthProjectEntry builds a value of type
+// *auth.ProjectEntry from a value of type *ProjectEntryResponseBody.
+func unmarshalProjectEntryResponseBodyToAuthProjectEntry(v *ProjectEntryResponseBody) *auth.ProjectEntry {
+	res := &auth.ProjectEntry{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: auth.Slug(*v.Slug),
 	}
 
 	return res

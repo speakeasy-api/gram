@@ -33,7 +33,7 @@ type CachedUserInfo struct {
 	UserID        string
 	Admin         bool
 	Email         string
-	Organizations []auth.Organization
+	Organizations []auth.OrganizationEntry
 }
 
 func UserInfoCacheKey(userID string) string {

@@ -210,34 +210,35 @@ func DecodeInfoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 	}
 }
 
-// marshalAuthOrganizationToOrganizationResponseBody builds a value of type
-// *OrganizationResponseBody from a value of type *auth.Organization.
-func marshalAuthOrganizationToOrganizationResponseBody(v *auth.Organization) *OrganizationResponseBody {
-	res := &OrganizationResponseBody{
-		OrganizationID:   v.OrganizationID,
-		OrganizationName: v.OrganizationName,
-		OrganizationSlug: v.OrganizationSlug,
-		AccountType:      v.AccountType,
+// marshalAuthOrganizationEntryToOrganizationEntryResponseBody builds a value
+// of type *OrganizationEntryResponseBody from a value of type
+// *auth.OrganizationEntry.
+func marshalAuthOrganizationEntryToOrganizationEntryResponseBody(v *auth.OrganizationEntry) *OrganizationEntryResponseBody {
+	res := &OrganizationEntryResponseBody{
+		ID:          v.ID,
+		Name:        v.Name,
+		Slug:        v.Slug,
+		AccountType: v.AccountType,
 	}
 	if v.Projects != nil {
-		res.Projects = make([]*ProjectResponseBody, len(v.Projects))
+		res.Projects = make([]*ProjectEntryResponseBody, len(v.Projects))
 		for i, val := range v.Projects {
-			res.Projects[i] = marshalAuthProjectToProjectResponseBody(val)
+			res.Projects[i] = marshalAuthProjectEntryToProjectEntryResponseBody(val)
 		}
 	} else {
-		res.Projects = []*ProjectResponseBody{}
+		res.Projects = []*ProjectEntryResponseBody{}
 	}
 
 	return res
 }
 
-// marshalAuthProjectToProjectResponseBody builds a value of type
-// *ProjectResponseBody from a value of type *auth.Project.
-func marshalAuthProjectToProjectResponseBody(v *auth.Project) *ProjectResponseBody {
-	res := &ProjectResponseBody{
-		ProjectID:   v.ProjectID,
-		ProjectName: v.ProjectName,
-		ProjectSlug: string(v.ProjectSlug),
+// marshalAuthProjectEntryToProjectEntryResponseBody builds a value of type
+// *ProjectEntryResponseBody from a value of type *auth.ProjectEntry.
+func marshalAuthProjectEntryToProjectEntryResponseBody(v *auth.ProjectEntry) *ProjectEntryResponseBody {
+	res := &ProjectEntryResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+		Slug: string(v.Slug),
 	}
 
 	return res

@@ -122,7 +122,7 @@ interface ToolsetDialogProps {
 function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
   const project = useProject();
   const { data: toolsetsData } = useListToolsets({
-    gramProject: project.projectSlug,
+    gramProject: project.slug,
   });
   const [selectedToolset, setSelectedToolset] = useState<string>("");
 
@@ -248,7 +248,7 @@ export default function EnvironmentPage() {
 
   const { data: selectedToolset } = useToolset(
     {
-      gramProject: project.projectSlug,
+      gramProject: project.slug,
       slug: selectedToolsetSlug,
     },
     {
@@ -307,7 +307,7 @@ export default function EnvironmentPage() {
 
     updateEnvironmentMutation.mutate({
       request: {
-        gramProject: project.projectSlug,
+        gramProject: project.slug,
         slug: environment!.slug,
         updateEnvironmentRequestBody: {
           entriesToUpdate: updatedEntries,
@@ -328,7 +328,7 @@ export default function EnvironmentPage() {
         ) {
           deleteEnvironmentMutation.mutate({
             request: {
-              gramProject: project.projectSlug,
+              gramProject: project.slug,
               slug: environment.slug,
             },
           });

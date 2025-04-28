@@ -137,9 +137,8 @@ var _ = Service("auth", func() {
 			Attribute("user_id", String)
 			Attribute("user_email", String)
 			Attribute("active_organization_id", String)
-			Attribute("organizations", ArrayOf("Organization")) // <-- here too
+			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
-			// Response headers
 			Attribute("session_token", String, "The authentication session")
 			Attribute("session_cookie", String, "The authentication session")
 
@@ -160,20 +159,4 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "info")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionInfo"}`)
 	})
-})
-
-var Project = Type("Project", func() {
-	Attribute("project_id", String)
-	Attribute("project_name", String)
-	Attribute("project_slug", shared.Slug)
-	Required("project_id", "project_name", "project_slug")
-})
-
-var Organization = Type("Organization", func() {
-	Attribute("organization_id", String)
-	Attribute("organization_name", String)
-	Attribute("organization_slug", String)
-	Attribute("account_type", String)
-	Attribute("projects", ArrayOf("Project"))
-	Required("organization_id", "organization_name", "organization_slug", "account_type", "projects")
 })

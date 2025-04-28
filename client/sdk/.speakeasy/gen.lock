@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 161bb054e1900b6b759acfc53a20226e
+  docChecksum: 4a8dbe7f2e5f7f760d0011b173800cf0
   docVersion: 0.0.1
   speakeasyVersion: 1.537.1
   generationVersion: 2.588.4
-  releaseVersion: 0.8.8
-  configChecksum: 0a1b192a2637b28e751a1d0fc46d33fd
+  releaseVersion: 0.8.9
+  configChecksum: ab360d044f414c56ec7a001c4e824cb9
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -45,6 +45,8 @@ generatedFiles:
   - docs/models/components/createdeploymentresult.md
   - docs/models/components/createenvironmentform.md
   - docs/models/components/createkeyform.md
+  - docs/models/components/createprojectrequestbody.md
+  - docs/models/components/createprojectresult.md
   - docs/models/components/createtoolsetrequestbody.md
   - docs/models/components/deployment.md
   - docs/models/components/deploymentpackage.md
@@ -63,11 +65,13 @@ generatedFiles:
   - docs/models/components/listdeploymentresult.md
   - docs/models/components/listenvironmentsresult.md
   - docs/models/components/listkeysresult.md
+  - docs/models/components/listprojectsresult.md
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
   - docs/models/components/openapiv3deploymentasset.md
-  - docs/models/components/organization.md
+  - docs/models/components/organizationentry.md
   - docs/models/components/project.md
+  - docs/models/components/projectentry.md
   - docs/models/components/security.md
   - docs/models/components/toolsetdetails.md
   - docs/models/components/updateenvironmentrequestbody.md
@@ -80,6 +84,8 @@ generatedFiles:
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createdeploymentrequest.md
   - docs/models/operations/createenvironmentrequest.md
+  - docs/models/operations/createprojectrequest.md
+  - docs/models/operations/createprojectsecurity.md
   - docs/models/operations/createtoolsetrequest.md
   - docs/models/operations/deleteenvironmentrequest.md
   - docs/models/operations/deletetoolsetrequest.md
@@ -94,6 +100,8 @@ generatedFiles:
   - docs/models/operations/listapikeyssecurity.md
   - docs/models/operations/listdeploymentsrequest.md
   - docs/models/operations/listenvironmentsrequest.md
+  - docs/models/operations/listprojectsrequest.md
+  - docs/models/operations/listprojectssecurity.md
   - docs/models/operations/listtoolsetsrequest.md
   - docs/models/operations/listtoolsrequest.md
   - docs/models/operations/logoutrequest.md
@@ -117,6 +125,7 @@ generatedFiles:
   - docs/sdks/gram/README.md
   - docs/sdks/instances/README.md
   - docs/sdks/keys/README.md
+  - docs/sdks/projects/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
   - eslint.config.mjs
@@ -141,6 +150,8 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
+  - src/funcs/projectsCreate.ts
+  - src/funcs/projectsList.ts
   - src/funcs/toolsList.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
@@ -205,6 +216,8 @@ generatedFiles:
   - src/models/components/createdeploymentresult.ts
   - src/models/components/createenvironmentform.ts
   - src/models/components/createkeyform.ts
+  - src/models/components/createprojectrequestbody.ts
+  - src/models/components/createprojectresult.ts
   - src/models/components/createtoolsetrequestbody.ts
   - src/models/components/deployment.ts
   - src/models/components/deploymentpackage.ts
@@ -223,11 +236,13 @@ generatedFiles:
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
   - src/models/components/listkeysresult.ts
+  - src/models/components/listprojectsresult.ts
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
   - src/models/components/openapiv3deploymentasset.ts
-  - src/models/components/organization.ts
+  - src/models/components/organizationentry.ts
   - src/models/components/project.ts
+  - src/models/components/projectentry.ts
   - src/models/components/security.ts
   - src/models/components/toolsetdetails.ts
   - src/models/components/updateenvironmentrequestbody.ts
@@ -242,6 +257,7 @@ generatedFiles:
   - src/models/operations/createapikey.ts
   - src/models/operations/createdeployment.ts
   - src/models/operations/createenvironment.ts
+  - src/models/operations/createproject.ts
   - src/models/operations/createtoolset.ts
   - src/models/operations/deleteenvironment.ts
   - src/models/operations/deletetoolset.ts
@@ -253,6 +269,7 @@ generatedFiles:
   - src/models/operations/listapikeys.ts
   - src/models/operations/listdeployments.ts
   - src/models/operations/listenvironments.ts
+  - src/models/operations/listprojects.ts
   - src/models/operations/listtools.ts
   - src/models/operations/listtoolsets.ts
   - src/models/operations/logout.ts
@@ -267,6 +284,7 @@ generatedFiles:
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
+  - src/react-query/createProject.ts
   - src/react-query/createToolset.ts
   - src/react-query/deleteEnvironment.ts
   - src/react-query/deleteToolset.ts
@@ -277,6 +295,7 @@ generatedFiles:
   - src/react-query/listAPIKeys.ts
   - src/react-query/listDeployments.ts
   - src/react-query/listEnvironments.ts
+  - src/react-query/listProjects.ts
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
   - src/react-query/logout.ts
@@ -294,6 +313,7 @@ generatedFiles:
   - src/sdk/index.ts
   - src/sdk/instances.ts
   - src/sdk/keys.ts
+  - src/sdk/projects.ts
   - src/sdk/sdk.ts
   - src/sdk/tools.ts
   - src/sdk/toolsets.ts
@@ -647,5 +667,21 @@ examples:
       responses:
         "200":
           application/json: {"deployment": {"created_at": "2024-12-30T07:56:41.751Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+  createProject:
+    speakeasy-default-create-project:
+      requestBody:
+        application/json: {"name": "<value>", "organization_id": "<id>", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"project": {"created_at": "2024-06-17T07:14:55.338Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2024-11-30T17:06:07.804Z"}}
+  listProjects:
+    speakeasy-default-list-projects:
+      parameters:
+        query:
+          organization_id: "<id>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}]}
 examplesVersion: 1.0.1
 generatedTests: {}

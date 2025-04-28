@@ -25,7 +25,7 @@ export function useEnvironments() {
   const project = useProject();
   const { data: environments, refetch: refetchEnvironments } =
     useListEnvironmentsSuspense({
-      gramProject: project.projectSlug,
+      gramProject: project.slug,
     });
   return Object.assign(environments.environments, {
     refetch: refetchEnvironments,
@@ -53,7 +53,7 @@ export default function Environments() {
   const createEnvironment = () => {
     createEnvironmentMutation.mutate({
       request: {
-        gramProject: project.projectSlug,
+        gramProject: project.slug,
         createEnvironmentForm: {
           name: environmentName,
           description: "New Environment Description",

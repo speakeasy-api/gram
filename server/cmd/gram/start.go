@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
@@ -279,22 +280,24 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
+			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"))
+
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.DevCORSMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
-
-			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"))
 			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 				chatService.HandleCompletion(w, r)
 			})
+
 			auth.Attach(mux, auth.NewService(logger.With(slog.String("component", "auth")), db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          serverURL,
 				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("environment")),
 			}))
+			projects.Attach(mux, projects.NewService(logger.With(slog.String("component", "projects")), db, sessionManager))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
