@@ -13,3 +13,5 @@ junit-report.xml
 .speakeasy/temp
 mprocs.log
 __debug_bin*
+go.work
+go.work.sum
