@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { toolsList } from "../funcs/toolsList.js";
+import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -26,21 +26,21 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type ListToolsQueryData = components.ListToolsResult;
+export type LatestDeploymentQueryData = components.GetLatestDeploymentResult;
 
 /**
- * listTools tools
+ * getLatestDeployment deployments
  *
  * @remarks
- * List all tools for a project
+ * Get the latest deployment for a project.
  */
-export function useListTools(
-  request?: operations.ListToolsRequest | undefined,
-  options?: QueryHookOptions<ListToolsQueryData>,
-): UseQueryResult<ListToolsQueryData, Error> {
+export function useLatestDeployment(
+  request?: operations.GetLatestDeploymentRequest | undefined,
+  options?: QueryHookOptions<LatestDeploymentQueryData>,
+): UseQueryResult<LatestDeploymentQueryData, Error> {
   const client = useGramContext();
   return useQuery({
-    ...buildListToolsQuery(
+    ...buildLatestDeploymentQuery(
       client,
       request,
       options,
@@ -50,18 +50,18 @@ export function useListTools(
 }
 
 /**
- * listTools tools
+ * getLatestDeployment deployments
  *
  * @remarks
- * List all tools for a project
+ * Get the latest deployment for a project.
  */
-export function useListToolsSuspense(
-  request?: operations.ListToolsRequest | undefined,
-  options?: SuspenseQueryHookOptions<ListToolsQueryData>,
-): UseSuspenseQueryResult<ListToolsQueryData, Error> {
+export function useLatestDeploymentSuspense(
+  request?: operations.GetLatestDeploymentRequest | undefined,
+  options?: SuspenseQueryHookOptions<LatestDeploymentQueryData>,
+): UseSuspenseQueryResult<LatestDeploymentQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildListToolsQuery(
+    ...buildLatestDeploymentQuery(
       client,
       request,
       options,
@@ -70,42 +70,38 @@ export function useListToolsSuspense(
   });
 }
 
-export function prefetchListTools(
+export function prefetchLatestDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListToolsRequest | undefined,
+  request?: operations.GetLatestDeploymentRequest | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildListToolsQuery(
+    ...buildLatestDeploymentQuery(
       client$,
       request,
     ),
   });
 }
 
-export function setListToolsData(
+export function setLatestDeploymentData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      cursor?: string | undefined;
-      deploymentId?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
-  data: ListToolsQueryData,
-): ListToolsQueryData | undefined {
-  const key = queryKeyListTools(...queryKeyBase);
+  data: LatestDeploymentQueryData,
+): LatestDeploymentQueryData | undefined {
+  const key = queryKeyLatestDeployment(...queryKeyBase);
 
-  return client.setQueryData<ListToolsQueryData>(key, data);
+  return client.setQueryData<LatestDeploymentQueryData>(key, data);
 }
 
-export function invalidateListTools(
+export function invalidateLatestDeployment(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      cursor?: string | undefined;
-      deploymentId?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -114,43 +110,45 @@ export function invalidateListTools(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "tools", "list", ...queryKeyBase],
+    queryKey: ["@gram/client", "deployments", "latest", ...queryKeyBase],
   });
 }
 
-export function invalidateAllListTools(
+export function invalidateAllLatestDeployment(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "tools", "list"],
+    queryKey: ["@gram/client", "deployments", "latest"],
   });
 }
 
-export function buildListToolsQuery(
+export function buildLatestDeploymentQuery(
   client$: GramCore,
-  request?: operations.ListToolsRequest | undefined,
+  request?: operations.GetLatestDeploymentRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListToolsQueryData>;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<LatestDeploymentQueryData>;
 } {
   return {
-    queryKey: queryKeyListTools({
-      cursor: request?.cursor,
-      deploymentId: request?.deploymentId,
+    queryKey: queryKeyLatestDeployment({
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function listToolsQueryFn(ctx): Promise<ListToolsQueryData> {
+    queryFn: async function latestDeploymentQueryFn(
+      ctx,
+    ): Promise<LatestDeploymentQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
       const mergedOptions = {
         ...options,
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(toolsList(
+      return unwrapAsync(deploymentsLatest(
         client$,
         request,
         mergedOptions,
@@ -159,13 +157,11 @@ export function buildListToolsQuery(
   };
 }
 
-export function queryKeyListTools(
+export function queryKeyLatestDeployment(
   parameters: {
-    cursor?: string | undefined;
-    deploymentId?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "tools", "list", parameters];
+  return ["@gram/client", "deployments", "latest", parameters];
 }

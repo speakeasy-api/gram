@@ -25,6 +25,7 @@ import {
 import { useEnvironments } from "../environments/Environments";
 import { Environment, ToolsetDetails } from "@gram/client/models/components";
 import { InputDialog } from "@/components/input-dialog";
+import { NameAndSlug } from "@/components/name-and-slug";
 
 export function useToolsets() {
   const project = useProject();
@@ -185,15 +186,11 @@ function ToolsetCard({
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
           <Card.Title>
-            <Stack direction="horizontal" gap={2}>
-              <Link
-                to={`/toolsets/${toolset.slug}`}
-                className="hover:underline"
-              >
-                <span>{toolset.name}</span>
-              </Link>
-              <span className="text-muted-foreground">({toolset.slug})</span>
-            </Stack>
+            <NameAndSlug
+              name={toolset.name}
+              slug={toolset.slug}
+              linkTo={`/toolsets/${toolset.slug}`}
+            />
           </Card.Title>
           <div className="flex gap-2 items-center">
             {toolset.defaultEnvironmentSlug && (

@@ -14,6 +14,10 @@ export type ListToolsRequest = {
    */
   cursor?: string | undefined;
   /**
+   * The deployment ID. If unset, latest deployment will be used.
+   */
+  deploymentId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -30,10 +34,12 @@ export const ListToolsRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   cursor: z.string().optional(),
+  deployment_id: z.string().optional(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "deployment_id": "deploymentId",
     "Gram-Session": "gramSession",
     "Gram-Project": "gramProject",
   });
@@ -42,6 +48,7 @@ export const ListToolsRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type ListToolsRequest$Outbound = {
   cursor?: string | undefined;
+  deployment_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -53,10 +60,12 @@ export const ListToolsRequest$outboundSchema: z.ZodType<
   ListToolsRequest
 > = z.object({
   cursor: z.string().optional(),
+  deploymentId: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    deploymentId: "deployment_id",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
   });

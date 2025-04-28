@@ -1,12 +1,5 @@
 import { Stack } from "@speakeasy-api/moonshine";
-import {
-  Dialog,
-  DialogDescription,
-  DialogTitle,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-} from "./ui/dialog";
+import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
@@ -62,11 +55,11 @@ export function InputDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description>{description}</Dialog.Description>
+        </Dialog.Header>
         <Stack gap={6} className="my-4">
           {inputsArray.map((input) => (
             <Stack key={input.label} gap={2}>
@@ -85,15 +78,15 @@ export function InputDialog({
             </Stack>
           ))}
         </Stack>
-        <DialogFooter>
+        <Dialog.Footer>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Back
           </Button>
           <Button onClick={submit} disabled={!formValid}>
             {submitButtonText}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </Dialog.Footer>
+      </Dialog.Content>
     </Dialog>
   );
 }

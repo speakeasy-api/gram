@@ -39,10 +39,10 @@ type EvolveRequestBody struct {
 	// The ID of the deployment to evolve. If omitted, the latest deployment will
 	// be used.
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// The OpenAPI 3.x documents to add to the new deployment.
-	AddOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"add_openapiv3_assets,omitempty" json:"add_openapiv3_assets,omitempty" xml:"add_openapiv3_assets,omitempty"`
-	// The OpenAPI 3.x documents to add to the deployment.
-	AddPackages []*AddPackageFormRequestBody `form:"add_packages,omitempty" json:"add_packages,omitempty" xml:"add_packages,omitempty"`
+	// The OpenAPI 3.x documents to upsert in the new deployment.
+	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"upsert_openapiv3_assets,omitempty" json:"upsert_openapiv3_assets,omitempty" xml:"upsert_openapiv3_assets,omitempty"`
+	// The packages to upsert in the new deployment.
+	UpsertPackages []*AddPackageFormRequestBody `form:"upsert_packages,omitempty" json:"upsert_packages,omitempty" xml:"upsert_packages,omitempty"`
 }
 
 // GetDeploymentResponseBody is the type of the "deployments" service
@@ -243,16 +243,16 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 	body := &EvolveRequestBody{
 		DeploymentID: p.DeploymentID,
 	}
-	if p.AddOpenapiv3Assets != nil {
-		body.AddOpenapiv3Assets = make([]*AddOpenAPIv3DeploymentAssetFormRequestBody, len(p.AddOpenapiv3Assets))
-		for i, val := range p.AddOpenapiv3Assets {
-			body.AddOpenapiv3Assets[i] = marshalDeploymentsAddOpenAPIv3DeploymentAssetFormToAddOpenAPIv3DeploymentAssetFormRequestBody(val)
+	if p.UpsertOpenapiv3Assets != nil {
+		body.UpsertOpenapiv3Assets = make([]*AddOpenAPIv3DeploymentAssetFormRequestBody, len(p.UpsertOpenapiv3Assets))
+		for i, val := range p.UpsertOpenapiv3Assets {
+			body.UpsertOpenapiv3Assets[i] = marshalDeploymentsAddOpenAPIv3DeploymentAssetFormToAddOpenAPIv3DeploymentAssetFormRequestBody(val)
 		}
 	}
-	if p.AddPackages != nil {
-		body.AddPackages = make([]*AddPackageFormRequestBody, len(p.AddPackages))
-		for i, val := range p.AddPackages {
-			body.AddPackages[i] = marshalDeploymentsAddPackageFormToAddPackageFormRequestBody(val)
+	if p.UpsertPackages != nil {
+		body.UpsertPackages = make([]*AddPackageFormRequestBody, len(p.UpsertPackages))
+		for i, val := range p.UpsertPackages {
+			body.UpsertPackages[i] = marshalDeploymentsAddPackageFormToAddPackageFormRequestBody(val)
 		}
 	}
 	return body

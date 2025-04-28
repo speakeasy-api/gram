@@ -20,13 +20,13 @@ type IdempotencyKey *string
 type DeploymentID uuid.UUID
 type ProjectID uuid.UUID
 
-type addOpenAPIv3 struct {
+type upsertOpenAPIv3 struct {
 	assetID uuid.UUID
 	name    string
 	slug    string
 }
 
-type addPackage struct {
+type upsertPackage struct {
 	packageID uuid.UUID
 	versionID uuid.UUID
 }
@@ -48,8 +48,8 @@ func createDeployment(
 	tx *repo.Queries,
 	idempotencyKey IdempotencyKey,
 	fields deploymentFields,
-	newOpenAPIv3 []addOpenAPIv3,
-	newPackages []addPackage,
+	openAPIv3ToUpsert []upsertOpenAPIv3,
+	packagesToUpsert []upsertPackage,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "createDeployment")
 	defer span.End()
@@ -92,7 +92,7 @@ func createDeployment(
 	logger = logger.With(slog.String("deployment_id", d.Deployment.ID.String()))
 	span.SetAttributes(attribute.String("deployment_id", d.Deployment.ID.String()))
 
-	err = amendDeployment(ctx, logger, tx, DeploymentID(newID), newOpenAPIv3, newPackages)
+	err = amendDeployment(ctx, logger, tx, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -118,9 +118,8 @@ func cloneDeployment(
 	depRepo *repo.Queries,
 	projectID ProjectID,
 	srcDeploymentID DeploymentID,
-
-	newOpenAPIv3 []addOpenAPIv3,
-	newPackages []addPackage,
+	openAPIv3ToUpsert []upsertOpenAPIv3,
+	newPackages []upsertPackage,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "cloneDeployment")
 	defer span.End()
@@ -156,7 +155,7 @@ func cloneDeployment(
 		return uuid.Nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
 	}
 
-	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), newOpenAPIv3, newPackages)
+	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, newPackages)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -180,14 +179,13 @@ func amendDeployment(
 	logger *slog.Logger,
 	depRepo *repo.Queries,
 	deploymentID DeploymentID,
-
-	newOpenAPIv3 []addOpenAPIv3,
-	newPackages []addPackage,
+	openAPIv3ToUpsert []upsertOpenAPIv3,
+	packagesToUpsert []upsertPackage,
 ) error {
 	id := uuid.UUID(deploymentID)
 
-	for _, a := range newOpenAPIv3 {
-		_, err := depRepo.AddDeploymentOpenAPIv3Asset(ctx, repo.AddDeploymentOpenAPIv3AssetParams{
+	for _, a := range openAPIv3ToUpsert {
+		_, err := depRepo.UpsertDeploymentOpenAPIv3Asset(ctx, repo.UpsertDeploymentOpenAPIv3AssetParams{
 			DeploymentID: id,
 			AssetID:      a.assetID,
 			Name:         a.name,
@@ -198,8 +196,8 @@ func amendDeployment(
 		}
 	}
 
-	for _, p := range newPackages {
-		_, err := depRepo.AddDeploymentPackage(ctx, repo.AddDeploymentPackageParams{
+	for _, p := range packagesToUpsert {
+		_, err := depRepo.UpsertDeploymentPackage(ctx, repo.UpsertDeploymentPackageParams{
 			DeploymentID: id,
 			PackageID:    p.packageID,
 			VersionID:    p.versionID,

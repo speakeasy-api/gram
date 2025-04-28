@@ -59,12 +59,17 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	params := repo.ListAllHttpToolDefinitionsParams{
-		ProjectID: *authCtx.ProjectID,
-		Cursor:    uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		ProjectID:    *authCtx.ProjectID,
+		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 	}
 
 	if payload.Cursor != nil {
 		params.Cursor = uuid.NullUUID{UUID: uuid.MustParse(*payload.Cursor), Valid: true}
+	}
+
+	if payload.DeploymentID != nil {
+		params.DeploymentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DeploymentID), Valid: true}
 	}
 
 	tools, err := s.repo.ListAllHttpToolDefinitions(ctx, params)

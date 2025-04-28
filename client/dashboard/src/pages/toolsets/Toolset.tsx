@@ -20,13 +20,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
 import { PlusIcon } from "lucide-react";
-import {
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-} from "@/components/ui/dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -37,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { Dot } from "@/components/ui/dot";
 import { useEnvironment } from "../environments/Environment";
 import { InputDialog } from "@/components/input-dialog";
+import { NameAndSlug } from "@/components/name-and-slug";
 
 export default function ToolsetPage() {
   const { toolsetSlug } = useParams();
@@ -296,7 +290,9 @@ export function ToolsetView({
           onSubmit={(newValue) => updateToolset({ name: newValue })}
           label={"Toolset Name"}
         >
-          <Heading variant="h2">{toolset?.name}</Heading>
+          <Heading variant="h2">
+            <NameAndSlug name={toolset?.name || ""} slug={toolset?.slug || ""} />
+          </Heading>
         </EditableText>
         <Badge className="h-6">
           {toolset?.httpTools?.length || "No"} Tools
@@ -490,15 +486,15 @@ function AddToolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Tools to {toolset.name}</DialogTitle>
-          <DialogDescription>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Add Tools to {toolset.name}</Dialog.Title>
+          <Dialog.Description>
             Add one or many tools to your toolset.
-          </DialogDescription>
-        </DialogHeader>
+          </Dialog.Description>
+        </Dialog.Header>
         {selector}
-        <DialogFooter>
+        <Dialog.Footer>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -508,8 +504,8 @@ function AddToolDialog({
           >
             Add to Toolset
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </Dialog.Footer>
+      </Dialog.Content>
     </Dialog>
   );
 }

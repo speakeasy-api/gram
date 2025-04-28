@@ -28,7 +28,7 @@ import { Result } from "../types/fp.js";
  * evolve deployments
  *
  * @remarks
- * Create a new deployment with an additional tool sources.
+ * Create a new deployment with additional or updated tool sources.
  */
 export function deploymentsEvolveDeployment(
   client: GramCore,

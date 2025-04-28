@@ -5,6 +5,7 @@
 import { deploymentsCreate } from "../funcs/deploymentsCreate.js";
 import { deploymentsEvolveDeployment } from "../funcs/deploymentsEvolveDeployment.js";
 import { deploymentsGetById } from "../funcs/deploymentsGetById.js";
+import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
 import { deploymentsList } from "../funcs/deploymentsList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -33,7 +34,7 @@ export class Deployments extends ClientSDK {
    * evolve deployments
    *
    * @remarks
-   * Create a new deployment with an additional tool sources.
+   * Create a new deployment with additional or updated tool sources.
    */
   async evolveDeployment(
     request: operations.EvolveDeploymentRequest,
@@ -50,13 +51,30 @@ export class Deployments extends ClientSDK {
    * getDeployment deployments
    *
    * @remarks
-   * Create a deployment to load tool definitions.
+   * Get a deployment by its ID.
    */
   async getById(
     request: operations.GetDeploymentRequest,
     options?: RequestOptions,
   ): Promise<components.GetDeploymentResult> {
     return unwrapAsync(deploymentsGetById(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getLatestDeployment deployments
+   *
+   * @remarks
+   * Get the latest deployment for a project.
+   */
+  async latest(
+    request?: operations.GetLatestDeploymentRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetLatestDeploymentResult> {
+    return unwrapAsync(deploymentsLatest(
       this,
       request,
       options,

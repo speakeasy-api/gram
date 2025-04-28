@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -25,18 +25,18 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getDeployment deployments
+ * getLatestDeployment deployments
  *
  * @remarks
- * Get a deployment by its ID.
+ * Get the latest deployment for a project.
  */
-export function deploymentsGetById(
+export function deploymentsLatest(
   client: GramCore,
-  request: operations.GetDeploymentRequest,
+  request?: operations.GetLatestDeploymentRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GetDeploymentResult,
+    components.GetLatestDeploymentResult,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -55,12 +55,12 @@ export function deploymentsGetById(
 
 async function $do(
   client: GramCore,
-  request: operations.GetDeploymentRequest,
+  request?: operations.GetLatestDeploymentRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.GetDeploymentResult,
+      components.GetLatestDeploymentResult,
       | APIError
       | SDKValidationError
       | UnexpectedClientError
@@ -74,7 +74,10 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.GetDeploymentRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.GetLatestDeploymentRequest$outboundSchema.optional().parse(
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -83,19 +86,15 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/deployments.get")();
-
-  const query = encodeFormQuery({
-    "id": payload.id,
-  });
+  const path = pathToFunc("/rpc/deployments.latest")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -106,7 +105,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getDeployment",
+    operationID: "getLatestDeployment",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,
@@ -124,7 +123,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
@@ -145,7 +143,7 @@ async function $do(
   const response = doResult.value;
 
   const [result] = await M.match<
-    components.GetDeploymentResult,
+    components.GetLatestDeploymentResult,
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -154,7 +152,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.json(200, components.GetDeploymentResult$inboundSchema),
+    M.json(200, components.GetLatestDeploymentResult$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response);

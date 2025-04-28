@@ -22,17 +22,17 @@ import {
 
 export type EvolveForm = {
   /**
-   * The OpenAPI 3.x documents to add to the new deployment.
-   */
-  addOpenapiv3Assets?: Array<AddOpenAPIv3DeploymentAssetForm> | undefined;
-  /**
-   * The OpenAPI 3.x documents to add to the deployment.
-   */
-  addPackages?: Array<AddPackageForm> | undefined;
-  /**
    * The ID of the deployment to evolve. If omitted, the latest deployment will be used.
    */
   deploymentId?: string | undefined;
+  /**
+   * The OpenAPI 3.x documents to upsert in the new deployment.
+   */
+  upsertOpenapiv3Assets?: Array<AddOpenAPIv3DeploymentAssetForm> | undefined;
+  /**
+   * The packages to upsert in the new deployment.
+   */
+  upsertPackages?: Array<AddPackageForm> | undefined;
 };
 
 /** @internal */
@@ -41,25 +41,26 @@ export const EvolveForm$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  add_openapiv3_assets: z.array(AddOpenAPIv3DeploymentAssetForm$inboundSchema)
-    .optional(),
-  add_packages: z.array(AddPackageForm$inboundSchema).optional(),
   deployment_id: z.string().optional(),
+  upsert_openapiv3_assets: z.array(
+    AddOpenAPIv3DeploymentAssetForm$inboundSchema,
+  ).optional(),
+  upsert_packages: z.array(AddPackageForm$inboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    "add_openapiv3_assets": "addOpenapiv3Assets",
-    "add_packages": "addPackages",
     "deployment_id": "deploymentId",
+    "upsert_openapiv3_assets": "upsertOpenapiv3Assets",
+    "upsert_packages": "upsertPackages",
   });
 });
 
 /** @internal */
 export type EvolveForm$Outbound = {
-  add_openapiv3_assets?:
+  deployment_id?: string | undefined;
+  upsert_openapiv3_assets?:
     | Array<AddOpenAPIv3DeploymentAssetForm$Outbound>
     | undefined;
-  add_packages?: Array<AddPackageForm$Outbound> | undefined;
-  deployment_id?: string | undefined;
+  upsert_packages?: Array<AddPackageForm$Outbound> | undefined;
 };
 
 /** @internal */
@@ -68,15 +69,15 @@ export const EvolveForm$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   EvolveForm
 > = z.object({
-  addOpenapiv3Assets: z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)
-    .optional(),
-  addPackages: z.array(AddPackageForm$outboundSchema).optional(),
   deploymentId: z.string().optional(),
+  upsertOpenapiv3Assets: z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)
+    .optional(),
+  upsertPackages: z.array(AddPackageForm$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
-    addOpenapiv3Assets: "add_openapiv3_assets",
-    addPackages: "add_packages",
     deploymentId: "deployment_id",
+    upsertOpenapiv3Assets: "upsert_openapiv3_assets",
+    upsertPackages: "upsert_packages",
   });
 });
 

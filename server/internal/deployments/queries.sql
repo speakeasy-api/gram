@@ -182,22 +182,25 @@ FROM status, log;
 INSERT INTO deployment_logs (deployment_id, project_id, event, message)
 VALUES (@deployment_id, @project_id, @event, @message);
 
--- name: AddDeploymentOpenAPIv3Asset :one
+-- name: UpsertDeploymentOpenAPIv3Asset :one
 INSERT INTO deployments_openapiv3_assets (
-  deployment_id
-  , asset_id
-  , name
-  , slug
+  deployment_id,
+  asset_id,
+  name,
+  slug
 ) VALUES (
   @deployment_id,
   @asset_id,
   @name,
   @slug
 )
-ON CONFLICT (deployment_id, slug) DO NOTHING
+ON CONFLICT (deployment_id, slug) DO UPDATE
+SET
+  asset_id = EXCLUDED.asset_id,
+  name = EXCLUDED.name
 RETURNING id, asset_id, name, slug;
 
--- name: AddDeploymentPackage :one
+-- name: UpsertDeploymentPackage :one
 INSERT INTO deployments_packages (
   deployment_id
   , package_id
@@ -207,7 +210,9 @@ INSERT INTO deployments_packages (
   @package_id,
   @version_id
 )
-ON CONFLICT (deployment_id, package_id) DO NOTHING
+ON CONFLICT (deployment_id, package_id) DO UPDATE
+SET
+  version_id = EXCLUDED.version_id
 RETURNING id;
 
 -- name: CreateOpenAPIv3ToolDefinition :one

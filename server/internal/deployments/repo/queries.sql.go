@@ -13,80 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addDeploymentOpenAPIv3Asset = `-- name: AddDeploymentOpenAPIv3Asset :one
-INSERT INTO deployments_openapiv3_assets (
-  deployment_id
-  , asset_id
-  , name
-  , slug
-) VALUES (
-  $1,
-  $2,
-  $3,
-  $4
-)
-ON CONFLICT (deployment_id, slug) DO NOTHING
-RETURNING id, asset_id, name, slug
-`
-
-type AddDeploymentOpenAPIv3AssetParams struct {
-	DeploymentID uuid.UUID
-	AssetID      uuid.UUID
-	Name         string
-	Slug         string
-}
-
-type AddDeploymentOpenAPIv3AssetRow struct {
-	ID      uuid.UUID
-	AssetID uuid.UUID
-	Name    string
-	Slug    string
-}
-
-func (q *Queries) AddDeploymentOpenAPIv3Asset(ctx context.Context, arg AddDeploymentOpenAPIv3AssetParams) (AddDeploymentOpenAPIv3AssetRow, error) {
-	row := q.db.QueryRow(ctx, addDeploymentOpenAPIv3Asset,
-		arg.DeploymentID,
-		arg.AssetID,
-		arg.Name,
-		arg.Slug,
-	)
-	var i AddDeploymentOpenAPIv3AssetRow
-	err := row.Scan(
-		&i.ID,
-		&i.AssetID,
-		&i.Name,
-		&i.Slug,
-	)
-	return i, err
-}
-
-const addDeploymentPackage = `-- name: AddDeploymentPackage :one
-INSERT INTO deployments_packages (
-  deployment_id
-  , package_id
-  , version_id
-) VALUES (
-  $1,
-  $2,
-  $3
-)
-ON CONFLICT (deployment_id, package_id) DO NOTHING
-RETURNING id
-`
-
-type AddDeploymentPackageParams struct {
-	DeploymentID uuid.UUID
-	PackageID    uuid.UUID
-	VersionID    uuid.UUID
-}
-
-func (q *Queries) AddDeploymentPackage(ctx context.Context, arg AddDeploymentPackageParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, addDeploymentPackage, arg.DeploymentID, arg.PackageID, arg.VersionID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const cloneDeployment = `-- name: CloneDeployment :one
 INSERT INTO deployments (
   cloned_from
@@ -857,4 +783,83 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 	var i TransitionDeploymentRow
 	err := row.Scan(&i.StatusID, &i.Status, &i.LogID)
 	return i, err
+}
+
+const upsertDeploymentOpenAPIv3Asset = `-- name: UpsertDeploymentOpenAPIv3Asset :one
+INSERT INTO deployments_openapiv3_assets (
+  deployment_id,
+  asset_id,
+  name,
+  slug
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4
+)
+ON CONFLICT (deployment_id, slug) DO UPDATE
+SET
+  asset_id = EXCLUDED.asset_id,
+  name = EXCLUDED.name
+RETURNING id, asset_id, name, slug
+`
+
+type UpsertDeploymentOpenAPIv3AssetParams struct {
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+}
+
+type UpsertDeploymentOpenAPIv3AssetRow struct {
+	ID      uuid.UUID
+	AssetID uuid.UUID
+	Name    string
+	Slug    string
+}
+
+func (q *Queries) UpsertDeploymentOpenAPIv3Asset(ctx context.Context, arg UpsertDeploymentOpenAPIv3AssetParams) (UpsertDeploymentOpenAPIv3AssetRow, error) {
+	row := q.db.QueryRow(ctx, upsertDeploymentOpenAPIv3Asset,
+		arg.DeploymentID,
+		arg.AssetID,
+		arg.Name,
+		arg.Slug,
+	)
+	var i UpsertDeploymentOpenAPIv3AssetRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssetID,
+		&i.Name,
+		&i.Slug,
+	)
+	return i, err
+}
+
+const upsertDeploymentPackage = `-- name: UpsertDeploymentPackage :one
+INSERT INTO deployments_packages (
+  deployment_id
+  , package_id
+  , version_id
+) VALUES (
+  $1,
+  $2,
+  $3
+)
+ON CONFLICT (deployment_id, package_id) DO UPDATE
+SET
+  version_id = EXCLUDED.version_id
+RETURNING id
+`
+
+type UpsertDeploymentPackageParams struct {
+	DeploymentID uuid.UUID
+	PackageID    uuid.UUID
+	VersionID    uuid.UUID
+}
+
+func (q *Queries) UpsertDeploymentPackage(ctx context.Context, arg UpsertDeploymentPackageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertDeploymentPackage, arg.DeploymentID, arg.PackageID, arg.VersionID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

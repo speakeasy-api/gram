@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import { InputDialog } from "./input-dialog";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -34,6 +34,13 @@ export function EditableText({
       onSubmit(editedValue);
     }
   };
+
+  useEffect(() => {
+    if (!editedValue) {
+      setEditedValue(value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
     <>

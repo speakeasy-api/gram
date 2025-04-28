@@ -227,14 +227,14 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	tx := s.repo.WithTx(dbtx)
 
-	newAssets := make([]addOpenAPIv3, 0, len(form.Openapiv3Assets))
+	newAssets := make([]upsertOpenAPIv3, 0, len(form.Openapiv3Assets))
 	for _, add := range form.Openapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
 			return nil, oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, s.logger)
 		}
 
-		newAssets = append(newAssets, addOpenAPIv3{
+		newAssets = append(newAssets, upsertOpenAPIv3{
 			assetID: assetID,
 			name:    add.Name,
 			slug:    string(add.Slug),
@@ -251,9 +251,9 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, err
 	}
 
-	newPackages := make([]addPackage, 0, len(resolved))
+	newPackages := make([]upsertPackage, 0, len(resolved))
 	for _, pkg := range resolved {
-		newPackages = append(newPackages, addPackage(pkg))
+		newPackages = append(newPackages, upsertPackage(pkg))
 	}
 
 	newID, err := createDeployment(
@@ -327,22 +327,22 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	tx := s.repo.WithTx(dbtx)
 	pkgTx := s.packages.WithTx(dbtx)
 
-	newAssets := make([]addOpenAPIv3, 0, len(form.AddOpenapiv3Assets))
-	for _, add := range form.AddOpenapiv3Assets {
+	assetsToUpsert := make([]upsertOpenAPIv3, 0, len(form.UpsertOpenapiv3Assets))
+	for _, add := range form.UpsertOpenapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
 			return nil, oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, s.logger)
 		}
 
-		newAssets = append(newAssets, addOpenAPIv3{
+		assetsToUpsert = append(assetsToUpsert, upsertOpenAPIv3{
 			assetID: assetID,
 			name:    add.Name,
 			slug:    string(add.Slug),
 		})
 	}
 
-	pkgInputs := make([][2]string, 0, len(form.AddPackages))
-	for _, add := range form.AddPackages {
+	pkgInputs := make([][2]string, 0, len(form.UpsertPackages))
+	for _, add := range form.UpsertPackages {
 		pkgInputs = append(pkgInputs, [2]string{add.Name, conv.PtrValOr(add.Version, "")})
 	}
 
@@ -351,9 +351,9 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, err
 	}
 
-	newPackages := make([]addPackage, 0, len(resolved))
+	packagesToUpsert := make([]upsertPackage, 0, len(resolved))
 	for _, pkg := range resolved {
-		newPackages = append(newPackages, addPackage(pkg))
+		packagesToUpsert = append(packagesToUpsert, upsertPackage(pkg))
 	}
 
 	var cloneID uuid.UUID
@@ -374,8 +374,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 				githubRepo:     "",
 				githubPr:       "",
 			},
-			newAssets,
-			newPackages,
+			assetsToUpsert,
+			packagesToUpsert,
 		)
 		if err != nil {
 			return nil, oops.E(err, "error initializing deployment", "failed to initialize deployment").Log(ctx, logger)
@@ -398,8 +398,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		newID, err := cloneDeployment(
 			ctx, s.tracer, logger, tx,
 			ProjectID(projectID), DeploymentID(latestDeploymentID),
-			newAssets,
-			newPackages,
+			assetsToUpsert,
+			packagesToUpsert,
 		)
 		if err != nil {
 			return nil, oops.E(err, "error cloning deployment", "failed to clone deployment").Log(ctx, logger)

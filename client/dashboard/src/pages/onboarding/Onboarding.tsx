@@ -11,7 +11,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useListTools } from "@gram/client/react-query/index.js";
+import { useLatestDeployment, useListTools } from "@gram/client/react-query/index.js";
 import { Input } from "@/components/ui/input";
 import { Stepper, StepProps } from "@/components/stepper";
 
@@ -33,18 +33,26 @@ export default function Onboarding() {
 }
 
 export function OnboardingContent({
+  existingDocumentSlug,
   onOnboardingComplete,
+  className,
 }: {
+  existingDocumentSlug?: string;
   onOnboardingComplete?: (deployment: Deployment) => void;
+  className?: string;
 }) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
 
+  const { data: latestDeployment } = useLatestDeployment();
+
   const [file, setFile] = useState<File>();
   const [asset, setAsset] = useState<UploadOpenAPIv3Result>();
   const [creatingDeployment, setCreatingDeployment] = useState(false);
-  const [apiName, setApiName] = useState<string>();
+  const [apiName, setApiName] = useState<string | undefined>(
+    existingDocumentSlug
+  );
   const [deployment, setDeployment] = useState<Deployment>();
 
   const { data: tools, refetch: refetchTools } = useListTools({
@@ -71,10 +79,11 @@ export function OnboardingContent({
         }
 
         const result: UploadOpenAPIv3Result = await response.json();
-        console.log("Upload successful:", result);
 
         setAsset(result);
-        setApiName(file?.name.split(".")[0] ?? "My API");
+        if (!apiName) {
+          setApiName(file?.name.split(".")[0] ?? "My API");
+        }
       });
     } catch (error) {
       console.error("Upload failed:", error);
@@ -90,7 +99,7 @@ export function OnboardingContent({
 
     const deployment = await client.deployments.evolveDeployment({
       evolveForm: {
-        addOpenapiv3Assets: [
+        upsertOpenapiv3Assets: [
           {
             assetId: asset.asset.id,
             name: apiName,
@@ -100,13 +109,33 @@ export function OnboardingContent({
       },
     });
 
-    console.log("Deployment created:", deployment);
     setDeployment(deployment.deployment);
     refetchTools();
     setCreatingDeployment(false);
   };
 
-  const numTools = tools?.tools.length ?? 0;
+  const documentId = deployment?.openapiv3Assets.find(
+    (doc) => doc.assetId === asset?.asset.id
+  )?.id;
+
+  const numTools = documentId
+    ? tools?.tools.filter(
+        (tool) =>
+          tool.openapiv3DocumentId !== undefined &&
+          tool.deploymentId === deployment?.id &&
+          tool.openapiv3DocumentId === documentId
+      ).length
+    : 0;
+
+  // If an existing document slug was NOT provided, then we need to make sure the provided slug
+  // isn't accidentally overwriting an existing document slug.
+  const apiNameValid =
+    apiName &&
+    apiName.length > 0 &&
+    (existingDocumentSlug ||
+      !latestDeployment?.deployment?.openapiv3Assets
+        .map((a) => a.slug)
+        .includes(apiName));
 
   const steps: StepProps[] = [
     {
@@ -133,15 +162,23 @@ export function OnboardingContent({
       heading: "Name Your API",
       description: "The tools generated will be scoped under this name.",
       display: (
-        <Stack direction={"horizontal"} gap={2} className="max-w-sm">
-          <Input
-            value={apiName}
-            onChange={(e) => setApiName(e.target.value)}
-            placeholder="My API"
-          />
-          <Button onClick={createDeployment} disabled={!apiName}>
-            Continue
-          </Button>
+        <Stack gap={2}>
+          <Stack direction={"horizontal"} gap={2} className="max-w-sm">
+            <Input
+              value={apiName}
+              onChange={(e) => setApiName(e.target.value)}
+              placeholder="My API"
+              disabled={!!existingDocumentSlug}
+            />
+            <Button onClick={createDeployment} disabled={!apiNameValid}>
+              Continue
+            </Button>
+          </Stack>
+          {!!apiName && !apiNameValid && (
+            <span className="text-destructive">
+              This slug is already in use.
+            </span>
+          )}
         </Stack>
       ),
       displayComplete: <Type>✓ Source named "{apiName}"</Type>,
@@ -151,19 +188,19 @@ export function OnboardingContent({
       heading: "Generate Tools",
       description: "Gram will generate tools for your API.",
       display: numTools ? (
-        <Type>✓ Created {tools?.tools.length} tools</Type>
+        <Type>✓ Created {numTools} tools</Type>
       ) : (
         <Type>
           Gram is generating tools for your API. This may take a few seconds.
         </Type>
       ),
-      displayComplete: <Type>✓ Created {tools?.tools.length} tools</Type>,
+      displayComplete: <Type>✓ Created {numTools} tools</Type>,
       isComplete: !!deployment,
     },
   ];
 
   return (
-    <Page.Body>
+    <Page.Body className={className}>
       <Stepper
         steps={steps}
         onComplete={() => onOnboardingComplete?.(deployment!)}

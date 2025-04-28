@@ -1,15 +1,14 @@
 import { Page } from "@/components/page-layout";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Card, Cards } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import {
-  useListDeploymentsSuspense,
   useDeploymentSuspense,
   useListToolsSuspense,
+  useLatestDeployment,
 } from "@gram/client/react-query/index.js";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
@@ -20,15 +19,17 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import { Heading } from "@/components/ui/heading";
+import { CreateThingCard } from "../toolsets/Toolsets";
+import { Dialog } from "@/components/ui/dialog";
+import { OnboardingContent } from "../onboarding/Onboarding";
+import { Button } from "@/components/ui/button";
+import { NameAndSlug } from "@/components/name-and-slug";
 
 function DeploymentCards() {
-  const project = useProject();
-  const { data: deployments } = useListDeploymentsSuspense({
-    gramProject: project.slug,
-  });
-  const latestDeploymentId = deployments.items?.[0]?.id;
+  const { data: deployment, refetch } = useLatestDeployment();
 
-  if (!latestDeploymentId) {
+  if (!deployment?.deployment) {
     return (
       <Card>
         <Card.Content className="pt-6">No deployments found.</Card.Content>
@@ -37,25 +38,12 @@ function DeploymentCards() {
   }
 
   return (
-    <Suspense fallback={<LoadingCards />}>
-      <DeploymentTools deploymentId={latestDeploymentId} />
+    <Suspense fallback={<Cards loading={true} />}>
+      <DeploymentTools
+        deploymentId={deployment.deployment.id}
+        onNewDeployment={refetch}
+      />
     </Suspense>
-  );
-}
-
-function LoadingCards() {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <Card>
-        <Card.Header>
-          <Stack direction="horizontal" gap={2} justify="space-between">
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-5 w-20" />
-          </Stack>
-          <Skeleton className="h-4 w-24 mt-2" />
-        </Card.Header>
-      </Card>
-    </div>
   );
 }
 
@@ -71,15 +59,27 @@ function ToolsTooltipContent({ tools }: { tools: HTTPToolDefinition[] }) {
   );
 }
 
-function DeploymentTools({ deploymentId }: { deploymentId: string }) {
+function DeploymentTools({
+  deploymentId,
+  onNewDeployment,
+}: {
+  deploymentId: string;
+  onNewDeployment: () => void;
+}) {
   const project = useProject();
+
   const { data: deployment } = useDeploymentSuspense({
     gramProject: project.slug,
     id: deploymentId,
   });
   const { data: toolsData } = useListToolsSuspense({
     gramProject: project.slug,
+    deploymentId: deploymentId,
   });
+
+  const [newDocumentDialogOpen, setNewDocumentDialogOpen] = useState(false);
+  const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] =
+    useState<string>();
 
   if (!deployment?.openapiv3Assets?.length) {
     return (
@@ -93,10 +93,21 @@ function DeploymentTools({ deploymentId }: { deploymentId: string }) {
 
   const toolsByDocument = groupToolsByDocument(toolsData?.tools || []);
 
+  const finishUpload = () => {
+    setNewDocumentDialogOpen(false);
+    setChangeDocumentTargetSlug(undefined);
+    onNewDeployment();
+  };
+
+  // TODO: We need to support this in the API
+  const removeDocument = (slug: string) => {
+    alert(`TODO: We need to support this ${slug}`);
+  };
+
   return (
     <>
-      <h1 className="mb-2">Documents</h1>
-      <div className="grid grid-cols-1 gap-4">
+      <Heading variant="h3">OpenAPI Documents</Heading>
+      <Cards>
         {deployment.openapiv3Assets.map(
           (asset: GetDeploymentResult["openapiv3Assets"][0]) => {
             const tools = toolsByDocument[asset.id] || [];
@@ -114,12 +125,7 @@ function DeploymentTools({ deploymentId }: { deploymentId: string }) {
                 <Card.Header>
                   <Stack direction="horizontal" gap={2} justify="space-between">
                     <Card.Title>
-                      <Stack direction="horizontal" gap={2}>
-                        <span>{asset.name}</span>
-                        <span className="text-muted-foreground lowercase">
-                          ({asset.slug})
-                        </span>
-                      </Stack>
+                      <NameAndSlug name={asset.name} slug={asset.slug} />
                     </Card.Title>
                     {tools.length > 0 ? (
                       <TooltipProvider>
@@ -158,12 +164,94 @@ function DeploymentTools({ deploymentId }: { deploymentId: string }) {
                     </Type>
                   )}
                 </Card.Header>
-                <Card.Content></Card.Content>
+                <Card.Content>
+                  <Type muted variant="body" className="italic line-clamp-2">
+                    {tools
+                      .map((tool) => tool.name.replace(asset.slug + "_", ""))
+                      .join(", ")}
+                  </Type>
+                </Card.Content>
+                <Card.Footer className="justify-end">
+                  <Stack direction="horizontal" gap={2}>
+                    <Button
+                      variant="destructiveGhost"
+                      onClick={() => removeDocument(asset.slug)}
+                      tooltip="Remove this document and related tools"
+                      icon="trash"
+                    >
+                      Delete
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setChangeDocumentTargetSlug(asset.slug)}
+                      tooltip="Upload a new version of this document"
+                      icon="upload"
+                    >
+                      Update
+                    </Button>
+                  </Stack>
+                </Card.Footer>
               </Card>
             );
           }
         )}
-      </div>
+        <CreateThingCard onClick={() => setNewDocumentDialogOpen(true)}>
+          + New OpenAPI Source
+        </CreateThingCard>
+      </Cards>
+      <Dialog
+        open={newDocumentDialogOpen}
+        onOpenChange={setNewDocumentDialogOpen}
+      >
+        <Dialog.Content className="max-w-2xl!">
+          <Dialog.Header>
+            <Dialog.Title>New OpenAPI Source</Dialog.Title>
+            <Dialog.Description>
+              Upload a new OpenAPI document to use in addition to your existing
+              documents.
+            </Dialog.Description>
+          </Dialog.Header>
+          <OnboardingContent
+            className="scale-95"
+            onOnboardingComplete={finishUpload}
+          />
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setNewDocumentDialogOpen(false)}
+            >
+              Back
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+      <Dialog
+        open={changeDocumentTargetSlug !== undefined}
+        onOpenChange={() => setChangeDocumentTargetSlug(undefined)}
+      >
+        <Dialog.Content className="max-w-2xl!">
+          <Dialog.Header>
+            <Dialog.Title>New OpenAPI Version</Dialog.Title>
+            <Dialog.Description>
+              You are creating a new version of document{" "}
+              {changeDocumentTargetSlug}
+            </Dialog.Description>
+          </Dialog.Header>
+          <OnboardingContent
+            existingDocumentSlug={changeDocumentTargetSlug}
+            className="scale-95"
+            onOnboardingComplete={finishUpload}
+          />
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setChangeDocumentTargetSlug(undefined)}
+            >
+              Back
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </>
   );
 }
@@ -175,7 +263,7 @@ export default function Home() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Suspense fallback={<LoadingCards />}>
+        <Suspense fallback={<Cards loading={true} />}>
           <DeploymentCards />
         </Suspense>
       </Page.Body>

@@ -39,10 +39,10 @@ type EvolveRequestBody struct {
 	// The ID of the deployment to evolve. If omitted, the latest deployment will
 	// be used.
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// The OpenAPI 3.x documents to add to the new deployment.
-	AddOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"add_openapiv3_assets,omitempty" json:"add_openapiv3_assets,omitempty" xml:"add_openapiv3_assets,omitempty"`
-	// The OpenAPI 3.x documents to add to the deployment.
-	AddPackages []*AddPackageFormRequestBody `form:"add_packages,omitempty" json:"add_packages,omitempty" xml:"add_packages,omitempty"`
+	// The OpenAPI 3.x documents to upsert in the new deployment.
+	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"upsert_openapiv3_assets,omitempty" json:"upsert_openapiv3_assets,omitempty" xml:"upsert_openapiv3_assets,omitempty"`
+	// The packages to upsert in the new deployment.
+	UpsertPackages []*AddPackageFormRequestBody `form:"upsert_packages,omitempty" json:"upsert_packages,omitempty" xml:"upsert_packages,omitempty"`
 }
 
 // GetDeploymentResponseBody is the type of the "deployments" service
@@ -350,16 +350,16 @@ func NewEvolvePayload(body *EvolveRequestBody, sessionToken *string, projectSlug
 	v := &deployments.EvolvePayload{
 		DeploymentID: body.DeploymentID,
 	}
-	if body.AddOpenapiv3Assets != nil {
-		v.AddOpenapiv3Assets = make([]*deployments.AddOpenAPIv3DeploymentAssetForm, len(body.AddOpenapiv3Assets))
-		for i, val := range body.AddOpenapiv3Assets {
-			v.AddOpenapiv3Assets[i] = unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(val)
+	if body.UpsertOpenapiv3Assets != nil {
+		v.UpsertOpenapiv3Assets = make([]*deployments.AddOpenAPIv3DeploymentAssetForm, len(body.UpsertOpenapiv3Assets))
+		for i, val := range body.UpsertOpenapiv3Assets {
+			v.UpsertOpenapiv3Assets[i] = unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(val)
 		}
 	}
-	if body.AddPackages != nil {
-		v.AddPackages = make([]*deployments.AddPackageForm, len(body.AddPackages))
-		for i, val := range body.AddPackages {
-			v.AddPackages[i] = unmarshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(val)
+	if body.UpsertPackages != nil {
+		v.UpsertPackages = make([]*deployments.AddPackageForm, len(body.UpsertPackages))
+		for i, val := range body.UpsertPackages {
+			v.UpsertPackages[i] = unmarshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(val)
 		}
 	}
 	v.SessionToken = sessionToken
@@ -401,14 +401,14 @@ func ValidateCreateDeploymentRequestBody(body *CreateDeploymentRequestBody) (err
 
 // ValidateEvolveRequestBody runs the validations defined on EvolveRequestBody
 func ValidateEvolveRequestBody(body *EvolveRequestBody) (err error) {
-	for _, e := range body.AddOpenapiv3Assets {
+	for _, e := range body.UpsertOpenapiv3Assets {
 		if e != nil {
 			if err2 := ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 	}
-	for _, e := range body.AddPackages {
+	for _, e := range body.UpsertPackages {
 		if e != nil {
 			if err2 := ValidateAddPackageFormRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)

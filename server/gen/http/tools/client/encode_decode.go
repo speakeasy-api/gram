@@ -53,6 +53,9 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
+		if p.DeploymentID != nil {
+			values.Add("deployment_id", *p.DeploymentID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

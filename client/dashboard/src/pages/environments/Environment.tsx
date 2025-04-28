@@ -16,11 +16,6 @@ import { DeleteButton } from "@/components/delete-button";
 import { PencilIcon } from "lucide-react";
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useListToolsets, useToolset } from "@gram/client/react-query/index.js";
@@ -70,17 +65,17 @@ function EntryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>
             {initialEntry ? "Update Environment Entry" : "New Variable"}
-          </DialogTitle>
-          <DialogDescription>
+          </Dialog.Title>
+          <Dialog.Description>
             {initialEntry
               ? "Update the environment variable value."
               : "Add a new environment variable."}
-          </DialogDescription>
-        </DialogHeader>
+          </Dialog.Description>
+        </Dialog.Header>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Type>Name</Type>
@@ -100,15 +95,15 @@ function EntryDialog({
             />
           </div>
         </div>
-        <DialogFooter>
+        <Dialog.Footer>
           <Button variant="ghost" onClick={handleClose}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!isValid}>
             {initialEntry ? "Update" : "Add"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </Dialog.Footer>
+      </Dialog.Content>
     </Dialog>
   );
 }
@@ -150,15 +145,15 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Fill for Toolset</DialogTitle>
-          <DialogDescription>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Fill for Toolset</Dialog.Title>
+          <Dialog.Description>
             Select a list toolsets you would like to prefill environment
             variables for. All possible env variables will be filled in as empty
             values, set any relevant variables and remove uneeded ones.
-          </DialogDescription>
-        </DialogHeader>
+          </Dialog.Description>
+        </Dialog.Header>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Type>Toolset</Type>
@@ -176,15 +171,15 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
             </select>
           </div>
         </div>
-        <DialogFooter>
+        <Dialog.Footer>
           <Button variant="ghost" onClick={handleClose}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!selectedToolset}>
             Fill Variables
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </Dialog.Footer>
+      </Dialog.Content>
     </Dialog>
   );
 }

@@ -9,7 +9,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Trash2, Copy, CheckCircle2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -139,12 +139,12 @@ export default function Settings() {
         />
 
         <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>
                 {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
-              </DialogTitle>
-            </DialogHeader>
+              </Dialog.Title>
+            </Dialog.Header>
             {newlyCreatedKey ? (
               <div className="space-y-4 py-4">
                 <div className="rounded-lg border-yellow-500/50 bg-yellow-50/50 text-yellow-600 p-4 text-sm">
@@ -194,14 +194,14 @@ export default function Settings() {
                 </div>
               </div>
             )}
-          </DialogContent>
+          </Dialog.Content>
         </Dialog>
 
         <Dialog open={!!keyToRevoke} onOpenChange={(open) => !open && setKeyToRevoke(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Revoke API Key</DialogTitle>
-            </DialogHeader>
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Revoke API Key</Dialog.Title>
+            </Dialog.Header>
             <div className="space-y-4 py-4">
               <Type variant="body">
                 Are you sure you want to revoke the API key <span className="italic font-bold">{keyToRevoke?.name}</span>? This action cannot be undone.
@@ -222,7 +222,7 @@ export default function Settings() {
                 </Button>
               </div>
             </div>
-          </DialogContent>
+          </Dialog.Content>
         </Dialog>
       </Page.Body>
     </Page>

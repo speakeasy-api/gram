@@ -83,7 +83,7 @@ var _ = Service("deployments", func() {
 	})
 
 	Method("evolve", func() {
-		Description("Create a new deployment with an additional tool sources.")
+		Description("Create a new deployment with additional or updated tool sources.")
 
 		Payload(func() {
 			Extend(EvolveForm)
@@ -352,8 +352,8 @@ var AddOpenAPIv3SourceResult = Type("AddOpenAPIv3SourceResult", func() {
 
 var EvolveForm = Type("EvolveForm", func() {
 	Attribute("deployment_id", String, "The ID of the deployment to evolve. If omitted, the latest deployment will be used.")
-	Attribute("add_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to add to the new deployment.")
-	Attribute("add_packages", ArrayOf(AddPackageForm), "The OpenAPI 3.x documents to add to the deployment.")
+	Attribute("upsert_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to upsert in the new deployment.")
+	Attribute("upsert_packages", ArrayOf(AddPackageForm), "The packages to upsert in the new deployment.")
 })
 
 var EvolveResult = Type("EvolveResult", func() {

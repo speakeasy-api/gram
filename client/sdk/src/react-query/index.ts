@@ -15,6 +15,7 @@ export * from "./deleteToolset.js";
 export * from "./deployment.js";
 export * from "./evolveDeployment.js";
 export * from "./instance.js";
+export * from "./latestDeployment.js";
 export * from "./listAPIKeys.js";
 export * from "./listDeployments.js";
 export * from "./listEnvironments.js";

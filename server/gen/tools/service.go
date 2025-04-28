@@ -80,6 +80,8 @@ type HTTPToolDefinition struct {
 type ListToolsPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
+	// The deployment ID. If unset, latest deployment will be used.
+	DeploymentID *string
 	// The cursor to fetch results from
 	Cursor *string
 }

@@ -280,7 +280,7 @@ paths:
                 name: CreateDeployment
     /rpc/deployments.evolve:
         post:
-            description: Create a new deployment with an additional tool sources.
+            description: Create a new deployment with additional or updated tool sources.
             operationId: evolveDeployment
             parameters:
                 - allowEmptyValue: true
@@ -840,6 +840,13 @@ paths:
                   name: cursor
                   schema:
                     description: The cursor to fetch results from
+                    type: string
+                - allowEmptyValue: true
+                  description: The deployment ID. If unset, latest deployment will be used.
+                  in: query
+                  name: deployment_id
+                  schema:
+                    description: The deployment ID. If unset, latest deployment will be used.
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -1572,19 +1579,19 @@ components:
         EvolveForm:
             type: object
             properties:
-                add_openapiv3_assets:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AddOpenAPIv3DeploymentAssetForm'
-                    description: The OpenAPI 3.x documents to add to the new deployment.
-                add_packages:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AddPackageForm'
-                    description: The OpenAPI 3.x documents to add to the deployment.
                 deployment_id:
                     type: string
                     description: The ID of the deployment to evolve. If omitted, the latest deployment will be used.
+                upsert_openapiv3_assets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddOpenAPIv3DeploymentAssetForm'
+                    description: The OpenAPI 3.x documents to upsert in the new deployment.
+                upsert_packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddPackageForm'
+                    description: The packages to upsert in the new deployment.
         EvolveResult:
             type: object
             properties:

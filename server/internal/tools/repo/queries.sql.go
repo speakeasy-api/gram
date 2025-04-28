@@ -58,26 +58,30 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 }
 
 const listAllHttpToolDefinitions = `-- name: ListAllHttpToolDefinitions :many
-WITH latest_deployment AS (
+WITH deployment AS (
     SELECT id
     FROM deployments
     WHERE deployments.project_id = $1
+      AND (
+        $3::uuid IS NULL
+        OR id = $3::uuid
+      )
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, latest_deployment.id
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, deployment.id
 FROM http_tool_definitions
-INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
+INNER JOIN deployment ON http_tool_definitions.deployment_id = deployment.id
 WHERE http_tool_definitions.project_id = $1 
   AND http_tool_definitions.deleted IS FALSE
   AND ($2::uuid IS NULL OR http_tool_definitions.id < $2)
 ORDER BY http_tool_definitions.id DESC
-LIMIT 100
 `
 
 type ListAllHttpToolDefinitionsParams struct {
-	ProjectID uuid.UUID
-	Cursor    uuid.NullUUID
+	ProjectID    uuid.UUID
+	Cursor       uuid.NullUUID
+	DeploymentID uuid.NullUUID
 }
 
 type ListAllHttpToolDefinitionsRow struct {
@@ -109,7 +113,7 @@ type ListAllHttpToolDefinitionsRow struct {
 }
 
 func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHttpToolDefinitionsParams) ([]ListAllHttpToolDefinitionsRow, error) {
-	rows, err := q.db.Query(ctx, listAllHttpToolDefinitions, arg.ProjectID, arg.Cursor)
+	rows, err := q.db.Query(ctx, listAllHttpToolDefinitions, arg.ProjectID, arg.Cursor, arg.DeploymentID)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Heading } from "./heading";
 import { Skeleton } from "./skeleton";
 import { Stack } from "@speakeasy-api/moonshine";
+
 const CardComponent = ({
   className,
   size = "default",
@@ -15,7 +16,7 @@ const CardComponent = ({
       className={cn(
         "bg-card max-w-2xl text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm group/card",
         size === "sm" && "gap-4 py-4",
-        className,
+        className
       )}
       {...props}
     />
@@ -28,7 +29,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-header"
       className={cn(
         "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-6 [.border-b]:pb-6 relative",
-        className,
+        className
       )}
       {...props}
     />
@@ -69,7 +70,7 @@ function CardInfo({ className, ...props }: React.ComponentProps<"div">) {
       className={cn(
         "absolute top-[-4px] right-6 bg-card trans gap-2 flex",
         ".group/card:has([data-slot=card-action]) group-hover/card:opacity-0", // If the card has an action, hide the info when hovering over the card
-        className,
+        className
       )}
       {...props}
     />
@@ -82,7 +83,7 @@ function CardActions({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-action"
       className={cn(
         "absolute top-[-8px] right-4 bg-card opacity-0 group-hover/card:opacity-100 trans gap-2 flex",
-        className,
+        className
       )}
       {...props}
     />

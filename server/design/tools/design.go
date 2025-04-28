@@ -15,6 +15,7 @@ var _ = Service("tools", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
+			Attribute("deployment_id", String, "The deployment ID. If unset, latest deployment will be used.")
 			Attribute("cursor", String, "The cursor to fetch results from")
 		})
 
@@ -23,6 +24,7 @@ var _ = Service("tools", func() {
 		HTTP(func() {
 			GET("/rpc/tools.list")
 			Param("cursor")
+			Param("deployment_id")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)

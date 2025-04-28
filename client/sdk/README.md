@@ -89,91 +89,6 @@ yarn add @tanstack/react-query react react-dom
 > [!NOTE]
 > This package is published as an ES Module (ESM) only. For applications using
 > CommonJS, use `await import()` to import and use this package.
-
-### Model Context Protocol (MCP) Server
-
-This SDK is also an installable MCP server where the various SDK methods are
-exposed as tools that can be invoked by AI applications.
-
-> Node.js v20 or greater is required to run the MCP server from npm.
-
-<details>
-<summary>Claude installation steps</summary>
-
-Add the following server definition to your `claude_desktop_config.json` file:
-
-```json
-{
-  "mcpServers": {
-    "Gram": {
-      "command": "npx",
-      "args": [
-        "-y", "--package", "@gram/client",
-        "--",
-        "mcp", "start",
-        "--project-slug-header-gram-project", "...",
-        "--session-header-gram-session", "..."
-      ]
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary>Cursor installation steps</summary>
-
-Create a `.cursor/mcp.json` file in your project root with the following content:
-
-```json
-{
-  "mcpServers": {
-    "Gram": {
-      "command": "npx",
-      "args": [
-        "-y", "--package", "@gram/client",
-        "--",
-        "mcp", "start",
-        "--project-slug-header-gram-project", "...",
-        "--session-header-gram-session", "..."
-      ]
-    }
-  }
-}
-```
-
-</details>
-
-You can also run MCP servers as a standalone binary with no additional dependencies. You must pull these binaries from available Github releases:
-
-```bash
-curl -L -o mcp-server \
-    https://github.com/{org}/{repo}/releases/download/{tag}/mcp-server-bun-darwin-arm64 && \
-chmod +x mcp-server
-```
-
-If the repo is a private repo you must add your Github PAT to download a release `-H "Authorization: Bearer {GITHUB_PAT}"`.
-
-
-```json
-{
-  "mcpServers": {
-    "Todos": {
-      "command": "./DOWNLOAD/PATH/mcp-server",
-      "args": [
-        "start"
-      ]
-    }
-  }
-}
-```
-
-For a full list of server arguments, run:
-
-```sh
-npx -y --package @gram/client -- mcp start --help
-```
 <!-- End SDK Installation [installation] -->
 
 <!-- Start Requirements [requirements] -->
@@ -297,6 +212,7 @@ run();
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
 * [evolveDeployment](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 * [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+* [latest](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 * [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
 
 ### [environments](docs/sdks/environments/README.md)
@@ -361,6 +277,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+- [`deploymentsLatest`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -414,6 +331,7 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
+- [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments

@@ -23,6 +23,7 @@ export * from "./evolveform.js";
 export * from "./evolveresult.js";
 export * from "./getdeploymentresult.js";
 export * from "./getinstanceresult.js";
+export * from "./getlatestdeploymentresult.js";
 export * from "./httptooldefinition.js";
 export * from "./inforesponsebody.js";
 export * from "./key.js";

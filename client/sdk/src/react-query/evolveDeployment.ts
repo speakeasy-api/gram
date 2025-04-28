@@ -28,7 +28,7 @@ export type EvolveDeploymentMutationData = components.EvolveResult;
  * evolve deployments
  *
  * @remarks
- * Create a new deployment with an additional tool sources.
+ * Create a new deployment with additional or updated tool sources.
  */
 export function useEvolveDeploymentMutation(
   options?: MutationHookOptions<

@@ -32,7 +32,7 @@ export type DeploymentQueryData = components.GetDeploymentResult;
  * getDeployment deployments
  *
  * @remarks
- * Create a deployment to load tool definitions.
+ * Get a deployment by its ID.
  */
 export function useDeployment(
   request: operations.GetDeploymentRequest,
@@ -53,7 +53,7 @@ export function useDeployment(
  * getDeployment deployments
  *
  * @remarks
- * Create a deployment to load tool definitions.
+ * Get a deployment by its ID.
  */
 export function useDeploymentSuspense(
   request: operations.GetDeploymentRequest,

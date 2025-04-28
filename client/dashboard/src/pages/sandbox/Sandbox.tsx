@@ -148,7 +148,7 @@ export function ToolsetPanel({
         setSelectedEnvironment(toolsets[0].defaultEnvironmentSlug);
       }
     }
-  }, [toolsets]);
+  }, [toolsets, configRef, setSelectedToolset, setSelectedEnvironment]);
 
   useEffect(() => {
     if (environments?.[0] && configRef.current.environmentSlug === null) {
@@ -158,7 +158,7 @@ export function ToolsetPanel({
         setSelectedEnvironment(environments[0].slug);
       }
     }
-  }, [environments]);
+  }, [environments, configRef, setSelectedEnvironment, toolset]);
 
   const toolsetDropdownItems =
     toolsets?.map((toolset) => ({

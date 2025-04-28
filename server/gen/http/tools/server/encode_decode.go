@@ -34,12 +34,18 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	return func(r *http.Request) (any, error) {
 		var (
 			cursor           *string
+			deploymentID     *string
 			sessionToken     *string
 			projectSlugInput *string
 		)
-		cursorRaw := r.URL.Query().Get("cursor")
+		qp := r.URL.Query()
+		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
+		}
+		deploymentIDRaw := qp.Get("deployment_id")
+		if deploymentIDRaw != "" {
+			deploymentID = &deploymentIDRaw
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -49,7 +55,7 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewListToolsPayload(cursor, sessionToken, projectSlugInput)
+		payload := NewListToolsPayload(cursor, deploymentID, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

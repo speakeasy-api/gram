@@ -21,7 +21,7 @@ type Service interface {
 	GetLatestDeployment(context.Context, *GetLatestDeploymentPayload) (res *GetLatestDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
 	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
-	// Create a new deployment with an additional tool sources.
+	// Create a new deployment with additional or updated tool sources.
 	Evolve(context.Context, *EvolvePayload) (res *EvolveResult, err error)
 	// List all deployments in descending order of creation.
 	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
@@ -164,10 +164,10 @@ type EvolvePayload struct {
 	// The ID of the deployment to evolve. If omitted, the latest deployment will
 	// be used.
 	DeploymentID *string
-	// The OpenAPI 3.x documents to add to the new deployment.
-	AddOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
-	// The OpenAPI 3.x documents to add to the deployment.
-	AddPackages []*AddPackageForm
+	// The OpenAPI 3.x documents to upsert in the new deployment.
+	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
+	// The packages to upsert in the new deployment.
+	UpsertPackages []*AddPackageForm
 }
 
 // EvolveResult is the result type of the deployments service evolve method.

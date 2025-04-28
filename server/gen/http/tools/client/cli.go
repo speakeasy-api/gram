@@ -13,11 +13,17 @@ import (
 
 // BuildListToolsPayload builds the payload for the tools listTools endpoint
 // from CLI flags.
-func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
+func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsDeploymentID string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
 	var cursor *string
 	{
 		if toolsListToolsCursor != "" {
 			cursor = &toolsListToolsCursor
+		}
+	}
+	var deploymentID *string
+	{
+		if toolsListToolsDeploymentID != "" {
+			deploymentID = &toolsListToolsDeploymentID
 		}
 	}
 	var sessionToken *string
@@ -34,6 +40,7 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsSessionTok
 	}
 	v := &tools.ListToolsPayload{}
 	v.Cursor = cursor
+	v.DeploymentID = deploymentID
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
