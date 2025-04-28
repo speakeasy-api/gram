@@ -81,6 +81,13 @@ type GetDeploymentResponseBody struct {
 	Packages []*DeploymentPackageResponseBody `form:"packages" json:"packages" xml:"packages"`
 }
 
+// GetLatestDeploymentResponseBody is the type of the "deployments" service
+// "getLatestDeployment" endpoint HTTP response body.
+type GetLatestDeploymentResponseBody struct {
+	// The latest deployment for a project if available.
+	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
+}
+
 // CreateDeploymentResponseBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP response body.
 type CreateDeploymentResponseBody struct {
@@ -241,6 +248,16 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 	return body
 }
 
+// NewGetLatestDeploymentResponseBody builds the HTTP response body from the
+// result of the "getLatestDeployment" endpoint of the "deployments" service.
+func NewGetLatestDeploymentResponseBody(res *deployments.GetLatestDeploymentResult) *GetLatestDeploymentResponseBody {
+	body := &GetLatestDeploymentResponseBody{}
+	if res.Deployment != nil {
+		body.Deployment = marshalDeploymentsDeploymentToDeploymentResponseBody(res.Deployment)
+	}
+	return body
+}
+
 // NewCreateDeploymentResponseBody builds the HTTP response body from the
 // result of the "createDeployment" endpoint of the "deployments" service.
 func NewCreateDeploymentResponseBody(res *deployments.CreateDeploymentResult) *CreateDeploymentResponseBody {
@@ -283,6 +300,16 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 func NewGetDeploymentPayload(id string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentPayload {
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetLatestDeploymentPayload builds a deployments service
+// getLatestDeployment endpoint payload.
+func NewGetLatestDeploymentPayload(sessionToken *string, projectSlugInput *string) *deployments.GetLatestDeploymentPayload {
+	v := &deployments.GetLatestDeploymentPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

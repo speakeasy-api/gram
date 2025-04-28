@@ -21,6 +21,10 @@ type Client struct {
 	// getDeployment endpoint.
 	GetDeploymentDoer goahttp.Doer
 
+	// GetLatestDeployment Doer is the HTTP client used to make requests to the
+	// getLatestDeployment endpoint.
+	GetLatestDeploymentDoer goahttp.Doer
+
 	// CreateDeployment Doer is the HTTP client used to make requests to the
 	// createDeployment endpoint.
 	CreateDeploymentDoer goahttp.Doer
@@ -52,15 +56,16 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDeploymentDoer:    doer,
-		CreateDeploymentDoer: doer,
-		EvolveDoer:           doer,
-		ListDeploymentsDoer:  doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		GetDeploymentDoer:       doer,
+		GetLatestDeploymentDoer: doer,
+		CreateDeploymentDoer:    doer,
+		EvolveDoer:              doer,
+		ListDeploymentsDoer:     doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
 	}
 }
 
@@ -83,6 +88,30 @@ func (c *Client) GetDeployment() goa.Endpoint {
 		resp, err := c.GetDeploymentDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deployments", "getDeployment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetLatestDeployment returns an endpoint that makes HTTP requests to the
+// deployments service getLatestDeployment server.
+func (c *Client) GetLatestDeployment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetLatestDeploymentRequest(c.encoder)
+		decodeResponse = DecodeGetLatestDeploymentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetLatestDeploymentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetLatestDeploymentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "getLatestDeployment", err)
 		}
 		return decodeResponse(resp)
 	}

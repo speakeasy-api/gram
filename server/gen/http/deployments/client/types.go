@@ -81,6 +81,13 @@ type GetDeploymentResponseBody struct {
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
 
+// GetLatestDeploymentResponseBody is the type of the "deployments" service
+// "getLatestDeployment" endpoint HTTP response body.
+type GetLatestDeploymentResponseBody struct {
+	// The latest deployment for a project if available.
+	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
+}
+
 // CreateDeploymentResponseBody is the type of the "deployments" service
 // "createDeployment" endpoint HTTP response body.
 type CreateDeploymentResponseBody struct {
@@ -128,26 +135,6 @@ type DeploymentPackageResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
-// AddOpenAPIv3DeploymentAssetFormRequestBody is used to define fields on
-// request body types.
-type AddOpenAPIv3DeploymentAssetFormRequestBody struct {
-	// The ID of the uploaded asset.
-	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
-	// The name to give the document as it will be displayed in UIs.
-	Name string `form:"name" json:"name" xml:"name"`
-	// The slug to give the document as it will be displayed in URLs.
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-}
-
-// AddDeploymentPackageFormRequestBody is used to define fields on request body
-// types.
-type AddDeploymentPackageFormRequestBody struct {
-	// The name of the package.
-	Name string `form:"name" json:"name" xml:"name"`
-	// The version of the package.
-	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-}
-
 // DeploymentResponseBody is used to define fields on response body types.
 type DeploymentResponseBody struct {
 	// The ID to of the deployment.
@@ -181,6 +168,26 @@ type DeploymentResponseBody struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
+}
+
+// AddOpenAPIv3DeploymentAssetFormRequestBody is used to define fields on
+// request body types.
+type AddOpenAPIv3DeploymentAssetFormRequestBody struct {
+	// The ID of the uploaded asset.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The name to give the document as it will be displayed in UIs.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug to give the document as it will be displayed in URLs.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
+// AddDeploymentPackageFormRequestBody is used to define fields on request body
+// types.
+type AddDeploymentPackageFormRequestBody struct {
+	// The name of the package.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The version of the package.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // AddPackageFormRequestBody is used to define fields on request body types.
@@ -280,6 +287,17 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 	return v
 }
 
+// NewGetLatestDeploymentResultOK builds a "deployments" service
+// "getLatestDeployment" endpoint result from a HTTP "OK" response.
+func NewGetLatestDeploymentResultOK(body *GetLatestDeploymentResponseBody) *deployments.GetLatestDeploymentResult {
+	v := &deployments.GetLatestDeploymentResult{}
+	if body.Deployment != nil {
+		v.Deployment = unmarshalDeploymentResponseBodyToDeploymentsDeployment(body.Deployment)
+	}
+
+	return v
+}
+
 // NewCreateDeploymentResultOK builds a "deployments" service
 // "createDeployment" endpoint result from a HTTP "OK" response.
 func NewCreateDeploymentResultOK(body *CreateDeploymentResponseBody) *deployments.CreateDeploymentResult {
@@ -363,6 +381,17 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	return
 }
 
+// ValidateGetLatestDeploymentResponseBody runs the validations defined on
+// GetLatestDeploymentResponseBody
+func ValidateGetLatestDeploymentResponseBody(body *GetLatestDeploymentResponseBody) (err error) {
+	if body.Deployment != nil {
+		if err2 := ValidateDeploymentResponseBody(body.Deployment); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateCreateDeploymentResponseBody runs the validations defined on
 // CreateDeploymentResponseBody
 func ValidateCreateDeploymentResponseBody(body *CreateDeploymentResponseBody) (err error) {
@@ -441,16 +470,6 @@ func ValidateDeploymentPackageResponseBody(body *DeploymentPackageResponseBody) 
 	return
 }
 
-// ValidateAddOpenAPIv3DeploymentAssetFormRequestBody runs the validations
-// defined on AddOpenAPIv3DeploymentAssetFormRequestBody
-func ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(body *AddOpenAPIv3DeploymentAssetFormRequestBody) (err error) {
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
-	if utf8.RuneCountInString(body.Slug) > 40 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
-	}
-	return
-}
-
 // ValidateDeploymentResponseBody runs the validations defined on
 // DeploymentResponseBody
 func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
@@ -494,6 +513,16 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateAddOpenAPIv3DeploymentAssetFormRequestBody runs the validations
+// defined on AddOpenAPIv3DeploymentAssetFormRequestBody
+func ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(body *AddOpenAPIv3DeploymentAssetFormRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	if utf8.RuneCountInString(body.Slug) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
 	}
 	return
 }

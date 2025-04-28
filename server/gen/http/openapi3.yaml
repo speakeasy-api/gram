@@ -321,7 +321,7 @@ paths:
                 name: EvolveDeployment
     /rpc/deployments.get:
         get:
-            description: Create a deployment to load tool definitions.
+            description: Get a deployment by its ID.
             operationId: getDeployment
             parameters:
                 - allowEmptyValue: true
@@ -362,6 +362,41 @@ paths:
             x-speakeasy-name-override: getById
             x-speakeasy-react-hook:
                 name: Deployment
+    /rpc/deployments.latest:
+        get:
+            description: Get the latest deployment for a project.
+            operationId: getLatestDeployment
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetLatestDeploymentResult'
+                    description: OK response.
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getLatestDeployment deployments
+            tags:
+                - deployments
+            x-speakeasy-name-override: latest
+            x-speakeasy-react-hook:
+                name: LatestDeployment
     /rpc/deployments.list:
         get:
             description: List all deployments in descending order of creation.
@@ -1674,6 +1709,11 @@ components:
                 - name
                 - tools
                 - environment
+        GetLatestDeploymentResult:
+            type: object
+            properties:
+                deployment:
+                    $ref: '#/components/schemas/Deployment'
         HTTPToolDefinition:
             type: object
             properties:

@@ -112,6 +112,43 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}, nil
 }
 
+func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeploymentPayload) (res *gen.GetLatestDeploymentResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, errors.New("authorization check failed")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	tx := s.repo.WithTx(dbtx)
+
+	id, err := tx.GetLatestDeploymentID(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(err, "error getting latest deployment id", "failed to get latest deployment id").Log(ctx, s.logger)
+	}
+
+	if id == uuid.Nil {
+		return &gen.GetLatestDeploymentResult{
+			Deployment: nil,
+		}, nil
+	}
+
+	dep, err := DescribeDeployment(ctx, s.logger, tx, ProjectID(*authCtx.ProjectID), DeploymentID(id))
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.GetLatestDeploymentResult{
+		Deployment: dep,
+	}, nil
+}
+
 func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeploymentsPayload) (res *gen.ListDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

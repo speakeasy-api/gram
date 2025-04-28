@@ -76,6 +76,54 @@ func DecodeGetDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 	}
 }
 
+// EncodeGetLatestDeploymentResponse returns an encoder for responses returned
+// by the deployments getLatestDeployment endpoint.
+func EncodeGetLatestDeploymentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*deployments.GetLatestDeploymentResult)
+		enc := encoder(ctx, w)
+		body := NewGetLatestDeploymentResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetLatestDeploymentRequest returns a decoder for requests sent to the
+// deployments getLatestDeployment endpoint.
+func DecodeGetLatestDeploymentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+	return func(r *http.Request) (any, error) {
+		var (
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload := NewGetLatestDeploymentPayload(sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
 // EncodeCreateDeploymentResponse returns an encoder for responses returned by
 // the deployments createDeployment endpoint.
 func EncodeCreateDeploymentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -300,37 +348,6 @@ func marshalDeploymentsDeploymentPackageToDeploymentPackageResponseBody(v *deplo
 	return res
 }
 
-// unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm
-// builds a value of type *deployments.AddOpenAPIv3DeploymentAssetForm from a
-// value of type *AddOpenAPIv3DeploymentAssetFormRequestBody.
-func unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(v *AddOpenAPIv3DeploymentAssetFormRequestBody) *deployments.AddOpenAPIv3DeploymentAssetForm {
-	if v == nil {
-		return nil
-	}
-	res := &deployments.AddOpenAPIv3DeploymentAssetForm{
-		AssetID: *v.AssetID,
-		Name:    *v.Name,
-		Slug:    deployments.Slug(*v.Slug),
-	}
-
-	return res
-}
-
-// unmarshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm
-// builds a value of type *deployments.AddDeploymentPackageForm from a value of
-// type *AddDeploymentPackageFormRequestBody.
-func unmarshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(v *AddDeploymentPackageFormRequestBody) *deployments.AddDeploymentPackageForm {
-	if v == nil {
-		return nil
-	}
-	res := &deployments.AddDeploymentPackageForm{
-		Name:    *v.Name,
-		Version: v.Version,
-	}
-
-	return res
-}
-
 // marshalDeploymentsDeploymentToDeploymentResponseBody builds a value of type
 // *DeploymentResponseBody from a value of type *deployments.Deployment.
 func marshalDeploymentsDeploymentToDeploymentResponseBody(v *deployments.Deployment) *DeploymentResponseBody {
@@ -366,6 +383,37 @@ func marshalDeploymentsDeploymentToDeploymentResponseBody(v *deployments.Deploym
 		}
 	} else {
 		res.Packages = []*DeploymentPackageResponseBody{}
+	}
+
+	return res
+}
+
+// unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm
+// builds a value of type *deployments.AddOpenAPIv3DeploymentAssetForm from a
+// value of type *AddOpenAPIv3DeploymentAssetFormRequestBody.
+func unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(v *AddOpenAPIv3DeploymentAssetFormRequestBody) *deployments.AddOpenAPIv3DeploymentAssetForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.AddOpenAPIv3DeploymentAssetForm{
+		AssetID: *v.AssetID,
+		Name:    *v.Name,
+		Slug:    deployments.Slug(*v.Slug),
+	}
+
+	return res
+}
+
+// unmarshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm
+// builds a value of type *deployments.AddDeploymentPackageForm from a value of
+// type *AddDeploymentPackageFormRequestBody.
+func unmarshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(v *AddDeploymentPackageFormRequestBody) *deployments.AddDeploymentPackageForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.AddDeploymentPackageForm{
+		Name:    *v.Name,
+		Version: v.Version,
 	}
 
 	return res

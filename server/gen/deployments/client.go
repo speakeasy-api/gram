@@ -15,19 +15,21 @@ import (
 
 // Client is the "deployments" service client.
 type Client struct {
-	GetDeploymentEndpoint    goa.Endpoint
-	CreateDeploymentEndpoint goa.Endpoint
-	EvolveEndpoint           goa.Endpoint
-	ListDeploymentsEndpoint  goa.Endpoint
+	GetDeploymentEndpoint       goa.Endpoint
+	GetLatestDeploymentEndpoint goa.Endpoint
+	CreateDeploymentEndpoint    goa.Endpoint
+	EvolveEndpoint              goa.Endpoint
+	ListDeploymentsEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "deployments" service client given the endpoints.
-func NewClient(getDeployment, createDeployment, evolve, listDeployments goa.Endpoint) *Client {
+func NewClient(getDeployment, getLatestDeployment, createDeployment, evolve, listDeployments goa.Endpoint) *Client {
 	return &Client{
-		GetDeploymentEndpoint:    getDeployment,
-		CreateDeploymentEndpoint: createDeployment,
-		EvolveEndpoint:           evolve,
-		ListDeploymentsEndpoint:  listDeployments,
+		GetDeploymentEndpoint:       getDeployment,
+		GetLatestDeploymentEndpoint: getLatestDeployment,
+		CreateDeploymentEndpoint:    createDeployment,
+		EvolveEndpoint:              evolve,
+		ListDeploymentsEndpoint:     listDeployments,
 	}
 }
 
@@ -40,6 +42,17 @@ func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (re
 		return
 	}
 	return ires.(*GetDeploymentResult), nil
+}
+
+// GetLatestDeployment calls the "getLatestDeployment" endpoint of the
+// "deployments" service.
+func (c *Client) GetLatestDeployment(ctx context.Context, p *GetLatestDeploymentPayload) (res *GetLatestDeploymentResult, err error) {
+	var ires any
+	ires, err = c.GetLatestDeploymentEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetLatestDeploymentResult), nil
 }
 
 // CreateDeployment calls the "createDeployment" endpoint of the "deployments"

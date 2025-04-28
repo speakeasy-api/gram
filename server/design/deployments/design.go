@@ -1,9 +1,10 @@
 package deployments
 
 import (
+	. "goa.design/goa/v3/dsl"
+
 	"github.com/speakeasy-api/gram/design/security"
 	"github.com/speakeasy-api/gram/design/shared"
-	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("deployments", func() {
@@ -12,7 +13,7 @@ var _ = Service("deployments", func() {
 	Security(security.Session, security.ProjectSlug)
 
 	Method("getDeployment", func() {
-		Description("Create a deployment to load tool definitions.")
+		Description("Get a deployment by its ID.")
 
 		Payload(func() {
 			Extend(GetDeploymentForm)
@@ -33,6 +34,28 @@ var _ = Service("deployments", func() {
 		Meta("openapi:operationId", "getDeployment")
 		Meta("openapi:extension:x-speakeasy-name-override", "getById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Deployment"}`)
+	})
+
+	Method("getLatestDeployment", func() {
+		Description("Get the latest deployment for a project.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetLatestDeploymentResult)
+
+		HTTP(func() {
+			GET("/rpc/deployments.latest")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getLatestDeployment")
+		Meta("openapi:extension:x-speakeasy-name-override", "latest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LatestDeployment"}`)
 	})
 
 	Method("createDeployment", func() {
@@ -307,6 +330,13 @@ var GetDeploymentForm = Type("GetDeploymentForm", func() {
 
 var GetDeploymentResult = Type("GetDeploymentResult", func() {
 	Extend(Deployment)
+})
+
+var GetLatestDeploymentResult = Type("GetLatestDeploymentResult", func() {
+	Attribute("deployment", Deployment, func() {
+		Description("The latest deployment for a project if available.")
+		Meta("openapi:example", "false")
+	})
 })
 
 var AddOpenAPIv3SourceForm = Type("AddOpenAPIv3SourceForm", func() {

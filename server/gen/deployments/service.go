@@ -15,8 +15,10 @@ import (
 
 // Manages deployments of tools from upstream sources.
 type Service interface {
-	// Create a deployment to load tool definitions.
+	// Get a deployment by its ID.
 	GetDeployment(context.Context, *GetDeploymentPayload) (res *GetDeploymentResult, err error)
+	// Get the latest deployment for a project.
+	GetLatestDeployment(context.Context, *GetLatestDeploymentPayload) (res *GetLatestDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
 	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
 	// Create a new deployment with an additional tool sources.
@@ -45,7 +47,7 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"getDeployment", "createDeployment", "evolve", "listDeployments"}
+var MethodNames = [5]string{"getDeployment", "getLatestDeployment", "createDeployment", "evolve", "listDeployments"}
 
 type AddDeploymentPackageForm struct {
 	// The name of the package.
@@ -217,6 +219,20 @@ type GetDeploymentResult struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAsset
 	// The packages that were deployed.
 	Packages []*DeploymentPackage
+}
+
+// GetLatestDeploymentPayload is the payload type of the deployments service
+// getLatestDeployment method.
+type GetLatestDeploymentPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetLatestDeploymentResult is the result type of the deployments service
+// getLatestDeployment method.
+type GetLatestDeploymentResult struct {
+	// The latest deployment for a project if available.
+	Deployment *Deployment
 }
 
 // ListDeploymentResult is the result type of the deployments service

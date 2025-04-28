@@ -96,6 +96,82 @@ func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildGetLatestDeploymentRequest instantiates a HTTP request object with
+// method and path set to call the "deployments" service "getLatestDeployment"
+// endpoint
+func (c *Client) BuildGetLatestDeploymentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetLatestDeploymentDeploymentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("deployments", "getLatestDeployment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetLatestDeploymentRequest returns an encoder for requests sent to the
+// deployments getLatestDeployment server.
+func EncodeGetLatestDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*deployments.GetLatestDeploymentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("deployments", "getLatestDeployment", "*deployments.GetLatestDeploymentPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetLatestDeploymentResponse returns a decoder for responses returned
+// by the deployments getLatestDeployment endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+func DecodeGetLatestDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetLatestDeploymentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			res := NewGetLatestDeploymentResultOK(&body)
+			return res, nil
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("deployments", "getLatestDeployment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateDeploymentRequest instantiates a HTTP request object with method
 // and path set to call the "deployments" service "createDeployment" endpoint
 func (c *Client) BuildCreateDeploymentRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -365,6 +441,38 @@ func unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(v *Dep
 	return res
 }
 
+// unmarshalDeploymentResponseBodyToDeploymentsDeployment builds a value of
+// type *deployments.Deployment from a value of type *DeploymentResponseBody.
+func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentResponseBody) *deployments.Deployment {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.Deployment{
+		ID:             *v.ID,
+		OrganizationID: *v.OrganizationID,
+		ProjectID:      *v.ProjectID,
+		UserID:         *v.UserID,
+		CreatedAt:      *v.CreatedAt,
+		Status:         *v.Status,
+		IdempotencyKey: v.IdempotencyKey,
+		GithubRepo:     v.GithubRepo,
+		GithubPr:       v.GithubPr,
+		GithubSha:      v.GithubSha,
+		ExternalID:     v.ExternalID,
+		ExternalURL:    v.ExternalURL,
+	}
+	res.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
+	for i, val := range v.Openapiv3Assets {
+		res.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(val)
+	}
+	res.Packages = make([]*deployments.DeploymentPackage, len(v.Packages))
+	for i, val := range v.Packages {
+		res.Packages[i] = unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(val)
+	}
+
+	return res
+}
+
 // marshalDeploymentsAddOpenAPIv3DeploymentAssetFormToAddOpenAPIv3DeploymentAssetFormRequestBody
 // builds a value of type *AddOpenAPIv3DeploymentAssetFormRequestBody from a
 // value of type *deployments.AddOpenAPIv3DeploymentAssetForm.
@@ -422,38 +530,6 @@ func marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackage
 	res := &deployments.AddDeploymentPackageForm{
 		Name:    v.Name,
 		Version: v.Version,
-	}
-
-	return res
-}
-
-// unmarshalDeploymentResponseBodyToDeploymentsDeployment builds a value of
-// type *deployments.Deployment from a value of type *DeploymentResponseBody.
-func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentResponseBody) *deployments.Deployment {
-	if v == nil {
-		return nil
-	}
-	res := &deployments.Deployment{
-		ID:             *v.ID,
-		OrganizationID: *v.OrganizationID,
-		ProjectID:      *v.ProjectID,
-		UserID:         *v.UserID,
-		CreatedAt:      *v.CreatedAt,
-		Status:         *v.Status,
-		IdempotencyKey: v.IdempotencyKey,
-		GithubRepo:     v.GithubRepo,
-		GithubPr:       v.GithubPr,
-		GithubSha:      v.GithubSha,
-		ExternalID:     v.ExternalID,
-		ExternalURL:    v.ExternalURL,
-	}
-	res.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
-	for i, val := range v.Openapiv3Assets {
-		res.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(val)
-	}
-	res.Packages = make([]*deployments.DeploymentPackage, len(v.Packages))
-	for i, val := range v.Packages {
-		res.Packages[i] = unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(val)
 	}
 
 	return res
