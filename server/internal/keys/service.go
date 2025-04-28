@@ -41,6 +41,8 @@ var _ gen.Service = (*Service)(nil)
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, env string) *Service {
 	var keyEnv string
 	switch env {
+	case "minikube":
+		fallthrough
 	case "local":
 		keyEnv = "local"
 	case "test":

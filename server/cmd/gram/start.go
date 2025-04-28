@@ -169,6 +169,8 @@ func newStartCommand() *cli.Command {
 
 			var serverURL string
 			switch c.String("environment") {
+			case "minikube":
+				fallthrough
 			case "local":
 				serverURL = fmt.Sprintf("http://localhost%s", c.String("address"))
 			case "test":

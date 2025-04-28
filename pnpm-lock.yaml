@@ -17,6 +17,9 @@ importers:
 
   .:
     devDependencies:
+      '@iarna/toml':
+        specifier: ^2.2.5
+        version: 2.2.5
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -26,6 +29,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.8.3
+      yaml:
+        specifier: ^2.3.1
+        version: 2.7.1
       zx:
         specifier: ^8.4.0
         version: 8.4.0
@@ -682,6 +688,9 @@ packages:
   '@humanwhocodes/retry@0.4.2':
     resolution: {integrity: sha512-xeO57FpIu4p1Ri3Jq/EXq4ClRm86dVF2z/+kvFnyqVYRavTZmaFaUBbWCOuuTh0o/g7DSsk6kc2vrS4Vl5oPOQ==}
     engines: {node: '>=18.18'}
+
+  '@iarna/toml@2.2.5':
+    resolution: {integrity: sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg==}
 
   '@jridgewell/gen-mapping@0.3.8':
     resolution: {integrity: sha512-imAbBGkb+ebQyxKgzv5Hu2nmROxoDOXHh80evxdoXNOrvAnVx7zimzc1Oo5h9RlfV4vPXaE2iM5pOFbvOCClWA==}
@@ -3992,6 +4001,8 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.2': {}
 
+  '@iarna/toml@2.2.5': {}
+
   '@jridgewell/gen-mapping@0.3.8':
     dependencies:
       '@jridgewell/set-array': 1.2.1
@@ -7295,8 +7306,7 @@ snapshots:
 
   yallist@3.1.1: {}
 
-  yaml@2.7.1:
-    optional: true
+  yaml@2.7.1: {}
 
   yocto-queue@0.1.0: {}
 

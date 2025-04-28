@@ -71,6 +71,7 @@ func newApp() *cli.App {
 
 func Execute(ctx context.Context, osArgs []string) {
 	if err := newApp().RunContext(ctx, osArgs); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
