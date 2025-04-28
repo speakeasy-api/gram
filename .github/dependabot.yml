@@ -9,17 +9,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "npm"
-    directories:
-      - "/"
-      - "/client/dashboard"
-    schedule:
-      interval: "weekly"
-    groups:
-      prod-dependencies:
-        dependency-type: "production"
-      dev-dependencies:
-        dependency-type: "development"
   - package-ecosystem: "gomod"
     directory: "/server"
     schedule:
