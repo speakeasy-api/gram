@@ -153,8 +153,8 @@ importers:
         specifier: ^3.1.0
         version: 3.1.0
       tailwindcss:
-        specifier: ^4.0.17
-        version: 4.1.0
+        specifier: ^4.1.4
+        version: 4.1.4
       tw-animate-css:
         specifier: ^1.2.5
         version: 1.2.5
@@ -3529,8 +3529,8 @@ packages:
   tailwindcss@4.1.0:
     resolution: {integrity: sha512-vBYstoFnvUZCDxaauNGQQEvJNQgCd1vSMDRYuZZMH1xRRcTboOk1rJrW5yFkEabU9X6Yx1C4LQ+QvPOvQj4Daw==}
 
-  tailwindcss@4.1.3:
-    resolution: {integrity: sha512-2Q+rw9vy1WFXu5cIxlvsabCwhU2qUwodGq03ODhLJ0jW4ek5BUtoCsnLB0qG+m8AHgEsSJcJGDSDe06FXlP74g==}
+  tailwindcss@4.1.4:
+    resolution: {integrity: sha512-1ZIUqtPITFbv/DxRmDr5/agPqJwF69d24m9qmM1939TJehgY539CtzeZRjbLt5G6fSy/7YqqYsfvoTEw9xUI2A==}
 
   tapable@2.2.1:
     resolution: {integrity: sha512-GNzQvQTOIP6RyTfE2Qxb8ZVlNmw0n88vp1szwWRimP02mnTsx3Wtn5qRdqY9w2XduFNUgvOwhNnQsjwCp+kqaQ==}
@@ -5035,7 +5035,7 @@ snapshots:
       react-virtuoso: 4.12.6(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       remark-gfm: 4.0.1
       tailwind-merge: 3.1.0
-      tailwindcss: 4.1.3
+      tailwindcss: 4.1.4
       tw-animate-css: 1.2.5
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
@@ -7288,7 +7288,7 @@ snapshots:
 
   tailwindcss@4.1.0: {}
 
-  tailwindcss@4.1.3: {}
+  tailwindcss@4.1.4: {}
 
   tapable@2.2.1: {}
 
