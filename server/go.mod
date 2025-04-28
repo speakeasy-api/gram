@@ -17,7 +17,7 @@ require (
 	github.com/charmbracelet/log v0.4.0
 	github.com/ettle/strcase v0.2.0
 	github.com/go-redis/cache/v9 v9.0.0
-	github.com/pb33f/libopenapi v0.21.8
+	github.com/pb33f/libopenapi v0.21.9
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.7.3
 	github.com/redis/go-redis/v9 v9.7.3
