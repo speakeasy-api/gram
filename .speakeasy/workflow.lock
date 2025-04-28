@@ -9,7 +9,7 @@ sources:
             - 0.0.1
     Gram Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:92a80b504f6383adc8688b2aa3148d7fa31466a4de8d805e9bf075856c72efbd
+        sourceRevisionDigest: sha256:c301cdf7c67a53d6adad5b80773946c6a96f1fb297fac4d3ec40b68d6155525d
         sourceBlobDigest: sha256:2a9cc8de6365a0797f5955ddf94529fd282a0268c328bbe18481c2004be54ce5
         tags:
             - latest
@@ -39,10 +39,10 @@ targets:
     gram-internal:
         source: Gram Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:92a80b504f6383adc8688b2aa3148d7fa31466a4de8d805e9bf075856c72efbd
+        sourceRevisionDigest: sha256:c301cdf7c67a53d6adad5b80773946c6a96f1fb297fac4d3ec40b68d6155525d
         sourceBlobDigest: sha256:2a9cc8de6365a0797f5955ddf94529fd282a0268c328bbe18481c2004be54ce5
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:d22b07570d4a7ceb889f1d3f93c4880595f0d582f33f25920606f5db34dd1137
+        codeSamplesRevisionDigest: sha256:dc51674931baea3697039089131ae3ee4ef3fe1b62e5d8598f072f69497b4008
     gram-public:
         source: Gram Public
         sourceNamespace: gram-api-description

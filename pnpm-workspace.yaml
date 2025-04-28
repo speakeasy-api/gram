@@ -2,6 +2,7 @@ packages:
   - client/*
   - sdks/*
 catalog:
+  "@tanstack/react-query": ^5.74.7
   typescript: ^5.8.2
 onlyBuiltDependencies:
   - bun
