@@ -18,10 +18,12 @@ RUN chmod +x /app/bin/gram
 
 ### --- ###
 
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=builder /app/bin/gram .
+USER nonroot
+
+COPY --from=builder --chown=nonroot:nonroot /app/bin/gram .
 
 ENTRYPOINT ["/app/gram"]
