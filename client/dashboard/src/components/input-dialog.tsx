@@ -50,7 +50,7 @@ export function InputDialog({
       if (input.optional) {
         return true;
       }
-      return input.validate?.(input.value) ?? false;
+      return input.validate?.(input.value) ?? true;
     }) && inputsArray.some((input) => input.value !== "");
 
   return (

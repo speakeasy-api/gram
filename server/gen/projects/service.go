@@ -51,8 +51,6 @@ type CreateProjectPayload struct {
 	OrganizationID string
 	// The name of the project
 	Name string
-	// The slug of the project
-	Slug Slug
 }
 
 // CreateProjectResult is the result type of the projects service createProject

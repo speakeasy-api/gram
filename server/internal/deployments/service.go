@@ -130,6 +130,11 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 
 	id, err := tx.GetLatestDeploymentID(ctx, *authCtx.ProjectID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return &gen.GetLatestDeploymentResult{
+				Deployment: nil,
+			}, nil
+		}
 		return nil, oops.E(err, "error getting latest deployment id", "failed to get latest deployment id").Log(ctx, s.logger)
 	}
 

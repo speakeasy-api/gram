@@ -24,14 +24,10 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"1xc\",\n      \"organization_id\": \"Id occaecati aut.\",\n      \"slug\": \"cj4\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"1xc\",\n      \"organization_id\": \"Id occaecati aut.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
-		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
-		if utf8.RuneCountInString(body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
 		}
 		if err != nil {
 			return nil, err
@@ -46,7 +42,6 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	v := &projects.CreateProjectPayload{
 		OrganizationID: body.OrganizationID,
 		Name:           body.Name,
-		Slug:           projects.Slug(body.Slug),
 	}
 	v.SessionToken = sessionToken
 

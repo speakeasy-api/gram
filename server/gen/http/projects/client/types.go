@@ -21,8 +21,6 @@ type CreateProjectRequestBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The name of the project
 	Name string `form:"name" json:"name" xml:"name"`
-	// The slug of the project
-	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
 // CreateProjectResponseBody is the type of the "projects" service
@@ -71,7 +69,6 @@ func NewCreateProjectRequestBody(p *projects.CreateProjectPayload) *CreateProjec
 	body := &CreateProjectRequestBody{
 		OrganizationID: p.OrganizationID,
 		Name:           p.Name,
-		Slug:           string(p.Slug),
 	}
 	return body
 }

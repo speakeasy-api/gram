@@ -24,7 +24,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"uyb\",\n      \"description\": \"Et sit reprehenderit atque.\",\n      \"http_tool_names\": [\n         \"Aut ipsa quia dolor laudantium magni aspernatur.\",\n         \"Dolores incidunt non similique veniam qui eaque.\"\n      ],\n      \"name\": \"Asperiores ut minus qui vel.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"8dm\",\n      \"description\": \"Autem perspiciatis.\",\n      \"http_tool_names\": [\n         \"Rem aut provident nihil officiis non.\",\n         \"Qui asperiores eveniet impedit necessitatibus est.\"\n      ],\n      \"name\": \"Autem ut et voluptatem corrupti sequi.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))

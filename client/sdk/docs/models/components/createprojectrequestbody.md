@@ -8,7 +8,6 @@ import { CreateProjectRequestBody } from "@gram/client/models/components";
 let value: CreateProjectRequestBody = {
   name: "<value>",
   organizationId: "<id>",
-  slug: "<value>",
 };
 ```
 
@@ -18,4 +17,3 @@ let value: CreateProjectRequestBody = {
 | --------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------- |
 | `name`                                              | *string*                                            | :heavy_check_mark:                                  | The name of the project                             |
 | `organizationId`                                    | *string*                                            | :heavy_check_mark:                                  | The ID of the organization to create the project in |
-| `slug`                                              | *string*                                            | :heavy_check_mark:                                  | The slug of the project                             |

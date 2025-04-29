@@ -1011,9 +1011,8 @@ Create a new project.
 Example:
     %[1]s projects create-project --body '{
       "name": "1xc",
-      "organization_id": "Id occaecati aut.",
-      "slug": "cj4"
-   }' --session-token "Aliquid odio est doloribus esse dolores."
+      "organization_id": "Id occaecati aut."
+   }' --session-token "Consequuntur qui."
 `, os.Args[0])
 }
 
@@ -1025,7 +1024,7 @@ List all projects for an organization.
     -session-token STRING: 
 
 Example:
-    %[1]s projects list-projects --organization-id "Possimus quis inventore cumque cupiditate enim." --session-token "Consectetur nam odio veniam nisi."
+    %[1]s projects list-projects --organization-id "Molestiae aliquam." --session-token "Enim possimus quis inventore cumque cupiditate enim."
 `, os.Args[0])
 }
 
@@ -1052,7 +1051,7 @@ List all tools for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s tools list-tools --cursor "Id impedit sunt non et dolores." --deployment-id "Facere necessitatibus aut." --session-token "Ut quidem." --project-slug-input "Quod eligendi omnis voluptate laboriosam."
+    %[1]s tools list-tools --cursor "Nam odio veniam nisi." --deployment-id "Harum id." --session-token "Sunt non et dolores qui facere necessitatibus." --project-slug-input "Nam ut."
 `, os.Args[0])
 }
 
@@ -1081,7 +1080,7 @@ Load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances get-instance --toolset-slug "gv1" --environment-slug "yv8" --session-token "Doloribus aut." --project-slug-input "Laboriosam consequuntur est." --apikey-token "Ratione eligendi officia qui ut."
+    %[1]s instances get-instance --toolset-slug "g49" --environment-slug "74x" --session-token "Porro dignissimos non." --project-slug-input "Dicta at ipsum voluptas." --apikey-token "Et molestias et."
 `, os.Args[0])
 }
 
@@ -1112,14 +1111,14 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_slug": "uyb",
-      "description": "Et sit reprehenderit atque.",
+      "default_environment_slug": "8dm",
+      "description": "Autem perspiciatis.",
       "http_tool_names": [
-         "Aut ipsa quia dolor laudantium magni aspernatur.",
-         "Dolores incidunt non similique veniam qui eaque."
+         "Rem aut provident nihil officiis non.",
+         "Qui asperiores eveniet impedit necessitatibus est."
       ],
-      "name": "Asperiores ut minus qui vel."
-   }' --session-token "Nulla repellendus." --project-slug-input "Pariatur et omnis ut sit eligendi."
+      "name": "Autem ut et voluptatem corrupti sequi."
+   }' --session-token "Vel voluptas et." --project-slug-input "Reprehenderit atque non inventore aut ipsa."
 `, os.Args[0])
 }
 
@@ -1131,7 +1130,7 @@ List all toolsets for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Similique dolor dolorum." --project-slug-input "Praesentium nemo in quos quasi."
+    %[1]s toolsets list-toolsets --session-token "Officiis quaerat voluptatem recusandae ut similique dolor." --project-slug-input "Sint praesentium nemo in quos quasi."
 `, os.Args[0])
 }
 

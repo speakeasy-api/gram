@@ -9,7 +9,6 @@ let value: CreateProjectRequest = {
   createProjectRequestBody: {
     name: "<value>",
     organizationId: "<id>",
-    slug: "<value>",
   },
 };
 ```

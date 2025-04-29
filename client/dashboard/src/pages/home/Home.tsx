@@ -27,7 +27,10 @@ import { Button } from "@/components/ui/button";
 import { NameAndSlug } from "@/components/name-and-slug";
 
 function DeploymentCards() {
-  const { data: deployment, refetch } = useLatestDeployment();
+  const project = useProject();
+  const { data: deployment, refetch } = useLatestDeployment({
+    gramProject: project.slug,
+  });
 
   if (!deployment?.deployment) {
     return (

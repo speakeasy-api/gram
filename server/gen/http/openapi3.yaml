@@ -1311,15 +1311,9 @@ components:
                     description: The ID of the organization to create the project in
                 session_token:
                     type: string
-                slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
-                    maxLength: 40
             required:
                 - organization_id
                 - name
-                - slug
         CreateProjectRequestBody:
             type: object
             properties:
@@ -1330,15 +1324,9 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization to create the project in
-                slug:
-                    type: string
-                    description: The slug of the project
-                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
-                    maxLength: 40
             required:
                 - organization_id
                 - name
-                - slug
         CreateProjectResult:
             type: object
             properties:

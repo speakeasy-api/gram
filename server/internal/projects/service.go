@@ -85,7 +85,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	prj, err := s.repo.CreateProject(ctx, repo.CreateProjectParams{
 		OrganizationID: payload.OrganizationID,
 		Name:           payload.Name,
-		Slug:           conv.ToSlug(string(payload.Slug)),
+		Slug:           conv.ToSlug(payload.Name),
 	})
 	var pgErr *pgconn.PgError
 	switch {

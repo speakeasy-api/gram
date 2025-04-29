@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 480339deae73d17c01a0e8d9a6d6ee7b
+  docChecksum: 83c045abab3f053bdd237a4e57cfb006
   docVersion: 0.0.1
-  speakeasyVersion: 1.537.1
-  generationVersion: 2.588.4
-  releaseVersion: 0.9.2
-  configChecksum: 5159a6fb7eb446015420f5397687e394
+  speakeasyVersion: 1.533.0
+  generationVersion: 2.578.0
+  releaseVersion: 0.9.4
+  configChecksum: fb1871cf4ce39353d8b6bd53cff93665
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -645,7 +645,7 @@ examples:
   createProject:
     speakeasy-default-create-project:
       requestBody:
-        application/json: {"name": "<value>", "organization_id": "<id>", "slug": "<value>"}
+        application/json: {"name": "<value>", "organization_id": "<id>"}
       responses:
         "200":
           application/json: {"project": {"created_at": "2024-06-17T07:14:55.338Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2024-11-30T17:06:07.804Z"}}

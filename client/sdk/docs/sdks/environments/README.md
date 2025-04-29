@@ -352,8 +352,12 @@ async function run() {
   const result = await gram.environments.updateBySlug({
     slug: "<value>",
     updateEnvironmentRequestBody: {
-      entriesToRemove: [],
-      entriesToUpdate: [],
+      entriesToRemove: [
+
+      ],
+      entriesToUpdate: [
+
+      ],
     },
   });
 
@@ -385,8 +389,12 @@ async function run() {
   const res = await environmentsUpdateBySlug(gram, {
     slug: "<value>",
     updateEnvironmentRequestBody: {
-      entriesToRemove: [],
-      entriesToUpdate: [],
+      entriesToRemove: [
+  
+      ],
+      entriesToUpdate: [
+  
+      ],
     },
   });
 

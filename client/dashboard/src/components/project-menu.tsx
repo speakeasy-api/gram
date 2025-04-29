@@ -1,7 +1,7 @@
 import React from "react";
 import { Combobox } from "./ui/combobox.tsx";
 import { Heading } from "./ui/heading.tsx";
-import { ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown, PlusIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
 import { Button } from "./ui/button.tsx";
 import { IconLogout } from "@tabler/icons-react";
@@ -13,9 +13,11 @@ import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
 import { Separator } from "./ui/separator.tsx";
 import { ProjectEntry } from "@gram/client/models/components";
-import { useLogoutMutation } from "@gram/client/react-query";
+import { useSdkClient } from "@/contexts/Sdk.tsx";
+import { InputDialog } from "./input-dialog.tsx";
+import { Skeleton } from "./ui/skeleton.tsx";
 
-// Add this helper function to generate colors from project label
+// Generate colors from project label
 function getProjectColors(label: string): {
   from: string;
   to: string;
@@ -56,7 +58,7 @@ function ProjectAvatar({
   project,
   className,
 }: {
-  project: ProjectEntry;
+  project: Pick<ProjectEntry, "id">;
   className?: string;
 }) {
   const colors = getProjectColors(project.id);
@@ -74,7 +76,7 @@ export function ProjectMenu() {
   const session = useSession();
   const organization = useOrganization();
   const project = useProject();
-  const logoutMutation = useLogoutMutation();
+  const client = useSdkClient();
 
   const [open, setOpen] = React.useState(false);
 
@@ -130,10 +132,8 @@ export function ProjectMenu() {
               title: "Logout",
               icon: IconLogout,
               onClick: async () => {
-                await logoutMutation.mutateAsync({
-                  security: {
-                    sessionHeaderGramSession: "",
-                  },
+                await client.auth.logout({
+                  sessionHeaderGramSession: "", // TODO?
                 });
                 window.location.href = "/login";
                 setOpen(false);
@@ -149,46 +149,90 @@ export function ProjectMenu() {
 function ProjectSelector() {
   const organization = useOrganization();
   const project = useProject();
+  const client = useSdkClient();
 
-  const projectWithIcons = organization?.projects.map((project) => ({
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
+  const [newProjectName, setNewProjectName] = React.useState("");
+
+  const projectWithIcons = organization.projects.map((project) => ({
     ...project,
     value: project.id,
     label: project.slug,
     icon: <ProjectAvatar project={project} className="h-4 w-4" />,
   }));
 
-  // TODO: Removing new project icon until we need a flow for this
-  // projectWithIcons?.push({
-  //   value: "new-project",
-  //   label: "New Project",
-  //   icon: <PlusIcon className="h-4 w-4" />,
-  //   projectId: "new-project",
-  //   projectName: "New Project",
-  //   projectSlug: "new-project",
-  // });
+  projectWithIcons.push({
+    value: "new-project",
+    label: "New Project",
+    icon: <PlusIcon className="h-4 w-4" />,
+    id: "new-project",
+    name: "New Project",
+    slug: "new-project",
+  });
 
-  const selected = projectWithIcons?.find((p) => p.id === project.id);
+  if (projectWithIcons.length === 0) {
+    return <Skeleton className="h-8 w-full" />;
+  }
+
+  const selected =
+    projectWithIcons.find((p) => p.id === project.id) ?? projectWithIcons[0]!;
 
   const changeProject = (projectId: string) => {
     if (projectId === "new-project") {
-      // TODO: Create new project
-      console.log("new project");
+      setCreateDialogOpen(true);
     } else {
       project.switchProject(projectId);
     }
   };
 
+  const createProject = async (name: string) => {
+    const result = await client.projects.create(
+      {
+        sessionHeaderGramSession: "",
+      },
+      {
+        createProjectRequestBody: {
+          name,
+          organizationId: organization.id,
+        },
+      }
+    );
+    setCreateDialogOpen(false);
+    project.switchProject(result.project.id);
+  };
+
   return (
-    <Combobox
-      selected={selected}
-      onSelectionChange={(value) => changeProject(value.value)}
-      items={projectWithIcons ?? []}
-    >
-      <Stack direction={"horizontal"} gap={2} align="center">
-        <ProjectAvatar project={project} className="h-4 w-4" />
-        <span className="truncate">{selected?.label}</span>
-      </Stack>
-      <ChevronsUpDown className="opacity-50" />
-    </Combobox>
+    <>
+      <Combobox
+        selected={selected}
+        onSelectionChange={(value) => changeProject(value.value)}
+        items={projectWithIcons ?? []}
+      >
+        <Stack direction={"horizontal"} gap={2} align="center">
+          <ProjectAvatar project={selected} className="h-4 w-4" />
+          <span className="truncate">{selected?.label}</span>
+        </Stack>
+        <ChevronsUpDown className="opacity-50" />
+      </Combobox>
+      {createDialogOpen && (
+        <InputDialog
+          open={createDialogOpen}
+          onOpenChange={() => setCreateDialogOpen(false)}
+          title="Create New Project"
+          description="Create a new project to get started"
+          onSubmit={() => {
+          createProject(newProjectName);
+        }}
+        inputs={[
+          {
+            label: "Name",
+            value: newProjectName,
+            onChange: setNewProjectName,
+              placeholder: "New Project",
+            },
+          ]}
+        />
+      )}
+    </>
   );
 }

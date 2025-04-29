@@ -28,7 +28,6 @@ async function run() {
     createProjectRequestBody: {
       name: "<value>",
       organizationId: "<id>",
-      slug: "<value>",
     },
   });
 
@@ -58,7 +57,6 @@ async function run() {
     createProjectRequestBody: {
       name: "<value>",
       organizationId: "<id>",
-      slug: "<value>",
     },
   });
 

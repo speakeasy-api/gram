@@ -17,10 +17,6 @@ export type CreateProjectRequestBody = {
    * The ID of the organization to create the project in
    */
   organizationId: string;
-  /**
-   * The slug of the project
-   */
-  slug: string;
 };
 
 /** @internal */
@@ -31,7 +27,6 @@ export const CreateProjectRequestBody$inboundSchema: z.ZodType<
 > = z.object({
   name: z.string(),
   organization_id: z.string(),
-  slug: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "organization_id": "organizationId",
@@ -42,7 +37,6 @@ export const CreateProjectRequestBody$inboundSchema: z.ZodType<
 export type CreateProjectRequestBody$Outbound = {
   name: string;
   organization_id: string;
-  slug: string;
 };
 
 /** @internal */
@@ -53,7 +47,6 @@ export const CreateProjectRequestBody$outboundSchema: z.ZodType<
 > = z.object({
   name: z.string(),
   organizationId: z.string(),
-  slug: z.string(),
 }).transform((v) => {
   return remap$(v, {
     organizationId: "organization_id",
