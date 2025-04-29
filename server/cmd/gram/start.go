@@ -60,7 +60,7 @@ func newStartCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:     "environment",
-				Usage:    "The current server environment", // local, test, prod
+				Usage:    "The current server environment", // local, dev, prod
 				Required: true,
 				EnvVars:  []string{"GRAM_ENVIRONMENT"},
 			},
@@ -173,7 +173,7 @@ func newStartCommand() *cli.Command {
 				fallthrough
 			case "local":
 				serverURL = fmt.Sprintf("http://localhost%s", c.String("address"))
-			case "test":
+			case "dev":
 				serverURL = "" // TODO: Fill in once hosted
 			case "prod":
 				serverURL = "" // TODO: Fill in once hosted

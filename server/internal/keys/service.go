@@ -45,7 +45,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		fallthrough
 	case "local":
 		keyEnv = "local"
-	case "test":
+	case "dev":
 		keyEnv = "test"
 	case "prod":
 		keyEnv = "live"

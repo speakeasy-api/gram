@@ -62,7 +62,7 @@ func FormSignInRedirectURL(env string) string {
 		return "http://localhost:5173/"
 	case "minikube":
 		return "http://localhost:8080/"
-	case "test":
+	case "dev":
 		return "" // TODO: Fill in once hosted
 	case "prod":
 		return "" // TODO: Fill in once hosted
