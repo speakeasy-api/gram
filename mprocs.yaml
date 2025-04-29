@@ -1,6 +1,6 @@
 procs:
   server:
-    cmd: ["mise", "watch", "start:server"]
+    cmd: ["mise", "run", "start:server"]
     stop: SIGTERM
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]
