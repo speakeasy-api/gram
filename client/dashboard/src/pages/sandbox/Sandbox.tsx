@@ -24,6 +24,7 @@ import { ToolsetView } from "../toolsets/Toolset";
 import { OnboardingContent } from "../onboarding/Onboarding";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Deployment } from "@gram/client/models/components";
+import { getServerURL } from "@/lib/utils";
 
 type ChatConfig = React.RefObject<{
   toolsetSlug: string | null;
@@ -272,7 +273,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
 
   const openai = createOpenAI({
     apiKey: "this is required",
-    baseURL: "http://localhost:8080/",
+    baseURL: getServerURL(),
     headers: {
       "Gram-Session": session.session,
     },
@@ -325,7 +326,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
       console.log("Received new tool call:", toolCall);
 
       const response = await fetch(
-        `http://localhost:8080/rpc/instances.invoke/tool?tool_id=${tool.id}&environment_slug=${configRef.current.environmentSlug}`,
+        `http://${getServerURL()}/rpc/instances.invoke/tool?tool_id=${tool.id}&environment_slug=${configRef.current.environmentSlug}`,
         {
           method: "POST",
           headers: {

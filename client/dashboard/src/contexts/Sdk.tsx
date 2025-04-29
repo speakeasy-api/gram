@@ -1,3 +1,4 @@
+import { getServerURL } from "@/lib/utils";
 import { Gram } from "@gram/client";
 import { HTTPClient } from "@gram/client/lib/http.js";
 import { GramProvider } from "@gram/client/react-query/index.js";
@@ -24,7 +25,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   });
 
   const gram = new Gram({
-    serverURL: "http://localhost:8080",
+    serverURL: getServerURL(),
     httpClient,
   });
 

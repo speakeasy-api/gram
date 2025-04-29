@@ -2,6 +2,7 @@
 
 import { GramLogo } from "@/components/gram-logo";
 import { Button } from "@/components/ui/button";
+import { getServerURL } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 
 export function LoginSection() {
@@ -9,7 +10,7 @@ export function LoginSection() {
   const signinError = searchParams.get("signin_error");
 
   const handleLogin = async () => {
-    window.location.href = "http://localhost:8080/rpc/auth.login";
+    window.location.href = `http://${getServerURL()}/rpc/auth.login`;
   };
 
   return (

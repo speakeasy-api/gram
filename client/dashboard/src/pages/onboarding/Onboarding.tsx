@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useLatestDeployment, useListTools } from "@gram/client/react-query/index.js";
 import { Input } from "@/components/ui/input";
 import { Stepper, StepProps } from "@/components/stepper";
+import { getServerURL } from "@/lib/utils";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -64,7 +65,7 @@ export function OnboardingContent({
       setFile(file);
 
       // Need to use fetch directly because the SDK doesn't support file uploads
-      fetch(`http://localhost:8080/rpc/assets.uploadOpenAPIv3`, {
+      fetch(`http://${getServerURL()}/rpc/assets.uploadOpenAPIv3`, {
         method: "POST",
         headers: {
           "content-type": file.type,
