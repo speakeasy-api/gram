@@ -1,0 +1,13 @@
+server:
+  - 'server/**'
+
+client:
+  - 'client/**'
+  - 'package.json'
+  - 'tsconfig.json'
+
+python_sdk:
+  - 'sdks/python/**'
+
+typescript_sdk:
+  - 'sdks/typescript/**'
