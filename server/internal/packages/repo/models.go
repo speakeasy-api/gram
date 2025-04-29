@@ -9,6 +9,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Package struct {
+	ID             uuid.UUID
+	Name           string
+	Title          pgtype.Text
+	Summary        pgtype.Text
+	Keywords       []string
+	OrganizationID string
+	ProjectID      uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type PackageVersion struct {
 	ID           uuid.UUID
 	PackageID    uuid.UUID

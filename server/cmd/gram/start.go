@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/packages"
 	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
@@ -300,6 +301,7 @@ func newStartCommand() *cli.Command {
 				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("environment")),
 			}))
 			projects.Attach(mux, projects.NewService(logger.With(slog.String("component", "projects")), db, sessionManager))
+			packages.Attach(mux, packages.NewService(logger.With(slog.String("component", "packages")), db, sessionManager))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))

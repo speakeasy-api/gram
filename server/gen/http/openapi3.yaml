@@ -761,6 +761,131 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
+    /rpc/packages.create:
+        post:
+            description: Create a new package for a project.
+            operationId: createPackage
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePackageForm2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreatePackageResult'
+                    description: OK response.
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createPackage packages
+            tags:
+                - packages
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreatePackage
+    /rpc/packages.listVersions:
+        get:
+            description: List published versions of a package.
+            operationId: listVersions
+            parameters:
+                - allowEmptyValue: true
+                  description: The name of the package
+                  in: query
+                  name: name
+                  required: true
+                  schema:
+                    description: The name of the package
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListVersionsResult'
+                    description: OK response.
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listVersions packages
+            tags:
+                - packages
+            x-speakeasy-name-override: listVersions
+            x-speakeasy-react-hook:
+                name: ListVersions
+    /rpc/packages.publish:
+        post:
+            description: Publish a new version of a package.
+            operationId: publish
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PublishPackageForm2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PublishPackageResult'
+                    description: OK response.
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: publish packages
+            tags:
+                - packages
+            x-speakeasy-name-override: publish
+            x-speakeasy-react-hook:
+                name: PublishPackage
     /rpc/projects.create:
         post:
             description: Create a new project.
@@ -1299,6 +1424,65 @@ components:
             required:
                 - name
                 - project_id
+        CreatePackageForm:
+            type: object
+            properties:
+                keywords:
+                    type: array
+                    items:
+                        type: string
+                    description: The keywords of the package
+                    maxItems: 5
+                name:
+                    type: string
+                    description: The name of the package
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 100
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+                summary:
+                    type: string
+                    description: The summary of the package
+                    maxLength: 80
+                title:
+                    type: string
+                    description: The title of the package
+                    maxLength: 100
+            required:
+                - name
+        CreatePackageForm2:
+            type: object
+            properties:
+                keywords:
+                    type: array
+                    items:
+                        type: string
+                    description: The keywords of the package
+                    maxItems: 5
+                name:
+                    type: string
+                    description: The name of the package
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 100
+                summary:
+                    type: string
+                    description: The summary of the package
+                    maxLength: 80
+                title:
+                    type: string
+                    description: The title of the package
+                    maxLength: 100
+            required:
+                - name
+        CreatePackageResult:
+            type: object
+            properties:
+                package:
+                    $ref: '#/components/schemas/Package'
+            required:
+                - package
         CreateProjectForm:
             type: object
             properties:
@@ -1930,6 +2114,30 @@ components:
                     description: The list of toolsets
             required:
                 - toolsets
+        ListVersionsForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The name of the package
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - name
+        ListVersionsResult:
+            type: object
+            properties:
+                package:
+                    $ref: '#/components/schemas/Package'
+                versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PackageVersion'
+            required:
+                - package
+                - versions
         OpenAPIv3DeploymentAsset:
             type: object
             properties:
@@ -1973,6 +2181,83 @@ components:
                 - slug
                 - account_type
                 - projects
+        Package:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the package
+                    format: date-time
+                deleted_at:
+                    type: string
+                    description: The deletion date of the package
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the package
+                keywords:
+                    type: array
+                    items:
+                        type: string
+                    description: The keywords of the package
+                latest_version:
+                    type: string
+                    description: The latest version of the package
+                name:
+                    type: string
+                    description: The name of the package
+                organization_id:
+                    type: string
+                    description: The ID of the organization that owns the package
+                project_id:
+                    type: string
+                    description: The ID of the project that owns the package
+                summary:
+                    type: string
+                    description: The summary of the package
+                title:
+                    type: string
+                    description: The title of the package
+                updated_at:
+                    type: string
+                    description: The last update date of the package
+                    format: date-time
+            required:
+                - id
+                - name
+                - project_id
+                - organization_id
+                - created_at
+                - updated_at
+        PackageVersion:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the package version
+                    format: date-time
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment that the version belongs to
+                id:
+                    type: string
+                    description: The ID of the package version
+                package_id:
+                    type: string
+                    description: The ID of the package that the version belongs to
+                semver:
+                    type: string
+                    description: The semantic version value
+                visibility:
+                    type: string
+                    description: The visibility of the package version
+            required:
+                - id
+                - package_id
+                - deployment_id
+                - visibility
+                - semver
+                - created_at
         Project:
             type: object
             properties:
@@ -2023,6 +2308,66 @@ components:
                 - id
                 - name
                 - slug
+        PublishPackageForm:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    description: The deployment ID to associate with the package version
+                name:
+                    type: string
+                    description: The name of the package
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+                version:
+                    type: string
+                    description: The new semantic version of the package to publish
+                visibility:
+                    type: string
+                    description: The visibility of the package version
+                    enum:
+                        - public
+                        - private
+            required:
+                - name
+                - version
+                - deployment_id
+                - visibility
+        PublishPackageForm2:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    description: The deployment ID to associate with the package version
+                name:
+                    type: string
+                    description: The name of the package
+                version:
+                    type: string
+                    description: The new semantic version of the package to publish
+                visibility:
+                    type: string
+                    description: The visibility of the package version
+                    enum:
+                        - public
+                        - private
+            required:
+                - name
+                - version
+                - deployment_id
+                - visibility
+        PublishPackageResult:
+            type: object
+            properties:
+                package:
+                    $ref: '#/components/schemas/Package'
+                version:
+                    $ref: '#/components/schemas/PackageVersion'
+            required:
+                - package
+                - version
         ToolsetDetails:
             type: object
             properties:
@@ -2225,6 +2570,8 @@ tags:
       description: Managing toolset environments.
     - name: keys
       description: Managing system api keys.
+    - name: packages
+      description: Manages packages in Gram.
     - name: projects
       description: Manages projects in Gram.
     - name: tools

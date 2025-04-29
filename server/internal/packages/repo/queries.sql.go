@@ -12,6 +12,188 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createPackage = `-- name: CreatePackage :one
+INSERT INTO packages (
+    name
+  , title
+  , summary
+  , keywords
+  , organization_id
+  , project_id
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+`
+
+type CreatePackageParams struct {
+	Name           string
+	Title          pgtype.Text
+	Summary        pgtype.Text
+	Keywords       []string
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) CreatePackage(ctx context.Context, arg CreatePackageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createPackage,
+		arg.Name,
+		arg.Title,
+		arg.Summary,
+		arg.Keywords,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createPackageVersion = `-- name: CreatePackageVersion :one
+INSERT INTO package_versions (
+    package_id
+  , deployment_id
+  , major
+  , minor
+  , patch
+  , prerelease
+  , build
+  , visibility
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, package_id, deployment_id, visibility, major, minor, patch, prerelease, build, created_at, updated_at, deleted_at, deleted
+`
+
+type CreatePackageVersionParams struct {
+	PackageID    uuid.UUID
+	DeploymentID uuid.UUID
+	Major        int16
+	Minor        int16
+	Patch        int16
+	Prerelease   pgtype.Text
+	Build        pgtype.Text
+	Visibility   string
+}
+
+func (q *Queries) CreatePackageVersion(ctx context.Context, arg CreatePackageVersionParams) (PackageVersion, error) {
+	row := q.db.QueryRow(ctx, createPackageVersion,
+		arg.PackageID,
+		arg.DeploymentID,
+		arg.Major,
+		arg.Minor,
+		arg.Patch,
+		arg.Prerelease,
+		arg.Build,
+		arg.Visibility,
+	)
+	var i PackageVersion
+	err := row.Scan(
+		&i.ID,
+		&i.PackageID,
+		&i.DeploymentID,
+		&i.Visibility,
+		&i.Major,
+		&i.Minor,
+		&i.Patch,
+		&i.Prerelease,
+		&i.Build,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPackageWithLatestVersion = `-- name: GetPackageWithLatestVersion :one
+WITH package_id_lookup as (
+  SELECT id
+  FROM packages
+  WHERE (
+      ($2::UUID IS NOT NULL AND packages.id = $2::UUID)
+      OR ($3::TEXT IS NOT NULL AND packages.name = $3::TEXT)
+    )
+    AND packages.project_id = $1
+  LIMIT 1
+),
+latest_version as (
+  SELECT
+    id,
+    package_id,
+    deployment_id,
+    major,
+    minor,
+    patch,
+    prerelease,
+    build,
+    created_at
+  FROM package_versions
+  WHERE package_versions.package_id = (SELECT id FROM package_id_lookup)
+    AND package_versions.visibility = 'public'
+    AND package_versions.prerelease IS NULL
+    AND package_versions.build IS NULL
+  ORDER BY major DESC, minor DESC, patch DESC
+  LIMIT 1
+)
+SELECT
+    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
+  , latest_version.id as version_id
+  , latest_version.deployment_id as version_deployment_id
+  , latest_version.major as version_major
+  , latest_version.minor as version_minor
+  , latest_version.patch as version_patch
+  , latest_version.prerelease as version_prerelease
+  , latest_version.build as version_build
+  , latest_version.created_at as version_created_at
+FROM packages
+LEFT JOIN latest_version ON packages.id = latest_version.package_id
+WHERE packages.id = (SELECT id FROM package_id_lookup) AND packages.project_id = $1
+`
+
+type GetPackageWithLatestVersionParams struct {
+	ProjectID   uuid.UUID
+	PackageID   uuid.NullUUID
+	PackageName pgtype.Text
+}
+
+type GetPackageWithLatestVersionRow struct {
+	Package             Package
+	VersionID           uuid.NullUUID
+	VersionDeploymentID uuid.NullUUID
+	VersionMajor        pgtype.Int2
+	VersionMinor        pgtype.Int2
+	VersionPatch        pgtype.Int2
+	VersionPrerelease   pgtype.Text
+	VersionBuild        pgtype.Text
+	VersionCreatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) GetPackageWithLatestVersion(ctx context.Context, arg GetPackageWithLatestVersionParams) (GetPackageWithLatestVersionRow, error) {
+	row := q.db.QueryRow(ctx, getPackageWithLatestVersion, arg.ProjectID, arg.PackageID, arg.PackageName)
+	var i GetPackageWithLatestVersionRow
+	err := row.Scan(
+		&i.Package.ID,
+		&i.Package.Name,
+		&i.Package.Title,
+		&i.Package.Summary,
+		&i.Package.Keywords,
+		&i.Package.OrganizationID,
+		&i.Package.ProjectID,
+		&i.Package.CreatedAt,
+		&i.Package.UpdatedAt,
+		&i.Package.DeletedAt,
+		&i.Package.Deleted,
+		&i.VersionID,
+		&i.VersionDeploymentID,
+		&i.VersionMajor,
+		&i.VersionMinor,
+		&i.VersionPatch,
+		&i.VersionPrerelease,
+		&i.VersionBuild,
+		&i.VersionCreatedAt,
+	)
+	return i, err
+}
+
 const listPackagesByVersionIDs = `-- name: ListPackagesByVersionIDs :many
 SELECT packages.id as package_id, packages.name as package_name, package_versions.id, package_versions.package_id, package_versions.deployment_id, package_versions.visibility, package_versions.major, package_versions.minor, package_versions.patch, package_versions.prerelease, package_versions.build, package_versions.created_at, package_versions.updated_at, package_versions.deleted_at, package_versions.deleted
 FROM package_versions
@@ -50,6 +232,93 @@ func (q *Queries) ListPackagesByVersionIDs(ctx context.Context, ids []uuid.UUID)
 			&i.PackageVersion.UpdatedAt,
 			&i.PackageVersion.DeletedAt,
 			&i.PackageVersion.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVersions = `-- name: ListVersions :many
+WITH package_id_lookup as (
+  SELECT id
+  FROM packages
+  WHERE (
+      ($2::UUID IS NOT NULL AND packages.id = $2::UUID)
+      OR ($3::TEXT IS NOT NULL AND packages.name = $3::TEXT)
+    )
+    AND packages.project_id = $1
+  LIMIT 1
+)
+SELECT 
+    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
+  , pv.id as version_id
+  , pv.deployment_id as version_deployment_id
+  , pv.major as version_major
+  , pv.minor as version_minor
+  , pv.patch as version_patch
+  , pv.prerelease as version_prerelease
+  , pv.build as version_build
+  , pv.visibility as version_visibility
+  , pv.created_at as version_created_at
+FROM package_versions as pv
+INNER JOIN packages ON pv.package_id = packages.id
+WHERE packages.id = (SELECT id FROM package_id_lookup) AND packages.project_id = $1
+`
+
+type ListVersionsParams struct {
+	ProjectID   uuid.UUID
+	PackageID   uuid.NullUUID
+	PackageName pgtype.Text
+}
+
+type ListVersionsRow struct {
+	Package             Package
+	VersionID           uuid.UUID
+	VersionDeploymentID uuid.UUID
+	VersionMajor        int16
+	VersionMinor        int16
+	VersionPatch        int16
+	VersionPrerelease   pgtype.Text
+	VersionBuild        pgtype.Text
+	VersionVisibility   string
+	VersionCreatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListVersions(ctx context.Context, arg ListVersionsParams) ([]ListVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listVersions, arg.ProjectID, arg.PackageID, arg.PackageName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVersionsRow
+	for rows.Next() {
+		var i ListVersionsRow
+		if err := rows.Scan(
+			&i.Package.ID,
+			&i.Package.Name,
+			&i.Package.Title,
+			&i.Package.Summary,
+			&i.Package.Keywords,
+			&i.Package.OrganizationID,
+			&i.Package.ProjectID,
+			&i.Package.CreatedAt,
+			&i.Package.UpdatedAt,
+			&i.Package.DeletedAt,
+			&i.Package.Deleted,
+			&i.VersionID,
+			&i.VersionDeploymentID,
+			&i.VersionMajor,
+			&i.VersionMinor,
+			&i.VersionPatch,
+			&i.VersionPrerelease,
+			&i.VersionBuild,
+			&i.VersionVisibility,
+			&i.VersionCreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -121,4 +390,24 @@ func (q *Queries) PeekPackageByNameAndVersion(ctx context.Context, arg PeekPacka
 	var i PeekPackageByNameAndVersionRow
 	err := row.Scan(&i.PackageID, &i.PackageVersionID)
 	return i, err
+}
+
+const pokePackageByName = `-- name: PokePackageByName :one
+SELECT id 
+FROM packages
+WHERE name = $1
+  AND project_id = $2
+LIMIT 1
+`
+
+type PokePackageByNameParams struct {
+	Name      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) PokePackageByName(ctx context.Context, arg PokePackageByNameParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, pokePackageByName, arg.Name, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

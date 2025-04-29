@@ -52,6 +52,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		auth:     auth.New(logger, db, sessions),
 	}
 }
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.TraceMethods(service.tracer))

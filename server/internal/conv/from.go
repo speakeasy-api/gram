@@ -63,6 +63,14 @@ func PtrToPGText(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: true}
 }
 
+func PtrToPGTextEmpty(t *string) pgtype.Text {
+	if t == nil {
+		return pgtype.Text{Valid: false, String: ""}
+	}
+
+	return pgtype.Text{String: *t, Valid: *t != ""}
+}
+
 func FromBytes(b []byte) *string {
 	if len(b) == 0 {
 		return nil
