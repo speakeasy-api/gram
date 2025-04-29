@@ -65,7 +65,7 @@ export function OnboardingContent({
       setFile(file);
 
       // Need to use fetch directly because the SDK doesn't support file uploads
-      fetch(`http://${getServerURL()}/rpc/assets.uploadOpenAPIv3`, {
+      fetch(`${getServerURL()}/rpc/assets.uploadOpenAPIv3`, {
         method: "POST",
         headers: {
           "content-type": file.type,

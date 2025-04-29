@@ -10,7 +10,7 @@ export function LoginSection() {
   const signinError = searchParams.get("signin_error");
 
   const handleLogin = async () => {
-    window.location.href = `http://${getServerURL()}/rpc/auth.login`;
+    window.location.href = `${getServerURL()}/rpc/auth.login`;
   };
 
   return (
