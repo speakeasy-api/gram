@@ -63,7 +63,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
-          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-server
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram
           context: ./server
           file: server/Dockerfile
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
