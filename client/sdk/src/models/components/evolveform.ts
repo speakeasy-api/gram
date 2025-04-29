@@ -26,6 +26,14 @@ export type EvolveForm = {
    */
   deploymentId?: string | undefined;
   /**
+   * The OpenAPI 3.x documents to exclude from the new deployment when cloning a previous deployment.
+   */
+  excludeOpenapiv3Assets?: Array<string> | undefined;
+  /**
+   * The packages to exclude from the new deployment when cloning a previous deployment.
+   */
+  excludePackages?: Array<string> | undefined;
+  /**
    * The OpenAPI 3.x documents to upsert in the new deployment.
    */
   upsertOpenapiv3Assets?: Array<AddOpenAPIv3DeploymentAssetForm> | undefined;
@@ -42,6 +50,8 @@ export const EvolveForm$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   deployment_id: z.string().optional(),
+  exclude_openapiv3_assets: z.array(z.string()).optional(),
+  exclude_packages: z.array(z.string()).optional(),
   upsert_openapiv3_assets: z.array(
     AddOpenAPIv3DeploymentAssetForm$inboundSchema,
   ).optional(),
@@ -49,6 +59,8 @@ export const EvolveForm$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "deployment_id": "deploymentId",
+    "exclude_openapiv3_assets": "excludeOpenapiv3Assets",
+    "exclude_packages": "excludePackages",
     "upsert_openapiv3_assets": "upsertOpenapiv3Assets",
     "upsert_packages": "upsertPackages",
   });
@@ -57,6 +69,8 @@ export const EvolveForm$inboundSchema: z.ZodType<
 /** @internal */
 export type EvolveForm$Outbound = {
   deployment_id?: string | undefined;
+  exclude_openapiv3_assets?: Array<string> | undefined;
+  exclude_packages?: Array<string> | undefined;
   upsert_openapiv3_assets?:
     | Array<AddOpenAPIv3DeploymentAssetForm$Outbound>
     | undefined;
@@ -70,12 +84,16 @@ export const EvolveForm$outboundSchema: z.ZodType<
   EvolveForm
 > = z.object({
   deploymentId: z.string().optional(),
+  excludeOpenapiv3Assets: z.array(z.string()).optional(),
+  excludePackages: z.array(z.string()).optional(),
   upsertOpenapiv3Assets: z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)
     .optional(),
   upsertPackages: z.array(AddPackageForm$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     deploymentId: "deployment_id",
+    excludeOpenapiv3Assets: "exclude_openapiv3_assets",
+    excludePackages: "exclude_packages",
     upsertOpenapiv3Assets: "upsert_openapiv3_assets",
     upsertPackages: "upsert_packages",
   });

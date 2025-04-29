@@ -66,16 +66,18 @@ SELECT
   , current.slug
 FROM deployments_openapiv3_assets as current
 WHERE current.deployment_id = $2
+  AND current.id != ANY ($3)
 RETURNING id
 `
 
 type CloneDeploymentOpenAPIv3AssetsParams struct {
 	CloneDeploymentID    uuid.UUID
 	OriginalDeploymentID uuid.UUID
+	ExcludedIds          []uuid.UUID
 }
 
 func (q *Queries) CloneDeploymentOpenAPIv3Assets(ctx context.Context, arg CloneDeploymentOpenAPIv3AssetsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, cloneDeploymentOpenAPIv3Assets, arg.CloneDeploymentID, arg.OriginalDeploymentID)
+	rows, err := q.db.Query(ctx, cloneDeploymentOpenAPIv3Assets, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedIds)
 	if err != nil {
 		return nil, err
 	}
@@ -106,12 +108,14 @@ SELECT
   , current.version_id
 FROM deployments_packages as current
 WHERE current.deployment_id = $2
+  AND current.id != ANY ($3)
 RETURNING id, package_id, version_id
 `
 
 type CloneDeploymentPackagesParams struct {
 	CloneDeploymentID    uuid.UUID
 	OriginalDeploymentID uuid.UUID
+	ExcludedIds          []uuid.UUID
 }
 
 type CloneDeploymentPackagesRow struct {
@@ -121,7 +125,7 @@ type CloneDeploymentPackagesRow struct {
 }
 
 func (q *Queries) CloneDeploymentPackages(ctx context.Context, arg CloneDeploymentPackagesParams) ([]CloneDeploymentPackagesRow, error) {
-	rows, err := q.db.Query(ctx, cloneDeploymentPackages, arg.CloneDeploymentID, arg.OriginalDeploymentID)
+	rows, err := q.db.Query(ctx, cloneDeploymentPackages, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedIds)
 	if err != nil {
 		return nil, err
 	}

@@ -43,6 +43,12 @@ type EvolveRequestBody struct {
 	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"upsert_openapiv3_assets,omitempty" json:"upsert_openapiv3_assets,omitempty" xml:"upsert_openapiv3_assets,omitempty"`
 	// The packages to upsert in the new deployment.
 	UpsertPackages []*AddPackageFormRequestBody `form:"upsert_packages,omitempty" json:"upsert_packages,omitempty" xml:"upsert_packages,omitempty"`
+	// The OpenAPI 3.x documents to exclude from the new deployment when cloning a
+	// previous deployment.
+	ExcludeOpenapiv3Assets []string `form:"exclude_openapiv3_assets,omitempty" json:"exclude_openapiv3_assets,omitempty" xml:"exclude_openapiv3_assets,omitempty"`
+	// The packages to exclude from the new deployment when cloning a previous
+	// deployment.
+	ExcludePackages []string `form:"exclude_packages,omitempty" json:"exclude_packages,omitempty" xml:"exclude_packages,omitempty"`
 }
 
 // GetDeploymentResponseBody is the type of the "deployments" service
@@ -253,6 +259,18 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 		body.UpsertPackages = make([]*AddPackageFormRequestBody, len(p.UpsertPackages))
 		for i, val := range p.UpsertPackages {
 			body.UpsertPackages[i] = marshalDeploymentsAddPackageFormToAddPackageFormRequestBody(val)
+		}
+	}
+	if p.ExcludeOpenapiv3Assets != nil {
+		body.ExcludeOpenapiv3Assets = make([]string, len(p.ExcludeOpenapiv3Assets))
+		for i, val := range p.ExcludeOpenapiv3Assets {
+			body.ExcludeOpenapiv3Assets[i] = val
+		}
+	}
+	if p.ExcludePackages != nil {
+		body.ExcludePackages = make([]string, len(p.ExcludePackages))
+		for i, val := range p.ExcludePackages {
+			body.ExcludePackages[i] = val
 		}
 	}
 	return body

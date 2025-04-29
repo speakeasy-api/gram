@@ -354,6 +354,8 @@ var EvolveForm = Type("EvolveForm", func() {
 	Attribute("deployment_id", String, "The ID of the deployment to evolve. If omitted, the latest deployment will be used.")
 	Attribute("upsert_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to upsert in the new deployment.")
 	Attribute("upsert_packages", ArrayOf(AddPackageForm), "The packages to upsert in the new deployment.")
+	Attribute("exclude_openapiv3_assets", ArrayOf(String), "The OpenAPI 3.x documents to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("exclude_packages", ArrayOf(String), "The packages to exclude from the new deployment when cloning a previous deployment.")
 })
 
 var EvolveResult = Type("EvolveResult", func() {

@@ -168,6 +168,12 @@ type EvolvePayload struct {
 	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
 	// The packages to upsert in the new deployment.
 	UpsertPackages []*AddPackageForm
+	// The OpenAPI 3.x documents to exclude from the new deployment when cloning a
+	// previous deployment.
+	ExcludeOpenapiv3Assets []string
+	// The packages to exclude from the new deployment when cloning a previous
+	// deployment.
+	ExcludePackages []string
 }
 
 // EvolveResult is the result type of the deployments service evolve method.

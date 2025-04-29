@@ -119,7 +119,9 @@ func cloneDeployment(
 	projectID ProjectID,
 	srcDeploymentID DeploymentID,
 	openAPIv3ToUpsert []upsertOpenAPIv3,
-	newPackages []upsertPackage,
+	packagesToUpsert []upsertPackage,
+	openAPIv3ToExclude []uuid.UUID,
+	packagesToExclude []uuid.UUID,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "cloneDeployment")
 	defer span.End()
@@ -142,6 +144,7 @@ func cloneDeployment(
 	_, err = depRepo.CloneDeploymentPackages(ctx, repo.CloneDeploymentPackagesParams{
 		OriginalDeploymentID: srcDepID,
 		CloneDeploymentID:    newID,
+		ExcludedIds:          packagesToExclude,
 	})
 	if err != nil {
 		return uuid.Nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
@@ -150,12 +153,13 @@ func cloneDeployment(
 	_, err = depRepo.CloneDeploymentOpenAPIv3Assets(ctx, repo.CloneDeploymentOpenAPIv3AssetsParams{
 		OriginalDeploymentID: srcDepID,
 		CloneDeploymentID:    newID,
+		ExcludedIds:          openAPIv3ToExclude,
 	})
 	if err != nil {
 		return uuid.Nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
 	}
 
-	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, newPackages)
+	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
 	if err != nil {
 		return uuid.Nil, err
 	}

@@ -135,7 +135,7 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveSessionTo
 	{
 		err = json.Unmarshal([]byte(deploymentsEvolveBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Dolores sit dignissimos aut.\",\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Ipsum debitis voluptatem.\",\n            \"name\": \"Doloribus eum ut cumque.\",\n            \"slug\": \"uqg\"\n         },\n         {\n            \"asset_id\": \"Ipsum debitis voluptatem.\",\n            \"name\": \"Doloribus eum ut cumque.\",\n            \"slug\": \"uqg\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Iste corrupti ea est vel magnam.\",\n            \"version\": \"Hic eius voluptatem aliquam dolorem sit.\"\n         },\n         {\n            \"name\": \"Iste corrupti ea est vel magnam.\",\n            \"version\": \"Hic eius voluptatem aliquam dolorem sit.\"\n         },\n         {\n            \"name\": \"Iste corrupti ea est vel magnam.\",\n            \"version\": \"Hic eius voluptatem aliquam dolorem sit.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Dolores sit dignissimos aut.\",\n      \"exclude_openapiv3_assets\": [\n         \"Qui debitis rerum accusamus.\",\n         \"Est est.\"\n      ],\n      \"exclude_packages\": [\n         \"Vel mollitia autem quasi porro accusantium.\",\n         \"Accusamus est quis similique culpa dolores.\",\n         \"Laudantium dolores sit voluptas in.\"\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Ipsum debitis voluptatem.\",\n            \"name\": \"Doloribus eum ut cumque.\",\n            \"slug\": \"uqg\"\n         },\n         {\n            \"asset_id\": \"Ipsum debitis voluptatem.\",\n            \"name\": \"Doloribus eum ut cumque.\",\n            \"slug\": \"uqg\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Iste corrupti ea est vel magnam.\",\n            \"version\": \"Hic eius voluptatem aliquam dolorem sit.\"\n         },\n         {\n            \"name\": \"Iste corrupti ea est vel magnam.\",\n            \"version\": \"Hic eius voluptatem aliquam dolorem sit.\"\n         },\n         {\n            \"name\": \"Iste corrupti ea est vel magnam.\",\n            \"version\": \"Hic eius voluptatem aliquam dolorem sit.\"\n         }\n      ]\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -163,6 +163,18 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveSessionTo
 		v.UpsertPackages = make([]*deployments.AddPackageForm, len(body.UpsertPackages))
 		for i, val := range body.UpsertPackages {
 			v.UpsertPackages[i] = marshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(val)
+		}
+	}
+	if body.ExcludeOpenapiv3Assets != nil {
+		v.ExcludeOpenapiv3Assets = make([]string, len(body.ExcludeOpenapiv3Assets))
+		for i, val := range body.ExcludeOpenapiv3Assets {
+			v.ExcludeOpenapiv3Assets[i] = val
+		}
+	}
+	if body.ExcludePackages != nil {
+		v.ExcludePackages = make([]string, len(body.ExcludePackages))
+		for i, val := range body.ExcludePackages {
+			v.ExcludePackages[i] = val
 		}
 	}
 	v.SessionToken = sessionToken

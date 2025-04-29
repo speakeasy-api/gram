@@ -356,6 +356,24 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		packagesToUpsert = append(packagesToUpsert, upsertPackage(pkg))
 	}
 
+	excludeOpenapiv3Assets := make([]uuid.UUID, 0, len(form.ExcludeOpenapiv3Assets))
+	for _, assetID := range form.ExcludeOpenapiv3Assets {
+		id, err := uuid.Parse(assetID)
+		if err != nil {
+			return nil, oops.E(err, "error parsing deployment asset id to exclude", "failed to parse deployment asset id").Log(ctx, s.logger)
+		}
+		excludeOpenapiv3Assets = append(excludeOpenapiv3Assets, id)
+	}
+
+	excludePackages := make([]uuid.UUID, 0, len(form.ExcludePackages))
+	for _, pkgID := range form.ExcludePackages {
+		id, err := uuid.Parse(pkgID)
+		if err != nil {
+			return nil, oops.E(err, "error parsing deployment package id to exclude", "failed to parse deployment package id").Log(ctx, s.logger)
+		}
+		excludePackages = append(excludePackages, id)
+	}
+
 	var cloneID uuid.UUID
 
 	latestDeploymentID, err := tx.GetLatestDeploymentID(ctx, projectID)
@@ -400,6 +418,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			ProjectID(projectID), DeploymentID(latestDeploymentID),
 			assetsToUpsert,
 			packagesToUpsert,
+			excludeOpenapiv3Assets,
+			excludePackages,
 		)
 		if err != nil {
 			return nil, oops.E(err, "error cloning deployment", "failed to clone deployment").Log(ctx, logger)

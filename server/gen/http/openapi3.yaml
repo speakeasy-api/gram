@@ -1582,6 +1582,16 @@ components:
                 deployment_id:
                     type: string
                     description: The ID of the deployment to evolve. If omitted, the latest deployment will be used.
+                exclude_openapiv3_assets:
+                    type: array
+                    items:
+                        type: string
+                    description: The OpenAPI 3.x documents to exclude from the new deployment when cloning a previous deployment.
+                exclude_packages:
+                    type: array
+                    items:
+                        type: string
+                    description: The packages to exclude from the new deployment when cloning a previous deployment.
                 upsert_openapiv3_assets:
                     type: array
                     items:
