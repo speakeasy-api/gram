@@ -8,7 +8,7 @@ import { useContext } from "react";
 import {
   useListEnvironmentsSuspense,
   useListToolsetsSuspense,
-  useSessionInfoSuspense,
+  useSessionInfo,
 } from "@gram/client/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import { GramLogo } from "@/components/gram-logo";
@@ -193,7 +193,8 @@ const PrefetchedQueries = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
-  const { data, error, refetch } = useSessionInfoSuspense(
+  // you cannot use useSessionInfoSuspense here because it will not catch the error correctly
+  const { data, isLoading, error, refetch } = useSessionInfo(
     { sessionHeaderGramSession: "" },
     undefined,
     {
@@ -211,9 +212,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return newSession.data?.result ?? emptySession;
   };
 
-  const sessionId = data.headers["gram-session"]?.[0];
+  const sessionId = data?.headers["gram-session"]?.[0];
 
-  if (error || !sessionId || !data.result.organizations) {
+  // you need something like this so you don't redirect with empty session to soon
+  if (isLoading) {
+    return <FullScreenLoader />;
+  }
+
+  if (error || !sessionId || !data.result?.organizations) {
     return (
       <SessionContext.Provider value={emptySession}>
         {children}
