@@ -1,4 +1,5 @@
 import { GramAPICore } from "./core.js";
+import { getServerUrlByKey } from "./environments.js";
 import { instancesGetBySlug } from "./funcs/instancesGetBySlug.js";
 import { isBrowserLike } from "./lib/browsers.js";
 import { SDK_METADATA } from "./lib/config.js";
@@ -14,13 +15,15 @@ export type GramInstanceRequest = {
 
 export class LangchainAdapter {
   readonly #apiKey: string;
+  readonly #serverURL: string;
   readonly #cache: Map<string, StructuredToolInterface[]> = new Map();
   readonly #core: GramAPICore;
 
   constructor(apiKey: string) {
     this.#apiKey = apiKey;
+    this.#serverURL = getServerUrlByKey(apiKey);
     this.#core = new GramAPICore({
-      serverURL: "http://localhost:8080",
+      serverURL: this.#serverURL,
     });
   }
 
@@ -83,7 +86,7 @@ export class LangchainAdapter {
           retryConnectionErrors: true,
         } as const;
 
-        const url = new URL("http://localhost:8080/rpc/instances.invoke/tool");
+        const url = new URL(`${this.#serverURL}/rpc/instances.invoke/tool`);
         url.searchParams.set("tool_id", toolData.id);
         if (environment) {
           url.searchParams.set("environment_slug", environment);
@@ -96,7 +99,7 @@ export class LangchainAdapter {
 
         const result = await client._do(request, {
           context: {
-            baseURL: "http://localhost:8080",
+            baseURL: this.#serverURL,
             operationID: "invokeTool",
             oAuth2Scopes: null,
             retryConfig,

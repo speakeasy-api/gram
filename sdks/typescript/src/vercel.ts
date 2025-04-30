@@ -1,4 +1,5 @@
 import { GramAPICore } from "./core.js";
+import { getServerUrlByKey } from "./environments.js";
 import { instancesGetBySlug } from "./funcs/instancesGetBySlug.js";
 import { isBrowserLike } from "./lib/browsers.js";
 import { SDK_METADATA } from "./lib/config.js";
@@ -14,13 +15,15 @@ export type GramInstanceRequest = {
 
 export class VercelAdapter {
   readonly #apiKey: string;
+  readonly #serverURL: string;
   readonly #cache: Map<string, ToolSet> = new Map();
   readonly #core: GramAPICore;
 
   constructor(apiKey: string) {
     this.#apiKey = apiKey;
+    this.#serverURL = getServerUrlByKey(apiKey);
     this.#core = new GramAPICore({
-      serverURL: "http://localhost:8080",
+      serverURL: this.#serverURL,
     });
   }
 
@@ -59,6 +62,7 @@ export class VercelAdapter {
 
     const client = this.#core;
     const apiKey = this.#apiKey;
+    const serverURL = this.#serverURL;
     const instance = await this.#fetchInstance(project, toolset, environment);
 
     const tools: ToolSet = {};
@@ -88,7 +92,7 @@ export class VercelAdapter {
           } as const;
 
           const url = new URL(
-            "http://localhost:8080/rpc/instances.invoke/tool"
+            `${serverURL}/rpc/instances.invoke/tool`
           );
           url.searchParams.set("tool_id", toolData.id);
           if (environment) {
@@ -103,7 +107,7 @@ export class VercelAdapter {
 
           const result = await client._do(request, {
             context: {
-              baseURL: "http://localhost:8080",
+              baseURL: serverURL,
               operationID: "invokeTool",
               oAuth2Scopes: null,
               retryConfig,
