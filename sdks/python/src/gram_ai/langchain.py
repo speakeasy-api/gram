@@ -11,6 +11,7 @@ from langchain_core.tools import (
 )
 
 from gram_ai import VERSION, GramAPI
+from gram_ai.environments import get_server_url_by_key
 from gram_ai.models.getinstanceresult import GetInstanceResult
 from gram_ai.utils.retries import (
     BackoffStrategy,
@@ -31,6 +32,7 @@ class GramLangchainCall:
 
 class GramLangchain:
     api_key: str
+    server_url: str
     _cache: dict[tuple[str, str, Union[str, None]], list[BaseTool]] = {}
 
     def __init__(
@@ -39,7 +41,8 @@ class GramLangchain:
         api_key: str,
     ):
         self.api_key = api_key
-        self.client = GramAPI(server_url="http://localhost:8080")
+        self.server_url = get_server_url_by_key(api_key)
+        self.client = GramAPI(server_url=self.server_url)
 
     async def _do_http_async(self, req: httpx.Request) -> httpx.Response:
         async with httpx.AsyncClient() as client:
@@ -98,7 +101,7 @@ class GramLangchain:
         return result
 
     def _prepare_request(self, tool_call: GramLangchainCall, **kwargs):
-        url = "http://localhost:8080/rpc/instances.invoke/tool"
+        url = f"{self.server_url}/rpc/instances.invoke/tool"
         params = {"tool_id": tool_call.tool_id}
         if tool_call.environment:
             params["environment_slug"] = tool_call.environment

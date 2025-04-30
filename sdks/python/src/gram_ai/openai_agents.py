@@ -7,6 +7,7 @@ import httpx
 from agents import FunctionTool, Tool, RunContextWrapper
 
 from gram_ai import VERSION, GramAPI
+from gram_ai.environments import get_server_url_by_key
 from gram_ai.models.getinstanceresult import GetInstanceResult
 from gram_ai.utils.retries import BackoffStrategy, Retries, RetryConfig, retry_async
 
@@ -21,6 +22,7 @@ class GramOpenAIAgentsCall:
 
 class GramOpenAIAgents:
     api_key: str
+    server_url: str
     _cache: dict[tuple[str, str, Union[str, None]], list[Tool]] = {}
 
     def __init__(
@@ -29,7 +31,8 @@ class GramOpenAIAgents:
         api_key: str,
     ):
         self.api_key = api_key
-        self.client = GramAPI(server_url="http://localhost:8080")
+        self.server_url = get_server_url_by_key(api_key)
+        self.client = GramAPI(server_url=self.server_url)
 
     def _fetch_tools(
         self,
@@ -81,7 +84,7 @@ class GramOpenAIAgents:
     async def _invoke_tool(
         self, tool_call: GramOpenAIAgentsCall, _ctx: RunContextWrapper[Any], data: str
     ) -> str:
-        url = "http://localhost:8080/rpc/instances.invoke/tool"
+        url = f"{self.server_url}/rpc/instances.invoke/tool"
         params = {"tool_id": tool_call.tool_id}
         if tool_call.environment:
             params["environment_slug"] = tool_call.environment
