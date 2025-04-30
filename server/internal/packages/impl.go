@@ -2,7 +2,6 @@ package packages
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -50,6 +49,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -64,14 +64,14 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayload) (res *gen.CreatePackageResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").Log(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -93,21 +93,21 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 		ProjectID:      *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(err, "error creating package", "failed to create package").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating package").Log(ctx, logger)
 	}
 
 	if packageID == uuid.Nil {
-		return nil, oops.E(nil, "error retrieving package id", "nil package id returned from database").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, nil, "error retrieving package id").Log(ctx, logger)
 	}
 
 	nullID := uuid.NullUUID{UUID: packageID, Valid: true}
 	pkg, err := describePackage(ctx, logger, tx, ProjectID(*authCtx.ProjectID), NullablePackageID(nullID), NullablePackageName(nil))
 	if err != nil {
-		return nil, oops.E(err, "error reading package details", "failed to describe package").Log(ctx, logger)
+		return nil, err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(err, "error saving package", "failed to commit database transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving package").Log(ctx, logger)
 	}
 
 	return &gen.CreatePackageResult{Package: pkg}, nil
@@ -116,14 +116,14 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayload) (res *gen.ListVersionsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing package versions").Log(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -135,7 +135,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 
 	pkg, err := describePackage(ctx, logger, tx, ProjectID(*authCtx.ProjectID), NullablePackageID(nilID), NullablePackageName(packageName))
 	if err != nil {
-		return nil, oops.E(err, "error describing package", "failed to describe package").Log(ctx, logger)
+		return nil, err
 	}
 
 	versionRows, err := tx.ListVersions(ctx, repo.ListVersionsParams{
@@ -144,7 +144,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 		ProjectID:   *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(err, "error listing versions", "failed to list versions").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing versions").Log(ctx, logger)
 	}
 
 	versions := make([]*gen.PackageVersion, 0, len(versionRows))
@@ -177,19 +177,19 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *gen.PublishPackageResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
 
 	semver, err := ParseSemver(form.Version)
 	if err != nil {
-		return nil, oops.E(err, "error parsing version", "failed to parse version").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing version").Log(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").Log(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -199,7 +199,7 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 
 	depID, err := uuid.Parse(form.DeploymentID)
 	if err != nil {
-		return nil, oops.E(err, "error parsing deployment id", "failed to parse deployment id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment id").Log(ctx, logger)
 	}
 
 	pkgID, err := tx.PokePackageByName(ctx, repo.PokePackageByNameParams{
@@ -207,11 +207,11 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(err, "error reading package data", "failed to find package by name").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading package data").Log(ctx, logger)
 	}
 
 	if pkgID == uuid.Nil {
-		return nil, oops.E(nil, "package not found", "package not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "package not found").Log(ctx, logger)
 	}
 
 	row, err := tx.CreatePackageVersion(ctx, repo.CreatePackageVersionParams{
@@ -225,17 +225,17 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 		Visibility:   form.Visibility,
 	})
 	if err != nil {
-		return nil, oops.E(err, "error creating package version", "failed to create package version").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating package version").Log(ctx, logger)
 	}
 
 	pid := uuid.NullUUID{UUID: pkgID, Valid: true}
 	pkg, err := describePackage(ctx, logger, tx, ProjectID(*authCtx.ProjectID), NullablePackageID(pid), NullablePackageName(nil))
 	if err != nil {
-		return nil, oops.E(err, "error describing package", "failed to describe package").Log(ctx, logger)
+		return nil, err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(err, "error saving package version", "failed to commit database transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving package version").Log(ctx, logger)
 	}
 
 	return &gen.PublishPackageResult{
@@ -269,7 +269,7 @@ func describePackage(
 		ProjectID:   uuid.UUID(projectID),
 	})
 	if err != nil {
-		return nil, oops.E(err, "error getting package with latest version", "failed to get package with latest version").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting package with latest version").Log(ctx, logger)
 	}
 
 	var deletedAt *string

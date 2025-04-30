@@ -128,6 +128,825 @@ type GetToolsetResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CreateToolsetUnauthorizedResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "unauthorized" error.
+type CreateToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetForbiddenResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "forbidden" error.
+type CreateToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetBadRequestResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "bad_request" error.
+type CreateToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetNotFoundResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "not_found" error.
+type CreateToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetConflictResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "conflict" error.
+type CreateToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "createToolset" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetInvalidResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "invalid" error.
+type CreateToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetInvariantViolationResponseBody is the type of the "toolsets"
+// service "createToolset" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateToolsetUnexpectedResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "unexpected" error.
+type CreateToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsUnauthorizedResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "unauthorized" error.
+type ListToolsetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsForbiddenResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "forbidden" error.
+type ListToolsetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsBadRequestResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "bad_request" error.
+type ListToolsetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsNotFoundResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "not_found" error.
+type ListToolsetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsConflictResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "conflict" error.
+type ListToolsetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "listToolsets" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListToolsetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsInvalidResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "invalid" error.
+type ListToolsetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsInvariantViolationResponseBody is the type of the "toolsets"
+// service "listToolsets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListToolsetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsUnexpectedResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "unexpected" error.
+type ListToolsetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetUnauthorizedResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "unauthorized" error.
+type UpdateToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetForbiddenResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "forbidden" error.
+type UpdateToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetBadRequestResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "bad_request" error.
+type UpdateToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetNotFoundResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "not_found" error.
+type UpdateToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetConflictResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "conflict" error.
+type UpdateToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "updateToolset" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetInvalidResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "invalid" error.
+type UpdateToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetInvariantViolationResponseBody is the type of the "toolsets"
+// service "updateToolset" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateToolsetUnexpectedResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "unexpected" error.
+type UpdateToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetUnauthorizedResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "unauthorized" error.
+type DeleteToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetForbiddenResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "forbidden" error.
+type DeleteToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetBadRequestResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "bad_request" error.
+type DeleteToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetNotFoundResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "not_found" error.
+type DeleteToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetConflictResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "conflict" error.
+type DeleteToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "deleteToolset" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DeleteToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetInvalidResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "invalid" error.
+type DeleteToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetInvariantViolationResponseBody is the type of the "toolsets"
+// service "deleteToolset" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DeleteToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolsetUnexpectedResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "unexpected" error.
+type DeleteToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetUnauthorizedResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "unauthorized" error.
+type GetToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetForbiddenResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "forbidden" error.
+type GetToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetBadRequestResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "bad_request" error.
+type GetToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetNotFoundResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "not_found" error.
+type GetToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetConflictResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "conflict" error.
+type GetToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetUnsupportedMediaResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "unsupported_media" error.
+type GetToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetInvalidResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "invalid" error.
+type GetToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetInvariantViolationResponseBody is the type of the "toolsets"
+// service "getToolset" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetUnexpectedResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "unexpected" error.
+type GetToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // HTTPToolDefinitionResponseBody is used to define fields on response body
 // types.
 type HTTPToolDefinitionResponseBody struct {
@@ -304,6 +1123,636 @@ func NewGetToolsetResponseBody(res *toolsets.ToolsetDetails) *GetToolsetResponse
 		}
 	} else {
 		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
+	}
+	return body
+}
+
+// NewCreateToolsetUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetUnauthorizedResponseBody(res *goa.ServiceError) *CreateToolsetUnauthorizedResponseBody {
+	body := &CreateToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetForbiddenResponseBody builds the HTTP response body from the
+// result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetForbiddenResponseBody(res *goa.ServiceError) *CreateToolsetForbiddenResponseBody {
+	body := &CreateToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetBadRequestResponseBody builds the HTTP response body from
+// the result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetBadRequestResponseBody(res *goa.ServiceError) *CreateToolsetBadRequestResponseBody {
+	body := &CreateToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetNotFoundResponseBody builds the HTTP response body from the
+// result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetNotFoundResponseBody(res *goa.ServiceError) *CreateToolsetNotFoundResponseBody {
+	body := &CreateToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetConflictResponseBody builds the HTTP response body from the
+// result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetConflictResponseBody(res *goa.ServiceError) *CreateToolsetConflictResponseBody {
+	body := &CreateToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateToolsetUnsupportedMediaResponseBody {
+	body := &CreateToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetInvalidResponseBody builds the HTTP response body from the
+// result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetInvalidResponseBody(res *goa.ServiceError) *CreateToolsetInvalidResponseBody {
+	body := &CreateToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetInvariantViolationResponseBody(res *goa.ServiceError) *CreateToolsetInvariantViolationResponseBody {
+	body := &CreateToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateToolsetUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetUnexpectedResponseBody(res *goa.ServiceError) *CreateToolsetUnexpectedResponseBody {
+	body := &CreateToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsUnauthorizedResponseBody(res *goa.ServiceError) *ListToolsetsUnauthorizedResponseBody {
+	body := &ListToolsetsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsForbiddenResponseBody(res *goa.ServiceError) *ListToolsetsForbiddenResponseBody {
+	body := &ListToolsetsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsBadRequestResponseBody(res *goa.ServiceError) *ListToolsetsBadRequestResponseBody {
+	body := &ListToolsetsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsNotFoundResponseBody(res *goa.ServiceError) *ListToolsetsNotFoundResponseBody {
+	body := &ListToolsetsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsConflictResponseBody builds the HTTP response body from the
+// result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsConflictResponseBody(res *goa.ServiceError) *ListToolsetsConflictResponseBody {
+	body := &ListToolsetsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListToolsetsUnsupportedMediaResponseBody {
+	body := &ListToolsetsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsInvalidResponseBody builds the HTTP response body from the
+// result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsInvalidResponseBody(res *goa.ServiceError) *ListToolsetsInvalidResponseBody {
+	body := &ListToolsetsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsInvariantViolationResponseBody(res *goa.ServiceError) *ListToolsetsInvariantViolationResponseBody {
+	body := &ListToolsetsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsUnexpectedResponseBody(res *goa.ServiceError) *ListToolsetsUnexpectedResponseBody {
+	body := &ListToolsetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetUnauthorizedResponseBody(res *goa.ServiceError) *UpdateToolsetUnauthorizedResponseBody {
+	body := &UpdateToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetForbiddenResponseBody builds the HTTP response body from the
+// result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetForbiddenResponseBody(res *goa.ServiceError) *UpdateToolsetForbiddenResponseBody {
+	body := &UpdateToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetBadRequestResponseBody builds the HTTP response body from
+// the result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetBadRequestResponseBody(res *goa.ServiceError) *UpdateToolsetBadRequestResponseBody {
+	body := &UpdateToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetNotFoundResponseBody builds the HTTP response body from the
+// result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetNotFoundResponseBody(res *goa.ServiceError) *UpdateToolsetNotFoundResponseBody {
+	body := &UpdateToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetConflictResponseBody builds the HTTP response body from the
+// result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetConflictResponseBody(res *goa.ServiceError) *UpdateToolsetConflictResponseBody {
+	body := &UpdateToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateToolsetUnsupportedMediaResponseBody {
+	body := &UpdateToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetInvalidResponseBody builds the HTTP response body from the
+// result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetInvalidResponseBody(res *goa.ServiceError) *UpdateToolsetInvalidResponseBody {
+	body := &UpdateToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetInvariantViolationResponseBody(res *goa.ServiceError) *UpdateToolsetInvariantViolationResponseBody {
+	body := &UpdateToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateToolsetUnexpectedResponseBody builds the HTTP response body from
+// the result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetUnexpectedResponseBody(res *goa.ServiceError) *UpdateToolsetUnexpectedResponseBody {
+	body := &UpdateToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetUnauthorizedResponseBody(res *goa.ServiceError) *DeleteToolsetUnauthorizedResponseBody {
+	body := &DeleteToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetForbiddenResponseBody builds the HTTP response body from the
+// result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetForbiddenResponseBody(res *goa.ServiceError) *DeleteToolsetForbiddenResponseBody {
+	body := &DeleteToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetBadRequestResponseBody builds the HTTP response body from
+// the result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetBadRequestResponseBody(res *goa.ServiceError) *DeleteToolsetBadRequestResponseBody {
+	body := &DeleteToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetNotFoundResponseBody builds the HTTP response body from the
+// result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetNotFoundResponseBody(res *goa.ServiceError) *DeleteToolsetNotFoundResponseBody {
+	body := &DeleteToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetConflictResponseBody builds the HTTP response body from the
+// result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetConflictResponseBody(res *goa.ServiceError) *DeleteToolsetConflictResponseBody {
+	body := &DeleteToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteToolsetUnsupportedMediaResponseBody {
+	body := &DeleteToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetInvalidResponseBody builds the HTTP response body from the
+// result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetInvalidResponseBody(res *goa.ServiceError) *DeleteToolsetInvalidResponseBody {
+	body := &DeleteToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetInvariantViolationResponseBody(res *goa.ServiceError) *DeleteToolsetInvariantViolationResponseBody {
+	body := &DeleteToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolsetUnexpectedResponseBody builds the HTTP response body from
+// the result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetUnexpectedResponseBody(res *goa.ServiceError) *DeleteToolsetUnexpectedResponseBody {
+	body := &DeleteToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetUnauthorizedResponseBody(res *goa.ServiceError) *GetToolsetUnauthorizedResponseBody {
+	body := &GetToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetForbiddenResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetForbiddenResponseBody(res *goa.ServiceError) *GetToolsetForbiddenResponseBody {
+	body := &GetToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetBadRequestResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetBadRequestResponseBody(res *goa.ServiceError) *GetToolsetBadRequestResponseBody {
+	body := &GetToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetNotFoundResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetNotFoundResponseBody(res *goa.ServiceError) *GetToolsetNotFoundResponseBody {
+	body := &GetToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetConflictResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetConflictResponseBody(res *goa.ServiceError) *GetToolsetConflictResponseBody {
+	body := &GetToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *GetToolsetUnsupportedMediaResponseBody {
+	body := &GetToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetInvalidResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetInvalidResponseBody(res *goa.ServiceError) *GetToolsetInvalidResponseBody {
+	body := &GetToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetInvariantViolationResponseBody(res *goa.ServiceError) *GetToolsetInvariantViolationResponseBody {
+	body := &GetToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetUnexpectedResponseBody(res *goa.ServiceError) *GetToolsetUnexpectedResponseBody {
+	body := &GetToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }

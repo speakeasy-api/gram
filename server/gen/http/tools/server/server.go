@@ -102,7 +102,7 @@ func NewListToolsHandler(
 	var (
 		decodeRequest  = DecodeListToolsRequest(mux, decoder)
 		encodeResponse = EncodeListToolsResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeListToolsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))

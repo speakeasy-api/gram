@@ -64,6 +64,17 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // DecodeListToolsResponse returns a decoder for responses returned by the
 // tools listTools endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
+// DecodeListToolsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -94,6 +105,139 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			res := NewListToolsResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+				}
+				err = ValidateListToolsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tools", "listTools", err)
+				}
+				return nil, NewListToolsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+				}
+				err = ValidateListToolsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tools", "listTools", err)
+				}
+				return nil, NewListToolsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("tools", "listTools", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("tools", "listTools", resp.StatusCode, string(body))

@@ -117,7 +117,7 @@ func NewCreateEnvironmentHandler(
 	var (
 		decodeRequest  = DecodeCreateEnvironmentRequest(mux, decoder)
 		encodeResponse = EncodeCreateEnvironmentResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeCreateEnvironmentError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -168,7 +168,7 @@ func NewListEnvironmentsHandler(
 	var (
 		decodeRequest  = DecodeListEnvironmentsRequest(mux, decoder)
 		encodeResponse = EncodeListEnvironmentsResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeListEnvironmentsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -219,7 +219,7 @@ func NewUpdateEnvironmentHandler(
 	var (
 		decodeRequest  = DecodeUpdateEnvironmentRequest(mux, decoder)
 		encodeResponse = EncodeUpdateEnvironmentResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeUpdateEnvironmentError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -270,7 +270,7 @@ func NewDeleteEnvironmentHandler(
 	var (
 		decodeRequest  = DecodeDeleteEnvironmentRequest(mux, decoder)
 		encodeResponse = EncodeDeleteEnvironmentResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeDeleteEnvironmentError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))

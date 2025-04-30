@@ -10,6 +10,7 @@ import (
 var _ = Service("environments", func() {
 	Description("Managing toolset environments.")
 	Security(security.Session, security.ProjectSlug)
+	shared.DeclareErrorResponses()
 
 	Method("createEnvironment", func() {
 		Description("Create a new environment")

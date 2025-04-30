@@ -30,6 +30,17 @@ func NewClient(createKey, listKeys, revokeKey goa.Endpoint) *Client {
 }
 
 // CreateKey calls the "createKey" endpoint of the "keys" service.
+// CreateKey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) CreateKey(ctx context.Context, p *CreateKeyPayload) (res *Key, err error) {
 	var ires any
 	ires, err = c.CreateKeyEndpoint(ctx, p)
@@ -40,6 +51,17 @@ func (c *Client) CreateKey(ctx context.Context, p *CreateKeyPayload) (res *Key, 
 }
 
 // ListKeys calls the "listKeys" endpoint of the "keys" service.
+// ListKeys may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKeysResult, err error) {
 	var ires any
 	ires, err = c.ListKeysEndpoint(ctx, p)
@@ -50,6 +72,17 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKey
 }
 
 // RevokeKey calls the "revokeKey" endpoint of the "keys" service.
+// RevokeKey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error) {
 	_, err = c.RevokeKeyEndpoint(ctx, p)
 	return

@@ -3,10 +3,10 @@ package toolsets
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strings"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -52,6 +52,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -62,7 +63,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*gen.ToolsetDetails, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("project ID not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	createToolParams := repo.CreateToolsetParams{
@@ -81,13 +82,13 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to find environment: %w", err)
+			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
 		}
 		createToolParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
 	} else {
 		environments, err := s.environmentRepo.ListEnvironments(ctx, *authCtx.ProjectID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list environments: %w", err)
+			return nil, oops.E(oops.CodeUnexpected, err, "error listing environments")
 		}
 		for _, environment := range environments {
 			if environment.Slug == "default" { // We will autofill the default environment if one is available
@@ -98,9 +99,10 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	createdToolset, err := s.repo.CreateToolset(ctx, createToolParams)
+	var pgErr *pgconn.PgError
 	if err != nil {
-		if strings.Contains(err.Error(), "unique constraint") {
-			return nil, errors.New("toolset slug already exists")
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "toolset slug already exists")
 		}
 
 		return nil, err
@@ -117,7 +119,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("project ID not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	toolsets, err := s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
@@ -142,7 +144,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.ToolsetDetails, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("project ID not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	// First get the existing toolset
@@ -176,7 +178,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to find environment: %w", err)
+			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
 		}
 		updateParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
 	}
@@ -189,7 +191,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	updatedToolset, err := s.repo.UpdateToolset(ctx, updateParams)
 	if err != nil {
-		return nil, oops.E(err, "error updating toolset", "failed to update toolset in database").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").Log(ctx, s.logger)
 	}
 
 	toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, updatedToolset.Slug, *authCtx.ProjectID)
@@ -203,7 +205,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetPayload) (err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return errors.New("project ID not found in context")
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	return s.repo.DeleteToolset(ctx, repo.DeleteToolsetParams{
@@ -215,7 +217,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*gen.ToolsetDetails, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("project ID not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	return s.toolsets.LoadToolsetDetails(ctx, string(payload.Slug), *authCtx.ProjectID)

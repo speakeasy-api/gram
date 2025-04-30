@@ -2,8 +2,8 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,14 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"goa.design/goa/v3/security"
-)
-
-var (
-	ErrAuthCheckFailed    = oops.New("check failed")
-	ErrAuthNoSession      = oops.New("no session found")
-	ErrAuthInvalidOrgID   = oops.New("invalid session organization")
-	ErrAuthInvalidProject = oops.New("invalid project")
-	ErrAuthAccessDenied   = oops.New("access denied")
 )
 
 type Auth struct {
@@ -53,23 +45,22 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 	case ProjectSlugSecuritySchema:
 		return s.checkProjectAccess(ctx, s.logger, key)
 	default:
-		return ctx, errors.New("unsupported security scheme")
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
 	}
 }
 
 func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok {
-		return ctx, fmt.Errorf("project access: %w", ErrAuthNoSession)
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "no session found")
 	}
 
 	projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return ctx, oops.E(ErrAuthCheckFailed.Wrap(err), "error checking project access", "database error for project access lookup").Log(ctx, logger, slog.String("org_id", authCtx.ActiveOrganizationID))
-	}
-
-	if len(projects) == 0 {
-		return ctx, fmt.Errorf("project access: %w: no projects found", ErrAuthAccessDenied)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return ctx, oops.E(oops.CodeForbidden, nil, "no projects found")
+	case err != nil:
+		return ctx, oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, slog.String("org_id", authCtx.ActiveOrganizationID))
 	}
 
 	if projectSlug == "" && len(projects) == 1 {
@@ -77,7 +68,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	}
 
 	if projectSlug == "" {
-		return ctx, fmt.Errorf("project access: %w: empty slug", ErrAuthInvalidProject)
+		return ctx, oops.E(oops.CodeBadRequest, nil, "empty projectslug")
 	}
 
 	hasProjectAccess := false
@@ -89,8 +80,10 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 		}
 	}
 
+	logger = logger.With(slog.String("project_slug", projectSlug), slog.String("org_id", authCtx.ActiveOrganizationID))
+
 	if !hasProjectAccess {
-		return ctx, oops.E(ErrAuthCheckFailed, "project access lookup error", "project slug not found").Log(ctx, logger, slog.String("project_slug", projectSlug), slog.String("org_id", authCtx.ActiveOrganizationID))
+		return ctx, oops.C(oops.CodeForbidden).Log(ctx, logger)
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)

@@ -2,12 +2,14 @@ package tools
 
 import (
 	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("tools", func() {
 	Description("Dashboard API for interacting with tools.")
 	Security(security.Session, security.ProjectSlug)
+	shared.DeclareErrorResponses()
 
 	Method("listTools", func() {
 		Description("List all tools for a project")

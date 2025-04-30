@@ -37,6 +37,334 @@ type ListProjectsResponseBody struct {
 	Projects []*ProjectEntryResponseBody `form:"projects" json:"projects" xml:"projects"`
 }
 
+// CreateProjectUnauthorizedResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "unauthorized" error.
+type CreateProjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectForbiddenResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "forbidden" error.
+type CreateProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectBadRequestResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "bad_request" error.
+type CreateProjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectNotFoundResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "not_found" error.
+type CreateProjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectConflictResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "conflict" error.
+type CreateProjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectUnsupportedMediaResponseBody is the type of the "projects"
+// service "createProject" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateProjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectInvalidResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "invalid" error.
+type CreateProjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectInvariantViolationResponseBody is the type of the "projects"
+// service "createProject" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateProjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateProjectUnexpectedResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "unexpected" error.
+type CreateProjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsUnauthorizedResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "unauthorized" error.
+type ListProjectsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsForbiddenResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "forbidden" error.
+type ListProjectsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsBadRequestResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "bad_request" error.
+type ListProjectsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsNotFoundResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "not_found" error.
+type ListProjectsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsConflictResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "conflict" error.
+type ListProjectsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsUnsupportedMediaResponseBody is the type of the "projects"
+// service "listProjects" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListProjectsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsInvalidResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "invalid" error.
+type ListProjectsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsInvariantViolationResponseBody is the type of the "projects"
+// service "listProjects" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListProjectsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsUnexpectedResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "unexpected" error.
+type ListProjectsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
 	// The ID of the project
@@ -84,6 +412,258 @@ func NewListProjectsResponseBody(res *projects.ListProjectsResult) *ListProjects
 		}
 	} else {
 		body.Projects = []*ProjectEntryResponseBody{}
+	}
+	return body
+}
+
+// NewCreateProjectUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectUnauthorizedResponseBody(res *goa.ServiceError) *CreateProjectUnauthorizedResponseBody {
+	body := &CreateProjectUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectForbiddenResponseBody builds the HTTP response body from the
+// result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectForbiddenResponseBody(res *goa.ServiceError) *CreateProjectForbiddenResponseBody {
+	body := &CreateProjectForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectBadRequestResponseBody builds the HTTP response body from
+// the result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectBadRequestResponseBody(res *goa.ServiceError) *CreateProjectBadRequestResponseBody {
+	body := &CreateProjectBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectNotFoundResponseBody builds the HTTP response body from the
+// result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectNotFoundResponseBody(res *goa.ServiceError) *CreateProjectNotFoundResponseBody {
+	body := &CreateProjectNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectConflictResponseBody builds the HTTP response body from the
+// result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectConflictResponseBody(res *goa.ServiceError) *CreateProjectConflictResponseBody {
+	body := &CreateProjectConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateProjectUnsupportedMediaResponseBody {
+	body := &CreateProjectUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectInvalidResponseBody builds the HTTP response body from the
+// result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectInvalidResponseBody(res *goa.ServiceError) *CreateProjectInvalidResponseBody {
+	body := &CreateProjectInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectInvariantViolationResponseBody(res *goa.ServiceError) *CreateProjectInvariantViolationResponseBody {
+	body := &CreateProjectInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateProjectUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectUnexpectedResponseBody(res *goa.ServiceError) *CreateProjectUnexpectedResponseBody {
+	body := &CreateProjectUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsUnauthorizedResponseBody(res *goa.ServiceError) *ListProjectsUnauthorizedResponseBody {
+	body := &ListProjectsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsForbiddenResponseBody(res *goa.ServiceError) *ListProjectsForbiddenResponseBody {
+	body := &ListProjectsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsBadRequestResponseBody(res *goa.ServiceError) *ListProjectsBadRequestResponseBody {
+	body := &ListProjectsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsNotFoundResponseBody(res *goa.ServiceError) *ListProjectsNotFoundResponseBody {
+	body := &ListProjectsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsConflictResponseBody builds the HTTP response body from the
+// result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsConflictResponseBody(res *goa.ServiceError) *ListProjectsConflictResponseBody {
+	body := &ListProjectsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListProjectsUnsupportedMediaResponseBody {
+	body := &ListProjectsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsInvalidResponseBody builds the HTTP response body from the
+// result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsInvalidResponseBody(res *goa.ServiceError) *ListProjectsInvalidResponseBody {
+	body := &ListProjectsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsInvariantViolationResponseBody(res *goa.ServiceError) *ListProjectsInvariantViolationResponseBody {
+	body := &ListProjectsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsUnexpectedResponseBody(res *goa.ServiceError) *ListProjectsUnexpectedResponseBody {
+	body := &ListProjectsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }

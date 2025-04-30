@@ -19,7 +19,7 @@ func (s *Service) logDeploymentError(ctx context.Context, logger *slog.Logger, t
 	})
 
 	if err != nil {
-		return oops.E(err, "unexpected database error", "failed to log deployment error").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "unexpected database error").Log(ctx, logger)
 	}
 
 	return nil

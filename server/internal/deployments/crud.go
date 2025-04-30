@@ -71,7 +71,7 @@ func createDeployment(
 		ExternalUrl: conv.ToPGTextEmpty(fields.externalURL),
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return uuid.Nil, oops.E(err, "error creating deployment", "failed to create deployment").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error creating deployment").Log(ctx, logger)
 	}
 
 	created := cmd.RowsAffected() > 0
@@ -81,7 +81,7 @@ func createDeployment(
 		ProjectID:      fields.projectID,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(err, "error reading deployment", "failed to read laatest deployment").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error reading deployment").Log(ctx, logger)
 	}
 
 	newID := d.Deployment.ID
@@ -92,9 +92,9 @@ func createDeployment(
 	logger = logger.With(slog.String("deployment_id", d.Deployment.ID.String()))
 	span.SetAttributes(attribute.String("deployment_id", d.Deployment.ID.String()))
 
-	err = amendDeployment(ctx, logger, tx, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
-	if err != nil {
-		return uuid.Nil, err
+	aerr := amendDeployment(ctx, logger, tx, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
+	if aerr != nil {
+		return uuid.Nil, aerr
 	}
 
 	_, err = tx.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
@@ -105,7 +105,7 @@ func createDeployment(
 		Message:      "Deployment created",
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(err, "error logging deployment creation", "failed to mark deployment as created").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error logging deployment creation").Log(ctx, logger)
 	}
 
 	return newID, nil
@@ -135,7 +135,7 @@ func cloneDeployment(
 		ProjectID: projID,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(err, "error cloning deployment", "failed to clone deployment").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
 	}
 
 	logger = logger.With(slog.String("deployment_id", newID.String()))
@@ -147,7 +147,7 @@ func cloneDeployment(
 		ExcludedIds:          packagesToExclude,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment openapi v3 assets").Log(ctx, logger)
 	}
 
 	_, err = depRepo.CloneDeploymentOpenAPIv3Assets(ctx, repo.CloneDeploymentOpenAPIv3AssetsParams{
@@ -156,7 +156,7 @@ func cloneDeployment(
 		ExcludedIds:          openAPIv3ToExclude,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(err, "error cloning deployment openapi v3 assets", "failed to clone deployment openapi v3 assets").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment openapi v3 assets").Log(ctx, logger)
 	}
 
 	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
@@ -172,7 +172,7 @@ func cloneDeployment(
 		Message:      "Deployment created",
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(err, "error logging deployment creation", "failed to mark deployment as created").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error logging deployment creation").Log(ctx, logger)
 	}
 
 	return newID, nil
@@ -196,7 +196,7 @@ func amendDeployment(
 			Slug:         a.slug,
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return oops.E(err, "error adding deployment openapi v3 asset", "failed to add deployment openapi v3 asset").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error adding deployment openapi v3 asset").Log(ctx, logger)
 		}
 	}
 
@@ -207,7 +207,7 @@ func amendDeployment(
 			VersionID:    p.versionID,
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return oops.E(err, "error adding deployment package", "failed to add deployment package").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error adding deployment package").Log(ctx, logger)
 		}
 	}
 

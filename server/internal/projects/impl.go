@@ -24,10 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/projects/repo"
 )
-
-var ErrProjectNameExists = errors.New("project name already exists")
 
 type Service struct {
 	tracer   trace.Tracer
@@ -55,6 +54,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -69,7 +69,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectPayload) (*gen.CreateProjectResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, errors.New("session not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
@@ -80,7 +80,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
 		return org.ID == payload.OrganizationID
 	}); orgIdx == -1 {
-		return nil, errors.New("unauthorized")
+		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	prj, err := s.repo.CreateProject(ctx, repo.CreateProjectParams{
@@ -92,7 +92,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	switch {
 	case errors.As(err, &pgErr):
 		if pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.New("project slug already exists")
+			return nil, oops.E(oops.CodeConflict, err, "project slug already exists")
 		}
 		return nil, err
 	case err != nil:
@@ -116,7 +116,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPayload) (res *gen.ListProjectsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, errors.New("session not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
@@ -127,11 +127,11 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
 		return org.ID == payload.OrganizationID
 	}); orgIdx == -1 {
-		return nil, errors.New("unauthorized")
+		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	if payload.OrganizationID == "" {
-		return nil, errors.New("organization id is required")
+		return nil, oops.E(oops.CodeInvalid, nil, "organization id is required")
 	}
 
 	projects, err := s.repo.ListProjectsByOrganization(ctx, payload.OrganizationID)

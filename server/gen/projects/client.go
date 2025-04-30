@@ -28,6 +28,17 @@ func NewClient(createProject, listProjects goa.Endpoint) *Client {
 }
 
 // CreateProject calls the "createProject" endpoint of the "projects" service.
+// CreateProject may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) CreateProject(ctx context.Context, p *CreateProjectPayload) (res *CreateProjectResult, err error) {
 	var ires any
 	ires, err = c.CreateProjectEndpoint(ctx, p)
@@ -38,6 +49,17 @@ func (c *Client) CreateProject(ctx context.Context, p *CreateProjectPayload) (re
 }
 
 // ListProjects calls the "listProjects" endpoint of the "projects" service.
+// ListProjects may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) ListProjects(ctx context.Context, p *ListProjectsPayload) (res *ListProjectsResult, err error) {
 	var ires any
 	ires, err = c.ListProjectsEndpoint(ctx, p)

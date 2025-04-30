@@ -112,7 +112,7 @@ func NewCreatePackageHandler(
 	var (
 		decodeRequest  = DecodeCreatePackageRequest(mux, decoder)
 		encodeResponse = EncodeCreatePackageResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeCreatePackageError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -163,7 +163,7 @@ func NewListVersionsHandler(
 	var (
 		decodeRequest  = DecodeListVersionsRequest(mux, decoder)
 		encodeResponse = EncodeListVersionsResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeListVersionsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -214,7 +214,7 @@ func NewPublishHandler(
 	var (
 		decodeRequest  = DecodePublishRequest(mux, decoder)
 		encodeResponse = EncodePublishResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodePublishError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))

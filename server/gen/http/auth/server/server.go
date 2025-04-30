@@ -122,7 +122,7 @@ func NewCallbackHandler(
 	var (
 		decodeRequest  = DecodeCallbackRequest(mux, decoder)
 		encodeResponse = EncodeCallbackResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeCallbackError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -172,7 +172,7 @@ func NewLoginHandler(
 ) http.Handler {
 	var (
 		encodeResponse = EncodeLoginResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeLoginError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -217,7 +217,7 @@ func NewSwitchScopesHandler(
 	var (
 		decodeRequest  = DecodeSwitchScopesRequest(mux, decoder)
 		encodeResponse = EncodeSwitchScopesResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeSwitchScopesError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -268,7 +268,7 @@ func NewLogoutHandler(
 	var (
 		decodeRequest  = DecodeLogoutRequest(mux, decoder)
 		encodeResponse = EncodeLogoutResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeLogoutError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -319,7 +319,7 @@ func NewInfoHandler(
 	var (
 		decodeRequest  = DecodeInfoRequest(mux, decoder)
 		encodeResponse = EncodeInfoResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeInfoError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))

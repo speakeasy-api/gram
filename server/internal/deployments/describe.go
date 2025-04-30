@@ -23,9 +23,9 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows), err == nil && len(rows) == 0:
-		return nil, nil
+		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(err, "error getting deployment with assets", "failed to get deployment with assets").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment with assets").Log(ctx, logger)
 	}
 
 	deployment := rows[0].Deployment
@@ -44,7 +44,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				"valid asset name", r.DeploymentsOpenapiv3AssetName.Valid && r.DeploymentsOpenapiv3AssetName.String != "",
 				"valid asset slug", r.DeploymentsOpenapiv3AssetSlug.Valid && r.DeploymentsOpenapiv3AssetSlug.String != "",
 			); err != nil {
-				return nil, oops.E(err, "invalid state for deployment openapiv3 asset", "error reading deployment openapiv3 asset").Log(ctx, logger)
+				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment openapiv3 asset").Log(ctx, logger)
 			}
 
 			attachedAssets = append(attachedAssets, &gen.OpenAPIv3DeploymentAsset{

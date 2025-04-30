@@ -10,6 +10,7 @@ import (
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
 	Security(security.Session)
+	shared.DeclareErrorResponses()
 
 	Method("callback", func() {
 		Description("Handles the authentication callback.")

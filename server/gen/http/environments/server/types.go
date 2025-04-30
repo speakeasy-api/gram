@@ -90,6 +90,690 @@ type UpdateEnvironmentResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CreateEnvironmentUnauthorizedResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateEnvironmentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentForbiddenResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the "forbidden"
+// error.
+type CreateEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentBadRequestResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateEnvironmentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentNotFoundResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the "not_found"
+// error.
+type CreateEnvironmentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentConflictResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the "conflict"
+// error.
+type CreateEnvironmentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentUnsupportedMediaResponseBody is the type of the
+// "environments" service "createEnvironment" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateEnvironmentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentInvalidResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the "invalid"
+// error.
+type CreateEnvironmentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentInvariantViolationResponseBody is the type of the
+// "environments" service "createEnvironment" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CreateEnvironmentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateEnvironmentUnexpectedResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the "unexpected"
+// error.
+type CreateEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsUnauthorizedResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListEnvironmentsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsForbiddenResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the "forbidden"
+// error.
+type ListEnvironmentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsBadRequestResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the "bad_request"
+// error.
+type ListEnvironmentsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsNotFoundResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the "not_found"
+// error.
+type ListEnvironmentsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsConflictResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the "conflict"
+// error.
+type ListEnvironmentsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsUnsupportedMediaResponseBody is the type of the
+// "environments" service "listEnvironments" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListEnvironmentsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsInvalidResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the "invalid"
+// error.
+type ListEnvironmentsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsInvariantViolationResponseBody is the type of the
+// "environments" service "listEnvironments" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListEnvironmentsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsUnexpectedResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the "unexpected"
+// error.
+type ListEnvironmentsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentUnauthorizedResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateEnvironmentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentForbiddenResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the "forbidden"
+// error.
+type UpdateEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentBadRequestResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateEnvironmentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentNotFoundResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the "not_found"
+// error.
+type UpdateEnvironmentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentConflictResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the "conflict"
+// error.
+type UpdateEnvironmentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentUnsupportedMediaResponseBody is the type of the
+// "environments" service "updateEnvironment" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateEnvironmentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentInvalidResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the "invalid"
+// error.
+type UpdateEnvironmentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentInvariantViolationResponseBody is the type of the
+// "environments" service "updateEnvironment" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateEnvironmentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateEnvironmentUnexpectedResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the "unexpected"
+// error.
+type UpdateEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentUnauthorizedResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteEnvironmentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentForbiddenResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the "forbidden"
+// error.
+type DeleteEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentBadRequestResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteEnvironmentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentNotFoundResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the "not_found"
+// error.
+type DeleteEnvironmentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentConflictResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the "conflict"
+// error.
+type DeleteEnvironmentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentUnsupportedMediaResponseBody is the type of the
+// "environments" service "deleteEnvironment" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteEnvironmentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentInvalidResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the "invalid"
+// error.
+type DeleteEnvironmentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentInvariantViolationResponseBody is the type of the
+// "environments" service "deleteEnvironment" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteEnvironmentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentUnexpectedResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the "unexpected"
+// error.
+type DeleteEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // EnvironmentEntryResponseBody is used to define fields on response body types.
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
@@ -192,6 +876,528 @@ func NewUpdateEnvironmentResponseBody(res *environments.Environment) *UpdateEnvi
 		}
 	} else {
 		body.Entries = []*EnvironmentEntryResponseBody{}
+	}
+	return body
+}
+
+// NewCreateEnvironmentUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createEnvironment" endpoint of the "environments"
+// service.
+func NewCreateEnvironmentUnauthorizedResponseBody(res *goa.ServiceError) *CreateEnvironmentUnauthorizedResponseBody {
+	body := &CreateEnvironmentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentForbiddenResponseBody builds the HTTP response body from
+// the result of the "createEnvironment" endpoint of the "environments" service.
+func NewCreateEnvironmentForbiddenResponseBody(res *goa.ServiceError) *CreateEnvironmentForbiddenResponseBody {
+	body := &CreateEnvironmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentBadRequestResponseBody builds the HTTP response body
+// from the result of the "createEnvironment" endpoint of the "environments"
+// service.
+func NewCreateEnvironmentBadRequestResponseBody(res *goa.ServiceError) *CreateEnvironmentBadRequestResponseBody {
+	body := &CreateEnvironmentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentNotFoundResponseBody builds the HTTP response body from
+// the result of the "createEnvironment" endpoint of the "environments" service.
+func NewCreateEnvironmentNotFoundResponseBody(res *goa.ServiceError) *CreateEnvironmentNotFoundResponseBody {
+	body := &CreateEnvironmentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentConflictResponseBody builds the HTTP response body from
+// the result of the "createEnvironment" endpoint of the "environments" service.
+func NewCreateEnvironmentConflictResponseBody(res *goa.ServiceError) *CreateEnvironmentConflictResponseBody {
+	body := &CreateEnvironmentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createEnvironment" endpoint of the
+// "environments" service.
+func NewCreateEnvironmentUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateEnvironmentUnsupportedMediaResponseBody {
+	body := &CreateEnvironmentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentInvalidResponseBody builds the HTTP response body from
+// the result of the "createEnvironment" endpoint of the "environments" service.
+func NewCreateEnvironmentInvalidResponseBody(res *goa.ServiceError) *CreateEnvironmentInvalidResponseBody {
+	body := &CreateEnvironmentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createEnvironment" endpoint of the
+// "environments" service.
+func NewCreateEnvironmentInvariantViolationResponseBody(res *goa.ServiceError) *CreateEnvironmentInvariantViolationResponseBody {
+	body := &CreateEnvironmentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateEnvironmentUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createEnvironment" endpoint of the "environments"
+// service.
+func NewCreateEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *CreateEnvironmentUnexpectedResponseBody {
+	body := &CreateEnvironmentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listEnvironments" endpoint of the "environments"
+// service.
+func NewListEnvironmentsUnauthorizedResponseBody(res *goa.ServiceError) *ListEnvironmentsUnauthorizedResponseBody {
+	body := &ListEnvironmentsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listEnvironments" endpoint of the "environments" service.
+func NewListEnvironmentsForbiddenResponseBody(res *goa.ServiceError) *ListEnvironmentsForbiddenResponseBody {
+	body := &ListEnvironmentsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listEnvironments" endpoint of the "environments" service.
+func NewListEnvironmentsBadRequestResponseBody(res *goa.ServiceError) *ListEnvironmentsBadRequestResponseBody {
+	body := &ListEnvironmentsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listEnvironments" endpoint of the "environments" service.
+func NewListEnvironmentsNotFoundResponseBody(res *goa.ServiceError) *ListEnvironmentsNotFoundResponseBody {
+	body := &ListEnvironmentsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsConflictResponseBody builds the HTTP response body from
+// the result of the "listEnvironments" endpoint of the "environments" service.
+func NewListEnvironmentsConflictResponseBody(res *goa.ServiceError) *ListEnvironmentsConflictResponseBody {
+	body := &ListEnvironmentsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listEnvironments" endpoint of the
+// "environments" service.
+func NewListEnvironmentsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListEnvironmentsUnsupportedMediaResponseBody {
+	body := &ListEnvironmentsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsInvalidResponseBody builds the HTTP response body from
+// the result of the "listEnvironments" endpoint of the "environments" service.
+func NewListEnvironmentsInvalidResponseBody(res *goa.ServiceError) *ListEnvironmentsInvalidResponseBody {
+	body := &ListEnvironmentsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listEnvironments" endpoint of the
+// "environments" service.
+func NewListEnvironmentsInvariantViolationResponseBody(res *goa.ServiceError) *ListEnvironmentsInvariantViolationResponseBody {
+	body := &ListEnvironmentsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listEnvironments" endpoint of the "environments" service.
+func NewListEnvironmentsUnexpectedResponseBody(res *goa.ServiceError) *ListEnvironmentsUnexpectedResponseBody {
+	body := &ListEnvironmentsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateEnvironment" endpoint of the "environments"
+// service.
+func NewUpdateEnvironmentUnauthorizedResponseBody(res *goa.ServiceError) *UpdateEnvironmentUnauthorizedResponseBody {
+	body := &UpdateEnvironmentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateEnvironment" endpoint of the "environments" service.
+func NewUpdateEnvironmentForbiddenResponseBody(res *goa.ServiceError) *UpdateEnvironmentForbiddenResponseBody {
+	body := &UpdateEnvironmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateEnvironment" endpoint of the "environments"
+// service.
+func NewUpdateEnvironmentBadRequestResponseBody(res *goa.ServiceError) *UpdateEnvironmentBadRequestResponseBody {
+	body := &UpdateEnvironmentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateEnvironment" endpoint of the "environments" service.
+func NewUpdateEnvironmentNotFoundResponseBody(res *goa.ServiceError) *UpdateEnvironmentNotFoundResponseBody {
+	body := &UpdateEnvironmentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentConflictResponseBody builds the HTTP response body from
+// the result of the "updateEnvironment" endpoint of the "environments" service.
+func NewUpdateEnvironmentConflictResponseBody(res *goa.ServiceError) *UpdateEnvironmentConflictResponseBody {
+	body := &UpdateEnvironmentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateEnvironment" endpoint of the
+// "environments" service.
+func NewUpdateEnvironmentUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateEnvironmentUnsupportedMediaResponseBody {
+	body := &UpdateEnvironmentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentInvalidResponseBody builds the HTTP response body from
+// the result of the "updateEnvironment" endpoint of the "environments" service.
+func NewUpdateEnvironmentInvalidResponseBody(res *goa.ServiceError) *UpdateEnvironmentInvalidResponseBody {
+	body := &UpdateEnvironmentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateEnvironment" endpoint of the
+// "environments" service.
+func NewUpdateEnvironmentInvariantViolationResponseBody(res *goa.ServiceError) *UpdateEnvironmentInvariantViolationResponseBody {
+	body := &UpdateEnvironmentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateEnvironmentUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateEnvironment" endpoint of the "environments"
+// service.
+func NewUpdateEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *UpdateEnvironmentUnexpectedResponseBody {
+	body := &UpdateEnvironmentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "deleteEnvironment" endpoint of the "environments"
+// service.
+func NewDeleteEnvironmentUnauthorizedResponseBody(res *goa.ServiceError) *DeleteEnvironmentUnauthorizedResponseBody {
+	body := &DeleteEnvironmentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentForbiddenResponseBody builds the HTTP response body from
+// the result of the "deleteEnvironment" endpoint of the "environments" service.
+func NewDeleteEnvironmentForbiddenResponseBody(res *goa.ServiceError) *DeleteEnvironmentForbiddenResponseBody {
+	body := &DeleteEnvironmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentBadRequestResponseBody builds the HTTP response body
+// from the result of the "deleteEnvironment" endpoint of the "environments"
+// service.
+func NewDeleteEnvironmentBadRequestResponseBody(res *goa.ServiceError) *DeleteEnvironmentBadRequestResponseBody {
+	body := &DeleteEnvironmentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentNotFoundResponseBody builds the HTTP response body from
+// the result of the "deleteEnvironment" endpoint of the "environments" service.
+func NewDeleteEnvironmentNotFoundResponseBody(res *goa.ServiceError) *DeleteEnvironmentNotFoundResponseBody {
+	body := &DeleteEnvironmentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentConflictResponseBody builds the HTTP response body from
+// the result of the "deleteEnvironment" endpoint of the "environments" service.
+func NewDeleteEnvironmentConflictResponseBody(res *goa.ServiceError) *DeleteEnvironmentConflictResponseBody {
+	body := &DeleteEnvironmentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "deleteEnvironment" endpoint of the
+// "environments" service.
+func NewDeleteEnvironmentUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteEnvironmentUnsupportedMediaResponseBody {
+	body := &DeleteEnvironmentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentInvalidResponseBody builds the HTTP response body from
+// the result of the "deleteEnvironment" endpoint of the "environments" service.
+func NewDeleteEnvironmentInvalidResponseBody(res *goa.ServiceError) *DeleteEnvironmentInvalidResponseBody {
+	body := &DeleteEnvironmentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "deleteEnvironment" endpoint of the
+// "environments" service.
+func NewDeleteEnvironmentInvariantViolationResponseBody(res *goa.ServiceError) *DeleteEnvironmentInvariantViolationResponseBody {
+	body := &DeleteEnvironmentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentUnexpectedResponseBody builds the HTTP response body
+// from the result of the "deleteEnvironment" endpoint of the "environments"
+// service.
+func NewDeleteEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *DeleteEnvironmentUnexpectedResponseBody {
+	body := &DeleteEnvironmentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }

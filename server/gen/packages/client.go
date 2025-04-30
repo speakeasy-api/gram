@@ -30,6 +30,17 @@ func NewClient(createPackage, listVersions, publish goa.Endpoint) *Client {
 }
 
 // CreatePackage calls the "createPackage" endpoint of the "packages" service.
+// CreatePackage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) CreatePackage(ctx context.Context, p *CreatePackagePayload) (res *CreatePackageResult, err error) {
 	var ires any
 	ires, err = c.CreatePackageEndpoint(ctx, p)
@@ -40,6 +51,17 @@ func (c *Client) CreatePackage(ctx context.Context, p *CreatePackagePayload) (re
 }
 
 // ListVersions calls the "listVersions" endpoint of the "packages" service.
+// ListVersions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res *ListVersionsResult, err error) {
 	var ires any
 	ires, err = c.ListVersionsEndpoint(ctx, p)
@@ -50,6 +72,17 @@ func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res 
 }
 
 // Publish calls the "publish" endpoint of the "packages" service.
+// Publish may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) Publish(ctx context.Context, p *PublishPayload) (res *PublishPackageResult, err error) {
 	var ires any
 	ires, err = c.PublishEndpoint(ctx, p)

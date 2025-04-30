@@ -33,6 +33,17 @@ func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnv
 
 // CreateEnvironment calls the "createEnvironment" endpoint of the
 // "environments" service.
+// CreateEnvironment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) CreateEnvironment(ctx context.Context, p *CreateEnvironmentPayload) (res *Environment, err error) {
 	var ires any
 	ires, err = c.CreateEnvironmentEndpoint(ctx, p)
@@ -44,6 +55,17 @@ func (c *Client) CreateEnvironment(ctx context.Context, p *CreateEnvironmentPayl
 
 // ListEnvironments calls the "listEnvironments" endpoint of the "environments"
 // service.
+// ListEnvironments may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) ListEnvironments(ctx context.Context, p *ListEnvironmentsPayload) (res *ListEnvironmentsResult, err error) {
 	var ires any
 	ires, err = c.ListEnvironmentsEndpoint(ctx, p)
@@ -55,6 +77,17 @@ func (c *Client) ListEnvironments(ctx context.Context, p *ListEnvironmentsPayloa
 
 // UpdateEnvironment calls the "updateEnvironment" endpoint of the
 // "environments" service.
+// UpdateEnvironment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayload) (res *Environment, err error) {
 	var ires any
 	ires, err = c.UpdateEnvironmentEndpoint(ctx, p)
@@ -66,6 +99,17 @@ func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayl
 
 // DeleteEnvironment calls the "deleteEnvironment" endpoint of the
 // "environments" service.
+// DeleteEnvironment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) DeleteEnvironment(ctx context.Context, p *DeleteEnvironmentPayload) (err error) {
 	_, err = c.DeleteEnvironmentEndpoint(ctx, p)
 	return

@@ -2,7 +2,6 @@ package keys
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/keys/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 const keyPrefix = "gram"
@@ -65,6 +65,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -75,7 +76,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) (*gen.Key, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return nil, errors.New("auth not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	token, err := s.generateKey()
@@ -118,7 +119,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*gen.ListKeysResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return nil, errors.New("session not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	keys, err := s.repo.ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -147,7 +148,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) (err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return errors.New("auth not found in context")
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	return s.repo.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{

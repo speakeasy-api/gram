@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/tools/repo"
 )
 
@@ -45,6 +45,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -55,7 +56,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) (res *gen.ListToolsResult, err error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("project ID is required")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	params := repo.ListAllHttpToolDefinitionsParams{

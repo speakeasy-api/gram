@@ -2,7 +2,6 @@ package environments
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type Service struct {
@@ -49,6 +49,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -59,7 +60,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvironmentPayload) (*gen.Environment, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("auth not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	slug := conv.ToSlug(payload.Name)
@@ -119,7 +120,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnvironmentsPayload) (*gen.ListEnvironmentsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("auth not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	environments, err := s.repo.ListEnvironments(ctx, *authCtx.ProjectID)
@@ -164,7 +165,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvironmentPayload) (*gen.Environment, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("auth not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
@@ -196,7 +197,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 	projectID := *authCtx.ProjectID
 	if environment.ProjectID.String() != projectID.String() {
-		return nil, errors.New("environment not found")
+		return nil, oops.E(oops.CodeNotFound, nil, "environment not found")
 	}
 
 	for _, updatedEntry := range payload.EntriesToUpdate {
@@ -248,7 +249,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvironmentPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return errors.New("auth not found in context")
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	return s.repo.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{

@@ -66,6 +66,17 @@ func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // DecodeGetInstanceResponse returns a decoder for responses returned by the
 // instances getInstance endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeGetInstanceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -96,6 +107,139 @@ func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			res := NewGetInstanceResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetInstanceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetInstanceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetInstanceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetInstanceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetInstanceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetInstanceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInstanceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInstanceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+				}
+				err = ValidateGetInstanceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+				}
+				return nil, NewGetInstanceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetInstanceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+				}
+				err = ValidateGetInstanceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+				}
+				return nil, NewGetInstanceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("instances", "getInstance", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("instances", "getInstance", resp.StatusCode, string(body))

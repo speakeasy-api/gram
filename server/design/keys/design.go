@@ -4,11 +4,13 @@ import (
 	. "goa.design/goa/v3/dsl"
 
 	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 )
 
 var _ = Service("keys", func() {
 	Description("Managing system api keys.")
 	Security(security.Session)
+	shared.DeclareErrorResponses()
 
 	Method("createKey", func() {
 		Description("Create a new api key")

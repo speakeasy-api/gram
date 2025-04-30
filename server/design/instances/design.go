@@ -15,6 +15,7 @@ var _ = Service("instances", func() {
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("consumer")
 	})
+	shared.DeclareErrorResponses()
 
 	Method("getInstance", func() {
 		Description("Load all relevant data for an instance of a toolset and environment")

@@ -34,6 +34,17 @@ func NewClient(callback, login, switchScopes, logout, info goa.Endpoint) *Client
 }
 
 // Callback calls the "callback" endpoint of the "auth" service.
+// Callback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *CallbackResult, err error) {
 	var ires any
 	ires, err = c.CallbackEndpoint(ctx, p)
@@ -44,6 +55,17 @@ func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *Callbac
 }
 
 // Login calls the "login" endpoint of the "auth" service.
+// Login may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) Login(ctx context.Context) (res *LoginResult, err error) {
 	var ires any
 	ires, err = c.LoginEndpoint(ctx, nil)
@@ -54,6 +76,17 @@ func (c *Client) Login(ctx context.Context) (res *LoginResult, err error) {
 }
 
 // SwitchScopes calls the "switchScopes" endpoint of the "auth" service.
+// SwitchScopes may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) SwitchScopes(ctx context.Context, p *SwitchScopesPayload) (res *SwitchScopesResult, err error) {
 	var ires any
 	ires, err = c.SwitchScopesEndpoint(ctx, p)
@@ -64,6 +97,17 @@ func (c *Client) SwitchScopes(ctx context.Context, p *SwitchScopesPayload) (res 
 }
 
 // Logout calls the "logout" endpoint of the "auth" service.
+// Logout may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResult, err error) {
 	var ires any
 	ires, err = c.LogoutEndpoint(ctx, p)
@@ -74,6 +118,17 @@ func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResul
 }
 
 // Info calls the "info" endpoint of the "auth" service.
+// Info may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) Info(ctx context.Context, p *InfoPayload) (res *InfoResult, err error) {
 	var ires any
 	ires, err = c.InfoEndpoint(ctx, p)

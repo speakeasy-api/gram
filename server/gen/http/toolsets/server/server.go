@@ -122,7 +122,7 @@ func NewCreateToolsetHandler(
 	var (
 		decodeRequest  = DecodeCreateToolsetRequest(mux, decoder)
 		encodeResponse = EncodeCreateToolsetResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeCreateToolsetError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -173,7 +173,7 @@ func NewListToolsetsHandler(
 	var (
 		decodeRequest  = DecodeListToolsetsRequest(mux, decoder)
 		encodeResponse = EncodeListToolsetsResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeListToolsetsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -224,7 +224,7 @@ func NewUpdateToolsetHandler(
 	var (
 		decodeRequest  = DecodeUpdateToolsetRequest(mux, decoder)
 		encodeResponse = EncodeUpdateToolsetResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeUpdateToolsetError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -275,7 +275,7 @@ func NewDeleteToolsetHandler(
 	var (
 		decodeRequest  = DecodeDeleteToolsetRequest(mux, decoder)
 		encodeResponse = EncodeDeleteToolsetResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeDeleteToolsetError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -326,7 +326,7 @@ func NewGetToolsetHandler(
 	var (
 		decodeRequest  = DecodeGetToolsetRequest(mux, decoder)
 		encodeResponse = EncodeGetToolsetResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeGetToolsetError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))

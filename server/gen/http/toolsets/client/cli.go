@@ -24,7 +24,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"wf2\",\n      \"description\": \"Pariatur aut eos consequatur et.\",\n      \"http_tool_names\": [\n         \"Aliquid architecto ipsam ut.\",\n         \"Mollitia saepe.\"\n      ],\n      \"name\": \"Qui quasi deserunt totam ad aut nemo.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"3zi\",\n      \"description\": \"Iste aut dolorem enim quae perspiciatis.\",\n      \"http_tool_names\": [\n         \"Sed ducimus ut quis.\",\n         \"Maxime eligendi quod quasi.\",\n         \"Quia dolores id dolore.\",\n         \"Omnis ducimus voluptas aut consequuntur.\"\n      ],\n      \"name\": \"Eos repudiandae tenetur odit.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
@@ -100,7 +100,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"ngw\",\n      \"description\": \"Dolorem aut nam labore.\",\n      \"http_tool_names\": [\n         \"Consectetur velit asperiores temporibus modi.\",\n         \"Inventore quaerat optio qui quo corporis totam.\"\n      ],\n      \"name\": \"Architecto necessitatibus voluptatem totam quaerat.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"08h\",\n      \"description\": \"Dolore deleniti iste.\",\n      \"http_tool_names\": [\n         \"Et officiis sapiente impedit et adipisci.\",\n         \"Odit maxime ut possimus quasi.\",\n         \"Qui cumque dolor et molestiae doloremque molestiae.\"\n      ],\n      \"name\": \"Animi et quia officia ut.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))

@@ -26,6 +26,17 @@ func NewClient(getInstance goa.Endpoint) *Client {
 }
 
 // GetInstance calls the "getInstance" endpoint of the "instances" service.
+// GetInstance may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) GetInstance(ctx context.Context, p *GetInstanceForm) (res *GetInstanceResult, err error) {
 	var ires any
 	ires, err = c.GetInstanceEndpoint(ctx, p)

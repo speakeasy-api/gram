@@ -11,6 +11,7 @@ var _ = Service("projects", func() {
 	Description("Manages projects in Gram.")
 
 	Security(security.Session)
+	shared.DeclareErrorResponses()
 
 	Method("createProject", func() {
 		Description("Create a new project.")

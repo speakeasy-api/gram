@@ -48,6 +48,492 @@ type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 }
 
+// CreateKeyUnauthorizedResponseBody is the type of the "keys" service
+// "createKey" endpoint HTTP response body for the "unauthorized" error.
+type CreateKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyForbiddenResponseBody is the type of the "keys" service "createKey"
+// endpoint HTTP response body for the "forbidden" error.
+type CreateKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyBadRequestResponseBody is the type of the "keys" service
+// "createKey" endpoint HTTP response body for the "bad_request" error.
+type CreateKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyNotFoundResponseBody is the type of the "keys" service "createKey"
+// endpoint HTTP response body for the "not_found" error.
+type CreateKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyConflictResponseBody is the type of the "keys" service "createKey"
+// endpoint HTTP response body for the "conflict" error.
+type CreateKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyUnsupportedMediaResponseBody is the type of the "keys" service
+// "createKey" endpoint HTTP response body for the "unsupported_media" error.
+type CreateKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyInvalidResponseBody is the type of the "keys" service "createKey"
+// endpoint HTTP response body for the "invalid" error.
+type CreateKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyInvariantViolationResponseBody is the type of the "keys" service
+// "createKey" endpoint HTTP response body for the "invariant_violation" error.
+type CreateKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateKeyUnexpectedResponseBody is the type of the "keys" service
+// "createKey" endpoint HTTP response body for the "unexpected" error.
+type CreateKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysUnauthorizedResponseBody is the type of the "keys" service
+// "listKeys" endpoint HTTP response body for the "unauthorized" error.
+type ListKeysUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysForbiddenResponseBody is the type of the "keys" service "listKeys"
+// endpoint HTTP response body for the "forbidden" error.
+type ListKeysForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysBadRequestResponseBody is the type of the "keys" service "listKeys"
+// endpoint HTTP response body for the "bad_request" error.
+type ListKeysBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysNotFoundResponseBody is the type of the "keys" service "listKeys"
+// endpoint HTTP response body for the "not_found" error.
+type ListKeysNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysConflictResponseBody is the type of the "keys" service "listKeys"
+// endpoint HTTP response body for the "conflict" error.
+type ListKeysConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysUnsupportedMediaResponseBody is the type of the "keys" service
+// "listKeys" endpoint HTTP response body for the "unsupported_media" error.
+type ListKeysUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysInvalidResponseBody is the type of the "keys" service "listKeys"
+// endpoint HTTP response body for the "invalid" error.
+type ListKeysInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysInvariantViolationResponseBody is the type of the "keys" service
+// "listKeys" endpoint HTTP response body for the "invariant_violation" error.
+type ListKeysInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysUnexpectedResponseBody is the type of the "keys" service "listKeys"
+// endpoint HTTP response body for the "unexpected" error.
+type ListKeysUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyUnauthorizedResponseBody is the type of the "keys" service
+// "revokeKey" endpoint HTTP response body for the "unauthorized" error.
+type RevokeKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyForbiddenResponseBody is the type of the "keys" service "revokeKey"
+// endpoint HTTP response body for the "forbidden" error.
+type RevokeKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyBadRequestResponseBody is the type of the "keys" service
+// "revokeKey" endpoint HTTP response body for the "bad_request" error.
+type RevokeKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyNotFoundResponseBody is the type of the "keys" service "revokeKey"
+// endpoint HTTP response body for the "not_found" error.
+type RevokeKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyConflictResponseBody is the type of the "keys" service "revokeKey"
+// endpoint HTTP response body for the "conflict" error.
+type RevokeKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyUnsupportedMediaResponseBody is the type of the "keys" service
+// "revokeKey" endpoint HTTP response body for the "unsupported_media" error.
+type RevokeKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyInvalidResponseBody is the type of the "keys" service "revokeKey"
+// endpoint HTTP response body for the "invalid" error.
+type RevokeKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyInvariantViolationResponseBody is the type of the "keys" service
+// "revokeKey" endpoint HTTP response body for the "invariant_violation" error.
+type RevokeKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyUnexpectedResponseBody is the type of the "keys" service
+// "revokeKey" endpoint HTTP response body for the "unexpected" error.
+type RevokeKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // KeyResponseBody is used to define fields on response body types.
 type KeyResponseBody struct {
 	// The ID of the key
@@ -105,6 +591,384 @@ func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
 		}
 	} else {
 		body.Keys = []*KeyResponseBody{}
+	}
+	return body
+}
+
+// NewCreateKeyUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyUnauthorizedResponseBody(res *goa.ServiceError) *CreateKeyUnauthorizedResponseBody {
+	body := &CreateKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyForbiddenResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyForbiddenResponseBody(res *goa.ServiceError) *CreateKeyForbiddenResponseBody {
+	body := &CreateKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyBadRequestResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyBadRequestResponseBody(res *goa.ServiceError) *CreateKeyBadRequestResponseBody {
+	body := &CreateKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyNotFoundResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyNotFoundResponseBody(res *goa.ServiceError) *CreateKeyNotFoundResponseBody {
+	body := &CreateKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyConflictResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyConflictResponseBody(res *goa.ServiceError) *CreateKeyConflictResponseBody {
+	body := &CreateKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateKeyUnsupportedMediaResponseBody {
+	body := &CreateKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyInvalidResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyInvalidResponseBody(res *goa.ServiceError) *CreateKeyInvalidResponseBody {
+	body := &CreateKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyInvariantViolationResponseBody(res *goa.ServiceError) *CreateKeyInvariantViolationResponseBody {
+	body := &CreateKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateKeyUnexpectedResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyUnexpectedResponseBody(res *goa.ServiceError) *CreateKeyUnexpectedResponseBody {
+	body := &CreateKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysUnauthorizedResponseBody(res *goa.ServiceError) *ListKeysUnauthorizedResponseBody {
+	body := &ListKeysUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysForbiddenResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysForbiddenResponseBody(res *goa.ServiceError) *ListKeysForbiddenResponseBody {
+	body := &ListKeysForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysBadRequestResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysBadRequestResponseBody(res *goa.ServiceError) *ListKeysBadRequestResponseBody {
+	body := &ListKeysBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysNotFoundResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysNotFoundResponseBody(res *goa.ServiceError) *ListKeysNotFoundResponseBody {
+	body := &ListKeysNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysConflictResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysConflictResponseBody(res *goa.ServiceError) *ListKeysConflictResponseBody {
+	body := &ListKeysConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysUnsupportedMediaResponseBody(res *goa.ServiceError) *ListKeysUnsupportedMediaResponseBody {
+	body := &ListKeysUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysInvalidResponseBody builds the HTTP response body from the result
+// of the "listKeys" endpoint of the "keys" service.
+func NewListKeysInvalidResponseBody(res *goa.ServiceError) *ListKeysInvalidResponseBody {
+	body := &ListKeysInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysInvariantViolationResponseBody(res *goa.ServiceError) *ListKeysInvariantViolationResponseBody {
+	body := &ListKeysInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysUnexpectedResponseBody(res *goa.ServiceError) *ListKeysUnexpectedResponseBody {
+	body := &ListKeysUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyUnauthorizedResponseBody(res *goa.ServiceError) *RevokeKeyUnauthorizedResponseBody {
+	body := &RevokeKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyForbiddenResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyForbiddenResponseBody(res *goa.ServiceError) *RevokeKeyForbiddenResponseBody {
+	body := &RevokeKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyBadRequestResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyBadRequestResponseBody(res *goa.ServiceError) *RevokeKeyBadRequestResponseBody {
+	body := &RevokeKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyNotFoundResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyNotFoundResponseBody(res *goa.ServiceError) *RevokeKeyNotFoundResponseBody {
+	body := &RevokeKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyConflictResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyConflictResponseBody(res *goa.ServiceError) *RevokeKeyConflictResponseBody {
+	body := &RevokeKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeKeyUnsupportedMediaResponseBody {
+	body := &RevokeKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyInvalidResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyInvalidResponseBody(res *goa.ServiceError) *RevokeKeyInvalidResponseBody {
+	body := &RevokeKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyInvariantViolationResponseBody(res *goa.ServiceError) *RevokeKeyInvariantViolationResponseBody {
+	body := &RevokeKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyUnexpectedResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyUnexpectedResponseBody(res *goa.ServiceError) *RevokeKeyUnexpectedResponseBody {
+	body := &RevokeKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }

@@ -63,6 +63,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -77,12 +78,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayload) (res *gen.GetDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	id, err := uuid.Parse(form.ID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment id").Log(ctx, s.logger)
 	}
 
 	dep, err := DescribeDeployment(ctx, s.logger, s.repo, ProjectID(*authCtx.ProjectID), DeploymentID(id))
@@ -91,7 +92,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}
 
 	if dep == nil {
-		return nil, errors.New("deployment not found")
+		return nil, oops.C(oops.CodeNotFound)
 	}
 
 	return &gen.GetDeploymentResult{
@@ -115,12 +116,12 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeploymentPayload) (res *gen.GetLatestDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -135,7 +136,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 				Deployment: nil,
 			}, nil
 		}
-		return nil, oops.E(err, "error getting latest deployment id", "failed to get latest deployment id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting latest deployment id").Log(ctx, s.logger)
 	}
 
 	if id == uuid.Nil {
@@ -157,14 +158,14 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeploymentsPayload) (res *gen.ListDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	var cursor uuid.NullUUID
 	if form.Cursor != nil {
 		c, err := uuid.Parse(*form.Cursor)
 		if err != nil {
-			return nil, oops.E(err, "invalid cursor", "failed to parse cursor").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
 		}
 
 		cursor = uuid.NullUUID{UUID: c, Valid: true}
@@ -205,7 +206,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	logger := s.logger
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	projectID := *authCtx.ProjectID
@@ -218,13 +219,13 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		attribute.String("session_id", *authCtx.SessionID),
 	)
 
-	if len(form.Openapiv3Assets) == 0 {
-		return nil, errors.New("at least one asset is required")
+	if len(form.Openapiv3Assets) == 0 && len(form.Packages) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package is required")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -236,7 +237,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	for _, add := range form.Openapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing asset id").Log(ctx, s.logger)
 		}
 
 		newAssets = append(newAssets, upsertOpenAPIv3{
@@ -288,17 +289,19 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(err, "error saving deployment", "failed to commit database transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
 	}
 
 	status := dep.Status
 	if status == "created" {
-		status, err = s.startDeployment(ctx, logger, projectID, newID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
 		if err != nil {
 			return nil, err
 		}
+
+		status = s
 		if status == "" {
-			return nil, errors.New("unable to resolve deployment status")
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "error resolving deployment status").Log(ctx, logger)
 		}
 
 		dep.Status = status
@@ -313,7 +316,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	span := trace.SpanFromContext(ctx)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("authorization check failed")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	projectID := *authCtx.ProjectID
@@ -323,7 +326,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(err, "database error", "failed to begin database transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -336,7 +339,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, add := range form.UpsertOpenapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing asset id").Log(ctx, s.logger)
 		}
 
 		assetsToUpsert = append(assetsToUpsert, upsertOpenAPIv3{
@@ -365,7 +368,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, assetID := range form.ExcludeOpenapiv3Assets {
 		id, err := uuid.Parse(assetID)
 		if err != nil {
-			return nil, oops.E(err, "error parsing deployment asset id to exclude", "failed to parse deployment asset id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment asset id to exclude").Log(ctx, s.logger)
 		}
 		excludeOpenapiv3Assets = append(excludeOpenapiv3Assets, id)
 	}
@@ -374,7 +377,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, pkgID := range form.ExcludePackages {
 		id, err := uuid.Parse(pkgID)
 		if err != nil {
-			return nil, oops.E(err, "error parsing deployment package id to exclude", "failed to parse deployment package id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment package id to exclude").Log(ctx, s.logger)
 		}
 		excludePackages = append(excludePackages, id)
 	}
@@ -401,12 +404,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			packagesToUpsert,
 		)
 		if err != nil {
-			return nil, oops.E(err, "error initializing deployment", "failed to initialize deployment").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error initializing deployment").Log(ctx, logger)
 		}
 
-		err = inv.Check("initial deployment state", "deployment id cannot be nil", newID != uuid.Nil)
-		if err != nil {
-			return nil, oops.E(err, "error cloning deployment", "cloned deployment id cannot be nil").Log(ctx, logger)
+		ierr := inv.Check("initial deployment state", "deployment id cannot be nil", newID != uuid.Nil)
+		if ierr != nil {
+			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
 		}
 
 		logger = logger.With(slog.String("deployment_id", newID.String()))
@@ -415,7 +418,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		cloneID = newID
 	// 2️⃣ Something went wrong querying for the latest deployment
 	case err != nil:
-		return nil, oops.E(err, "error getting latest deployment", "failed to get latest deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting latest deployment").Log(ctx, logger)
 	// 3️⃣ We found a latest deployment, we need to clone it
 	default:
 		newID, err := cloneDeployment(
@@ -427,12 +430,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			excludePackages,
 		)
 		if err != nil {
-			return nil, oops.E(err, "error cloning deployment", "failed to clone deployment").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
 		}
 
-		err = inv.Check("cloned deployment state", "deployment id cannot be nil", newID != uuid.Nil)
-		if err != nil {
-			return nil, oops.E(err, "error cloning deployment", "cloned deployment id cannot be nil").Log(ctx, logger)
+		ierr := inv.Check("cloned deployment state", "deployment id cannot be nil", newID != uuid.Nil)
+		if ierr != nil {
+			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
 		}
 
 		logger = logger.With(slog.String("deployment_id", newID.String()))
@@ -447,17 +450,19 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(err, "error saving deployment", "failed to commit database transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
 	}
 
 	status := dep.Status
 	if status == "created" {
-		status, err = s.startDeployment(ctx, logger, projectID, cloneID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, cloneID, dep)
 		if err != nil {
 			return nil, err
 		}
+
+		status = s
 		if status == "" {
-			return nil, errors.New("unable to resolve deployment status")
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").Log(ctx, logger)
 		}
 
 		dep.Status = status
@@ -483,10 +488,10 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		if version == "" {
 			row, err := tx.PeekLatestPackageVersionByName(ctx, name)
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, oops.E(err, "no versions found for package: "+name, "package version not found in database lookup").Log(ctx, s.logger, slog.String("package_name", name))
+				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: "+name).Log(ctx, s.logger, slog.String("package_name", name))
 			}
 			if err != nil {
-				return nil, oops.E(err, "error getting latest package version", "failed to get latest package version").Log(ctx, s.logger, slog.String("package_name", name))
+				return nil, oops.E(oops.CodeUnexpected, err, "error getting latest package version").Log(ctx, s.logger, slog.String("package_name", name))
 			}
 
 			packageID = row.PackageID
@@ -494,11 +499,11 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		} else {
 			semver, err := packages.ParseSemver(version)
 			if err != nil {
-				return nil, oops.E(err, "error parsing semver", "failed to parse semver").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeBadRequest, err, "error parsing semver").Log(ctx, s.logger)
 			}
 
 			if err := inv.Check("semver", "semver must be valid", semver.Valid); err != nil {
-				return nil, oops.E(err, "package version incorrectly parsed", "package semver invariant check failed").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeInvariantViolation, err, "package version incorrectly parsed").Log(ctx, s.logger)
 			}
 
 			row, err := tx.PeekPackageByNameAndVersion(ctx, packagesRepo.PeekPackageByNameAndVersionParams{
@@ -511,10 +516,10 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 			})
 			if errors.Is(err, sql.ErrNoRows) {
 				msg := fmt.Sprintf("package version not found: %s@%s", name, version)
-				return nil, oops.E(err, msg, "package version not found in database lookup").Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
+				return nil, oops.E(oops.CodeBadRequest, err, msg).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
 			}
 			if err != nil {
-				return nil, oops.E(err, "error getting package by name and version", "failed to get package by name and version").Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
+				return nil, oops.E(oops.CodeBadRequest, err, "error getting package by name and version").Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
 			}
 
 			packageID = row.PackageID
@@ -523,7 +528,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 
 		if packageID == uuid.Nil || versionID == uuid.Nil {
 			msg := fmt.Sprintf("could not resolve package version: %s@%s", name, conv.Default(version, "latest"))
-			return nil, oops.E(nil, msg, "package or version could not be resolved").Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", conv.Default(version, "latest")))
+			return nil, oops.E(oops.CodeBadRequest, nil, msg).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", conv.Default(version, "latest")))
 		}
 
 		res = append(res, resolvedPackage{
@@ -547,7 +552,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 			Event:        "deployment:failed",
 			Message:      err.Error(),
 		}); err != nil {
-			return "", oops.E(err, "error transitioning deployment to error", "failed to transition deployment to error").Log(ctx, logger)
+			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to error").Log(ctx, logger)
 		}
 
 		span.AddEvent("deployment_failed")
@@ -560,7 +565,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 			Event:        "deployment:completed",
 			Message:      "Deployment completed",
 		}); err != nil {
-			return "", oops.E(err, "error transitioning deployment to completed", "failed to transition deployment to completed").Log(ctx, logger)
+			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to completed").Log(ctx, logger)
 		}
 
 		span.AddEvent("deployment_completed")
@@ -578,12 +583,12 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 
 	deploymentID, err := uuid.Parse(deployment.ID)
 	if err != nil {
-		return oops.E(err, "error parsing deployment id", "failed to parse deployment id").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "error parsing deployment id").Log(ctx, logger)
 	}
 
 	projectID, err := uuid.Parse(deployment.ProjectID)
 	if err != nil {
-		return oops.E(err, "error parsing project id", "failed to parse project id").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "error parsing project id").Log(ctx, logger)
 	}
 
 	_, err = s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
@@ -594,7 +599,7 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 		Message:      "Deployment pending",
 	})
 	if err != nil {
-		return oops.E(err, "error logging deployment event", "failed to mark deployment as pending").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "error transitioning deployment to pending").Log(ctx, logger)
 	}
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(2)
@@ -606,12 +611,12 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 
 		openapiDocID, err := uuid.Parse(docInfo.ID)
 		if err != nil {
-			return oops.E(err, "error parsing openapi document id", "failed to parse openapi document id").Log(ctx, logger)
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing openapi document id").Log(ctx, logger)
 		}
 
 		assetID, err := uuid.Parse(docInfo.AssetID)
 		if err != nil {
-			return oops.E(err, "error parsing asset id", "failed to parse asset id").Log(ctx, logger)
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing asset id").Log(ctx, logger)
 		}
 
 		asset, err := s.assets.GetProjectAsset(ctx, assetsRepo.GetProjectAssetParams{
@@ -619,18 +624,18 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 			ProjectID: projectID,
 		})
 		if err != nil {
-			return oops.E(err, "error getting asset", "failed to get asset").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error getting asset").Log(ctx, logger)
 		}
 
 		u, err := url.Parse(asset.Url)
 		if err != nil {
-			return oops.E(err, "error parsing asset URL", "failed to parse asset URL").Log(ctx, logger)
+			return oops.E(oops.CodeBadRequest, err, "error parsing asset URL").Log(ctx, logger)
 		}
 
 		workers.Go(func() error {
 			dbtx, err := s.db.Begin(ctx)
 			if err != nil {
-				return oops.E(err, "unexpected database error", "failed to begin database transaction").Log(ctx, logger)
+				return oops.E(oops.CodeUnexpected, err, "error processing deployment").Log(ctx, logger)
 			}
 			defer o11y.NoLogDefer(func() error {
 				return dbtx.Rollback(ctx)
@@ -647,7 +652,7 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 			})
 
 			if err := dbtx.Commit(ctx); err != nil {
-				return oops.E(err, "unexpected database error", "failed to commit database transaction").Log(ctx, logger)
+				return oops.E(oops.CodeUnexpected, err, "error saving processed deployment").Log(ctx, logger)
 			}
 
 			if processErr == nil {

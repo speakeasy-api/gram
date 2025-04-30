@@ -3,7 +3,6 @@ package sessions
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type localEnvFile map[string]struct {
@@ -94,13 +94,13 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 				return ctx, err
 			}
 		} else {
-			return ctx, errors.New("session token is required for auth")
+			return ctx, oops.C(oops.CodeUnauthorized)
 		}
 	}
 
 	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
 	if err != nil {
-		return ctx, errors.New("session token is invalid")
+		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
@@ -111,7 +111,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	})
 
 	if _, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID); !ok {
-		return ctx, errors.New("user does not have access to organization")
+		return ctx, oops.C(oops.CodeForbidden)
 	}
 
 	return ctx, nil

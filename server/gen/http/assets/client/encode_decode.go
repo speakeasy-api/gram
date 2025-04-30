@@ -76,6 +76,17 @@ func EncodeUploadOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) f
 // DecodeUploadOpenAPIv3Response returns a decoder for responses returned by
 // the assets uploadOpenAPIv3 endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
+// DecodeUploadOpenAPIv3Response may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeUploadOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -106,6 +117,139 @@ func DecodeUploadOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewUploadOpenAPIv3ResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UploadOpenAPIv3UnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3UnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3Unauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UploadOpenAPIv3ForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3ForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3Forbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UploadOpenAPIv3BadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3BadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3BadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UploadOpenAPIv3NotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3NotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3NotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UploadOpenAPIv3ConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3ConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3Conflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UploadOpenAPIv3UnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3UnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3UnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UploadOpenAPIv3InvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3InvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3Invalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UploadOpenAPIv3InvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+				}
+				err = ValidateUploadOpenAPIv3InvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+				}
+				return nil, NewUploadOpenAPIv3InvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UploadOpenAPIv3UnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+				}
+				err = ValidateUploadOpenAPIv3UnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+				}
+				return nil, NewUploadOpenAPIv3Unexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "uploadOpenAPIv3", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("assets", "uploadOpenAPIv3", resp.StatusCode, string(body))

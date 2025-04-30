@@ -122,7 +122,7 @@ func NewGetDeploymentHandler(
 	var (
 		decodeRequest  = DecodeGetDeploymentRequest(mux, decoder)
 		encodeResponse = EncodeGetDeploymentResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeGetDeploymentError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -173,7 +173,7 @@ func NewGetLatestDeploymentHandler(
 	var (
 		decodeRequest  = DecodeGetLatestDeploymentRequest(mux, decoder)
 		encodeResponse = EncodeGetLatestDeploymentResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeGetLatestDeploymentError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -224,7 +224,7 @@ func NewCreateDeploymentHandler(
 	var (
 		decodeRequest  = DecodeCreateDeploymentRequest(mux, decoder)
 		encodeResponse = EncodeCreateDeploymentResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeCreateDeploymentError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -275,7 +275,7 @@ func NewEvolveHandler(
 	var (
 		decodeRequest  = DecodeEvolveRequest(mux, decoder)
 		encodeResponse = EncodeEvolveResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeEvolveError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -326,7 +326,7 @@ func NewListDeploymentsHandler(
 	var (
 		decodeRequest  = DecodeListDeploymentsRequest(mux, decoder)
 		encodeResponse = EncodeListDeploymentsResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeListDeploymentsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))

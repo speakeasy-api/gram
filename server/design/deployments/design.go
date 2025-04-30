@@ -11,6 +11,7 @@ var _ = Service("deployments", func() {
 	Description("Manages deployments of tools from upstream sources.")
 
 	Security(security.Session, security.ProjectSlug)
+	shared.DeclareErrorResponses()
 
 	Method("getDeployment", func() {
 		Description("Get a deployment by its ID.")

@@ -56,6 +56,17 @@ func EncodeCreateProjectRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeCreateProjectResponse returns a decoder for responses returned by the
 // projects createProject endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeCreateProjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeCreateProjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -86,6 +97,139 @@ func DecodeCreateProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			res := NewCreateProjectResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateProjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateProjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateProjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateProjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateProjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateProjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateProjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+				}
+				err = ValidateCreateProjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "createProject", err)
+				}
+				return nil, NewCreateProjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateProjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+				}
+				err = ValidateCreateProjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "createProject", err)
+				}
+				return nil, NewCreateProjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "createProject", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("projects", "createProject", resp.StatusCode, string(body))
@@ -130,6 +274,17 @@ func EncodeListProjectsRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeListProjectsResponse returns a decoder for responses returned by the
 // projects listProjects endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeListProjectsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeListProjectsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -160,6 +315,139 @@ func DecodeListProjectsResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewListProjectsResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListProjectsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListProjectsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListProjectsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListProjectsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListProjectsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListProjectsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListProjectsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListProjectsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+				}
+				err = ValidateListProjectsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+				}
+				return nil, NewListProjectsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListProjectsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+				}
+				err = ValidateListProjectsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+				}
+				return nil, NewListProjectsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "listProjects", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("projects", "listProjects", resp.StatusCode, string(body))

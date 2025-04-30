@@ -10,22 +10,32 @@ import (
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	goa "goa.design/goa/v3/pkg"
 )
 
 var funcMemo sync.Map
 
-// E captures the public and private message for an error.
-//
 //go:noinline
-func E(cause error, public string, private string) *ShareableError {
-	if cause == nil {
-		return nil
-	}
-
+func E(code Code, cause error, public string) *ShareableError {
 	var pc [1]uintptr
 	runtime.Callers(2, pc[:])
 
 	return &ShareableError{
+		code:    code,
+		cause:   cause,
+		private: "",
+		public:  public,
+		pc:      pc[0],
+	}
+}
+
+//go:noinline
+func EE(code Code, cause error, public string, private string) *ShareableError {
+	var pc [1]uintptr
+	runtime.Callers(2, pc[:])
+
+	return &ShareableError{
+		code:    code,
 		cause:   cause,
 		public:  public,
 		private: private,
@@ -33,7 +43,22 @@ func E(cause error, public string, private string) *ShareableError {
 	}
 }
 
+//go:noinline
+func C(code Code) *ShareableError {
+	var pc [1]uintptr
+	runtime.Callers(2, pc[:])
+
+	return &ShareableError{
+		code:    code,
+		cause:   nil,
+		private: "",
+		public:  code.UserMessage(),
+		pc:      pc[0],
+	}
+}
+
 type ShareableError struct {
+	code    Code
 	cause   error
 	public  string
 	private string
@@ -45,7 +70,16 @@ func (e *ShareableError) Error() string {
 }
 
 func (e *ShareableError) String() string {
-	return fmt.Sprintf("%s: %s [%s]", e.private, e.cause.Error(), funcForPC(e.pc))
+	msg := e.private
+	if msg == "" {
+		msg = e.public
+	}
+
+	if e.cause == nil {
+		return fmt.Sprintf("%s [%s]", msg, funcForPC(e.pc))
+	}
+
+	return fmt.Sprintf("%s: %s [%s]", msg, e.cause.Error(), funcForPC(e.pc))
 }
 
 func (e *ShareableError) Unwrap() error {
@@ -66,12 +100,26 @@ func (e *ShareableError) LogValue() slog.Value {
 
 func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...any) *ShareableError {
 	trace.SpanFromContext(ctx).SetStatus(codes.Error, e.String())
+
 	if len(args) > 0 {
 		logger.ErrorContext(ctx, e.public, append(args, slog.String("error", e.String()))...)
 	} else {
 		logger.ErrorContext(ctx, e.public, slog.String("error", e.String()))
 	}
 	return e
+}
+
+func (e *ShareableError) AsGoa() *goa.ServiceError {
+	var timeout, temporary, fault bool
+
+	switch e.code {
+	case CodeUnexpected, CodeInvariantViolation:
+		fault = true
+	default:
+		timeout, temporary, fault = false, false, false
+	}
+
+	return goa.NewServiceError(e, string(e.code), timeout, temporary, fault)
 }
 
 func funcForPC(pc uintptr) string {

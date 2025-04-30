@@ -9,6 +9,7 @@ import (
 
 var _ = Service("packages", func() {
 	Description("Manages packages in Gram.")
+	shared.DeclareErrorResponses()
 
 	Method("createPackage", func() {
 		Description("Create a new package for a project.")

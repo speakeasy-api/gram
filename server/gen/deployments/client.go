@@ -35,6 +35,17 @@ func NewClient(getDeployment, getLatestDeployment, createDeployment, evolve, lis
 
 // GetDeployment calls the "getDeployment" endpoint of the "deployments"
 // service.
+// GetDeployment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (res *GetDeploymentResult, err error) {
 	var ires any
 	ires, err = c.GetDeploymentEndpoint(ctx, p)
@@ -46,6 +57,17 @@ func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (re
 
 // GetLatestDeployment calls the "getLatestDeployment" endpoint of the
 // "deployments" service.
+// GetLatestDeployment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) GetLatestDeployment(ctx context.Context, p *GetLatestDeploymentPayload) (res *GetLatestDeploymentResult, err error) {
 	var ires any
 	ires, err = c.GetLatestDeploymentEndpoint(ctx, p)
@@ -57,6 +79,17 @@ func (c *Client) GetLatestDeployment(ctx context.Context, p *GetLatestDeployment
 
 // CreateDeployment calls the "createDeployment" endpoint of the "deployments"
 // service.
+// CreateDeployment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayload) (res *CreateDeploymentResult, err error) {
 	var ires any
 	ires, err = c.CreateDeploymentEndpoint(ctx, p)
@@ -67,6 +100,17 @@ func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayloa
 }
 
 // Evolve calls the "evolve" endpoint of the "deployments" service.
+// Evolve may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) Evolve(ctx context.Context, p *EvolvePayload) (res *EvolveResult, err error) {
 	var ires any
 	ires, err = c.EvolveEndpoint(ctx, p)
@@ -78,6 +122,17 @@ func (c *Client) Evolve(ctx context.Context, p *EvolvePayload) (res *EvolveResul
 
 // ListDeployments calls the "listDeployments" endpoint of the "deployments"
 // service.
+// ListDeployments may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) ListDeployments(ctx context.Context, p *ListDeploymentsPayload) (res *ListDeploymentResult, err error) {
 	var ires any
 	ires, err = c.ListDeploymentsEndpoint(ctx, p)

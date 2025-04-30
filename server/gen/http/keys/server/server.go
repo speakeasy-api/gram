@@ -112,7 +112,7 @@ func NewCreateKeyHandler(
 	var (
 		decodeRequest  = DecodeCreateKeyRequest(mux, decoder)
 		encodeResponse = EncodeCreateKeyResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeCreateKeyError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -163,7 +163,7 @@ func NewListKeysHandler(
 	var (
 		decodeRequest  = DecodeListKeysRequest(mux, decoder)
 		encodeResponse = EncodeListKeysResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeListKeysError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -214,7 +214,7 @@ func NewRevokeKeyHandler(
 	var (
 		decodeRequest  = DecodeRevokeKeyRequest(mux, decoder)
 		encodeResponse = EncodeRevokeKeyResponse(encoder)
-		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+		encodeError    = EncodeRevokeKeyError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))

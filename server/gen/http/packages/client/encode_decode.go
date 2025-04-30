@@ -60,6 +60,17 @@ func EncodeCreatePackageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeCreatePackageResponse returns a decoder for responses returned by the
 // packages createPackage endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeCreatePackageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeCreatePackageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -90,6 +101,139 @@ func DecodeCreatePackageResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			res := NewCreatePackageResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreatePackageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreatePackageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreatePackageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreatePackageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreatePackageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreatePackageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreatePackageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreatePackageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+				}
+				err = ValidateCreatePackageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+				}
+				return nil, NewCreatePackageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreatePackageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+				}
+				err = ValidateCreatePackageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+				}
+				return nil, NewCreatePackageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("packages", "createPackage", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("packages", "createPackage", resp.StatusCode, string(body))
@@ -138,6 +282,17 @@ func EncodeListVersionsRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeListVersionsResponse returns a decoder for responses returned by the
 // packages listVersions endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeListVersionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeListVersionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -168,6 +323,139 @@ func DecodeListVersionsResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewListVersionsResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListVersionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListVersionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListVersionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListVersionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListVersionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListVersionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListVersionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListVersionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+				}
+				err = ValidateListVersionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+				}
+				return nil, NewListVersionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListVersionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+				}
+				err = ValidateListVersionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+				}
+				return nil, NewListVersionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("packages", "listVersions", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("packages", "listVersions", resp.StatusCode, string(body))
@@ -217,6 +505,17 @@ func EncodePublishRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 // DecodePublishResponse returns a decoder for responses returned by the
 // packages publish endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
+// DecodePublishResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodePublishResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -247,6 +546,139 @@ func DecodePublishResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			res := NewPublishPackageResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PublishUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PublishForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PublishBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PublishNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PublishConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PublishUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PublishInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PublishInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("packages", "publish", err)
+				}
+				err = ValidatePublishInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("packages", "publish", err)
+				}
+				return nil, NewPublishInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PublishUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("packages", "publish", err)
+				}
+				err = ValidatePublishUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("packages", "publish", err)
+				}
+				return nil, NewPublishUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("packages", "publish", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("packages", "publish", resp.StatusCode, string(body))

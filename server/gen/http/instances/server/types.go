@@ -9,6 +9,7 @@ package server
 
 import (
 	instances "github.com/speakeasy-api/gram/gen/instances"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // GetInstanceResponseBody is the type of the "instances" service "getInstance"
@@ -24,6 +25,170 @@ type GetInstanceResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The environment
 	Environment *EnvironmentResponseBody `form:"environment" json:"environment" xml:"environment"`
+}
+
+// GetInstanceUnauthorizedResponseBody is the type of the "instances" service
+// "getInstance" endpoint HTTP response body for the "unauthorized" error.
+type GetInstanceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceForbiddenResponseBody is the type of the "instances" service
+// "getInstance" endpoint HTTP response body for the "forbidden" error.
+type GetInstanceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceBadRequestResponseBody is the type of the "instances" service
+// "getInstance" endpoint HTTP response body for the "bad_request" error.
+type GetInstanceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceNotFoundResponseBody is the type of the "instances" service
+// "getInstance" endpoint HTTP response body for the "not_found" error.
+type GetInstanceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceConflictResponseBody is the type of the "instances" service
+// "getInstance" endpoint HTTP response body for the "conflict" error.
+type GetInstanceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceUnsupportedMediaResponseBody is the type of the "instances"
+// service "getInstance" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetInstanceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceInvalidResponseBody is the type of the "instances" service
+// "getInstance" endpoint HTTP response body for the "invalid" error.
+type GetInstanceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceInvariantViolationResponseBody is the type of the "instances"
+// service "getInstance" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetInstanceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInstanceUnexpectedResponseBody is the type of the "instances" service
+// "getInstance" endpoint HTTP response body for the "unexpected" error.
+type GetInstanceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // HTTPToolDefinitionResponseBody is used to define fields on response body
@@ -120,6 +285,132 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 	}
 	if res.Environment != nil {
 		body.Environment = marshalInstancesEnvironmentToEnvironmentResponseBody(res.Environment)
+	}
+	return body
+}
+
+// NewGetInstanceUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceUnauthorizedResponseBody(res *goa.ServiceError) *GetInstanceUnauthorizedResponseBody {
+	body := &GetInstanceUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceForbiddenResponseBody builds the HTTP response body from the
+// result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceForbiddenResponseBody(res *goa.ServiceError) *GetInstanceForbiddenResponseBody {
+	body := &GetInstanceForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceBadRequestResponseBody builds the HTTP response body from the
+// result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceBadRequestResponseBody(res *goa.ServiceError) *GetInstanceBadRequestResponseBody {
+	body := &GetInstanceBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceNotFoundResponseBody builds the HTTP response body from the
+// result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceNotFoundResponseBody(res *goa.ServiceError) *GetInstanceNotFoundResponseBody {
+	body := &GetInstanceNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceConflictResponseBody builds the HTTP response body from the
+// result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceConflictResponseBody(res *goa.ServiceError) *GetInstanceConflictResponseBody {
+	body := &GetInstanceConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceUnsupportedMediaResponseBody(res *goa.ServiceError) *GetInstanceUnsupportedMediaResponseBody {
+	body := &GetInstanceUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceInvalidResponseBody builds the HTTP response body from the
+// result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceInvalidResponseBody(res *goa.ServiceError) *GetInstanceInvalidResponseBody {
+	body := &GetInstanceInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceInvariantViolationResponseBody(res *goa.ServiceError) *GetInstanceInvariantViolationResponseBody {
+	body := &GetInstanceInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInstanceUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getInstance" endpoint of the "instances" service.
+func NewGetInstanceUnexpectedResponseBody(res *goa.ServiceError) *GetInstanceUnexpectedResponseBody {
+	body := &GetInstanceUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }

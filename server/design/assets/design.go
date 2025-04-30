@@ -2,6 +2,7 @@ package assets
 
 import (
 	"github.com/speakeasy-api/gram/design/security"
+	"github.com/speakeasy-api/gram/design/shared"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -9,6 +10,7 @@ var _ = Service("assets", func() {
 	Description("Manages assets used by Gram projects.")
 
 	Security(security.Session, security.ProjectSlug)
+	shared.DeclareErrorResponses()
 
 	Method("uploadOpenAPIv3", func() {
 		Description("Upload an OpenAPI v3 document to Gram.")

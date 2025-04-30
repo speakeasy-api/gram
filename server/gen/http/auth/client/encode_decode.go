@@ -52,6 +52,17 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // DecodeCallbackResponse returns a decoder for responses returned by the auth
 // callback endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
+// DecodeCallbackResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -104,6 +115,139 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			res := NewCallbackResultTemporaryRedirect(location, sessionToken, sessionCookie)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CallbackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CallbackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CallbackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CallbackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CallbackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CallbackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CallbackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CallbackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "callback", err)
+				}
+				err = ValidateCallbackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "callback", err)
+				}
+				return nil, NewCallbackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CallbackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "callback", err)
+				}
+				err = ValidateCallbackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "callback", err)
+				}
+				return nil, NewCallbackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "callback", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "callback", resp.StatusCode, string(body))
@@ -129,6 +273,17 @@ func (c *Client) BuildLoginRequest(ctx context.Context, v any) (*http.Request, e
 // DecodeLoginResponse returns a decoder for responses returned by the auth
 // login endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
+// DecodeLoginResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -159,6 +314,139 @@ func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 			}
 			res := NewLoginResultTemporaryRedirect(location)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body LoginUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body LoginForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body LoginBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body LoginNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body LoginConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body LoginUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body LoginInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body LoginInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "login", err)
+				}
+				err = ValidateLoginInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "login", err)
+				}
+				return nil, NewLoginInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body LoginUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "login", err)
+				}
+				err = ValidateLoginUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "login", err)
+				}
+				return nil, NewLoginUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "login", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "login", resp.StatusCode, string(body))
@@ -208,6 +496,17 @@ func EncodeSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeSwitchScopesResponse returns a decoder for responses returned by the
 // auth switchScopes endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
+// DecodeSwitchScopesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -254,6 +553,139 @@ func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewSwitchScopesResultOK(sessionToken, sessionCookie)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SwitchScopesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SwitchScopesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SwitchScopesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SwitchScopesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SwitchScopesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SwitchScopesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SwitchScopesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SwitchScopesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+				}
+				err = ValidateSwitchScopesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+				}
+				return nil, NewSwitchScopesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SwitchScopesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+				}
+				err = ValidateSwitchScopesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+				}
+				return nil, NewSwitchScopesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "switchScopes", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "switchScopes", resp.StatusCode, string(body))
@@ -295,6 +727,17 @@ func EncodeLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // DecodeLogoutResponse returns a decoder for responses returned by the auth
 // logout endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
+// DecodeLogoutResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -333,6 +776,139 @@ func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			}
 			res := NewLogoutResultOK(sessionCookie)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body LogoutUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body LogoutForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body LogoutBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body LogoutNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body LogoutConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body LogoutUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body LogoutInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body LogoutInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logout", err)
+				}
+				err = ValidateLogoutInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logout", err)
+				}
+				return nil, NewLogoutInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body LogoutUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logout", err)
+				}
+				err = ValidateLogoutUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logout", err)
+				}
+				return nil, NewLogoutUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "logout", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "logout", resp.StatusCode, string(body))
@@ -374,6 +950,17 @@ func EncodeInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 // DecodeInfoResponse returns a decoder for responses returned by the auth info
 // endpoint. restoreBody controls whether the response body should be restored
 // after having been read.
+// DecodeInfoResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -431,6 +1018,139 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			}
 			res := NewInfoResultOK(&body, sessionToken, sessionCookie)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body InfoUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body InfoForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body InfoBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body InfoNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body InfoConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body InfoUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body InfoInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body InfoInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "info", err)
+				}
+				err = ValidateInfoInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "info", err)
+				}
+				return nil, NewInfoInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body InfoUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "info", err)
+				}
+				err = ValidateInfoUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "info", err)
+				}
+				return nil, NewInfoUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "info", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "info", resp.StatusCode, string(body))

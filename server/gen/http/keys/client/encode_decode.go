@@ -56,6 +56,17 @@ func EncodeCreateKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // DecodeCreateKeyResponse returns a decoder for responses returned by the keys
 // createKey endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
+// DecodeCreateKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeCreateKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -86,6 +97,139 @@ func DecodeCreateKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			res := NewCreateKeyKeyOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+				}
+				err = ValidateCreateKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "createKey", err)
+				}
+				return nil, NewCreateKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+				}
+				err = ValidateCreateKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "createKey", err)
+				}
+				return nil, NewCreateKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "createKey", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("keys", "createKey", resp.StatusCode, string(body))
@@ -127,6 +271,17 @@ func EncodeListKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // DecodeListKeysResponse returns a decoder for responses returned by the keys
 // listKeys endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
+// DecodeListKeysResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -157,6 +312,139 @@ func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			res := NewListKeysResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListKeysUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListKeysForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListKeysBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListKeysNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListKeysConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListKeysUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListKeysInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListKeysInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+				}
+				err = ValidateListKeysInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+				}
+				return nil, NewListKeysInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListKeysUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+				}
+				err = ValidateListKeysUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+				}
+				return nil, NewListKeysUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "listKeys", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("keys", "listKeys", resp.StatusCode, string(body))
@@ -201,6 +489,17 @@ func EncodeRevokeKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // DecodeRevokeKeyResponse returns a decoder for responses returned by the keys
 // revokeKey endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
+// DecodeRevokeKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -218,6 +517,139 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 		switch resp.StatusCode {
 		case http.StatusOK:
 			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevokeKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevokeKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevokeKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevokeKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevokeKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevokeKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevokeKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevokeKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+				}
+				err = ValidateRevokeKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+				}
+				return nil, NewRevokeKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevokeKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+				}
+				err = ValidateRevokeKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+				}
+				return nil, NewRevokeKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "revokeKey", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("keys", "revokeKey", resp.StatusCode, string(body))

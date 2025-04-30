@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -73,6 +75,7 @@ func FormSignInRedirectURL(env string) string {
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -151,7 +154,7 @@ func (s *Service) Login(context.Context) (res *gen.LoginResult, err error) {
 func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, errors.New("session not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
@@ -168,7 +171,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 			}
 		}
 		if !orgFound {
-			return nil, errors.New("organization not found")
+			return nil, oops.E(oops.CodeInvalid, nil, "organization not found in user info")
 		}
 		authCtx.ActiveOrganizationID = *payload.OrganizationID
 	}
@@ -191,7 +194,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	// Clears cookie and invalidates session
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, errors.New("session not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
@@ -211,7 +214,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.InfoResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, errors.New("session not found in context")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
@@ -268,13 +271,13 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]projectsRepo.Project, error) {
 	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(err, "error listing projects", "failed to list projects by organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing projects").Log(ctx, s.logger)
 	}
 
 	if len(projects) == 0 {
 		project, err := s.createDefaultProject(ctx, organizationID)
 		if err != nil {
-			return nil, oops.E(err, "error creating default project", "failed to create default project").Log(ctx, s.logger)
+			return nil, err
 		}
 
 		_, err = s.envRepo.CreateEnvironment(ctx, envRepo.CreateEnvironmentParams{
@@ -285,7 +288,7 @@ func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID
 			Description:    conv.ToPGText("Default project for organization"),
 		})
 		if err != nil {
-			return nil, oops.E(err, "error creating default environment", "failed to create default environment").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").Log(ctx, s.logger)
 		}
 
 		projects = append(projects, project)
@@ -300,11 +303,14 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 		Name:           "Default",
 		Slug:           "default",
 	})
+	var pgErr *pgconn.PgError
+	var empty projectsRepo.Project
 	if err != nil {
-		if strings.Contains(err.Error(), "unique constraint") {
-			return project, errors.New("project slug already exists")
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return empty, oops.E(oops.CodeConflict, nil, "project already exists")
 		}
-		return project, err
+		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").Log(ctx, s.logger)
 	}
+
 	return project, nil
 }

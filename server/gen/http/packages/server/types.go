@@ -63,6 +63,496 @@ type PublishResponseBody struct {
 	Version *PackageVersionResponseBody `form:"version" json:"version" xml:"version"`
 }
 
+// CreatePackageUnauthorizedResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "unauthorized" error.
+type CreatePackageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageForbiddenResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "forbidden" error.
+type CreatePackageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageBadRequestResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "bad_request" error.
+type CreatePackageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageNotFoundResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "not_found" error.
+type CreatePackageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageConflictResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "conflict" error.
+type CreatePackageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageUnsupportedMediaResponseBody is the type of the "packages"
+// service "createPackage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreatePackageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageInvalidResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "invalid" error.
+type CreatePackageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageInvariantViolationResponseBody is the type of the "packages"
+// service "createPackage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreatePackageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePackageUnexpectedResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "unexpected" error.
+type CreatePackageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsUnauthorizedResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "unauthorized" error.
+type ListVersionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsForbiddenResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "forbidden" error.
+type ListVersionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsBadRequestResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "bad_request" error.
+type ListVersionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsNotFoundResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "not_found" error.
+type ListVersionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsConflictResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "conflict" error.
+type ListVersionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsUnsupportedMediaResponseBody is the type of the "packages"
+// service "listVersions" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListVersionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsInvalidResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "invalid" error.
+type ListVersionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsInvariantViolationResponseBody is the type of the "packages"
+// service "listVersions" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListVersionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListVersionsUnexpectedResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "unexpected" error.
+type ListVersionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishUnauthorizedResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "unauthorized" error.
+type PublishUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishForbiddenResponseBody is the type of the "packages" service "publish"
+// endpoint HTTP response body for the "forbidden" error.
+type PublishForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishBadRequestResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "bad_request" error.
+type PublishBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishNotFoundResponseBody is the type of the "packages" service "publish"
+// endpoint HTTP response body for the "not_found" error.
+type PublishNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishConflictResponseBody is the type of the "packages" service "publish"
+// endpoint HTTP response body for the "conflict" error.
+type PublishConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishUnsupportedMediaResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "unsupported_media" error.
+type PublishUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishInvalidResponseBody is the type of the "packages" service "publish"
+// endpoint HTTP response body for the "invalid" error.
+type PublishInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishInvariantViolationResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "invariant_violation" error.
+type PublishInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishUnexpectedResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "unexpected" error.
+type PublishUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // PackageResponseBody is used to define fields on response body types.
 type PackageResponseBody struct {
 	// The ID of the package
@@ -142,6 +632,384 @@ func NewPublishResponseBody(res *packages.PublishPackageResult) *PublishResponse
 	}
 	if res.Version != nil {
 		body.Version = marshalPackagesPackageVersionToPackageVersionResponseBody(res.Version)
+	}
+	return body
+}
+
+// NewCreatePackageUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageUnauthorizedResponseBody(res *goa.ServiceError) *CreatePackageUnauthorizedResponseBody {
+	body := &CreatePackageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageForbiddenResponseBody builds the HTTP response body from the
+// result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageForbiddenResponseBody(res *goa.ServiceError) *CreatePackageForbiddenResponseBody {
+	body := &CreatePackageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageBadRequestResponseBody builds the HTTP response body from
+// the result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageBadRequestResponseBody(res *goa.ServiceError) *CreatePackageBadRequestResponseBody {
+	body := &CreatePackageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageNotFoundResponseBody builds the HTTP response body from the
+// result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageNotFoundResponseBody(res *goa.ServiceError) *CreatePackageNotFoundResponseBody {
+	body := &CreatePackageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageConflictResponseBody builds the HTTP response body from the
+// result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageConflictResponseBody(res *goa.ServiceError) *CreatePackageConflictResponseBody {
+	body := &CreatePackageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageUnsupportedMediaResponseBody(res *goa.ServiceError) *CreatePackageUnsupportedMediaResponseBody {
+	body := &CreatePackageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageInvalidResponseBody builds the HTTP response body from the
+// result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageInvalidResponseBody(res *goa.ServiceError) *CreatePackageInvalidResponseBody {
+	body := &CreatePackageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageInvariantViolationResponseBody(res *goa.ServiceError) *CreatePackageInvariantViolationResponseBody {
+	body := &CreatePackageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePackageUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageUnexpectedResponseBody(res *goa.ServiceError) *CreatePackageUnexpectedResponseBody {
+	body := &CreatePackageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsUnauthorizedResponseBody(res *goa.ServiceError) *ListVersionsUnauthorizedResponseBody {
+	body := &ListVersionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsForbiddenResponseBody(res *goa.ServiceError) *ListVersionsForbiddenResponseBody {
+	body := &ListVersionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsBadRequestResponseBody(res *goa.ServiceError) *ListVersionsBadRequestResponseBody {
+	body := &ListVersionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsNotFoundResponseBody(res *goa.ServiceError) *ListVersionsNotFoundResponseBody {
+	body := &ListVersionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsConflictResponseBody builds the HTTP response body from the
+// result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsConflictResponseBody(res *goa.ServiceError) *ListVersionsConflictResponseBody {
+	body := &ListVersionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListVersionsUnsupportedMediaResponseBody {
+	body := &ListVersionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsInvalidResponseBody builds the HTTP response body from the
+// result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsInvalidResponseBody(res *goa.ServiceError) *ListVersionsInvalidResponseBody {
+	body := &ListVersionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsInvariantViolationResponseBody(res *goa.ServiceError) *ListVersionsInvariantViolationResponseBody {
+	body := &ListVersionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListVersionsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsUnexpectedResponseBody(res *goa.ServiceError) *ListVersionsUnexpectedResponseBody {
+	body := &ListVersionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "packages" service.
+func NewPublishUnauthorizedResponseBody(res *goa.ServiceError) *PublishUnauthorizedResponseBody {
+	body := &PublishUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishForbiddenResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "packages" service.
+func NewPublishForbiddenResponseBody(res *goa.ServiceError) *PublishForbiddenResponseBody {
+	body := &PublishForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishBadRequestResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "packages" service.
+func NewPublishBadRequestResponseBody(res *goa.ServiceError) *PublishBadRequestResponseBody {
+	body := &PublishBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishNotFoundResponseBody builds the HTTP response body from the result
+// of the "publish" endpoint of the "packages" service.
+func NewPublishNotFoundResponseBody(res *goa.ServiceError) *PublishNotFoundResponseBody {
+	body := &PublishNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishConflictResponseBody builds the HTTP response body from the result
+// of the "publish" endpoint of the "packages" service.
+func NewPublishConflictResponseBody(res *goa.ServiceError) *PublishConflictResponseBody {
+	body := &PublishConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "publish" endpoint of the "packages" service.
+func NewPublishUnsupportedMediaResponseBody(res *goa.ServiceError) *PublishUnsupportedMediaResponseBody {
+	body := &PublishUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishInvalidResponseBody builds the HTTP response body from the result
+// of the "publish" endpoint of the "packages" service.
+func NewPublishInvalidResponseBody(res *goa.ServiceError) *PublishInvalidResponseBody {
+	body := &PublishInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "publish" endpoint of the "packages" service.
+func NewPublishInvariantViolationResponseBody(res *goa.ServiceError) *PublishInvariantViolationResponseBody {
+	body := &PublishInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishUnexpectedResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "packages" service.
+func NewPublishUnexpectedResponseBody(res *goa.ServiceError) *PublishUnexpectedResponseBody {
+	body := &PublishUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }

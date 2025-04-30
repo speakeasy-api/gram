@@ -60,6 +60,17 @@ func EncodeCreateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeCreateEnvironmentResponse returns a decoder for responses returned by
 // the environments createEnvironment endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
+// DecodeCreateEnvironmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeCreateEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -90,6 +101,139 @@ func DecodeCreateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			res := NewCreateEnvironmentEnvironmentOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateEnvironmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateEnvironmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateEnvironmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateEnvironmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateEnvironmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateEnvironmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateEnvironmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateEnvironmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+				}
+				err = ValidateCreateEnvironmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+				}
+				return nil, NewCreateEnvironmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateEnvironmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+				}
+				err = ValidateCreateEnvironmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+				}
+				return nil, NewCreateEnvironmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "createEnvironment", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "createEnvironment", resp.StatusCode, string(body))
@@ -135,6 +279,17 @@ func EncodeListEnvironmentsRequest(encoder func(*http.Request) goahttp.Encoder) 
 // DecodeListEnvironmentsResponse returns a decoder for responses returned by
 // the environments listEnvironments endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
+// DecodeListEnvironmentsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeListEnvironmentsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -165,6 +320,139 @@ func DecodeListEnvironmentsResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			res := NewListEnvironmentsResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListEnvironmentsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListEnvironmentsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListEnvironmentsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListEnvironmentsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListEnvironmentsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListEnvironmentsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListEnvironmentsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListEnvironmentsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+				}
+				err = ValidateListEnvironmentsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+				}
+				return nil, NewListEnvironmentsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListEnvironmentsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+				}
+				err = ValidateListEnvironmentsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+				}
+				return nil, NewListEnvironmentsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "listEnvironments", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "listEnvironments", resp.StatusCode, string(body))
@@ -217,6 +505,17 @@ func EncodeUpdateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeUpdateEnvironmentResponse returns a decoder for responses returned by
 // the environments updateEnvironment endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
+// DecodeUpdateEnvironmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -247,6 +546,139 @@ func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			res := NewUpdateEnvironmentEnvironmentOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateEnvironmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateEnvironmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateEnvironmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateEnvironmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateEnvironmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateEnvironmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateEnvironmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateEnvironmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+				}
+				err = ValidateUpdateEnvironmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+				}
+				return nil, NewUpdateEnvironmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateEnvironmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+				}
+				err = ValidateUpdateEnvironmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+				}
+				return nil, NewUpdateEnvironmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "updateEnvironment", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "updateEnvironment", resp.StatusCode, string(body))
@@ -295,6 +727,17 @@ func EncodeDeleteEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeDeleteEnvironmentResponse returns a decoder for responses returned by
 // the environments deleteEnvironment endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
+// DecodeDeleteEnvironmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeDeleteEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -312,6 +755,139 @@ func DecodeDeleteEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 		switch resp.StatusCode {
 		case http.StatusOK:
 			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteEnvironmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteEnvironmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteEnvironmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteEnvironmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteEnvironmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteEnvironmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteEnvironmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteEnvironmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+				}
+				err = ValidateDeleteEnvironmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+				}
+				return nil, NewDeleteEnvironmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteEnvironmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+				}
+				err = ValidateDeleteEnvironmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+				}
+				return nil, NewDeleteEnvironmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "deleteEnvironment", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "deleteEnvironment", resp.StatusCode, string(body))

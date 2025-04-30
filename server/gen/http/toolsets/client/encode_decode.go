@@ -60,6 +60,17 @@ func EncodeCreateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeCreateToolsetResponse returns a decoder for responses returned by the
 // toolsets createToolset endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeCreateToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeCreateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -90,6 +101,139 @@ func DecodeCreateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			res := NewCreateToolsetToolsetDetailsOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+				}
+				err = ValidateCreateToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+				}
+				return nil, NewCreateToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+				}
+				err = ValidateCreateToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+				}
+				return nil, NewCreateToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "createToolset", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "createToolset", resp.StatusCode, string(body))
@@ -135,6 +279,17 @@ func EncodeListToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeListToolsetsResponse returns a decoder for responses returned by the
 // toolsets listToolsets endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeListToolsetsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -165,6 +320,139 @@ func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewListToolsetsResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolsetsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolsetsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolsetsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolsetsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolsetsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolsetsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolsetsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolsetsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+				}
+				err = ValidateListToolsetsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+				}
+				return nil, NewListToolsetsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolsetsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+				}
+				err = ValidateListToolsetsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+				}
+				return nil, NewListToolsetsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "listToolsets", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "listToolsets", resp.StatusCode, string(body))
@@ -217,6 +505,17 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeUpdateToolsetResponse returns a decoder for responses returned by the
 // toolsets updateToolset endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeUpdateToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -247,6 +546,139 @@ func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			res := NewUpdateToolsetToolsetDetailsOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+				}
+				err = ValidateUpdateToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+				}
+				return nil, NewUpdateToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+				}
+				err = ValidateUpdateToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+				}
+				return nil, NewUpdateToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "updateToolset", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "updateToolset", resp.StatusCode, string(body))
@@ -295,6 +727,17 @@ func EncodeDeleteToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeDeleteToolsetResponse returns a decoder for responses returned by the
 // toolsets deleteToolset endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
+// DecodeDeleteToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -312,6 +755,139 @@ func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 		switch resp.StatusCode {
 		case http.StatusNoContent:
 			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+				}
+				err = ValidateDeleteToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+				}
+				return nil, NewDeleteToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+				}
+				err = ValidateDeleteToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+				}
+				return nil, NewDeleteToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "deleteToolset", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "deleteToolset", resp.StatusCode, string(body))
@@ -360,6 +936,17 @@ func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // DecodeGetToolsetResponse returns a decoder for responses returned by the
 // toolsets getToolset endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
+// DecodeGetToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -390,6 +977,139 @@ func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			res := NewGetToolsetToolsetDetailsOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+				}
+				err = ValidateGetToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+				}
+				return nil, NewGetToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+				}
+				err = ValidateGetToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+				}
+				return nil, NewGetToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "getToolset", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "getToolset", resp.StatusCode, string(body))

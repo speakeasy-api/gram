@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 )
 
@@ -62,6 +63,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -80,20 +82,20 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("project id not found")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	if payload.ContentLength == 0 {
-		return nil, fmt.Errorf("no content")
+		return nil, oops.E(oops.CodeBadRequest, nil, "no content")
 	}
 
 	if payload.ContentLength > 8*1024*1024 {
-		return nil, fmt.Errorf("content length exceeds 8 MiB limit: %d", payload.ContentLength)
+		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 8 MiB limit")
 	}
 
 	f, err := os.CreateTemp("", "asset-*")
 	if err != nil {
-		return nil, fmt.Errorf("create temp file: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create temp file: %w", err), "error downloading document")
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return os.Remove(f.Name())
@@ -107,10 +109,10 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	writer := bufio.NewWriterSize(io.MultiWriter(f, hash), bsize)
 	_, err = io.Copy(writer, io.LimitReader(reader, payload.ContentLength))
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("copy to temp file: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("copy to temp file: %w", err), "error downloading document")
 	}
 	if err := writer.Flush(); err != nil {
-		return nil, fmt.Errorf("flush writer: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("flush writer: %w", err), "error downloading document")
 	}
 
 	sha := hex.EncodeToString(hash.Sum(nil))
@@ -120,7 +122,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		Sha256:    sha,
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("find project asset by sha256: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find project asset by sha256: %w", err), "error loading document data")
 	}
 	if asset.ID != uuid.Nil {
 		if assetURL, err := url.Parse(asset.Url); err == nil {
@@ -153,7 +155,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	contentType, _, err := mime.ParseMediaType(payload.ContentType)
 	if err != nil {
-		return nil, fmt.Errorf("parse content type: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
 
 	switch contentType {
@@ -162,21 +164,21 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	case "application/json", "text/json":
 		filename += ".json"
 	default:
-		return nil, fmt.Errorf("unsupported content type: %s", contentType)
+		return nil, oops.E(oops.CodeUnsupportedMedia, fmt.Errorf("unsupported content type: %s", contentType), "only json and yaml documents are supported: "+contentType)
 	}
 
 	off, err := f.Seek(0, io.SeekStart)
 	if err != nil {
-		return nil, fmt.Errorf("seek to start: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seek to start: %w", err), "error reading document")
 	}
 	if off != 0 {
-		return nil, fmt.Errorf("seek to start: offset not 0: %d", off)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seek to start: offset not 0: %d", off), "error reading document")
 	}
 
 	projectID := *authCtx.ProjectID
 	dst, uri, err := s.storage.Write(ctx, path.Join(projectID.String(), filename), f, contentType)
 	if err != nil {
-		return nil, fmt.Errorf("write to blob storage: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return dst.Close()
@@ -184,14 +186,14 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	n, err := io.CopyBuffer(dst, f, make([]byte, bsize))
 	if err != nil {
-		return nil, fmt.Errorf("copy to blob storage: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("copy to blob storage: %w", err), "error uploading document")
 	}
 	if n != payload.ContentLength {
-		return nil, fmt.Errorf("expected %d bytes, wrote %d", payload.ContentLength, n)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("expected %d bytes, wrote %d", payload.ContentLength, n), "error uploading document")
 	}
 
 	if err := dst.Close(); err != nil {
-		return nil, fmt.Errorf("finalize blob storage: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("finalize blob storage: %w", err), "error uploading document")
 	}
 
 	asset, err = s.repo.CreateAsset(ctx, repo.CreateAssetParams{
@@ -204,7 +206,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create asset in database: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
 	}
 
 	return &gen.UploadOpenAPIv3Result{

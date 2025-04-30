@@ -34,6 +34,17 @@ func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToo
 }
 
 // CreateToolset calls the "createToolset" endpoint of the "toolsets" service.
+// CreateToolset may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
 	ires, err = c.CreateToolsetEndpoint(ctx, p)
@@ -44,6 +55,17 @@ func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (re
 }
 
 // ListToolsets calls the "listToolsets" endpoint of the "toolsets" service.
+// ListToolsets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res *ListToolsetsResult, err error) {
 	var ires any
 	ires, err = c.ListToolsetsEndpoint(ctx, p)
@@ -54,6 +76,17 @@ func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res 
 }
 
 // UpdateToolset calls the "updateToolset" endpoint of the "toolsets" service.
+// UpdateToolset may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
 	ires, err = c.UpdateToolsetEndpoint(ctx, p)
@@ -64,12 +97,34 @@ func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (re
 }
 
 // DeleteToolset calls the "deleteToolset" endpoint of the "toolsets" service.
+// DeleteToolset may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) DeleteToolset(ctx context.Context, p *DeleteToolsetPayload) (err error) {
 	_, err = c.DeleteToolsetEndpoint(ctx, p)
 	return
 }
 
 // GetToolset calls the "getToolset" endpoint of the "toolsets" service.
+// GetToolset may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
 func (c *Client) GetToolset(ctx context.Context, p *GetToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
 	ires, err = c.GetToolsetEndpoint(ctx, p)

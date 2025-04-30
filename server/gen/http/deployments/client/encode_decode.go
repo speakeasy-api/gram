@@ -59,6 +59,17 @@ func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeGetDeploymentResponse returns a decoder for responses returned by the
 // deployments getDeployment endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
+// DecodeGetDeploymentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -89,6 +100,139 @@ func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			res := NewGetDeploymentResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetDeploymentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetDeploymentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetDeploymentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetDeploymentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetDeploymentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetDeploymentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetDeploymentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetDeploymentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+				}
+				err = ValidateGetDeploymentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+				}
+				return nil, NewGetDeploymentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetDeploymentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+				}
+				err = ValidateGetDeploymentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+				}
+				return nil, NewGetDeploymentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "getDeployment", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "getDeployment", resp.StatusCode, string(body))
@@ -135,6 +279,17 @@ func EncodeGetLatestDeploymentRequest(encoder func(*http.Request) goahttp.Encode
 // DecodeGetLatestDeploymentResponse returns a decoder for responses returned
 // by the deployments getLatestDeployment endpoint. restoreBody controls
 // whether the response body should be restored after having been read.
+// DecodeGetLatestDeploymentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeGetLatestDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -165,6 +320,139 @@ func DecodeGetLatestDeploymentResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			res := NewGetLatestDeploymentResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetLatestDeploymentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetLatestDeploymentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetLatestDeploymentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetLatestDeploymentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetLatestDeploymentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetLatestDeploymentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetLatestDeploymentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetLatestDeploymentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+				}
+				err = ValidateGetLatestDeploymentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+				}
+				return nil, NewGetLatestDeploymentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetLatestDeploymentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+				}
+				err = ValidateGetLatestDeploymentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+				}
+				return nil, NewGetLatestDeploymentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "getLatestDeployment", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "getLatestDeployment", resp.StatusCode, string(body))
@@ -218,6 +506,17 @@ func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) 
 // DecodeCreateDeploymentResponse returns a decoder for responses returned by
 // the deployments createDeployment endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
+// DecodeCreateDeploymentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -248,6 +547,139 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			res := NewCreateDeploymentResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateDeploymentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateDeploymentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateDeploymentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateDeploymentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateDeploymentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateDeploymentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateDeploymentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateDeploymentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+				}
+				err = ValidateCreateDeploymentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+				}
+				return nil, NewCreateDeploymentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateDeploymentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+				}
+				err = ValidateCreateDeploymentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+				}
+				return nil, NewCreateDeploymentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "createDeployment", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "createDeployment", resp.StatusCode, string(body))
@@ -297,6 +729,17 @@ func EncodeEvolveRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // DecodeEvolveResponse returns a decoder for responses returned by the
 // deployments evolve endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
+// DecodeEvolveResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeEvolveResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -327,6 +770,139 @@ func DecodeEvolveResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			}
 			res := NewEvolveResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body EvolveUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body EvolveForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body EvolveBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body EvolveNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body EvolveConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body EvolveUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body EvolveInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body EvolveInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+				}
+				err = ValidateEvolveInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+				}
+				return nil, NewEvolveInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body EvolveUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+				}
+				err = ValidateEvolveUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+				}
+				return nil, NewEvolveUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "evolve", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "evolve", resp.StatusCode, string(body))
@@ -377,6 +953,17 @@ func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 // DecodeListDeploymentsResponse returns a decoder for responses returned by
 // the deployments listDeployments endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
+// DecodeListDeploymentsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
 func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
@@ -407,6 +994,139 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewListDeploymentsListDeploymentResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDeploymentsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDeploymentsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDeploymentsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDeploymentsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDeploymentsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDeploymentsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDeploymentsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDeploymentsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+				}
+				err = ValidateListDeploymentsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+				}
+				return nil, NewListDeploymentsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDeploymentsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+				}
+				err = ValidateListDeploymentsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+				}
+				return nil, NewListDeploymentsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "listDeployments", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "listDeployments", resp.StatusCode, string(body))

@@ -2,7 +2,6 @@ package instances
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -25,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
@@ -57,6 +57,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 }
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
@@ -70,7 +71,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm) (res *gen.GetInstanceResult, err error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
-		return nil, errors.New("project ID is required")
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	toolset, err := s.toolset.LoadToolsetDetails(ctx, conv.ToLower(payload.ToolsetSlug), *authCtx.ProjectID)
@@ -79,7 +80,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}
 
 	if toolset.DefaultEnvironmentSlug == nil && payload.EnvironmentSlug == nil {
-		return nil, errors.New("an environment must be provided to use this toolset")
+		return nil, oops.E(oops.CodeInvalid, nil, "environment is required")
 	}
 
 	var envModel environments_repo.Environment

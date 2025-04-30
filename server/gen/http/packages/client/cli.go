@@ -24,7 +24,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 	{
 		err = json.Unmarshal([]byte(packagesCreatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keywords\": [\n         \"Doloribus aut.\",\n         \"Laboriosam consequuntur est.\",\n         \"Ratione eligendi officia qui ut.\"\n      ],\n      \"name\": \"rq1\",\n      \"summary\": \"iyv\",\n      \"title\": \"0gv\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keywords\": [\n         \"Libero quo quo.\",\n         \"Et ea incidunt possimus voluptatum.\",\n         \"Iusto et quia ipsa mollitia aspernatur sunt.\"\n      ],\n      \"name\": \"w0g\",\n      \"summary\": \"ww4\",\n      \"title\": \"f0o\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 100 {
@@ -111,7 +111,7 @@ func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken
 	{
 		err = json.Unmarshal([]byte(packagesPublishBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Iusto mollitia sed sunt nisi rerum beatae.\",\n      \"name\": \"Aut voluptatibus.\",\n      \"version\": \"Et beatae qui ea ratione.\",\n      \"visibility\": \"public\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Et ratione et in.\",\n      \"name\": \"Et maxime repellendus.\",\n      \"version\": \"Facere asperiores qui minima voluptatem.\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if !(body.Visibility == "public" || body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))

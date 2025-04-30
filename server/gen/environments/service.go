@@ -10,6 +10,7 @@ package environments
 import (
 	"context"
 
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
 
@@ -145,4 +146,49 @@ type UpdateEnvironmentPayload struct {
 	EntriesToUpdate []*EnvironmentEntryInput
 	// List of environment entry names to remove
 	EntriesToRemove []string
+}
+
+// MakeUnauthorized builds a goa.ServiceError from an error.
+func MakeUnauthorized(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unauthorized", false, false, false)
+}
+
+// MakeForbidden builds a goa.ServiceError from an error.
+func MakeForbidden(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "forbidden", false, false, false)
+}
+
+// MakeBadRequest builds a goa.ServiceError from an error.
+func MakeBadRequest(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "bad_request", false, false, false)
+}
+
+// MakeNotFound builds a goa.ServiceError from an error.
+func MakeNotFound(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "not_found", false, false, false)
+}
+
+// MakeConflict builds a goa.ServiceError from an error.
+func MakeConflict(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "conflict", false, false, false)
+}
+
+// MakeUnsupportedMedia builds a goa.ServiceError from an error.
+func MakeUnsupportedMedia(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unsupported_media", false, false, false)
+}
+
+// MakeInvalid builds a goa.ServiceError from an error.
+func MakeInvalid(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "invalid", false, false, false)
+}
+
+// MakeInvariantViolation builds a goa.ServiceError from an error.
+func MakeInvariantViolation(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "invariant_violation", false, false, true)
+}
+
+// MakeUnexpected builds a goa.ServiceError from an error.
+func MakeUnexpected(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unexpected", false, false, true)
 }
