@@ -1438,6 +1438,99 @@ paths:
             x-speakeasy-name-override: getBySlug
             x-speakeasy-react-hook:
                 name: Instance
+    /rpc/integrations.list:
+        get:
+            description: List available third-party integrations.
+            operationId: listIntegrations
+            parameters:
+                - allowEmptyValue: true
+                  description: Keywords to filter integrations by
+                  in: query
+                  name: keywords
+                  schema:
+                    description: Keywords to filter integrations by
+                    items:
+                        maxLength: 20
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListIntegrationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: list integrations
+            tags:
+                - integrations
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListIntegrations
     /rpc/keys.create:
         post:
             description: Create a new api key
@@ -3433,6 +3526,35 @@ components:
                 - user_email
                 - active_organization_id
                 - organizations
+        Integration:
+            type: object
+            properties:
+                package_id:
+                    type: string
+                package_keywords:
+                    type: array
+                    items:
+                        type: string
+                package_name:
+                    type: string
+                package_summary:
+                    type: string
+                package_title:
+                    type: string
+                tool_count:
+                    type: integer
+                    format: int64
+                version:
+                    type: string
+                version_created_at:
+                    type: string
+                    format: date-time
+            required:
+                - package_id
+                - package_name
+                - version
+                - version_created_at
+                - tool_count
         Key:
             type: object
             properties:
@@ -3506,6 +3628,23 @@ components:
             description: Result type for listing environments
             required:
                 - environments
+        ListIntegrationsForm:
+            type: object
+            properties:
+                keywords:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 20
+                    description: Keywords to filter integrations by
+        ListIntegrationsResult:
+            type: object
+            properties:
+                integrations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Integration'
+                    description: List of available third-party integrations
         ListKeysResult:
             type: object
             properties:
@@ -3981,6 +4120,8 @@ tags:
       description: Manages deployments of tools from upstream sources.
     - name: environments
       description: Managing toolset environments.
+    - name: integrations
+      description: Explore third-party tools in Gram.
     - name: keys
       description: Managing system api keys.
     - name: packages

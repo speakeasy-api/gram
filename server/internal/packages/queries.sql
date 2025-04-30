@@ -57,7 +57,6 @@ latest_version as (
   WHERE package_versions.package_id = (SELECT id FROM package_id_lookup)
     AND package_versions.visibility = 'public'
     AND package_versions.prerelease IS NULL
-    AND package_versions.build IS NULL
   ORDER BY major DESC, minor DESC, patch DESC
   LIMIT 1
 )

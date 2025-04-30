@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
 	"github.com/speakeasy-api/gram/internal/instances"
+	"github.com/speakeasy-api/gram/internal/integrations"
 	"github.com/speakeasy-api/gram/internal/keys"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/must"
@@ -302,6 +303,7 @@ func newStartCommand() *cli.Command {
 			}))
 			projects.Attach(mux, projects.NewService(logger.With(slog.String("component", "projects")), db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger.With(slog.String("component", "packages")), db, sessionManager))
+			integrations.Attach(mux, integrations.NewService(logger.With(slog.String("component", "integrations")), db, sessionManager))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))

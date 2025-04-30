@@ -9,6 +9,7 @@ import (
 	_ "github.com/speakeasy-api/gram/design/deployments"
 	_ "github.com/speakeasy-api/gram/design/environments"
 	_ "github.com/speakeasy-api/gram/design/instances"
+	_ "github.com/speakeasy-api/gram/design/integrations"
 	_ "github.com/speakeasy-api/gram/design/keys"
 	_ "github.com/speakeasy-api/gram/design/packages"
 	_ "github.com/speakeasy-api/gram/design/projects"
