@@ -46,10 +46,6 @@ jobs:
           token_format: "access_token"
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
-      - name: Echo
-        run: |
-          echo '::echo::on'
-          echo ${{ steps.auth.outputs.access_token }}
       - name: Login to GCR
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
