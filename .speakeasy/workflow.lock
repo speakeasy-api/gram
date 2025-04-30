@@ -16,7 +16,7 @@ sources:
             - 0.0.1
     Gram Public:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:ea5620566302aab2e577f02f5fabf8fd47eabcb3873ecec9f1ede50da02a43e7
+        sourceRevisionDigest: sha256:c4bb5414b59c20b751809ec0049d30e24500251b64a848c49140c6ec9fe48b35
         sourceBlobDigest: sha256:114fccc7d720509f4f07790fc71d433228ebccf5f8883e59971bfba2a27c47c6
         tags:
             - latest
@@ -56,7 +56,7 @@ targets:
     gram-public-ts:
         source: Gram Public
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:a76999906140a2e2a0d68fc4225dc155be1fcf4b539673cd90d78de9b5011513
+        sourceRevisionDigest: sha256:c4bb5414b59c20b751809ec0049d30e24500251b64a848c49140c6ec9fe48b35
         sourceBlobDigest: sha256:114fccc7d720509f4f07790fc71d433228ebccf5f8883e59971bfba2a27c47c6
 workflow:
     workflowVersion: 1.0.0
@@ -96,3 +96,6 @@ workflow:
             target: typescript
             source: Gram Public
             output: sdks/typescript
+            publish:
+                npm:
+                    token: $npm_token

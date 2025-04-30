@@ -34,4 +34,7 @@ targets:
     gram-public-ts:
         target: typescript
         source: Gram Public
+        publish:
+            npm:
+                token: $npm_token
         output: sdks/typescript
