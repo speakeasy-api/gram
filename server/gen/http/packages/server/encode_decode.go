@@ -67,7 +67,7 @@ func DecodeCreatePackageRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewCreatePackageForm(&body, sessionToken, projectSlugInput)
+		payload := NewCreatePackagePayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -124,7 +124,7 @@ func DecodeListVersionsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListVersionsForm(name, sessionToken, projectSlugInput)
+		payload := NewListVersionsPayload(name, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -192,7 +192,7 @@ func DecodePublishRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewPublishPackageForm(&body, sessionToken, projectSlugInput)
+		payload := NewPublishPayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

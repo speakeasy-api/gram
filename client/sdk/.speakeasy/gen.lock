@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 83c045abab3f053bdd237a4e57cfb006
+  docChecksum: 37e22b384ee0f72287663dd114b00f0d
   docVersion: 0.0.1
-  speakeasyVersion: 1.533.0
-  generationVersion: 2.578.0
-  releaseVersion: 0.9.4
-  configChecksum: fb1871cf4ce39353d8b6bd53cff93665
+  speakeasyVersion: 1.537.1
+  generationVersion: 2.588.4
+  releaseVersion: 0.9.5
+  configChecksum: 100b5d8d3ccdd4f26576520325c3a867
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -44,6 +44,8 @@ generatedFiles:
   - docs/models/components/createdeploymentresult.md
   - docs/models/components/createenvironmentform.md
   - docs/models/components/createkeyform.md
+  - docs/models/components/createpackageform.md
+  - docs/models/components/createpackageresult.md
   - docs/models/components/createprojectrequestbody.md
   - docs/models/components/createprojectresult.md
   - docs/models/components/createtoolsetrequestbody.md
@@ -68,15 +70,21 @@ generatedFiles:
   - docs/models/components/listprojectsresult.md
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
+  - docs/models/components/listversionsresult.md
   - docs/models/components/openapiv3deploymentasset.md
   - docs/models/components/organizationentry.md
+  - docs/models/components/package.md
+  - docs/models/components/packageversion.md
   - docs/models/components/project.md
   - docs/models/components/projectentry.md
+  - docs/models/components/publishpackageform.md
+  - docs/models/components/publishpackageresult.md
   - docs/models/components/security.md
   - docs/models/components/toolsetdetails.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
   - docs/models/components/uploadopenapiv3result.md
+  - docs/models/components/visibility.md
   - docs/models/operations/authcallbackrequest.md
   - docs/models/operations/authcallbackresponse.md
   - docs/models/operations/authloginresponse.md
@@ -84,6 +92,7 @@ generatedFiles:
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createdeploymentrequest.md
   - docs/models/operations/createenvironmentrequest.md
+  - docs/models/operations/createpackagerequest.md
   - docs/models/operations/createprojectrequest.md
   - docs/models/operations/createprojectsecurity.md
   - docs/models/operations/createtoolsetrequest.md
@@ -105,9 +114,11 @@ generatedFiles:
   - docs/models/operations/listprojectssecurity.md
   - docs/models/operations/listtoolsetsrequest.md
   - docs/models/operations/listtoolsrequest.md
+  - docs/models/operations/listversionsrequest.md
   - docs/models/operations/logoutrequest.md
   - docs/models/operations/logoutresponse.md
   - docs/models/operations/logoutsecurity.md
+  - docs/models/operations/publishrequest.md
   - docs/models/operations/revokeapikeyrequest.md
   - docs/models/operations/revokeapikeysecurity.md
   - docs/models/operations/sessioninforequest.md
@@ -126,6 +137,7 @@ generatedFiles:
   - docs/sdks/gram/README.md
   - docs/sdks/instances/README.md
   - docs/sdks/keys/README.md
+  - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
@@ -152,6 +164,9 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
+  - src/funcs/packagesCreate.ts
+  - src/funcs/packagesListVersions.ts
+  - src/funcs/packagesPublish.ts
   - src/funcs/projectsCreate.ts
   - src/funcs/projectsList.ts
   - src/funcs/toolsList.ts
@@ -188,6 +203,8 @@ generatedFiles:
   - src/models/components/createdeploymentresult.ts
   - src/models/components/createenvironmentform.ts
   - src/models/components/createkeyform.ts
+  - src/models/components/createpackageform.ts
+  - src/models/components/createpackageresult.ts
   - src/models/components/createprojectrequestbody.ts
   - src/models/components/createprojectresult.ts
   - src/models/components/createtoolsetrequestbody.ts
@@ -212,10 +229,15 @@ generatedFiles:
   - src/models/components/listprojectsresult.ts
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
+  - src/models/components/listversionsresult.ts
   - src/models/components/openapiv3deploymentasset.ts
   - src/models/components/organizationentry.ts
+  - src/models/components/package.ts
+  - src/models/components/packageversion.ts
   - src/models/components/project.ts
   - src/models/components/projectentry.ts
+  - src/models/components/publishpackageform.ts
+  - src/models/components/publishpackageresult.ts
   - src/models/components/security.ts
   - src/models/components/toolsetdetails.ts
   - src/models/components/updateenvironmentrequestbody.ts
@@ -230,6 +252,7 @@ generatedFiles:
   - src/models/operations/createapikey.ts
   - src/models/operations/createdeployment.ts
   - src/models/operations/createenvironment.ts
+  - src/models/operations/createpackage.ts
   - src/models/operations/createproject.ts
   - src/models/operations/createtoolset.ts
   - src/models/operations/deleteenvironment.ts
@@ -246,7 +269,9 @@ generatedFiles:
   - src/models/operations/listprojects.ts
   - src/models/operations/listtools.ts
   - src/models/operations/listtoolsets.ts
+  - src/models/operations/listversions.ts
   - src/models/operations/logout.ts
+  - src/models/operations/publish.ts
   - src/models/operations/revokeapikey.ts
   - src/models/operations/sessioninfo.ts
   - src/models/operations/switchauthscopes.ts
@@ -258,6 +283,7 @@ generatedFiles:
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
+  - src/react-query/createPackage.ts
   - src/react-query/createProject.ts
   - src/react-query/createToolset.ts
   - src/react-query/deleteEnvironment.ts
@@ -273,7 +299,9 @@ generatedFiles:
   - src/react-query/listProjects.ts
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
+  - src/react-query/listVersions.ts
   - src/react-query/logout.ts
+  - src/react-query/publishPackage.ts
   - src/react-query/revokeAPIKey.ts
   - src/react-query/sessionInfo.ts
   - src/react-query/switchScopes.ts
@@ -288,6 +316,7 @@ generatedFiles:
   - src/sdk/index.ts
   - src/sdk/instances.ts
   - src/sdk/keys.ts
+  - src/sdk/packages.ts
   - src/sdk/projects.ts
   - src/sdk/sdk.ts
   - src/sdk/tools.ts
@@ -663,5 +692,28 @@ examples:
       responses:
         "200":
           application/json: {"deployment": {"created_at": "2023-09-04T19:36:52.690Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+  createPackage:
+    speakeasy-default-create-package:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2024-06-17T07:14:55.338Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-11-30T17:06:07.804Z"}}
+  listVersions:
+    speakeasy-default-list-versions:
+      parameters:
+        query:
+          name: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2023-04-16T04:47:43.839Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-01-01T08:22:37.739Z"}, "versions": []}
+  publish:
+    speakeasy-default-publish:
+      requestBody:
+        application/json: {"deployment_id": "<id>", "name": "<value>", "version": "<value>", "visibility": "private"}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2025-03-12T05:01:06.792Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2025-05-31T13:12:58.117Z"}, "version": {"created_at": "2023-06-02T13:12:45.469Z", "deployment_id": "<id>", "id": "<id>", "package_id": "<id>", "semver": "<value>", "visibility": "<value>"}}
 examplesVersion: 1.0.1
 generatedTests: {}

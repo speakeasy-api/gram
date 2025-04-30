@@ -15,7 +15,12 @@ var _ = Service("packages", func() {
 
 		Security(security.Session, security.ProjectSlug)
 
-		Payload(CreatePackageForm)
+		Payload(func() {
+			Extend(CreatePackageForm)
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
 		Result(CreatePackageResult)
 
 		HTTP(func() {
@@ -34,7 +39,12 @@ var _ = Service("packages", func() {
 
 		Security(security.Session, security.ProjectSlug)
 
-		Payload(ListVersionsForm)
+		Payload(func() {
+			Extend(ListVersionsForm)
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
 		Result(ListVersionsResult)
 
 		HTTP(func() {
@@ -54,7 +64,12 @@ var _ = Service("packages", func() {
 
 		Security(security.Session, security.ProjectSlug)
 
-		Payload(PublishPackageForm)
+		Payload(func() {
+			Extend(PublishPackageForm)
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
 		Result(PublishPackageResult)
 
 		HTTP(func() {
@@ -86,9 +101,6 @@ var CreatePackageForm = Type("CreatePackageForm", func() {
 	Attribute("keywords", ArrayOf(String), "The keywords of the package", func() {
 		MaxLength(5)
 	})
-
-	security.SessionPayload()
-	security.ProjectPayload()
 })
 
 var CreatePackageResult = Type("CreatePackageResult", func() {
@@ -101,8 +113,6 @@ var ListVersionsForm = Type("ListVersionsForm", func() {
 	Required("name")
 
 	Attribute("name", String, "The name of the package")
-	security.SessionPayload()
-	security.ProjectPayload()
 })
 
 var ListVersionsResult = Type("ListVersionsResult", func() {
@@ -121,9 +131,6 @@ var PublishPackageForm = Type("PublishPackageForm", func() {
 	Attribute("visibility", String, "The visibility of the package version", func() {
 		Enum("public", "private")
 	})
-
-	security.SessionPayload()
-	security.ProjectPayload()
 })
 
 var PublishPackageResult = Type("PublishPackageResult", func() {

@@ -37,9 +37,9 @@ func (c *Client) BuildCreatePackageRequest(ctx context.Context, v any) (*http.Re
 // packages createPackage server.
 func EncodeCreatePackageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*packages.CreatePackageForm)
+		p, ok := v.(*packages.CreatePackagePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("packages", "createPackage", "*packages.CreatePackageForm", v)
+			return goahttp.ErrInvalidType("packages", "createPackage", "*packages.CreatePackagePayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -116,9 +116,9 @@ func (c *Client) BuildListVersionsRequest(ctx context.Context, v any) (*http.Req
 // packages listVersions server.
 func EncodeListVersionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*packages.ListVersionsForm)
+		p, ok := v.(*packages.ListVersionsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("packages", "listVersions", "*packages.ListVersionsForm", v)
+			return goahttp.ErrInvalidType("packages", "listVersions", "*packages.ListVersionsPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -194,9 +194,9 @@ func (c *Client) BuildPublishRequest(ctx context.Context, v any) (*http.Request,
 // publish server.
 func EncodePublishRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*packages.PublishPackageForm)
+		p, ok := v.(*packages.PublishPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("packages", "publish", "*packages.PublishPackageForm", v)
+			return goahttp.ErrInvalidType("packages", "publish", "*packages.PublishPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

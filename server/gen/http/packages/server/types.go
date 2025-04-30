@@ -146,10 +146,10 @@ func NewPublishResponseBody(res *packages.PublishPackageResult) *PublishResponse
 	return body
 }
 
-// NewCreatePackageForm builds a packages service createPackage endpoint
+// NewCreatePackagePayload builds a packages service createPackage endpoint
 // payload.
-func NewCreatePackageForm(body *CreatePackageRequestBody, sessionToken *string, projectSlugInput *string) *packages.CreatePackageForm {
-	v := &packages.CreatePackageForm{
+func NewCreatePackagePayload(body *CreatePackageRequestBody, sessionToken *string, projectSlugInput *string) *packages.CreatePackagePayload {
+	v := &packages.CreatePackagePayload{
 		Name:    *body.Name,
 		Title:   body.Title,
 		Summary: body.Summary,
@@ -166,9 +166,10 @@ func NewCreatePackageForm(body *CreatePackageRequestBody, sessionToken *string, 
 	return v
 }
 
-// NewListVersionsForm builds a packages service listVersions endpoint payload.
-func NewListVersionsForm(name string, sessionToken *string, projectSlugInput *string) *packages.ListVersionsForm {
-	v := &packages.ListVersionsForm{}
+// NewListVersionsPayload builds a packages service listVersions endpoint
+// payload.
+func NewListVersionsPayload(name string, sessionToken *string, projectSlugInput *string) *packages.ListVersionsPayload {
+	v := &packages.ListVersionsPayload{}
 	v.Name = name
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -176,9 +177,9 @@ func NewListVersionsForm(name string, sessionToken *string, projectSlugInput *st
 	return v
 }
 
-// NewPublishPackageForm builds a packages service publish endpoint payload.
-func NewPublishPackageForm(body *PublishRequestBody, sessionToken *string, projectSlugInput *string) *packages.PublishPackageForm {
-	v := &packages.PublishPackageForm{
+// NewPublishPayload builds a packages service publish endpoint payload.
+func NewPublishPayload(body *PublishRequestBody, sessionToken *string, projectSlugInput *string) *packages.PublishPayload {
+	v := &packages.PublishPayload{
 		Name:         *body.Name,
 		Version:      *body.Version,
 		DeploymentID: *body.DeploymentID,

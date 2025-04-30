@@ -30,7 +30,7 @@ func NewClient(createPackage, listVersions, publish goa.Endpoint) *Client {
 }
 
 // CreatePackage calls the "createPackage" endpoint of the "packages" service.
-func (c *Client) CreatePackage(ctx context.Context, p *CreatePackageForm) (res *CreatePackageResult, err error) {
+func (c *Client) CreatePackage(ctx context.Context, p *CreatePackagePayload) (res *CreatePackageResult, err error) {
 	var ires any
 	ires, err = c.CreatePackageEndpoint(ctx, p)
 	if err != nil {
@@ -40,7 +40,7 @@ func (c *Client) CreatePackage(ctx context.Context, p *CreatePackageForm) (res *
 }
 
 // ListVersions calls the "listVersions" endpoint of the "packages" service.
-func (c *Client) ListVersions(ctx context.Context, p *ListVersionsForm) (res *ListVersionsResult, err error) {
+func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res *ListVersionsResult, err error) {
 	var ires any
 	ires, err = c.ListVersionsEndpoint(ctx, p)
 	if err != nil {
@@ -50,7 +50,7 @@ func (c *Client) ListVersions(ctx context.Context, p *ListVersionsForm) (res *Li
 }
 
 // Publish calls the "publish" endpoint of the "packages" service.
-func (c *Client) Publish(ctx context.Context, p *PublishPackageForm) (res *PublishPackageResult, err error) {
+func (c *Client) Publish(ctx context.Context, p *PublishPayload) (res *PublishPackageResult, err error) {
 	var ires any
 	ires, err = c.PublishEndpoint(ctx, p)
 	if err != nil {

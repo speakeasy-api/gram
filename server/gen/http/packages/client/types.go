@@ -105,7 +105,7 @@ type PackageVersionResponseBody struct {
 
 // NewCreatePackageRequestBody builds the HTTP request body from the payload of
 // the "createPackage" endpoint of the "packages" service.
-func NewCreatePackageRequestBody(p *packages.CreatePackageForm) *CreatePackageRequestBody {
+func NewCreatePackageRequestBody(p *packages.CreatePackagePayload) *CreatePackageRequestBody {
 	body := &CreatePackageRequestBody{
 		Name:    p.Name,
 		Title:   p.Title,
@@ -122,7 +122,7 @@ func NewCreatePackageRequestBody(p *packages.CreatePackageForm) *CreatePackageRe
 
 // NewPublishRequestBody builds the HTTP request body from the payload of the
 // "publish" endpoint of the "packages" service.
-func NewPublishRequestBody(p *packages.PublishPackageForm) *PublishRequestBody {
+func NewPublishRequestBody(p *packages.PublishPayload) *PublishRequestBody {
 	body := &PublishRequestBody{
 		Name:         p.Name,
 		Version:      p.Version,

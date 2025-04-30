@@ -16,11 +16,11 @@ import (
 // Manages packages in Gram.
 type Service interface {
 	// Create a new package for a project.
-	CreatePackage(context.Context, *CreatePackageForm) (res *CreatePackageResult, err error)
+	CreatePackage(context.Context, *CreatePackagePayload) (res *CreatePackageResult, err error)
 	// List published versions of a package.
-	ListVersions(context.Context, *ListVersionsForm) (res *ListVersionsResult, err error)
+	ListVersions(context.Context, *ListVersionsPayload) (res *ListVersionsResult, err error)
 	// Publish a new version of a package.
-	Publish(context.Context, *PublishPackageForm) (res *PublishPackageResult, err error)
+	Publish(context.Context, *PublishPayload) (res *PublishPackageResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,9 +45,11 @@ const ServiceName = "packages"
 // MethodKey key.
 var MethodNames = [3]string{"createPackage", "listVersions", "publish"}
 
-// CreatePackageForm is the payload type of the packages service createPackage
-// method.
-type CreatePackageForm struct {
+// CreatePackagePayload is the payload type of the packages service
+// createPackage method.
+type CreatePackagePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
 	// The name of the package
 	Name string
 	// The title of the package
@@ -55,9 +57,7 @@ type CreatePackageForm struct {
 	// The summary of the package
 	Summary *string
 	// The keywords of the package
-	Keywords         []string
-	SessionToken     *string
-	ProjectSlugInput *string
+	Keywords []string
 }
 
 // CreatePackageResult is the result type of the packages service createPackage
@@ -67,13 +67,13 @@ type CreatePackageResult struct {
 	Package *Package
 }
 
-// ListVersionsForm is the payload type of the packages service listVersions
+// ListVersionsPayload is the payload type of the packages service listVersions
 // method.
-type ListVersionsForm struct {
-	// The name of the package
-	Name             string
+type ListVersionsPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
+	// The name of the package
+	Name string
 }
 
 // ListVersionsResult is the result type of the packages service listVersions
@@ -123,21 +123,6 @@ type PackageVersion struct {
 	CreatedAt string
 }
 
-// PublishPackageForm is the payload type of the packages service publish
-// method.
-type PublishPackageForm struct {
-	// The name of the package
-	Name string
-	// The new semantic version of the package to publish
-	Version string
-	// The deployment ID to associate with the package version
-	DeploymentID string
-	// The visibility of the package version
-	Visibility       string
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
 // PublishPackageResult is the result type of the packages service publish
 // method.
 type PublishPackageResult struct {
@@ -145,4 +130,18 @@ type PublishPackageResult struct {
 	Package *Package
 	// The published package version
 	Version *PackageVersion
+}
+
+// PublishPayload is the payload type of the packages service publish method.
+type PublishPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The name of the package
+	Name string
+	// The new semantic version of the package to publish
+	Version string
+	// The deployment ID to associate with the package version
+	DeploymentID string
+	// The visibility of the package version
+	Visibility string
 }

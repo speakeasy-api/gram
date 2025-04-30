@@ -43,7 +43,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 // "createPackage" of service "packages".
 func NewCreatePackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*CreatePackageForm)
+		p := req.(*CreatePackagePayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -78,7 +78,7 @@ func NewCreatePackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 // "listVersions" of service "packages".
 func NewListVersionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListVersionsForm)
+		p := req.(*ListVersionsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -113,7 +113,7 @@ func NewListVersionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 // "publish" of service "packages".
 func NewPublishEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*PublishPackageForm)
+		p := req.(*PublishPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",

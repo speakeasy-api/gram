@@ -61,7 +61,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackageForm) (res *gen.CreatePackageResult, err error) {
+func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayload) (res *gen.CreatePackageResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("authorization check failed")
@@ -113,7 +113,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackageForm
 	return &gen.CreatePackageResult{Package: pkg}, nil
 }
 
-func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsForm) (res *gen.ListVersionsResult, err error) {
+func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayload) (res *gen.ListVersionsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("authorization check failed")
@@ -174,7 +174,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsForm) 
 	}, nil
 }
 
-func (s *Service) Publish(ctx context.Context, form *gen.PublishPackageForm) (res *gen.PublishPackageResult, err error) {
+func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *gen.PublishPackageResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, errors.New("authorization check failed")

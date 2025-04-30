@@ -18,13 +18,13 @@ import (
 
 // BuildCreatePackagePayload builds the payload for the packages createPackage
 // endpoint from CLI flags.
-func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreatePackageSessionToken string, packagesCreatePackageProjectSlugInput string) (*packages.CreatePackageForm, error) {
+func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreatePackageSessionToken string, packagesCreatePackageProjectSlugInput string) (*packages.CreatePackagePayload, error) {
 	var err error
 	var body CreatePackageRequestBody
 	{
 		err = json.Unmarshal([]byte(packagesCreatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keywords\": [\n         \"Voluptatem esse quo.\",\n         \"Deleniti ipsa architecto a occaecati sed nostrum.\",\n         \"Doloremque non repellendus corporis aut.\"\n      ],\n      \"name\": \"aml\",\n      \"summary\": \"det\",\n      \"title\": \"19n\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keywords\": [\n         \"Doloribus aut.\",\n         \"Laboriosam consequuntur est.\",\n         \"Ratione eligendi officia qui ut.\"\n      ],\n      \"name\": \"rq1\",\n      \"summary\": \"iyv\",\n      \"title\": \"0gv\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 100 {
@@ -59,7 +59,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 			projectSlugInput = &packagesCreatePackageProjectSlugInput
 		}
 	}
-	v := &packages.CreatePackageForm{
+	v := &packages.CreatePackagePayload{
 		Name:    body.Name,
 		Title:   body.Title,
 		Summary: body.Summary,
@@ -78,7 +78,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 
 // BuildListVersionsPayload builds the payload for the packages listVersions
 // endpoint from CLI flags.
-func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersionsSessionToken string, packagesListVersionsProjectSlugInput string) (*packages.ListVersionsForm, error) {
+func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersionsSessionToken string, packagesListVersionsProjectSlugInput string) (*packages.ListVersionsPayload, error) {
 	var name string
 	{
 		name = packagesListVersionsName
@@ -95,7 +95,7 @@ func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersi
 			projectSlugInput = &packagesListVersionsProjectSlugInput
 		}
 	}
-	v := &packages.ListVersionsForm{}
+	v := &packages.ListVersionsPayload{}
 	v.Name = name
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -105,13 +105,13 @@ func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersi
 
 // BuildPublishPayload builds the payload for the packages publish endpoint
 // from CLI flags.
-func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken string, packagesPublishProjectSlugInput string) (*packages.PublishPackageForm, error) {
+func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken string, packagesPublishProjectSlugInput string) (*packages.PublishPayload, error) {
 	var err error
 	var body PublishRequestBody
 	{
 		err = json.Unmarshal([]byte(packagesPublishBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Similique id vel.\",\n      \"name\": \"Aut dolor ipsum rem deleniti.\",\n      \"version\": \"Pariatur perferendis quia architecto et quis.\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Iusto mollitia sed sunt nisi rerum beatae.\",\n      \"name\": \"Aut voluptatibus.\",\n      \"version\": \"Et beatae qui ea ratione.\",\n      \"visibility\": \"public\"\n   }'")
 		}
 		if !(body.Visibility == "public" || body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))
@@ -132,7 +132,7 @@ func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken
 			projectSlugInput = &packagesPublishProjectSlugInput
 		}
 	}
-	v := &packages.PublishPackageForm{
+	v := &packages.PublishPayload{
 		Name:         body.Name,
 		Version:      body.Version,
 		DeploymentID: body.DeploymentID,

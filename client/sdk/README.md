@@ -233,6 +233,12 @@ run();
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 
+### [packages](docs/sdks/packages/README.md)
+
+* [create](docs/sdks/packages/README.md#create) - createPackage packages
+* [listVersions](docs/sdks/packages/README.md#listversions) - listVersions packages
+* [publish](docs/sdks/packages/README.md#publish) - publish packages
+
 ### [projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
@@ -287,6 +293,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
+- [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
+- [`packagesPublish`](docs/sdks/packages/README.md#publish) - publish packages
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
@@ -324,6 +333,7 @@ To learn about this feature and how to get started, check
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -338,7 +348,9 @@ To learn about this feature and how to get started, check
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
+- [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth

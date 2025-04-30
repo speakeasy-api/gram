@@ -784,7 +784,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreatePackageForm2'
+                            $ref: '#/components/schemas/CreatePackageForm'
                 required: true
             responses:
                 "200":
@@ -868,7 +868,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/PublishPackageForm2'
+                            $ref: '#/components/schemas/PublishPackageForm'
                 required: true
             responses:
                 "200":
@@ -1425,34 +1425,6 @@ components:
                 - name
                 - project_id
         CreatePackageForm:
-            type: object
-            properties:
-                keywords:
-                    type: array
-                    items:
-                        type: string
-                    description: The keywords of the package
-                    maxItems: 5
-                name:
-                    type: string
-                    description: The name of the package
-                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
-                    maxLength: 100
-                project_slug_input:
-                    type: string
-                session_token:
-                    type: string
-                summary:
-                    type: string
-                    description: The summary of the package
-                    maxLength: 80
-                title:
-                    type: string
-                    description: The title of the package
-                    maxLength: 100
-            required:
-                - name
-        CreatePackageForm2:
             type: object
             properties:
                 keywords:
@@ -2120,10 +2092,6 @@ components:
                 name:
                     type: string
                     description: The name of the package
-                project_slug_input:
-                    type: string
-                session_token:
-                    type: string
             required:
                 - name
         ListVersionsResult:
@@ -2309,33 +2277,6 @@ components:
                 - name
                 - slug
         PublishPackageForm:
-            type: object
-            properties:
-                deployment_id:
-                    type: string
-                    description: The deployment ID to associate with the package version
-                name:
-                    type: string
-                    description: The name of the package
-                project_slug_input:
-                    type: string
-                session_token:
-                    type: string
-                version:
-                    type: string
-                    description: The new semantic version of the package to publish
-                visibility:
-                    type: string
-                    description: The visibility of the package version
-                    enum:
-                        - public
-                        - private
-            required:
-                - name
-                - version
-                - deployment_id
-                - visibility
-        PublishPackageForm2:
             type: object
             properties:
                 deployment_id:
