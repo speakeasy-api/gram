@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { HTTPToolDefinition } from "@gram/sdk/models/components";
+import { HTTPToolDefinition } from "@gram-ai/sdk/models/components";
 
 let value: HTTPToolDefinition = {
   createdAt: new Date("2025-03-04T09:26:20.697Z"),

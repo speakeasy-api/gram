@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { GetInstanceSecurityOption2 } from "@gram/sdk/models/operations";
+import { GetInstanceSecurityOption2 } from "@gram-ai/sdk/models/operations";
 
 let value: GetInstanceSecurityOption2 = {
   apikeyHeaderGramKey: "<value>",

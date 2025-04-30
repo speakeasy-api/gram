@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { GetInstanceRequest } from "@gram/sdk/models/operations";
+import { GetInstanceRequest } from "@gram-ai/sdk/models/operations";
 
 let value: GetInstanceRequest = {
   toolsetSlug: "<value>",

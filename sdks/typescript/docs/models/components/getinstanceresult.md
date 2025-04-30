@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { GetInstanceResult } from "@gram/sdk/models/components";
+import { GetInstanceResult } from "@gram-ai/sdk/models/components";
 
 let value: GetInstanceResult = {
   environment: {

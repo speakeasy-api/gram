@@ -16,7 +16,7 @@ Load all relevant data for an instance of a toolset and environment
 ### Example Usage
 
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const gramAPI = new GramAPI();
 
@@ -42,8 +42,8 @@ run();
 The standalone function version of this method:
 
 ```typescript
-import { GramAPICore } from "@gram/sdk/core.js";
-import { instancesGetBySlug } from "@gram/sdk/funcs/instancesGetBySlug.js";
+import { GramAPICore } from "@gram-ai/sdk/core.js";
+import { instancesGetBySlug } from "@gram-ai/sdk/funcs/instancesGetBySlug.js";
 
 // Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.

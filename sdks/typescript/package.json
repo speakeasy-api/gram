@@ -1,7 +1,7 @@
 {
-  "name": "@gram/sdk",
-  "version": "0.4.14",
-  "author": "Speakeasy",
+  "name": "@gram-ai/sdk",
+  "version": "0.0.1",
+  "author": "gram-ai",
   "type": "module",
   "main": "./esm/index.js",
   "exports": {
@@ -64,7 +64,7 @@
     "eslint": "^9.19.0",
     "globals": "^15.14.0",
     "typescript": "^5.4.5",
-    "typescript-eslint": "^8.31.0",
+    "typescript-eslint": "^8.22.0",
     "zod": "^3.23.4"
   },
   "dependencies": {

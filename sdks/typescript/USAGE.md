@@ -1,6 +1,6 @@
 <!-- Start SDK Example Usage [usage] -->
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const gramAPI = new GramAPI();
 

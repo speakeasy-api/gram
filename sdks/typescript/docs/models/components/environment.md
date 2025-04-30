@@ -5,7 +5,7 @@ Model representing an environment
 ## Example Usage
 
 ```typescript
-import { Environment } from "@gram/sdk/models/components";
+import { Environment } from "@gram-ai/sdk/models/components";
 
 let value: Environment = {
   createdAt: new Date("2024-12-03T14:12:16.809Z"),

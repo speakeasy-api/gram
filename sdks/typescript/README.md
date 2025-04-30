@@ -94,7 +94,7 @@ For supported JavaScript runtimes, please consult [RUNTIMES.md](RUNTIMES.md).
 ### Example
 
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const gramAPI = new GramAPI();
 
@@ -136,7 +136,7 @@ You can set the security parameters through the `security` optional parameter wh
 
 Some operations in this SDK require the security scheme to be specified at the request level. For example:
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const gramAPI = new GramAPI();
 
@@ -200,7 +200,7 @@ Some of the endpoints in this SDK support retries.  If you use the SDK without a
 
 To change the default retry strategy for a single API call, simply provide a retryConfig object to the call:
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const gramAPI = new GramAPI();
 
@@ -235,7 +235,7 @@ run();
 
 If you'd like to override the default retry strategy for all operations that support retries, you can provide a retryConfig at SDK initialization:
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const gramAPI = new GramAPI({
   retryConfig: {
@@ -279,8 +279,8 @@ If the request fails due to, for example 4XX or 5XX status codes, it will throw 
 | errors.APIError | 4XX, 5XX    | \*/\*        |
 
 ```typescript
-import { GramAPI } from "@gram/sdk";
-import { SDKValidationError } from "@gram/sdk/models/errors";
+import { GramAPI } from "@gram-ai/sdk";
+import { SDKValidationError } from "@gram-ai/sdk/models/errors";
 
 const gramAPI = new GramAPI();
 
@@ -348,7 +348,7 @@ In some rare cases, the SDK can fail to get a response from the server or even m
 
 The default server can be overridden globally by passing a URL to the `serverURL: string` optional parameter when initializing the SDK client instance. For example:
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const gramAPI = new GramAPI({
   serverURL: "http://localhost:80",
@@ -391,8 +391,8 @@ custom header and a timeout to requests and how to use the `"requestError"` hook
 to log errors:
 
 ```typescript
-import { GramAPI } from "@gram/sdk";
-import { HTTPClient } from "@gram/sdk/lib/http";
+import { GramAPI } from "@gram-ai/sdk";
+import { HTTPClient } from "@gram-ai/sdk/lib/http";
 
 const httpClient = new HTTPClient({
   // fetcher takes a function that has the same signature as native `fetch`.
@@ -433,7 +433,7 @@ You can pass a logger that matches `console`'s interface as an SDK option.
 > Beware that debug logging will reveal secrets, like API tokens in headers, in log messages printed to a console or files. It's recommended to use this feature only during local development and not in production.
 
 ```typescript
-import { GramAPI } from "@gram/sdk";
+import { GramAPI } from "@gram-ai/sdk";
 
 const sdk = new GramAPI({ debugLogger: console });
 ```

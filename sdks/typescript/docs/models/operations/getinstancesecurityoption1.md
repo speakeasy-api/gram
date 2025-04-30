@@ -3,7 +3,7 @@
 ## Example Usage
 
 ```typescript
-import { GetInstanceSecurityOption1 } from "@gram/sdk/models/operations";
+import { GetInstanceSecurityOption1 } from "@gram-ai/sdk/models/operations";
 
 let value: GetInstanceSecurityOption1 = {
   projectSlugHeaderGramProject: "<value>",

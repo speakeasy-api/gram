@@ -19,9 +19,9 @@ specific category of applications.
 ## Example
 
 ```typescript
-import { GramAPICore } from "@gram/sdk/core.js";
-import { instancesGetBySlug } from "@gram/sdk/funcs/instancesGetBySlug.js";
-import { SDKValidationError } from "@gram/sdk/models/errors/sdkvalidationerror.js";
+import { GramAPICore } from "@gram-ai/sdk/core.js";
+import { instancesGetBySlug } from "@gram-ai/sdk/funcs/instancesGetBySlug.js";
+import { SDKValidationError } from "@gram-ai/sdk/models/errors/sdkvalidationerror.js";
 
 // Use `GramAPICore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.

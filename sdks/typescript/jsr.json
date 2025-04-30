@@ -1,8 +1,8 @@
 
 
 {
-  "name": "@gram/sdk",
-  "version": "0.4.14",
+  "name": "@gram-ai/sdk",
+  "version": "0.0.1",
   "exports": {
     ".": "./src/index.ts",    
     "./models/errors": "./src/models/errors/index.ts",    

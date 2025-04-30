@@ -11,11 +11,12 @@ generation:
     parameterOrderingFeb2024: true
     requestResponseComponentNamesFeb2024: true
     securityFeb2025: true
+    sharedErrorComponentsApr2025: false
   auth:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
 typescript:
-  version: 0.4.14
+  version: 0.0.1
   additionalDependencies:
     devDependencies:
       '@langchain/core': ^0.3.48
@@ -29,7 +30,7 @@ typescript:
       ai:
         optional: true
   additionalPackageJSON: {}
-  author: Speakeasy
+  author: gram-ai
   clientServerStatusCodesAsErrors: true
   compileCommand:
     - ./scripts/compile.sh
@@ -54,7 +55,7 @@ typescript:
   methodArguments: infer-optional-args
   moduleFormat: esm
   outputModelSuffix: output
-  packageName: '@gram/sdk'
+  packageName: '@gram-ai/sdk'
   responseFormat: flat
   templateVersion: v2
   useIndexModules: true

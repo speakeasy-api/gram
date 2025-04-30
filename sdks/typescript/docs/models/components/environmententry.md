@@ -5,7 +5,7 @@ A single environment entry
 ## Example Usage
 
 ```typescript
-import { EnvironmentEntry } from "@gram/sdk/models/components";
+import { EnvironmentEntry } from "@gram-ai/sdk/models/components";
 
 let value: EnvironmentEntry = {
   createdAt: new Date("2023-11-27T13:52:01.538Z"),
