@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: d192341d-75ae-49e8-9011-4fa299dfcf9e
 management:
-  docChecksum: ec0480d51e221326cb55b761cf115f4a
+  docChecksum: 4036e5c62666d6defb12211092ce77c0
   docVersion: 0.0.1
-  speakeasyVersion: 1.537.1
-  generationVersion: 2.588.4
-  releaseVersion: 0.2.1
-  configChecksum: 5047d10065a650a961445da29b7741ee
+  speakeasyVersion: 1.540.1
+  generationVersion: 2.593.4
+  releaseVersion: 0.0.1
+  configChecksum: 111675933443f82879ccdee3a53b6ef6
 features:
   python:
     additionalDependencies: 1.0.0
-    core: 5.15.0
+    core: 5.16.0
     defaultEnabledRetries: 0.2.0
     envVarSecurityUsage: 0.3.2
     flattening: 3.1.1
