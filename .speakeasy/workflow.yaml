@@ -30,6 +30,9 @@ targets:
     gram-public-py:
         target: python
         source: Gram Public
+        publish:
+            pypi:
+                token: $pypi_token
         output: sdks/python
     gram-public-ts:
         target: typescript

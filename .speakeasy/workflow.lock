@@ -16,7 +16,7 @@ sources:
             - 0.0.1
     Gram Public:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:c4bb5414b59c20b751809ec0049d30e24500251b64a848c49140c6ec9fe48b35
+        sourceRevisionDigest: sha256:0e8d8115a0dfbc7e218a609146cf511eedb8399e0edf9f7aea319bdd1de98b24
         sourceBlobDigest: sha256:114fccc7d720509f4f07790fc71d433228ebccf5f8883e59971bfba2a27c47c6
         tags:
             - latest
@@ -51,7 +51,7 @@ targets:
     gram-public-py:
         source: Gram Public
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:ea5620566302aab2e577f02f5fabf8fd47eabcb3873ecec9f1ede50da02a43e7
+        sourceRevisionDigest: sha256:0e8d8115a0dfbc7e218a609146cf511eedb8399e0edf9f7aea319bdd1de98b24
         sourceBlobDigest: sha256:114fccc7d720509f4f07790fc71d433228ebccf5f8883e59971bfba2a27c47c6
     gram-public-ts:
         source: Gram Public
@@ -92,6 +92,9 @@ workflow:
             target: python
             source: Gram Public
             output: sdks/python
+            publish:
+                pypi:
+                    token: $pypi_token
         gram-public-ts:
             target: typescript
             source: Gram Public
