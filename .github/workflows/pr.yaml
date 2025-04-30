@@ -35,7 +35,7 @@ jobs:
   docker-build-server:
     runs-on: ubicloud-standard-4
     needs: changes
-    if: ${{ needs.changes.outputs.server == 'true' }}
+    if: ${{ needs.changes.outputs.server == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -75,7 +75,7 @@ jobs:
   docker-build-client:
     runs-on: ubicloud-standard-4
     needs: changes
-    if: ${{ needs.changes.outputs.client == 'true' }}
+    if: ${{ needs.changes.outputs.client == 'true'  || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
