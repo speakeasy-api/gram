@@ -168,6 +168,12 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			db, err := pgxpool.NewWithConfig(ctx, poolcfg)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
 			var serverURL string
 			switch c.String("environment") {
 			case "minikube":
@@ -181,12 +187,6 @@ func newStartCommand() *cli.Command {
 			default:
 				return fmt.Errorf("invalid environment: %s", c.String("environment"))
 			}
-
-			db, err := pgxpool.NewWithConfig(ctx, poolcfg)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
 
 			var assetStorage assets.BlobStore
 			{
