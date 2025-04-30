@@ -18,7 +18,7 @@ type Framework = (typeof FRAMEWORKS)[keyof typeof FRAMEWORKS][number];
 const CODE_SAMPLES = {
   typescript: {
     [VERCEL_AI_SDK]: `import { generateText } from 'ai';
-import { VercelAdapter } from "@gram/sdk/vercel";
+import { VercelAdapter } from "@gram-ai/sdk/vercel";
 import { createOpenAI } from "@ai-sdk/openai";
 
 const key = "<GRAM_API_KEY>";
@@ -42,7 +42,7 @@ const result = await generateText({
 });
 
 console.log(result.text);`,
-    [LANGCHAIN]: `import { LangchainAdapter } from "@gram/sdk/langchain";
+    [LANGCHAIN]: `import { LangchainAdapter } from "@gram-ai/sdk/langchain";
 import { ChatOpenAI } from "@langchain/openai";
 import { createOpenAIFunctionsAgent, AgentExecutor } from "langchain/agents";
 import { pull } from "langchain/hub";
@@ -84,7 +84,7 @@ const result = await executor.invoke({
 });
 
 console.log(result.output);`,
-    [FUNCION_CALLING]: `import { FunctionCallingAdapter } from "@gram/sdk/functioncalling";
+    [FUNCION_CALLING]: `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
 
 const key = process.env.GRAM_API_KEY ?? "";
 
