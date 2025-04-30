@@ -53,9 +53,9 @@ runs:
           type=sha
           type=sha,format=long
 
-    - name: Construct SERVER_VERSION
+    - name: Set GIT_SHA
       shell: bash
-      run: echo "SERVER_VERSION=$(date +'%Y-%m-%d')-$(echo $GITHUB_SHA | cut -c1-8)" >> $GITHUB_ENV
+      run: echo "GIT_SHA=$(echo $GITHUB_SHA | cut -c1-8)" >> $GITHUB_ENV
 
     - name: Build and push registry Docker image
       uses: docker/build-push-action@v6
@@ -67,7 +67,7 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           ${{ inputs.build-args }}
-          SERVER_VERSION=${{ env.SERVER_VERSION }}
+          GIT_SHA=${{ env.GIT_SHA }}
         secrets: |
           git_auth_token=${{ inputs.git-auth-token }}
         cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.image }}:latest
