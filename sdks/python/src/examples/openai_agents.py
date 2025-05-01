@@ -15,7 +15,7 @@ agent = Agent(
     name="Assistant",
     tools=gram.tools(
         project="default",
-        toolset="test",
+        toolset="speakeasy-admin",
         environment="default",
     ),
 )
