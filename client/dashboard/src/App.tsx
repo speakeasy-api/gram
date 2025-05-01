@@ -22,9 +22,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
     applyTheme(prefersDark ? "dark" : "light");
   }, []);
+
+  const primaryCTA = ROUTES.primaryCTA[0];
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme: applyTheme }}>
@@ -37,8 +41,8 @@ export default function App() {
                 {routesWithSubroutes(ROUTES.unauthenticatedRoutes)}
                 <Route path="/" element={<AppLayout />}>
                   <Route
-                    path={ROUTES.primaryCTA.url}
-                    element={<ROUTES.primaryCTA.component />}
+                    path={primaryCTA.url}
+                    element={<primaryCTA.component />}
                   />
                   {routesWithSubroutes(ROUTES.navMain)}
                   {routesWithSubroutes(ROUTES.navSecondary)}

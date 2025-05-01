@@ -4,7 +4,6 @@ import { Heading } from "./ui/heading.tsx";
 import { ChevronsUpDown, PlusIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
 import { Button } from "./ui/button.tsx";
-import { IconLogout } from "@tabler/icons-react";
 import { Type } from "./ui/type.tsx";
 import { NavButton } from "./nav-menu.tsx";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -130,7 +129,7 @@ export function ProjectMenu() {
           <NavButton
             item={{
               title: "Logout",
-              icon: IconLogout,
+              icon: "log-out",
               onClick: async () => {
                 await client.auth.logout({
                   sessionHeaderGramSession: "", // TODO?
@@ -221,13 +220,13 @@ function ProjectSelector() {
           title="Create New Project"
           description="Create a new project to get started"
           onSubmit={() => {
-          createProject(newProjectName);
-        }}
-        inputs={[
-          {
-            label: "Name",
-            value: newProjectName,
-            onChange: setNewProjectName,
+            createProject(newProjectName);
+          }}
+          inputs={[
+            {
+              label: "Name",
+              value: newProjectName,
+              onChange: setNewProjectName,
               placeholder: "New Project",
             },
           ]}

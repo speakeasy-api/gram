@@ -1,14 +1,3 @@
-import {
-  Icon,
-  IconBook,
-  IconCode,
-  IconMessageChatbot,
-  IconUpload,
-  IconWorld,
-} from "@tabler/icons-react";
-import { IconSettings } from "@tabler/icons-react";
-import { IconBlocks, IconTools } from "@tabler/icons-react";
-import { IconDashboard } from "@tabler/icons-react";
 import Integrations from "./pages/integrations/Integrations";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Home from "./pages/home/Home";
@@ -21,14 +10,13 @@ import { EnvironmentsRoot } from "./pages/environments/Environments";
 import EnvironmentPage from "./pages/environments/Environment";
 import Login from "./pages/login/Login";
 import SDK from "./pages/sdk/SDK";
-
-export const SanboxIcon = IconMessageChatbot;
+import { IconProps } from "@speakeasy-api/moonshine";
 
 export type AppRoute = {
   title: string;
   url: string;
   external?: boolean;
-  icon?: Icon;
+  icon?: IconProps["name"];
   component?: React.ComponentType;
   indexComponent?: React.ComponentType;
   subPages?: AppRoute[];
@@ -36,34 +24,38 @@ export type AppRoute = {
 };
 
 export const ROUTES = {
-  unauthenticatedRoutes: [{
-    title: "Login",
-    url: "/login",
-    component: Login,
-  }],
-  primaryCTA: {
-    title: "Sandbox",
-    url: "/sandbox",
-    icon: SanboxIcon,
-    component: Sandbox,
-  },
+  unauthenticatedRoutes: [
+    {
+      title: "Login",
+      url: "/login",
+      component: Login,
+    },
+  ],
+  primaryCTA: [
+    {
+      title: "Sandbox",
+      url: "/sandbox",
+      icon: "message-circle",
+      component: Sandbox,
+    },
+  ],
   navMain: [
     {
       title: "Home",
       url: "/",
-      icon: IconDashboard,
+      icon: "circle-gauge",
       component: Home,
     },
     {
       title: "Integrations",
       url: "/integrations",
-      icon: IconBlocks,
+      icon: "blocks",
       component: Integrations,
     },
     {
       title: "Toolsets",
       url: "/toolsets",
-      icon: IconTools,
+      icon: "pencil-ruler",
       component: ToolsetsRoot,
       indexComponent: Toolsets,
       subPages: [
@@ -77,7 +69,7 @@ export const ROUTES = {
     {
       title: "Environments",
       url: "/environments",
-      icon: IconWorld,
+      icon: "globe",
       component: EnvironmentsRoot,
       indexComponent: Environments,
       subPages: [
@@ -91,7 +83,7 @@ export const ROUTES = {
     {
       title: "SDK",
       url: "/sdk",
-      icon: IconCode,
+      icon: "code",
       component: SDK,
     },
   ],
@@ -99,20 +91,20 @@ export const ROUTES = {
     {
       title: "Upload OpenAPI",
       url: "/onboarding",
-      icon: IconUpload,
+      icon: "upload",
       component: Onboarding,
     },
     {
       title: "Settings",
       url: "/settings",
-      icon: IconSettings,
+      icon: "settings",
       component: Settings,
     },
     {
       title: "Docs",
       url: "https://docs.speakeasy.com",
-      icon: IconBook,
+      icon: "book-open",
       external: true,
     },
   ],
-};
+} as const satisfies Record<string, AppRoute[]>;

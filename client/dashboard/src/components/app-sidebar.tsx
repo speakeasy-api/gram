@@ -17,13 +17,14 @@ import { ROUTES } from "@/routes";
 import { ProjectMenu } from "./project-menu";
 import { cn } from "@/lib/utils";
 import { GramLogo } from "./gram-logo";
+import { Icon } from "@speakeasy-api/moonshine";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate();
 
   // Reverse sort the items by url length to ensure the most specific item is selected
   const activeItem = [
-    ROUTES.primaryCTA,
+    ...ROUTES.primaryCTA,
     ...ROUTES.navMain,
     ...ROUTES.navSecondary,
   ]
@@ -40,22 +41,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     active: activeItem?.url === item.url,
   }));
 
-  const primaryActive = activeItem?.url === ROUTES.primaryCTA.url;
+  const primaryCTARoute = ROUTES.primaryCTA[0];
+  const primaryActive = activeItem?.url === primaryCTARoute.url;
 
   const primaryCTA = (
     <SidebarMenuButton
-      tooltip={ROUTES.primaryCTA.title}
+      tooltip={primaryCTARoute.title}
       className={cn(
         "bg-primary! text-primary-foreground! hover:bg-primary/90 hover:text-primary-foreground min-w-8 trans",
-        primaryActive && "border-violet-300 border-2 scale-105",
+        primaryActive && "border-violet-300 border-2 scale-105"
       )}
       onClick={() => {
-        navigate(ROUTES.primaryCTA.url);
+        navigate(primaryCTARoute.url);
       }}
       isActive={primaryActive}
     >
-      <ROUTES.primaryCTA.icon />
-      <span>{ROUTES.primaryCTA.title}</span>
+      <Icon name={primaryCTARoute.icon} />
+      <span>{primaryCTARoute.title}</span>
     </SidebarMenuButton>
   );
 

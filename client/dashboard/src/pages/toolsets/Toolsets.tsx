@@ -5,13 +5,12 @@ import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
-import { SanboxIcon } from "@/routes";
 import {
   useCreateToolsetMutation,
   useListToolsetsSuspense,
   useToolsetSuspense,
 } from "@gram/client/react-query/index.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
 import { useProject } from "@/contexts/Auth";
 import { useState } from "react";
@@ -251,7 +250,10 @@ function ToolsetCard({
               tooltip="Open in chat sandbox"
             >
               Sandbox
-              <SanboxIcon className="text-muted-foreground group-hover:text-foreground trans" />
+              <Icon
+                name="message-circle"
+                className="text-muted-foreground group-hover:text-foreground trans"
+              />
             </Button>
           </Link>
         </div>

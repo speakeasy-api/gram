@@ -1,4 +1,3 @@
-import { type Icon } from "@tabler/icons-react";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -7,6 +6,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
+import { Icon, IconProps } from "@speakeasy-api/moonshine";
 
 export function NavMenu({
   items,
@@ -33,7 +33,7 @@ export function NavButton({
     title: string;
     url?: string;
     external?: boolean;
-    icon?: Icon;
+    icon?: IconProps["name"];
     active?: boolean;
     onClick?: () => void;
   };
@@ -58,10 +58,11 @@ export function NavButton({
       isActive={item.active}
     >
       {item.icon && (
-        <item.icon
+        <Icon
+          name={item.icon}
           className={cn(
             "trans text-muted-foreground group-hover/nav-button:text-primary",
-            item.active && "text-primary",
+            item.active && "text-primary"
           )}
         />
       )}
