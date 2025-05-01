@@ -22,10 +22,10 @@ func CORSMiddleware(env string) func(next http.Handler) http.Handler {
 					}
 				}
 			case "dev":
-				w.Header().Set("Access-Control-Allow-Origin", "https://dev.getgram.ai")
+				w.Header().Set("Access-Control-Allow-Origin", "http://dev.getgram.ai")
 			case "prod":
-				w.Header().Set("Access-Control-Allow-Origin", "https://prod.getgram.ai")
-				w.Header().Set("Access-Control-Allow-Origin", "https://getgram.ai")
+				w.Header().Set("Access-Control-Allow-Origin", "http://prod.getgram.ai")
+				w.Header().Set("Access-Control-Allow-Origin", "http://getgram.ai")
 			default:
 				// No CORS headers set for unspecified environments
 			}
