@@ -138,7 +138,14 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}, nil
 }
 
-func (s *Service) Login(context.Context) (res *gen.LoginResult, err error) {
+func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
+	if s.sessions.IsUnsafeLocalDevelopment() {
+		err = errors.New("calling rpc.login for local development stubbed auth is not supporte because that implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
+		s.logger.ErrorContext(ctx, "signin error", slog.String("error", err.Error()))
+		return &gen.LoginResult{
+			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+		}, nil
+	}
 	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
 
 	values := url.Values{}

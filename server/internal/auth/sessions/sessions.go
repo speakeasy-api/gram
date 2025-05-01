@@ -79,6 +79,10 @@ func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cac
 	}, nil
 }
 
+func (s *Manager) IsUnsafeLocalDevelopment() bool {
+	return s.unsafeLocal
+}
+
 func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool) (context.Context, error) {
 	if key == "" {
 		// This may have been set via cookie from http middleware, GOA does not support natively
