@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/url"
 	"time"
@@ -219,10 +218,6 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		attribute.String("session_id", *authCtx.SessionID),
 	)
 
-	if len(form.Openapiv3Assets) == 0 && len(form.Packages) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package is required")
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, logger)
@@ -258,8 +253,19 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	}
 
 	newPackages := make([]upsertPackage, 0, len(resolved))
-	for _, pkg := range resolved {
-		newPackages = append(newPackages, upsertPackage(pkg))
+	for i, pkg := range resolved {
+		if err := validatePackageInclusion(ctx, logger, projectID, pkgInputs[i], pkg); err != nil {
+			return nil, err
+		}
+
+		newPackages = append(newPackages, upsertPackage{
+			packageID: pkg.packageID,
+			versionID: pkg.versionID,
+		})
+	}
+
+	if len(newPackages) == 0 && len(newAssets) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package is required").Log(ctx, logger)
 	}
 
 	newID, err := createDeployment(
@@ -360,8 +366,19 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	}
 
 	packagesToUpsert := make([]upsertPackage, 0, len(resolved))
-	for _, pkg := range resolved {
-		packagesToUpsert = append(packagesToUpsert, upsertPackage(pkg))
+	for i, pkg := range resolved {
+		if err := validatePackageInclusion(ctx, logger, projectID, pkgInputs[i], pkg); err != nil {
+			return nil, err
+		}
+
+		packagesToUpsert = append(packagesToUpsert, upsertPackage{
+			packageID: pkg.packageID,
+			versionID: pkg.versionID,
+		})
+	}
+
+	if len(packagesToUpsert) == 0 && len(assetsToUpsert) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package is required").Log(ctx, logger)
 	}
 
 	excludeOpenapiv3Assets := make([]uuid.UUID, 0, len(form.ExcludeOpenapiv3Assets))
@@ -473,6 +490,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 type resolvedPackage struct {
 	packageID uuid.UUID
+	projectID uuid.UUID
 	versionID uuid.UUID
 }
 
@@ -483,18 +501,20 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		name, version := p[0], p[1]
 
 		var packageID uuid.UUID
+		var projectID uuid.UUID
 		var versionID uuid.UUID
 
 		if version == "" {
 			row, err := tx.PeekLatestPackageVersionByName(ctx, name)
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: "+name).Log(ctx, s.logger, slog.String("package_name", name))
+				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: %s", name).Log(ctx, s.logger, slog.String("package_name", name))
 			}
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error getting latest package version").Log(ctx, s.logger, slog.String("package_name", name))
 			}
 
 			packageID = row.PackageID
+			projectID = row.ProjectID
 			versionID = row.PackageVersionID
 		} else {
 			semver, err := packages.ParseSemver(version)
@@ -515,24 +535,24 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 				Build:      conv.ToPGText(semver.Build),
 			})
 			if errors.Is(err, sql.ErrNoRows) {
-				msg := fmt.Sprintf("package version not found: %s@%s", name, version)
-				return nil, oops.E(oops.CodeBadRequest, err, msg).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
+				return nil, oops.E(oops.CodeBadRequest, err, "package version not found: %s@%s", name, version).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
 			}
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "error getting package by name and version").Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
 			}
 
 			packageID = row.PackageID
+			projectID = row.ProjectID
 			versionID = row.PackageVersionID
 		}
 
 		if packageID == uuid.Nil || versionID == uuid.Nil {
-			msg := fmt.Sprintf("could not resolve package version: %s@%s", name, conv.Default(version, "latest"))
-			return nil, oops.E(oops.CodeBadRequest, nil, msg).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", conv.Default(version, "latest")))
+			return nil, oops.E(oops.CodeBadRequest, nil, "could not resolve package version: %s@%s", name, conv.Default(version, "latest")).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", conv.Default(version, "latest")))
 		}
 
 		res = append(res, resolvedPackage{
 			packageID: packageID,
+			projectID: projectID,
 			versionID: versionID,
 		})
 	}
@@ -663,4 +683,23 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 	}
 
 	return workers.Wait()
+}
+
+// validatePackageInclusion validates that a package can be added to a project
+// through a deployment. It checks the package data is well formed and guards
+// against adding a package to its own project causing a circular dependency.
+func validatePackageInclusion(ctx context.Context, logger *slog.Logger, targetProjectID uuid.UUID, requirement [2]string, resolved resolvedPackage) error {
+	if err := inv.Check(
+		"resolved package state",
+		"package id cannot be nil", resolved.packageID != uuid.Nil,
+		"version id cannot be nil", resolved.versionID != uuid.Nil,
+		"project id cannot be nil", resolved.projectID != targetProjectID,
+	); err != nil {
+		return oops.E(oops.CodeInvariantViolation, err, "error resolving package: %s@%s", requirement[0], requirement[1]).Log(ctx, logger)
+	}
+	if resolved.projectID == targetProjectID {
+		return oops.E(oops.CodeInvalid, nil, "cannot add package to its own project: %s", requirement[0]).Log(ctx, logger)
+	}
+
+	return nil
 }

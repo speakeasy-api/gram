@@ -1,13 +1,13 @@
 -- name: PeekLatestPackageVersionByName :one
-SELECT packages.id as package_id, package_versions.id as package_version_id
+SELECT packages.id as package_id, packages.project_id as project_id, package_versions.id as package_version_id
 FROM packages
 INNER JOIN package_versions ON packages.id = package_versions.package_id
 WHERE packages.name = @name
-ORDER BY package_versions.id DESC
+ORDER BY package_versions.major DESC, package_versions.minor DESC, package_versions.patch DESC, package_versions.id DESC
 LIMIT 1;
 
 -- name: PeekPackageByNameAndVersion :one
-SELECT packages.id as package_id, package_versions.id as package_version_id
+SELECT packages.id as package_id, packages.project_id as project_id, package_versions.id as package_version_id
 FROM packages
 INNER JOIN package_versions ON packages.id = package_versions.package_id
 WHERE packages.name = @name

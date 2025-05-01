@@ -16,15 +16,20 @@ import (
 var funcMemo sync.Map
 
 //go:noinline
-func E(code Code, cause error, public string) *ShareableError {
+func E(code Code, cause error, public string, args ...any) *ShareableError {
 	var pc [1]uintptr
 	runtime.Callers(2, pc[:])
+
+	msg := public
+	if len(args) > 0 {
+		msg = fmt.Sprintf(public, args...)
+	}
 
 	return &ShareableError{
 		code:    code,
 		cause:   cause,
 		private: "",
-		public:  public,
+		public:  msg,
 		pc:      pc[0],
 	}
 }

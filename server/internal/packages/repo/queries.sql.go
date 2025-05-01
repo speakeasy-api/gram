@@ -330,28 +330,29 @@ func (q *Queries) ListVersions(ctx context.Context, arg ListVersionsParams) ([]L
 }
 
 const peekLatestPackageVersionByName = `-- name: PeekLatestPackageVersionByName :one
-SELECT packages.id as package_id, package_versions.id as package_version_id
+SELECT packages.id as package_id, packages.project_id as project_id, package_versions.id as package_version_id
 FROM packages
 INNER JOIN package_versions ON packages.id = package_versions.package_id
 WHERE packages.name = $1
-ORDER BY package_versions.id DESC
+ORDER BY package_versions.major DESC, package_versions.minor DESC, package_versions.patch DESC, package_versions.id DESC
 LIMIT 1
 `
 
 type PeekLatestPackageVersionByNameRow struct {
 	PackageID        uuid.UUID
+	ProjectID        uuid.UUID
 	PackageVersionID uuid.UUID
 }
 
 func (q *Queries) PeekLatestPackageVersionByName(ctx context.Context, name string) (PeekLatestPackageVersionByNameRow, error) {
 	row := q.db.QueryRow(ctx, peekLatestPackageVersionByName, name)
 	var i PeekLatestPackageVersionByNameRow
-	err := row.Scan(&i.PackageID, &i.PackageVersionID)
+	err := row.Scan(&i.PackageID, &i.ProjectID, &i.PackageVersionID)
 	return i, err
 }
 
 const peekPackageByNameAndVersion = `-- name: PeekPackageByNameAndVersion :one
-SELECT packages.id as package_id, package_versions.id as package_version_id
+SELECT packages.id as package_id, packages.project_id as project_id, package_versions.id as package_version_id
 FROM packages
 INNER JOIN package_versions ON packages.id = package_versions.package_id
 WHERE packages.name = $1
@@ -374,6 +375,7 @@ type PeekPackageByNameAndVersionParams struct {
 
 type PeekPackageByNameAndVersionRow struct {
 	PackageID        uuid.UUID
+	ProjectID        uuid.UUID
 	PackageVersionID uuid.UUID
 }
 
@@ -387,7 +389,7 @@ func (q *Queries) PeekPackageByNameAndVersion(ctx context.Context, arg PeekPacka
 		arg.Build,
 	)
 	var i PeekPackageByNameAndVersionRow
-	err := row.Scan(&i.PackageID, &i.PackageVersionID)
+	err := row.Scan(&i.PackageID, &i.ProjectID, &i.PackageVersionID)
 	return i, err
 }
 

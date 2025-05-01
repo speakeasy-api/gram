@@ -164,7 +164,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	case "application/json", "text/json":
 		filename += ".json"
 	default:
-		return nil, oops.E(oops.CodeUnsupportedMedia, fmt.Errorf("unsupported content type: %s", contentType), "only json and yaml documents are supported: "+contentType)
+		return nil, oops.E(oops.CodeUnsupportedMedia, nil, "unsupported content type: %s", contentType)
 	}
 
 	off, err := f.Seek(0, io.SeekStart)
