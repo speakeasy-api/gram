@@ -182,9 +182,9 @@ func newStartCommand() *cli.Command {
 			case "local":
 				serverURL = fmt.Sprintf("http://localhost%s", c.String("address"))
 			case "dev":
-				serverURL = "https://dev.getgram.ai"
+				serverURL = "http://dev.getgram.ai"
 			case "prod":
-				serverURL = "https://getgram.ai"
+				serverURL = "http://getgram.ai"
 			default:
 				return fmt.Errorf("invalid environment: %s", c.String("environment"))
 			}

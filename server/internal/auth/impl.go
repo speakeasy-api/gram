@@ -65,9 +65,9 @@ func FormSignInRedirectURL(env string) string {
 	case "minikube":
 		return "http://localhost:8080/"
 	case "dev":
-		return "https://dev.getgram.ai"
+		return "http://dev.getgram.ai"
 	case "prod":
-		return "https://getgram.ai"
+		return "http://getgram.ai"
 	default:
 		return ""
 	}
