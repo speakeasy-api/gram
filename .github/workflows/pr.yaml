@@ -14,8 +14,8 @@ env:
   DOCKER_REPOSITORY_OWNER: ${{github.repository_owner}}
 jobs:
   changes:
-    name: Determine if we need to test and deploy different pieces of gram
-    runs-on: ubuntu-latest
+    name: Tag branch changes
+    runs-on: ubicloud-standard-4
     permissions:
       contents: "read"
       pull-requests: read
@@ -32,6 +32,7 @@ jobs:
         id: filter
         with:
           filters: .github/filters.yaml
+
   docker-build-server:
     runs-on: ubicloud-standard-4
     needs: changes

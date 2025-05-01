@@ -1,0 +1,5 @@
+pg_version = "17.0"
+assume_in_transaction = true
+[upload_to_github]
+fail_on_violations = true
+
