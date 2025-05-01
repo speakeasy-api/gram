@@ -1,7 +1,6 @@
 import { Card, Cards } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
-import { useProject } from "@/contexts/Auth";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
@@ -55,10 +54,8 @@ export function ToolsetView({
 }) {
   const toolsets = useToolsets();
   const navigate = useNavigate();
-  const project = useProject();
 
   const toolsetResult = useToolset({
-    gramProject: project.slug,
     slug: toolsetSlug,
   });
 
@@ -94,7 +91,6 @@ export function ToolsetView({
     toolset = { ...toolset, ...changes };
     updateToolsetMutation.mutate({
       request: {
-        gramProject: project.slug,
         slug: toolset.slug,
         updateToolsetRequestBody: {
           name: changes.name,
@@ -133,7 +129,6 @@ export function ToolsetView({
         ) {
           deleteToolsetMutation.mutate({
             request: {
-              gramProject: project.slug,
               slug: toolset.slug,
             },
           });
@@ -150,7 +145,6 @@ export function ToolsetView({
     updateToolsetMutation.mutate(
       {
         request: {
-          gramProject: project.slug,
           slug: toolset.slug,
           updateToolsetRequestBody: {
             httpToolNames: toolNames,
@@ -173,7 +167,6 @@ export function ToolsetView({
 
     updateToolsetMutation.mutate({
       request: {
-        gramProject: project.slug,
         slug: toolset.slug,
         updateToolsetRequestBody: {
           httpToolNames: toolset.httpTools
@@ -217,7 +210,6 @@ export function ToolsetView({
       updateEnvironmentMutation.mutate(
         {
           request: {
-            gramProject: project.slug,
             slug: environment.slug,
             updateEnvironmentRequestBody: {
               entriesToUpdate: envVarsToUpdate,
@@ -291,7 +283,10 @@ export function ToolsetView({
           label={"Toolset Name"}
         >
           <Heading variant="h2">
-            <NameAndSlug name={toolset?.name || ""} slug={toolset?.slug || ""} />
+            <NameAndSlug
+              name={toolset?.name || ""}
+              slug={toolset?.slug || ""}
+            />
           </Heading>
         </EditableText>
         <Badge className="h-6">
@@ -449,7 +444,6 @@ function AddToolDialog({
   toolset: ToolsetDetails;
   onSubmit: (newToolIds: string[]) => void;
 }) {
-  const project = useProject();
   const [selectedTools, setSelectedTools] = useState<string[]>(
     toolset.httpTools.map((tool) => tool.name)
   );
@@ -461,9 +455,7 @@ function AddToolDialog({
     }
   }, [open, toolset.httpTools]);
 
-  const tools = useListTools({
-    gramProject: project.slug,
-  });
+  const tools = useListTools();
 
   const options = tools.data?.tools.map((tool: HTTPToolDefinition) => ({
     label: tool.name,

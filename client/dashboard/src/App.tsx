@@ -4,7 +4,7 @@ import "./App.css"; // Import this second to override certain values in moonshin
 import { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/app-layout.tsx";
-import { AppRoute, ROUTES } from "./routes.ts";
+import { AppRoute, useRoutes } from "@/routes";
 import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { ThemeContext } from "./components/ui/theme-toggle.tsx";
 import { AuthProvider } from "./contexts/Auth.tsx";
@@ -28,33 +28,44 @@ export default function App() {
     applyTheme(prefersDark ? "dark" : "light");
   }, []);
 
-  const primaryCTA = ROUTES.primaryCTA[0];
-
   return (
     <ThemeContext.Provider value={{ theme, setTheme: applyTheme }}>
       <MoonshineConfigProvider themeElement={document.documentElement}>
-        <SdkProvider>
-          <AuthProvider>
-            <BrowserRouter>
-              <Routes>
-                {/* Register these unauthenticated paths outside of root layout */}
-                {routesWithSubroutes(ROUTES.unauthenticatedRoutes)}
-                <Route path="/" element={<AppLayout />}>
-                  <Route
-                    path={primaryCTA.url}
-                    element={<primaryCTA.component />}
-                  />
-                  {routesWithSubroutes(ROUTES.navMain)}
-                  {routesWithSubroutes(ROUTES.navSecondary)}
-                </Route>
-              </Routes>
-            </BrowserRouter>
-          </AuthProvider>
-        </SdkProvider>
+        <BrowserRouter>
+          <SdkProvider>
+            <AuthProvider>
+              <RouteProvider />
+            </AuthProvider>
+          </SdkProvider>
+        </BrowserRouter>
       </MoonshineConfigProvider>
     </ThemeContext.Provider>
   );
 }
+
+const RouteProvider = () => {
+  const routes = useRoutes();
+
+  const unauthenticatedRoutes = Object.values(routes).filter(
+    (route) => route.unauthenticated
+  );
+
+  const authenticatedRoutes = Object.values(routes).filter(
+    (route) => !route.unauthenticated
+  );
+
+  return (
+    <Routes>
+      {/* Register these unauthenticated paths outside of root layout */}
+      {routesWithSubroutes(unauthenticatedRoutes)}
+      <Route path="/" element={<AppLayout />}>
+        <Route path=":orgSlug/:projectSlug">
+          {routesWithSubroutes(authenticatedRoutes)}
+        </Route>
+      </Route>
+    </Routes>
+  );
+};
 
 const routesWithSubroutes = (routes: AppRoute[]) => {
   return routes
@@ -68,13 +79,7 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
         {item.indexComponent && (
           <Route index element={<item.indexComponent />} />
         )}
-        {item.subPages?.map((subPage) => (
-          <Route
-            key={subPage.title}
-            path={subPage.url}
-            element={subPage.component ? <subPage.component /> : null}
-          />
-        ))}
+        {routesWithSubroutes(Object.values(item.subPages ?? {}))}
       </Route>
     ));
 };

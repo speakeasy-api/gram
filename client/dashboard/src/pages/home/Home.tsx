@@ -12,7 +12,6 @@ import {
 } from "@gram/client/react-query/index.js";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
-import { useProject } from "@/contexts/Auth";
 import {
   Tooltip,
   TooltipContent,
@@ -27,10 +26,7 @@ import { Button } from "@/components/ui/button";
 import { NameAndSlug } from "@/components/name-and-slug";
 
 function DeploymentCards() {
-  const project = useProject();
-  const { data: deployment, refetch } = useLatestDeployment({
-    gramProject: project.slug,
-  });
+  const { data: deployment, refetch } = useLatestDeployment();
 
   if (!deployment?.deployment) {
     return (
@@ -69,14 +65,10 @@ function DeploymentTools({
   deploymentId: string;
   onNewDeployment: () => void;
 }) {
-  const project = useProject();
-
   const { data: deployment } = useDeploymentSuspense({
-    gramProject: project.slug,
     id: deploymentId,
   });
   const { data: toolsData } = useListToolsSuspense({
-    gramProject: project.slug,
     deploymentId: deploymentId,
   });
 

@@ -3,6 +3,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Heading } from "./ui/heading.tsx";
 import { Link, useLocation } from "react-router-dom";
 import React from "react";
+import { useSlugs } from "@/contexts/Sdk.tsx";
 
 function PageHeaderComponent({ children }: { children: React.ReactNode }) {
   return (
@@ -32,15 +33,17 @@ function PageHeaderActions({ children }: { children: React.ReactNode }) {
 }
 
 function PageHeaderBreadcrumbs() {
+  const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
 
   // Build breadcrumb elements from URL segments
   const visibleElements = location.pathname
     .split("/")
     .filter(Boolean) // Remove empty strings
+    .slice(2) // Remove the two leading elements (org slug and project slug)
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
-      const isCurrentPage = url === location.pathname;
+      const isCurrentPage = location.pathname.endsWith(url);
       const title = segment.toLowerCase() === 'sdk' ? 'SDK' : segment;
 
       return {
@@ -67,7 +70,7 @@ function PageHeaderBreadcrumbs() {
               <span>{elem.title}</span>
             ) : (
               <Link
-                to={elem.url}
+                to={`/${orgSlug}/${projectSlug}${elem.url}`}
                 className="text-muted-foreground hover:text-foreground trans"
               >
                 {elem.title}

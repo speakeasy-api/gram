@@ -1,13 +1,18 @@
-import { Page } from "@/components/page-layout"
-import { LoginSection } from "./components/login-section"
-import { PromptsSection } from "./components/prompt-section"
+import { Page } from "@/components/page-layout";
+import { LoginSection } from "./components/login-section";
+import { PromptsSection } from "./components/prompt-section";
 import { useSession } from "@/contexts/Auth";
-import { Navigate } from "react-router-dom";
+import { useRoutes } from "@/routes";
 
 export default function Login() {
+  const routes = useRoutes();
   const session = useSession();
-  if (session.session !== "") { // we are logged in, redirect to the home page
-    return <Navigate to="/" />
+
+  console.log(session);
+
+  if (session.session !== "") {
+    // we are logged in, redirect to the home page
+    routes.home.goTo();
   }
 
   return (
@@ -23,5 +28,5 @@ export default function Login() {
         <PromptsSection />
       </main>
     </Page>
-  )
+  );
 }

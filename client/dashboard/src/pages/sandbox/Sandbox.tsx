@@ -83,7 +83,6 @@ export function OnboardingPanel({
 }: {
   selectToolset: (toolsetSlug: string) => void;
 }) {
-  const project = useProject();
   const client = useSdkClient();
 
   const onOnboardingComplete = async (deployment: Deployment) => {
@@ -95,20 +94,16 @@ export function OnboardingPanel({
 
     // Auto-create a default toolset
     const res = await client.toolsets.create({
-      gramProject: project.slug,
       createToolsetRequestBody: {
         name: assetName,
         description: `A toolset created from OpenAPI document: ${assetName}`,
       },
     });
 
-    const allTools = await client.tools.list({
-      gramProject: project.slug,
-    });
+    const allTools = await client.tools.list();
 
     // Add all tools to the toolset
     await client.toolsets.updateBySlug({
-      gramProject: project.slug,
       slug: res.slug,
       updateToolsetRequestBody: {
         httpToolNames: allTools.tools.map((tool) => tool.name),
@@ -138,7 +133,6 @@ export function ToolsetPanel({
 
   const selectedToolset = configRef.current.toolsetSlug;
   const selectedEnvironment = configRef.current.environmentSlug;
-  console.log("selectedToolset", selectedToolset);
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
 
@@ -248,7 +242,6 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
   const instance = useInstance(
     {},
     {
-      gramProject: project.slug,
       toolsetSlug: configRef.current.toolsetSlug ?? "",
       environmentSlug: configRef.current.environmentSlug ?? undefined,
     },
@@ -276,6 +269,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
     baseURL: getServerURL(),
     headers: {
       "Gram-Session": session.session,
+      "Gram-Project": project.slug,
     },
   });
 

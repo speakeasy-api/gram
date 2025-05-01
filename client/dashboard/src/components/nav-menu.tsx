@@ -3,10 +3,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
-import { Icon, IconProps } from "@speakeasy-api/moonshine";
 
 export function NavMenu({
   items,
@@ -19,54 +17,59 @@ export function NavMenu({
     <SidebarMenu className={className}>
       {items.map((item) => (
         <SidebarMenuItem key={item.title}>
-          <NavButton item={item} />
+          <NavMenuButton item={item} />
         </SidebarMenuItem>
       ))}
     </SidebarMenu>
   );
 }
 
-export function NavButton({
-  item,
-}: {
-  item: {
-    title: string;
-    url?: string;
-    external?: boolean;
-    icon?: IconProps["name"];
-    active?: boolean;
-    onClick?: () => void;
+function NavMenuButton({ item }: { item: AppRoute }) {
+  const onClick = () => {
+    if (item.external) {
+      window.open(item.url, "_blank");
+    } else {
+      item.goTo();
+    }
   };
+
+  return (
+    <NavButton
+      title={item.title}
+      onClick={onClick}
+      active={item.active}
+      Icon={item.Icon}
+    />
+  );
+}
+
+export function NavButton({
+  title,
+  onClick,
+  active,
+  Icon,
+}: {
+  title: string;
+  onClick?: () => void;
+  active?: boolean;
+  Icon?: React.ComponentType<{ className?: string }>;
 }) {
-  const navigate = useNavigate();
-
-  const onClick =
-    item.onClick ??
-    (() => {
-      if (item.external) {
-        window.open(item.url, "_blank");
-      } else if (item.url) {
-        navigate(item.url);
-      }
-    });
-
   return (
     <SidebarMenuButton
       className="group/nav-button"
-      tooltip={item.title}
+      tooltip={title}
       onClick={onClick}
-      isActive={item.active}
+      isActive={active}
     >
-      {item.icon && (
+      {Icon && (
         <Icon
-          name={item.icon}
           className={cn(
             "trans text-muted-foreground group-hover/nav-button:text-primary",
-            item.active && "text-primary"
+            active && "text-primary"
           )}
         />
       )}
-      <span>{item.title}</span>
+      <span>{title}</span>
     </SidebarMenuButton>
   );
 }

@@ -56,9 +56,7 @@ export function OnboardingContent({
   );
   const [deployment, setDeployment] = useState<Deployment>();
 
-  const { data: tools, refetch: refetchTools } = useListTools({
-    gramProject: project.slug,
-  });
+  const { data: tools, refetch: refetchTools } = useListTools();
 
   const handleUpload = async (file: File) => {
     try {

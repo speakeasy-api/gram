@@ -11,53 +11,37 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Link, useNavigate } from "react-router-dom";
-import { ROUTES } from "@/routes";
-
+import { useRoutes } from "@/routes";
 import { ProjectMenu } from "./project-menu";
 import { cn } from "@/lib/utils";
 import { GramLogo } from "./gram-logo";
-import { Icon } from "@speakeasy-api/moonshine";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const navigate = useNavigate();
+  const routes = useRoutes();
 
-  // Reverse sort the items by url length to ensure the most specific item is selected
-  const activeItem = [
-    ...ROUTES.primaryCTA,
-    ...ROUTES.navMain,
-    ...ROUTES.navSecondary,
-  ]
-    .sort((a, b) => b.url.length - a.url.length)
-    .find((item) => location.pathname.startsWith(item.url));
+  const topNavItems = [
+    routes.home,
+    routes.integrations,
+    routes.toolsets,
+    routes.environments,
+  ];
 
-  const topNavItems = ROUTES.navMain.map((item) => ({
-    ...item,
-    active: activeItem?.url === item.url,
-  }));
+  const secondaryNavItems = [routes.sdk, routes.settings, routes.docs];
 
-  const secondaryNavItems = ROUTES.navSecondary.map((item) => ({
-    ...item,
-    active: activeItem?.url === item.url,
-  }));
-
-  const primaryCTARoute = ROUTES.primaryCTA[0];
-  const primaryActive = activeItem?.url === primaryCTARoute.url;
-
-  const primaryCTA = (
+  const sandboxCTA = (
     <SidebarMenuButton
-      tooltip={primaryCTARoute.title}
+      tooltip={routes.sandbox.title}
       className={cn(
         "bg-primary! text-primary-foreground! hover:bg-primary/90 hover:text-primary-foreground min-w-8 trans",
-        primaryActive && "border-violet-300 border-2 scale-105"
+        routes.sandbox.active && "border-violet-300 border-2 scale-105"
       )}
       onClick={() => {
-        navigate(primaryCTARoute.url);
+        routes.sandbox.goTo();
       }}
-      isActive={primaryActive}
+      isActive={routes.sandbox.active}
     >
-      <Icon name={primaryCTARoute.icon} />
-      <span>{primaryCTARoute.title}</span>
+      <routes.sandbox.Icon />
+      <span>{routes.sandbox.title}</span>
     </SidebarMenuButton>
   );
 
@@ -70,9 +54,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
             >
-              <Link to="/">
+              <routes.home.Link>
                 <GramLogo />
-              </Link>
+              </routes.home.Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -82,7 +66,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupContent className="flex flex-col gap-6">
             <SidebarMenu>
               <SidebarMenuItem className="flex items-center gap-2">
-                {primaryCTA}
+                {sandboxCTA}
               </SidebarMenuItem>
             </SidebarMenu>
             <NavMenu items={topNavItems} />

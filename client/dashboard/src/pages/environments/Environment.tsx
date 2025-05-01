@@ -1,5 +1,4 @@
 import { Heading } from "@/components/ui/heading";
-import { useProject } from "@/contexts/Auth";
 import {
   useDeleteEnvironmentMutation,
   useUpdateEnvironmentMutation,
@@ -115,10 +114,7 @@ interface ToolsetDialogProps {
 }
 
 function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
-  const project = useProject();
-  const { data: toolsetsData } = useListToolsets({
-    gramProject: project.slug,
-  });
+  const { data: toolsetsData } = useListToolsets();
   const [selectedToolset, setSelectedToolset] = useState<string>("");
 
   useEffect(() => {
@@ -202,7 +198,6 @@ export function useEnvironment(slug?: string) {
 export default function EnvironmentPage() {
   const environment = useEnvironment();
   const navigate = useNavigate();
-  const project = useProject();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
@@ -243,7 +238,6 @@ export default function EnvironmentPage() {
 
   const { data: selectedToolset } = useToolset(
     {
-      gramProject: project.slug,
       slug: selectedToolsetSlug,
     },
     {
@@ -302,7 +296,6 @@ export default function EnvironmentPage() {
 
     updateEnvironmentMutation.mutate({
       request: {
-        gramProject: project.slug,
         slug: environment!.slug,
         updateEnvironmentRequestBody: {
           entriesToUpdate: updatedEntries,
@@ -323,7 +316,6 @@ export default function EnvironmentPage() {
         ) {
           deleteEnvironmentMutation.mutate({
             request: {
-              gramProject: project.slug,
               slug: environment.slug,
             },
           });

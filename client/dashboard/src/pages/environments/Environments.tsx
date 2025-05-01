@@ -9,24 +9,22 @@ import {
   useListEnvironmentsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { useProject } from "@/contexts/Auth";
 import { useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { Environment } from "@gram/client/models/components/environment.js";
 import { CreateThingCard } from "../toolsets/Toolsets";
 import { InputDialog } from "@/components/input-dialog";
+import { useRoutes } from "@/routes";
 
 export function EnvironmentsRoot() {
   return <Outlet />;
 }
 
 export function useEnvironments() {
-  const project = useProject();
   const { data: environments, refetch: refetchEnvironments } =
-    useListEnvironmentsSuspense({
-      gramProject: project.slug,
-    });
+    useListEnvironmentsSuspense();
   return Object.assign(environments.environments, {
     refetch: refetchEnvironments,
   });
@@ -53,7 +51,6 @@ export default function Environments() {
   const createEnvironment = () => {
     createEnvironmentMutation.mutate({
       request: {
-        gramProject: project.slug,
         createEnvironmentForm: {
           name: environmentName,
           description: "New Environment Description",
@@ -110,16 +107,19 @@ export default function Environments() {
 }
 
 function EnvironmentCard({ environment }: { environment: Environment }) {
+  const routes = useRoutes();
+
   return (
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Link
-            to={`/environments/${environment.slug}`}
-            className="hover:underline"
+          <routes.environments.subPages.environment.Link
+            params={[environment.slug]}
           >
-            <Card.Title>{environment.name}</Card.Title>
-          </Link>
+            <Card.Title className="hover:underline">
+              {environment.name}
+            </Card.Title>
+          </routes.environments.subPages.environment.Link>
           <Badge>{environment.entries.length || "No"} Entries</Badge>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
@@ -131,9 +131,11 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
         </Stack>
       </Card.Header>
       <Card.Content>
-        <Link to={`/environments/${environment.slug}`}>
+        <routes.environments.subPages.environment.Link
+          params={[environment.slug]}
+        >
           <Button variant="outline">Edit</Button>
-        </Link>
+        </routes.environments.subPages.environment.Link>
       </Card.Content>
     </Card>
   );

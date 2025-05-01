@@ -5,14 +5,14 @@ import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
+import { useRoutes } from "@/routes";
 import {
   useCreateToolsetMutation,
   useListToolsetsSuspense,
   useToolsetSuspense,
 } from "@gram/client/react-query/index.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@speakeasy-api/moonshine";
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
-import { useProject } from "@/contexts/Auth";
 import { useState } from "react";
 import { PlusIcon, AlertTriangle, Check } from "lucide-react";
 import {
@@ -27,20 +27,14 @@ import { InputDialog } from "@/components/input-dialog";
 import { NameAndSlug } from "@/components/name-and-slug";
 
 export function useToolsets() {
-  const project = useProject();
-  const { data: toolsets, refetch } = useListToolsetsSuspense({
-    gramProject: project.slug,
-  });
+  const { data: toolsets, refetch } = useListToolsetsSuspense();
   return Object.assign(toolsets.toolsets, { refetch });
 }
 
 export const useToolset = () => {
   const { toolsetSlug } = useParams();
 
-  const project = useProject();
-
   const { data: toolset, refetch: refetchToolset } = useToolsetSuspense({
-    gramProject: project.slug,
     slug: toolsetSlug ?? "",
   });
 
@@ -52,7 +46,6 @@ export function ToolsetsRoot() {
 }
 
 export default function Toolsets() {
-  const project = useProject();
   const navigate = useNavigate();
   const toolsets = useToolsets();
   const environments = useEnvironments();
@@ -72,7 +65,6 @@ export default function Toolsets() {
   const createToolset = () => {
     createToolsetMutation.mutate({
       request: {
-        gramProject: project.slug,
         createToolsetRequestBody: {
           name: toolsetName,
           description: "New Toolset Description",
@@ -161,6 +153,7 @@ function ToolsetCard({
   toolset: ToolsetDetails;
   environments: Environment[];
 }) {
+  const routes = useRoutes();
   const defaultEnvironment = environments.find(
     (env) => env.slug === toolset.defaultEnvironmentSlug
   );
@@ -180,6 +173,34 @@ function ToolsetCard({
       )
     );
 
+  const envBarBadge = toolset.defaultEnvironmentSlug && (
+    <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
+      <Badge variant="outline" className="h-6 flex items-center gap-1">
+        {defaultEnvironment &&
+          (needsEnvVars ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <AlertTriangle className="w-3 h-3 text-orange-500 cursor-pointer" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    You have not set environment variables for this toolset.
+                    Navigate to the environment and use fill for toolset.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <Check className="w-3 h-3 text-green-500" />
+          ))}
+        Default Env
+      </Badge>
+    </Link>
+  );
+
   return (
     <Card>
       <Card.Header>
@@ -192,37 +213,7 @@ function ToolsetCard({
             />
           </Card.Title>
           <div className="flex gap-2 items-center">
-            {toolset.defaultEnvironmentSlug && (
-              <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
-                <Badge
-                  variant="outline"
-                  className="h-6 flex items-center gap-1"
-                >
-                  {defaultEnvironment &&
-                    (needsEnvVars ? (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div>
-                              <AlertTriangle className="w-3 h-3 text-orange-500 cursor-pointer" />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>
-                              You have not set environment variables for this
-                              toolset. Navigate to the environment and use fill
-                              for toolset.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      <Check className="w-3 h-3 text-green-500" />
-                    ))}
-                  Default Env
-                </Badge>
-              </Link>
-            )}
+            {envBarBadge}
             <Badge className="h-6 flex items-center">
               {toolset.httpTools?.length || "No"} Tools
             </Badge>
@@ -240,22 +231,19 @@ function ToolsetCard({
       </Card.Header>
       <Card.Content>
         <div className="flex items-center gap-2">
-          <Link to={`/toolsets/${toolset.slug}`}>
+          <routes.toolsets.subPages.toolset.Link params={[toolset.slug]}>
             <Button variant="outline">Edit</Button>
-          </Link>
-          <Link to={`/sandbox?toolset=${toolset.slug}`}>
+          </routes.toolsets.subPages.toolset.Link>
+          <routes.sandbox.Link queryParams={{ toolset: toolset.slug }}>
             <Button
               variant="outline"
               className="group"
               tooltip="Open in chat sandbox"
             >
               Sandbox
-              <Icon
-                name="message-circle"
-                className="text-muted-foreground group-hover:text-foreground trans"
-              />
+              <routes.sandbox.Icon className="text-muted-foreground group-hover:text-foreground trans" />
             </Button>
-          </Link>
+          </routes.sandbox.Link>
         </div>
       </Card.Content>
     </Card>

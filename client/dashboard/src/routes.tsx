@@ -1,0 +1,271 @@
+import Integrations from "./pages/integrations/Integrations";
+import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
+import Home from "./pages/home/Home";
+import Onboarding from "./pages/onboarding/Onboarding";
+import ToolsetPage from "./pages/toolsets/Toolset";
+import Sandbox from "./pages/sandbox/Sandbox";
+import Settings from "./pages/settings/Settings";
+import Environments from "./pages/environments/Environments";
+import { EnvironmentsRoot } from "./pages/environments/Environments";
+import EnvironmentPage from "./pages/environments/Environment";
+import Login from "./pages/login/Login";
+import SDK from "./pages/sdk/SDK";
+import { useSlugs } from "./contexts/Sdk";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useMemo } from "react";
+import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
+
+type AppRouteBasic = {
+  title: string;
+  url: string;
+  external?: boolean;
+  icon?: IconName;
+  component?: React.ComponentType;
+  indexComponent?: React.ComponentType;
+  subPages?: AppRoutesBasic;
+  unauthenticated?: boolean;
+};
+
+type GoToFunction = (...params: string[]) => void;
+
+export type AppRoutes = Record<string, AppRoute>;
+type AppRoutesBasic = Record<string, AppRouteBasic>;
+
+// App route augmented with some additional utilities
+export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
+  goTo: GoToFunction;
+  Icon: React.ComponentType<Omit<IconProps, "name">>;
+  active: boolean;
+  subPages?: AppRoutes;
+  Link: React.ComponentType<{
+    params?: string[];
+    queryParams?: Record<string, string>;
+    children: React.ReactNode;
+  }>;
+};
+
+const ROUTE_STRUCTURE = {
+  login: {
+    title: "Login",
+    url: "/login",
+    component: Login,
+    unauthenticated: true,
+  },
+  home: {
+    title: "Home",
+    url: "",
+    icon: "circle-gauge" as IconName,
+    component: Home,
+  },
+  sandbox: {
+    title: "Sandbox",
+    url: "sandbox",
+    icon: "message-circle" as IconName,
+    component: Sandbox,
+  },
+  integrations: {
+    title: "Integrations",
+    url: "integrations",
+    icon: "blocks" as IconName,
+    component: Integrations,
+  },
+  toolsets: {
+    title: "Toolsets",
+    url: "toolsets",
+    icon: "pencil-ruler" as IconName,
+    component: ToolsetsRoot,
+    indexComponent: Toolsets,
+    subPages: {
+      toolset: {
+        title: "Toolset",
+        url: ":toolsetSlug",
+        component: ToolsetPage,
+      },
+    },
+  },
+  environments: {
+    title: "Environments",
+    url: "environments",
+    icon: "globe" as IconName,
+    component: EnvironmentsRoot,
+    indexComponent: Environments,
+    subPages: {
+      environment: {
+        title: "Environment",
+        url: ":environmentSlug",
+        component: EnvironmentPage,
+      },
+    },
+  },
+  sdk: {
+    title: "SDK",
+    url: "sdk",
+    icon: "code" as IconName,
+    component: SDK,
+  },
+  uploadOpenAPI: {
+    title: "Upload OpenAPI",
+    url: "onboarding",
+    icon: "upload" as IconName,
+    component: Onboarding,
+  },
+  settings: {
+    title: "Settings",
+    url: "settings",
+    icon: "settings" as IconName,
+    component: Settings,
+  },
+  docs: {
+    title: "Docs",
+    url: "https://docs.speakeasy.com",
+    icon: "book-open" as IconName,
+    external: true,
+  },
+};
+
+type RouteStructure = typeof ROUTE_STRUCTURE;
+
+/**
+ * The point of all this type magic is to make it so you only have to define the routes once
+ * and the `useRoutes` hook can add a lot of extra utilities without losing the type safety.
+ */
+
+// Transform the AppRouteBasic into an AppRoute, recursing on subPages if present
+// so that subPages keeps its route-specific type
+type TransformAppRoute<T extends AppRouteBasic> = T extends {
+  subPages: AppRoutesBasic;
+}
+  ? Omit<AppRoute, "subPages"> & {
+      subPages: TransformRouteToGoTo<T["subPages"]>;
+    }
+  : AppRoute;
+
+type TransformElem<T> = T extends AppRouteBasic
+  ? TransformAppRoute<T>
+  : T extends AppRouteBasic
+  ? TransformRouteToGoTo<T>
+  : T;
+
+type TransformRouteToGoTo<T> = {
+  [K in keyof T]: TransformElem<T[K]>;
+};
+
+type RoutesWithGoTo = TransformRouteToGoTo<RouteStructure>;
+
+export const useRoutes = (): RoutesWithGoTo => {
+  const location = useLocation();
+  const { orgSlug, projectSlug } = useSlugs();
+  const navigate = useNavigate();
+
+  // Check if the current url matches the route url, including dynamic segments
+  const matchesCurrent = (url: string) => {
+    const urlParts = url.split("/").filter(Boolean);
+    const currentParts = location.pathname.split("/").filter(Boolean);
+
+    if (urlParts.length !== currentParts.length) {
+      return false;
+    }
+
+    return urlParts.every(
+      (part, index) => part === currentParts[index] || part.startsWith(":")
+    );
+  };
+
+  const addRouteUtilities = (
+    route: AppRouteBasic,
+    parent?: string
+  ): AppRoute => {
+    if (parent === undefined && !route.url.startsWith("/")) {
+      parent = `/:orgSlug/:projectSlug`;
+    }
+
+    const urlWithParent = `${parent ?? ""}/${route.url}`;
+
+    const resolveUrl = (...params: string[]) => {
+      const parts = urlWithParent.split("/").filter(Boolean);
+      const finalParts = [];
+
+      for (const part of parts) {
+        if (part.startsWith(":")) {
+          if (part === ":orgSlug") {
+            finalParts.push(orgSlug);
+          } else if (part === ":projectSlug") {
+            finalParts.push(projectSlug);
+          } else {
+            const v = params.shift();
+            if (!v) {
+              throw new Error(`No value provided for ${part}`);
+            }
+            finalParts.push(v);
+          }
+        } else {
+          finalParts.push(part);
+        }
+      }
+
+      return "/" + finalParts.join("/");
+    };
+
+    const goTo = (...params: string[]) => {
+      navigate(resolveUrl(...params));
+    };
+
+    const linkComponent = ({
+      params = [],
+      queryParams = {},
+      children,
+    }: {
+      params?: string[];
+      queryParams?: Record<string, string>;
+      children: React.ReactNode;
+    }) => {
+      const queryString = new URLSearchParams(queryParams).toString();
+      return (
+        <Link to={`${resolveUrl(...params)}?${queryString}`}>{children}</Link>
+      );
+    };
+
+    const subPages = route.subPages
+      ? addGoToToRoutes(route.subPages, urlWithParent)
+      : undefined;
+
+    const active =
+      matchesCurrent(urlWithParent) ||
+      !!Object.values(subPages ?? {}).some((subPage) => subPage.active);
+
+    const newRoute: AppRoute = {
+      ...route,
+      active,
+      Icon: (props: Omit<IconProps, "name">) =>
+        route.icon ? <Icon {...props} name={route.icon} /> : null,
+      goTo,
+      Link: linkComponent,
+      subPages,
+    };
+
+    if (route.url.startsWith("/")) {
+      newRoute.goTo = () => route.url;
+    }
+
+    return newRoute;
+  };
+
+  const addGoToToRoutes = <T extends AppRoutesBasic>(
+    routes: T,
+    parent?: string
+  ): TransformRouteToGoTo<T> => {
+    return Object.fromEntries(
+      Object.entries(routes).map(([key, route]) => [
+        key,
+        addRouteUtilities(route, parent),
+      ])
+    ) as TransformRouteToGoTo<T>;
+  };
+
+  const routes: RoutesWithGoTo = useMemo(
+    () => addGoToToRoutes(ROUTE_STRUCTURE),
+    [location.pathname]
+  );
+
+  return routes;
+};

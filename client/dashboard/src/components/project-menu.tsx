@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
 import { Button } from "./ui/button.tsx";
 import { Type } from "./ui/type.tsx";
 import { NavButton } from "./nav-menu.tsx";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils.ts";
 import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
@@ -127,16 +127,14 @@ export function ProjectMenu() {
             <ThemeToggle />
           </Stack>
           <NavButton
-            item={{
-              title: "Logout",
-              icon: "log-out",
-              onClick: async () => {
-                await client.auth.logout({
-                  sessionHeaderGramSession: "", // TODO?
-                });
-                window.location.href = "/login";
-                setOpen(false);
-              },
+            title="Logout"
+            Icon={() => <Icon name="log-out" />}
+            onClick={async () => {
+              await client.auth.logout({
+                sessionHeaderGramSession: "",
+              });
+              window.location.href = "/login";
+              setOpen(false);
             }}
           />
         </div>
@@ -155,7 +153,7 @@ function ProjectSelector() {
 
   const projectWithIcons = organization.projects.map((project) => ({
     ...project,
-    value: project.id,
+    value: project.slug,
     label: project.slug,
     icon: <ProjectAvatar project={project} className="h-4 w-4" />,
   }));
@@ -176,11 +174,11 @@ function ProjectSelector() {
   const selected =
     projectWithIcons.find((p) => p.id === project.id) ?? projectWithIcons[0]!;
 
-  const changeProject = (projectId: string) => {
-    if (projectId === "new-project") {
+  const changeProject = (slug: string) => {
+    if (slug === "new-project") {
       setCreateDialogOpen(true);
     } else {
-      project.switchProject(projectId);
+      project.switchProject(slug);
     }
   };
 
@@ -197,7 +195,7 @@ function ProjectSelector() {
       }
     );
     setCreateDialogOpen(false);
-    project.switchProject(result.project.id);
+    project.switchProject(result.project.slug);
   };
 
   return (

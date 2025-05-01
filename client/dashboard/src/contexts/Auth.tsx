@@ -1,4 +1,4 @@
-import { createContext, Suspense, useState, useEffect } from "react";
+import { createContext, useState } from "react";
 import {
   InfoResponseBody,
   OrganizationEntry,
@@ -12,6 +12,9 @@ import {
 } from "@gram/client/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import { GramLogo } from "@/components/gram-logo";
+import { useSlugs } from "./Sdk";
+import { useNavigate } from "react-router-dom";
+import { MinimumSuspense } from "@/components/ui/minimum-suspense";
 
 type Session = InfoResponseBody & {
   session: string;
@@ -37,44 +40,30 @@ const emptySession: Session = {
 
 const SessionContext = createContext<Session>(emptySession);
 
-const ProjectContext = createContext<{
-  activeProject: ProjectEntry | null;
-  setActiveProject: (project: ProjectEntry) => void;
-}>({
-  activeProject: null,
-  setActiveProject: () => {},
-});
-
 export const useSession = () => {
   return useContext(SessionContext);
 };
 
 export const useProject = () => {
   const organization = useOrganization();
-  const { activeProject, setActiveProject } = useContext(ProjectContext);
+  const navigate = useNavigate();
+  const { projectSlug } = useSlugs();
+  const [project, setProject] = useState<ProjectEntry | null>(null);
 
   const defaultProject = organization.projects[0];
   if (!defaultProject) {
     throw new Error("No projects found");
   }
 
-  // Initialize project if not set
-  useEffect(() => {
-    if (!activeProject) {
-      setActiveProject(defaultProject);
-    }
-  }, [defaultProject, activeProject, setActiveProject]);
+  const currentProject =
+    organization.projects.find((p) => p.slug === projectSlug) ?? defaultProject;
 
-  const currentProject = activeProject ?? defaultProject;
+  if (!project || project.slug !== currentProject.slug) {
+    setProject(currentProject);
+  }
 
-  const switchProject = async (projectId: string) => {
-    // Refetch in case the project was just created
-    const newOrg = await organization.refetch();
-
-    const project = newOrg.projects.find((p) => p.id === projectId);
-    if (!project) return;
-
-    setActiveProject(project);
+  const switchProject = async (slug: string) => {
+    navigate(`/${organization.slug}/${slug}`);
   };
 
   return Object.assign(currentProject, {
@@ -99,54 +88,6 @@ export const useOrganization = (): OrganizationEntry & {
   return Object.assign(organization, {
     refetch: orgRefetch,
   });
-};
-
-// Custom Suspense component with minimum loading time
-// This is used to ensure the loader is visible for a minimum amount of time to avoid flickering
-const MinimumSuspense = ({
-  children,
-  fallback,
-  minimumLoadTimeMs = 750,
-}: {
-  children: React.ReactNode;
-  fallback: React.ReactNode;
-  minimumLoadTimeMs?: number;
-}) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [showFallback, setShowFallback] = useState(false);
-
-  useEffect(() => {
-    if (!showFallback) {
-      return;
-    }
-
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, minimumLoadTimeMs);
-
-    return () => clearTimeout(timer);
-  }, [minimumLoadTimeMs, showFallback]);
-
-  // This is used to ensure the timer gets reset every time the fallback is shown
-  const FallbackHandler = () => {
-    useEffect(() => {
-      setShowFallback(true);
-      return () => setShowFallback(false);
-    }, []);
-    return <>{fallback}</>;
-  };
-
-  return (
-    <Suspense fallback={<FallbackHandler />}>
-      {isLoading ? <NeverResolves /> : children}
-    </Suspense>
-  );
-};
-
-// Component that never resolves during the minimum loading time
-const NeverResolves = () => {
-  throw new Promise(() => {});
 };
 
 // Error fallback component
@@ -179,47 +120,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 // Prefetch any queries while we're in the top-level loading state
 const PrefetchedQueries = ({ children }: { children: React.ReactNode }) => {
-  const project = useProject();
-
-  useListToolsetsSuspense({
-    gramProject: project.slug,
-  });
-
-  useListEnvironmentsSuspense({
-    gramProject: project.slug,
-  });
+  useListToolsetsSuspense();
+  useListEnvironmentsSuspense();
 
   return children;
 };
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
-  // you cannot use useSessionInfoSuspense here because it will not catch the error correctly
-  const { data, isLoading, error, refetch } = useSessionInfo(
-    { sessionHeaderGramSession: "" },
-    undefined,
-    {
-      refetchOnWindowFocus: false,
-      retries: {
-        strategy: "none",
-      },
-    }
-  );
+  const navigate = useNavigate();
+  const { projectSlug } = useSlugs();
 
-  const [activeProject, setActiveProject] = useState<ProjectEntry | null>(null);
+  const {
+    data: sessionData,
+    error,
+    refetch,
+    isLoading,
+  } = useSessionInfo({ sessionHeaderGramSession: "" }, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
 
   const sessionRefetch = async () => {
     const newSession = await refetch();
     return newSession.data?.result ?? emptySession;
   };
 
-  const sessionId = data?.headers["gram-session"]?.[0];
+  const sessionId = sessionData?.headers["gram-session"]?.[0];
 
   // you need something like this so you don't redirect with empty session to soon
   if (isLoading) {
     return <FullScreenLoader />;
   }
 
-  if (error || !sessionId || !data.result?.organizations) {
+  const organization =
+    sessionData?.result.organizations.find(
+      (org) => org.id === sessionData.result.activeOrganizationId
+    ) ?? sessionData?.result.organizations[0];
+
+  if (error || !sessionId || !organization) {
     return (
       <SessionContext.Provider value={emptySession}>
         {children}
@@ -227,13 +165,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const organization =
-    data.result.organizations.find(
-      (org) => org.id === data.result.activeOrganizationId
-    ) ?? data.result.organizations[0]!;
+  // if we're logged in but the URL doesn't have a project slug, redirect to the default project
+  if (organization && !projectSlug) {
+    navigate(`/${organization.slug}/${organization.projects[0]!.slug}`);
+  }
 
   const session: Session = {
-    ...data.result,
+    ...sessionData.result,
     session: sessionId,
     organization,
     refetch: sessionRefetch,
@@ -241,9 +179,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <SessionContext.Provider value={session}>
-      <ProjectContext.Provider value={{ activeProject, setActiveProject }}>
-        <PrefetchedQueries>{children}</PrefetchedQueries>
-      </ProjectContext.Provider>
+      <PrefetchedQueries>{children}</PrefetchedQueries>
     </SessionContext.Provider>
   );
 };
