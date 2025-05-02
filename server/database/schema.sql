@@ -314,7 +314,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 40),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
   default_environment_slug TEXT CHECK (default_environment_slug <> '' AND CHAR_LENGTH(default_environment_slug) <= 40),
-  http_tool_names TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(http_tool_names, 1) <= 100),
+  http_tool_names TEXT[] DEFAULT ARRAY[]::TEXT[] CHECK (array_length(http_tool_names, 1) <= 100),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
