@@ -338,17 +338,19 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.String))
 			} else if envVars[security.EnvVariables[0]] == "" {
 				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
+			} else if !security.Name.Valid || security.Name.String == "" {
+				logger.ErrorContext(ctx, "no name provided for api key auth", slog.String("scheme", security.Scheme.String))
 			} else {
 				key := security.EnvVariables[0]
-				switch security.InPlacement {
+				switch security.InPlacement.String {
 				case "header":
-					req.Header.Set(security.Name, envVars[key])
+					req.Header.Set(security.Name.String, envVars[key])
 				case "query":
 					values := req.URL.Query()
-					values.Set(security.Name, envVars[key])
+					values.Set(security.Name.String, envVars[key])
 					req.URL.RawQuery = values.Encode()
 				default:
-					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.InPlacement))
+					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.InPlacement.String))
 				}
 			}
 		case "http":

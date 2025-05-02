@@ -218,8 +218,8 @@ type CreateHTTPSecurityParams struct {
 	Key          string
 	DeploymentID uuid.UUID
 	Type         pgtype.Text
-	Name         string
-	InPlacement  string
+	Name         pgtype.Text
+	InPlacement  pgtype.Text
 	Scheme       pgtype.Text
 	BearerFormat pgtype.Text
 	EnvVariables []string

@@ -3,6 +3,7 @@ assume_in_transaction = true
 excluded_rules = [
   "ban-concurrent-index-creation-in-transaction", # This is checked in .mise-tasks/lint/migrations.sh
   "prefer-robust-stmts",
+  "ban-drop-not-null",
 ]
 [upload_to_github]
 fail_on_violations = true

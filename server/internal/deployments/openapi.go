@@ -647,10 +647,10 @@ func securitySchemesFromOpenAPIv3(doc v3.Document, task openapiV3Task) (map[stri
 			Key:          key,
 			DeploymentID: task.deploymentID,
 			Type:         conv.ToPGText(sec.Type),
-			Name:         sec.Name,
-			InPlacement:  sec.In,
-			Scheme:       conv.ToPGText(sec.Scheme),
-			BearerFormat: conv.ToPGText(sec.BearerFormat),
+			Name:         conv.ToPGTextEmpty(sec.Name),
+			InPlacement:  conv.ToPGTextEmpty(sec.In),
+			Scheme:       conv.ToPGTextEmpty(sec.Scheme),
+			BearerFormat: conv.ToPGTextEmpty(sec.BearerFormat),
 			EnvVariables: envvars,
 		}
 	}

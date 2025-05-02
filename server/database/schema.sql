@@ -335,8 +335,8 @@ CREATE TABLE IF NOT EXISTS http_security (
   key TEXT NOT NULL CHECK (key <> '' AND CHAR_LENGTH(key) <= 60),
   deployment_id uuid NOT NULL,
   type TEXT CHECK (type <> '' AND CHAR_LENGTH(type) <= 20),
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
-  in_placement TEXT NOT NULL CHECK (in_placement <> '' AND CHAR_LENGTH(in_placement) <= 10), -- header, query, path
+  name TEXT CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
+  in_placement TEXT CHECK (in_placement <> '' AND CHAR_LENGTH(in_placement) <= 10), -- header, query, path
   scheme TEXT CHECK (scheme <> '' AND CHAR_LENGTH(scheme) <= 20),
   bearer_format TEXT CHECK (bearer_format <> '' AND CHAR_LENGTH(bearer_format) <= 20),
 
