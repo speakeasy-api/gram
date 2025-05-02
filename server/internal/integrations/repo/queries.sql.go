@@ -53,9 +53,9 @@ type ListIntegrationsRow struct {
 	PackageTitle      pgtype.Text
 	PackageSummary    pgtype.Text
 	PackageKeywords   []string
-	VersionMajor      int16
-	VersionMinor      int16
-	VersionPatch      int16
+	VersionMajor      int64
+	VersionMinor      int64
+	VersionPatch      int64
 	VersionPrerelease pgtype.Text
 	VersionBuild      pgtype.Text
 	VersionCreatedAt  pgtype.Timestamptz

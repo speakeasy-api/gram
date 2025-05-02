@@ -66,9 +66,9 @@ RETURNING id, package_id, deployment_id, visibility, major, minor, patch, prerel
 type CreatePackageVersionParams struct {
 	PackageID    uuid.UUID
 	DeploymentID uuid.UUID
-	Major        int16
-	Minor        int16
-	Patch        int16
+	Major        int64
+	Minor        int64
+	Patch        int64
 	Prerelease   pgtype.Text
 	Build        pgtype.Text
 	Visibility   string
@@ -158,9 +158,9 @@ type GetPackageWithLatestVersionRow struct {
 	Package             Package
 	VersionID           uuid.NullUUID
 	VersionDeploymentID uuid.NullUUID
-	VersionMajor        pgtype.Int2
-	VersionMinor        pgtype.Int2
-	VersionPatch        pgtype.Int2
+	VersionMajor        pgtype.Int8
+	VersionMinor        pgtype.Int8
+	VersionPatch        pgtype.Int8
 	VersionPrerelease   pgtype.Text
 	VersionBuild        pgtype.Text
 	VersionCreatedAt    pgtype.Timestamptz
@@ -279,9 +279,9 @@ type ListVersionsRow struct {
 	Package             Package
 	VersionID           uuid.UUID
 	VersionDeploymentID uuid.UUID
-	VersionMajor        int16
-	VersionMinor        int16
-	VersionPatch        int16
+	VersionMajor        int64
+	VersionMinor        int64
+	VersionPatch        int64
 	VersionPrerelease   pgtype.Text
 	VersionBuild        pgtype.Text
 	VersionVisibility   string
@@ -366,9 +366,9 @@ LIMIT 1
 
 type PeekPackageByNameAndVersionParams struct {
 	Name       string
-	Major      int16
-	Minor      int16
-	Patch      int16
+	Major      int64
+	Minor      int64
+	Patch      int64
 	Prerelease pgtype.Text
 	Build      pgtype.Text
 }

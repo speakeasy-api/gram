@@ -82,9 +82,9 @@ type PackageVersion struct {
 	PackageID    uuid.UUID
 	DeploymentID uuid.UUID
 	Visibility   string
-	Major        int16
-	Minor        int16
-	Patch        int16
+	Major        int64
+	Minor        int64
+	Patch        int64
 	Prerelease   pgtype.Text
 	Build        pgtype.Text
 	CreatedAt    pgtype.Timestamptz

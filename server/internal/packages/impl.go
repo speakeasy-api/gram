@@ -281,9 +281,9 @@ func describePackage(
 	if row.VersionMajor.Valid && row.VersionMinor.Valid && row.VersionPatch.Valid {
 		sv := Semver{
 			Valid:      true,
-			Major:      row.VersionMajor.Int16,
-			Minor:      row.VersionMinor.Int16,
-			Patch:      row.VersionPatch.Int16,
+			Major:      row.VersionMajor.Int64,
+			Minor:      row.VersionMinor.Int64,
+			Patch:      row.VersionPatch.Int64,
 			Prerelease: conv.PtrValOr(conv.FromPGText[string](row.VersionPrerelease), ""),
 			Build:      conv.PtrValOr(conv.FromPGText[string](row.VersionBuild), ""),
 		}

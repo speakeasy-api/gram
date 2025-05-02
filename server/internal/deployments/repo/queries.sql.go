@@ -600,9 +600,9 @@ type GetDeploymentWithAssetsRow struct {
 	DeploymentsOpenapiv3AssetSlug    pgtype.Text
 	DeploymentPackageID              uuid.NullUUID
 	PackageName                      pgtype.Text
-	PackageVersionMajor              pgtype.Int2
-	PackageVersionMinor              pgtype.Int2
-	PackageVersionPatch              pgtype.Int2
+	PackageVersionMajor              pgtype.Int8
+	PackageVersionMinor              pgtype.Int8
+	PackageVersionPatch              pgtype.Int8
 	PackageVersionPrerelease         pgtype.Text
 	PackageVersionBuild              pgtype.Text
 }

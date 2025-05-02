@@ -12,9 +12,9 @@ import (
 
 type Semver struct {
 	Valid      bool
-	Major      int16
-	Minor      int16
-	Patch      int16
+	Major      int64
+	Minor      int64
+	Patch      int64
 	Prerelease string
 	Build      string
 }
@@ -43,9 +43,9 @@ func ParseSemver(s string) (Semver, error) {
 
 	return Semver{
 		Valid:      true,
-		Major:      int16(parsedMajor),
-		Minor:      int16(parsedMinor),
-		Patch:      int16(parsedPatch),
+		Major:      int64(parsedMajor),
+		Minor:      int64(parsedMinor),
+		Patch:      int64(parsedPatch),
 		Prerelease: v.Prerelease(),
 		Build:      v.Metadata(),
 	}, nil

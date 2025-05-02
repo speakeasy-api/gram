@@ -64,9 +64,9 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				Name: pkgName,
 				Version: packages.Semver{
 					Valid:      true,
-					Major:      r.PackageVersionMajor.Int16,
-					Minor:      r.PackageVersionMinor.Int16,
-					Patch:      r.PackageVersionPatch.Int16,
+					Major:      r.PackageVersionMajor.Int64,
+					Minor:      r.PackageVersionMinor.Int64,
+					Patch:      r.PackageVersionPatch.Int64,
 					Prerelease: r.PackageVersionPrerelease.String,
 					Build:      r.PackageVersionBuild.String,
 				}.String(),
