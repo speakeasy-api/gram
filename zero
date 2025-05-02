@@ -2,46 +2,63 @@
 
 set -e
 
-missing_tools=false
-mise_installed=true
-docker_installed=true
+onboarding_pass=true
+
+# region: Onboarding checks
+
+if [ ! -f "mise.local.toml" ]; then
+    cat > mise.local.toml << EOF
+# Local mise configuration
+# This file is gitignored and can contain tools and environment variables
+# that you personally need for local development.
+
+[tools]
+# Add your local tools here. Example:
+# dive = "latest"
+
+[env]
+# Add your local environment variables here. Example:
+# EXAMPLE_VAR = "value"
+EOF
+    echo "✅ Created mise.local.toml file"
+fi
 
 check_command() {
     local cmd=$1
-    local var_name="${cmd}_installed"
+    local instructions=$2
 
     if ! command -v "$cmd" &> /dev/null; then
-        missing_tools=true
-        eval "$var_name=false"
+        onboarding_pass=false
+        
+        echo "## \`$cmd\` not found:"
+        echo "$instructions" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+        echo
     fi
 }
 
-check_command "mise"
-check_command "docker"
+check_command "mise" "
+Install it from here: https://mise.jdx.dev/
+- Make sure to update your .zprofile (zsh), .profile (bash), ...
+- Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion
+"
 
-if [ $missing_tools = true ]; then
-    echo "# Missing tools:"
+check_command "docker" "
+Install it from here: https://www.docker.com/
+"
 
-    if [ $mise_installed = false ]; then
-      echo "## Mise:"
-      echo "Install it from here: https://mise.jdx.dev/"
-      echo "- Make sure to update your .zprofile (zsh), .profile (bash), ..."
-      echo "- Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion"
-    fi
-
-    if [ $docker_installed = false ]; then
-      echo "## Docker:"
-      echo "Install docker: https://www.docker.com/"
-    fi
-
+if [ $onboarding_pass = "false" ]; then
+    echo "❌ Onboarding checks failed. Please fix the issues above and rerun this script."
     exit 1
 fi
 
-echo -e "\n⏳ Installing tools"
-mise install
+# endregion: Onboarding checks
 
 echo -e "\n⏳ Setting up API keys"
 mise run zero:openai
+mise run zero:github
+
+echo -e "\n⏳ Installing tools"
+mise install
 
 echo -e "\n⏳ Installing dependencies"
 mise run install
