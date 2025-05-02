@@ -103,5 +103,6 @@ func NewPGXLogger(logger *slog.Logger, level tracelog.LogLevel) *tracelog.TraceL
 	return &tracelog.TraceLog{
 		Logger:   &pgxLogger{logger: logger},
 		LogLevel: level,
+		Config:   tracelog.DefaultTraceLogConfig(),
 	}
 }
