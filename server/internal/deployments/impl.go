@@ -678,7 +678,8 @@ func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deploym
 			if processErr == nil {
 				trace.SpanFromContext(ctx).AddEvent("openapiv3_processed")
 			}
-			return processErr
+
+			return oops.E(oops.CodeUnexpected, processErr, "openapiv3 document was not processed successfully").Log(ctx, logger)
 		})
 	}
 
