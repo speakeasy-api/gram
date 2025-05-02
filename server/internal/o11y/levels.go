@@ -20,6 +20,7 @@ var LogLevels = map[string]LevelMapping{
 }
 
 var pgxLevels = map[tracelog.LogLevel]slog.Level{
+	tracelog.LogLevelNone:  slog.LevelDebug,
 	tracelog.LogLevelTrace: slog.LevelDebug,
 	tracelog.LogLevelDebug: slog.LevelDebug,
 	tracelog.LogLevelInfo:  slog.LevelInfo,
