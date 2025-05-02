@@ -18,7 +18,7 @@ INSERT INTO toolsets (
   , @name
   , @slug
   , @description
-  , NULLIF(@http_tool_names::text[], '{}'::text[])
+  , COALESCE(@http_tool_names::text[], '{}'::text[])
   , @default_environment_slug
 )
 RETURNING *;
@@ -35,7 +35,7 @@ UPDATE toolsets
 SET 
     name = COALESCE(@name, name)
   , description = COALESCE(@description, description)
-  , http_tool_names = COALESCE(NULLIF(@http_tool_names::text[], '{}'::text[]), http_tool_names)
+  , http_tool_names = COALESCE(@http_tool_names::text[], http_tool_names)
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id

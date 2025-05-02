@@ -15,10 +15,10 @@ import {
 } from "@gram/client/models/components";
 import { EditableText } from "@/components/editable-text";
 import { CreateThingCard, useToolsets } from "./Toolsets";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
-import { PlusIcon } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -30,6 +30,16 @@ import { Dot } from "@/components/ui/dot";
 import { useEnvironment } from "../environments/Environment";
 import { InputDialog } from "@/components/input-dialog";
 import { NameAndSlug } from "@/components/name-and-slug";
+import { useRoutes } from "@/routes";
+import { useEnvironments } from "../environments/Environments";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AddButton } from "@/components/add-button";
 
 export default function ToolsetPage() {
   const { toolsetSlug } = useParams();
@@ -53,7 +63,7 @@ export function ToolsetView({
   environmentSlug?: string;
 }) {
   const toolsets = useToolsets();
-  const navigate = useNavigate();
+  const routes = useRoutes();
 
   const toolsetResult = useToolset({
     slug: toolsetSlug,
@@ -101,21 +111,11 @@ export function ToolsetView({
   };
 
   const deleteToolsetMutation = useDeleteToolsetMutation({
-    onSuccess: () => {
-      toolsets.refetch();
-      navigate("/toolsets");
+    onSuccess: async () => {
+      await toolsets.refetch();
+      routes.toolsets.goTo();
     },
   });
-
-  const addButton = (
-    <Button
-      variant="ghost"
-      tooltip="Add Tool"
-      onClick={() => setAddToolDialogOpen(true)}
-    >
-      <PlusIcon className="w-4 h-4" />
-    </Button>
-  );
 
   const deleteButton = (
     <DeleteButton
@@ -289,9 +289,12 @@ export function ToolsetView({
             />
           </Heading>
         </EditableText>
-        <Badge className="h-6">
-          {toolset?.httpTools?.length || "No"} Tools
-        </Badge>
+        <Stack direction="horizontal" gap={2}>
+          <ToolsetEnvironmentBadge toolset={toolset} />
+          <Badge className="h-8">
+            {toolset?.httpTools?.length || "No"} Tools
+          </Badge>
+        </Stack>
       </Stack>
       <EditableText
         value={toolset?.description || ""}
@@ -337,7 +340,10 @@ export function ToolsetView({
           <Page.Header.Breadcrumbs />
           <Page.Header.Actions>
             {toolset && deleteButton}
-            {addButton}
+            <AddButton
+              onClick={() => setAddToolDialogOpen(true)}
+              tooltip="Add Tool"
+            />
           </Page.Header.Actions>
         </Page.Header>
         {content}
@@ -501,3 +507,77 @@ function AddToolDialog({
     </Dialog>
   );
 }
+
+export const ToolsetEnvironmentBadge = ({
+  toolset,
+  size = "md",
+}: {
+  toolset: ToolsetDetails | undefined;
+  size?: "sm" | "md";
+}) => {
+  const environments = useEnvironments();
+  const routes = useRoutes();
+
+  const sizeClass = {
+    sm: "h-6",
+    md: "h-8",
+  }[size];
+
+  if (!toolset) {
+    return <Skeleton className={cn("w-24", sizeClass)} />;
+  }
+
+  const defaultEnvironment = environments.find(
+    (env) => env.slug === toolset.defaultEnvironmentSlug
+  );
+
+  // We consider a toolset to need env vars if it has relevant environment variables and the default environment is set
+  // The environment does not have any variables from the toolset's relevant environment variables set
+  const needsEnvVars =
+    defaultEnvironment &&
+    toolset.relevantEnvironmentVariables &&
+    toolset.relevantEnvironmentVariables.length > 0 &&
+    !toolset.relevantEnvironmentVariables.some((varName) =>
+      defaultEnvironment.entries.some(
+        (entry) =>
+          entry.name === varName &&
+          entry.value !== "" &&
+          entry.value !== "<EMPTY>"
+      )
+    );
+
+  return (
+    toolset.defaultEnvironmentSlug && (
+      <routes.environments.subPages.environment.Link
+        params={[toolset.defaultEnvironmentSlug]}
+      >
+        <Badge
+          variant="outline"
+          className={cn("flex items-center gap-1", sizeClass)}
+        >
+          {defaultEnvironment &&
+            (needsEnvVars ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <AlertTriangle className="w-3 h-3 text-orange-500 cursor-pointer" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      You have not set environment variables for this toolset.
+                      Navigate to the environment and use fill for toolset.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <Check className="w-3 h-3 text-green-500" />
+            ))}
+          Default Env
+        </Badge>
+      </routes.environments.subPages.environment.Link>
+    )
+  );
+};

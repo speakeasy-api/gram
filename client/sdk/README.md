@@ -227,6 +227,10 @@ run();
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 
+### [integrations](docs/sdks/integrations/README.md)
+
+* [list](docs/sdks/integrations/README.md#list) - list integrations
+
 ### [keys](docs/sdks/keys/README.md)
 
 * [create](docs/sdks/keys/README.md#create) - createKey keys
@@ -290,6 +294,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
+- [`integrationsList`](docs/sdks/integrations/README.md#list) - list integrations
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
@@ -345,6 +350,7 @@ To learn about this feature and how to get started, check
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
@@ -444,15 +450,19 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-If the request fails due to, for example 4XX or 5XX status codes, it will throw a `APIError`.
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `uploadOpenAPIv3` method may throw the following errors:
 
-| Error Type      | Status Code | Content Type |
-| --------------- | ----------- | ------------ |
-| errors.APIError | 4XX, 5XX    | \*/\*        |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500                               | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
+
+If the method throws an error and it is not captured by the known errors, it will default to throwing a `APIError`.
 
 ```typescript
 import { Gram } from "@gram/client";
-import { SDKValidationError } from "@gram/client/models/errors";
+import { SDKValidationError, ServiceError } from "@gram/client/models/errors";
 
 const gram = new Gram({
   security: {
@@ -475,19 +485,21 @@ async function run() {
   } catch (err) {
     switch (true) {
       // The server response does not match the expected SDK schema
-      case (err instanceof SDKValidationError):
-        {
-          // Pretty-print will provide a human-readable multi-line error message
-          console.error(err.pretty());
-          // Raw value may also be inspected
-          console.error(err.rawValue);
-          return;
-        }
-        apierror.js;
-      // Server returned an error status code or an unknown content type
-      case (err instanceof APIError): {
-        console.error(err.statusCode);
-        console.error(err.rawResponse.body);
+      case (err instanceof SDKValidationError): {
+        // Pretty-print will provide a human-readable multi-line error message
+        console.error(err.pretty());
+        // Raw value may also be inspected
+        console.error(err.rawValue);
+        return;
+      }
+      case (err instanceof ServiceError): {
+        // Handle err.data$: ServiceErrorData
+        console.error(err);
+        return;
+      }
+      case (err instanceof ServiceError): {
+        // Handle err.data$: ServiceErrorData
+        console.error(err);
         return;
       }
       default: {

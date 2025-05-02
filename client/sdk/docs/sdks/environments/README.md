@@ -125,9 +125,11 @@ import {
 
 ### Errors
 
-| Error Type      | Status Code     | Content Type    |
-| --------------- | --------------- | --------------- |
-| errors.APIError | 4XX, 5XX        | \*/\*           |
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500                               | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## deleteBySlug
 
@@ -222,9 +224,11 @@ import {
 
 ### Errors
 
-| Error Type      | Status Code     | Content Type    |
-| --------------- | --------------- | --------------- |
-| errors.APIError | 4XX, 5XX        | \*/\*           |
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500                               | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## list
 
@@ -328,9 +332,11 @@ import {
 
 ### Errors
 
-| Error Type      | Status Code     | Content Type    |
-| --------------- | --------------- | --------------- |
-| errors.APIError | 4XX, 5XX        | \*/\*           |
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500                               | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## updateBySlug
 
@@ -352,8 +358,12 @@ async function run() {
   const result = await gram.environments.updateBySlug({
     slug: "<value>",
     updateEnvironmentRequestBody: {
-      entriesToRemove: [],
-      entriesToUpdate: [],
+      entriesToRemove: [
+
+      ],
+      entriesToUpdate: [
+
+      ],
     },
   });
 
@@ -385,8 +395,12 @@ async function run() {
   const res = await environmentsUpdateBySlug(gram, {
     slug: "<value>",
     updateEnvironmentRequestBody: {
-      entriesToRemove: [],
-      entriesToUpdate: [],
+      entriesToRemove: [
+  
+      ],
+      entriesToUpdate: [
+  
+      ],
     },
   });
 
@@ -435,6 +449,8 @@ import {
 
 ### Errors
 
-| Error Type      | Status Code     | Content Type    |
-| --------------- | --------------- | --------------- |
-| errors.APIError | 4XX, 5XX        | \*/\*           |
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500                               | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |

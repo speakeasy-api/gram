@@ -33,10 +33,11 @@ type AppRoutesBasic = Record<string, AppRouteBasic>;
 
 // App route augmented with some additional utilities
 export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
-  goTo: GoToFunction;
   Icon: React.ComponentType<Omit<IconProps, "name">>;
   active: boolean;
   subPages?: AppRoutes;
+  href: (...params: string[]) => string;
+  goTo: GoToFunction;
   Link: React.ComponentType<{
     params?: string[];
     queryParams?: Record<string, string>;
@@ -238,6 +239,7 @@ export const useRoutes = (): RoutesWithGoTo => {
       active,
       Icon: (props: Omit<IconProps, "name">) =>
         route.icon ? <Icon {...props} name={route.icon} /> : null,
+      href: resolveUrl,
       goTo,
       Link: linkComponent,
       subPages,

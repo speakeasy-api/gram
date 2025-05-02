@@ -13,9 +13,7 @@ import { Type } from "@/components/ui/type";
 import { useEffect, useState } from "react";
 import { DeleteButton } from "@/components/delete-button";
 import { PencilIcon } from "lucide-react";
-import {
-  Dialog,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useListToolsets, useToolset } from "@gram/client/react-query/index.js";
 
@@ -374,9 +372,9 @@ export default function EnvironmentPage() {
         <Page.Header.Actions>{deleteButton}</Page.Header.Actions>
       </Page.Header>
       <Page.Body>
-        <Stack direction="horizontal" gap={6}>
+        <Stack gap={6}>
           <Heading variant="h2">{environment.name}</Heading>
-          <Stack direction="horizontal" gap={1}>
+          <Stack direction="horizontal" gap={2}>
             {hasChanges ? (
               <>
                 <Button onClick={commitUpdates}>Save</Button>

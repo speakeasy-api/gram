@@ -3,12 +3,12 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { resolveSecurity } from "../lib/security.js";
+import { extractSecurity, resolveGlobalSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import * as components from "../models/components/index.js";
 import { APIError } from "../models/errors/apierror.js";
@@ -26,19 +26,18 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listKeys keys
+ * list integrations
  *
  * @remarks
- * List all api keys for an organization
+ * List available third-party integrations.
  */
-export function keysList(
+export function integrationsList(
   client: GramCore,
-  security: operations.ListAPIKeysSecurity,
-  request?: operations.ListAPIKeysRequest | undefined,
+  request?: operations.ListIntegrationsRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListKeysResult,
+    components.ListIntegrationsResult,
     | errors.ServiceError
     | errors.ServiceError
     | APIError
@@ -52,7 +51,6 @@ export function keysList(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
     options,
   ));
@@ -60,13 +58,12 @@ export function keysList(
 
 async function $do(
   client: GramCore,
-  security: operations.ListAPIKeysSecurity,
-  request?: operations.ListAPIKeysRequest | undefined,
+  request?: operations.ListIntegrationsRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListKeysResult,
+      components.ListIntegrationsResult,
       | errors.ServiceError
       | errors.ServiceError
       | APIError
@@ -83,7 +80,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.ListAPIKeysRequest$outboundSchema.optional().parse(value),
+      operations.ListIntegrationsRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -92,34 +89,35 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/keys.list")();
+  const path = pathToFunc("/rpc/integrations.list")();
+
+  const query = encodeFormQuery({
+    "keywords": payload?.keywords,
+  });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
   }));
 
-  const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
-      },
-    ],
-  );
+  const securityInput = await extractSecurity(client._options.security);
+  const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listAPIKeys",
-    oAuth2Scopes: null,
+    operationID: "listIntegrations",
+    oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: security,
+    securitySource: client._options.security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -132,6 +130,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
@@ -167,7 +166,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListKeysResult,
+    components.ListIntegrationsResult,
     | errors.ServiceError
     | errors.ServiceError
     | APIError
@@ -178,7 +177,7 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.json(200, components.ListKeysResult$inboundSchema),
+    M.json(200, components.ListIntegrationsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

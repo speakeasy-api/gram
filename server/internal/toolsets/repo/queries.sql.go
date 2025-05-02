@@ -27,7 +27,7 @@ INSERT INTO toolsets (
   , $3
   , $4
   , $5
-  , NULLIF($6::text[], '{}'::text[])
+  , COALESCE($6::text[], '{}'::text[])
   , $7
 )
 RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
@@ -303,7 +303,7 @@ UPDATE toolsets
 SET 
     name = COALESCE($1, name)
   , description = COALESCE($2, description)
-  , http_tool_names = COALESCE(NULLIF($3::text[], '{}'::text[]), http_tool_names)
+  , http_tool_names = COALESCE($3::text[], http_tool_names)
   , default_environment_slug = COALESCE($4, default_environment_slug)
   , updated_at = clock_timestamp()
 WHERE slug = $5 AND project_id = $6

@@ -9,14 +9,14 @@ import {
   useListEnvironmentsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { useProject } from "@/contexts/Auth";
 import { useState } from "react";
-import { PlusIcon } from "lucide-react";
 import { Environment } from "@gram/client/models/components/environment.js";
 import { CreateThingCard } from "../toolsets/Toolsets";
 import { InputDialog } from "@/components/input-dialog";
 import { useRoutes } from "@/routes";
+import { AddButton } from "@/components/add-button";
 
 export function EnvironmentsRoot() {
   return <Outlet />;
@@ -32,16 +32,16 @@ export function useEnvironments() {
 
 export default function Environments() {
   const project = useProject();
-  const navigate = useNavigate();
   const environments = useEnvironments();
+  const routes = useRoutes();
 
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
   const [environmentName, setEnvironmentName] = useState("");
   const createEnvironmentMutation = useCreateEnvironmentMutation({
-    onSuccess: (data) => {
-      environments.refetch();
-      navigate(`/environments/${data.slug}`);
+    onSuccess: async (data) => {
+      await environments.refetch();
+      routes.environments.subPages.environment.goTo(data.slug);
     },
     onError: (error) => {
       console.error("Failed to create environment:", error);
@@ -61,24 +61,16 @@ export default function Environments() {
     });
   };
 
-  const addButton = (
-    <Button
-      variant="ghost"
-      className="text-muted-foreground hover:text-foreground"
-      onClick={() => {
-        setCreateEnvironmentDialogOpen(true);
-      }}
-      tooltip="New Environment"
-    >
-      <PlusIcon className="w-4 h-4" />
-    </Button>
-  );
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>{addButton}</Page.Header.Actions>
+        <Page.Header.Actions>
+          <AddButton
+            onClick={() => setCreateEnvironmentDialogOpen(true)}
+            tooltip="New Environment"
+          />
+        </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
         {environments.map((environment) => (

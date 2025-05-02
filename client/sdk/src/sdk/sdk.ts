@@ -8,6 +8,7 @@ import { Auth } from "./auth.js";
 import { Deployments } from "./deployments.js";
 import { Environments } from "./environments.js";
 import { Instances } from "./instances.js";
+import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
 import { Packages } from "./packages.js";
 import { Projects } from "./projects.js";
@@ -38,6 +39,11 @@ export class Gram extends ClientSDK {
   private _instances?: Instances;
   get instances(): Instances {
     return (this._instances ??= new Instances(this._options));
+  }
+
+  private _integrations?: Integrations;
+  get integrations(): Integrations {
+    return (this._integrations ??= new Integrations(this._options));
   }
 
   private _keys?: Keys;

@@ -29,11 +29,7 @@ function DeploymentCards() {
   const { data: deployment, refetch } = useLatestDeployment();
 
   if (!deployment?.deployment) {
-    return (
-      <Card>
-        <Card.Content className="pt-6">No deployments found.</Card.Content>
-      </Card>
-    );
+    return <OnboardingContent onOnboardingComplete={() => refetch()} />;
   }
 
   return (

@@ -183,3 +183,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     </SessionContext.Provider>
   );
 };
+
+// TODO: Make this better
+export const useIsAdmin = () => {
+  const session = useSession();
+
+  return (
+    session.organization.slug === "organization-123" ||
+    session.organization.slug === "speakeasy-self"
+  );
+};

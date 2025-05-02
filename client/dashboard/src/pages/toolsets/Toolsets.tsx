@@ -12,19 +12,13 @@ import {
   useToolsetSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
+import { Outlet, useParams } from "react-router-dom";
 import { useState } from "react";
-import { PlusIcon, AlertTriangle, Check } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useEnvironments } from "../environments/Environments";
-import { Environment, ToolsetDetails } from "@gram/client/models/components";
+import { ToolsetDetails } from "@gram/client/models/components";
 import { InputDialog } from "@/components/input-dialog";
 import { NameAndSlug } from "@/components/name-and-slug";
+import { ToolsetEnvironmentBadge } from "./Toolset";
+import { AddButton } from "@/components/add-button";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -46,16 +40,15 @@ export function ToolsetsRoot() {
 }
 
 export default function Toolsets() {
-  const navigate = useNavigate();
   const toolsets = useToolsets();
-  const environments = useEnvironments();
+  const routes = useRoutes();
 
   const [createToolsetDialogOpen, setCreateToolsetDialogOpen] = useState(false);
   const [toolsetName, setToolsetName] = useState("");
   const createToolsetMutation = useCreateToolsetMutation({
-    onSuccess: (data) => {
-      toolsets.refetch();
-      navigate(`/toolsets/${data.slug}`);
+    onSuccess: async (data) => {
+      await toolsets.refetch();
+      routes.toolsets.subPages.toolset.goTo(data.slug);
     },
     onError: (error) => {
       console.error("Failed to create toolset:", error);
@@ -73,32 +66,20 @@ export default function Toolsets() {
     });
   };
 
-  const addButton = (
-    <Button
-      variant="ghost"
-      className="text-muted-foreground hover:text-foreground"
-      onClick={() => {
-        setCreateToolsetDialogOpen(true);
-      }}
-      tooltip="New Toolset"
-    >
-      <PlusIcon className="w-4 h-4" />
-    </Button>
-  );
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>{addButton}</Page.Header.Actions>
+        <Page.Header.Actions>
+          <AddButton
+            onClick={() => setCreateToolsetDialogOpen(true)}
+            tooltip="New Toolset"
+          />
+        </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
         {toolsets.map((toolset) => (
-          <ToolsetCard
-            key={toolset.id}
-            toolset={toolset}
-            environments={environments}
-          />
+          <ToolsetCard key={toolset.id} toolset={toolset} />
         ))}
         <CreateThingCard onClick={() => setCreateToolsetDialogOpen(true)}>
           + New Toolset
@@ -146,60 +127,8 @@ export function CreateThingCard({
   );
 }
 
-function ToolsetCard({
-  toolset,
-  environments,
-}: {
-  toolset: ToolsetDetails;
-  environments: Environment[];
-}) {
+function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
   const routes = useRoutes();
-  const defaultEnvironment = environments.find(
-    (env) => env.slug === toolset.defaultEnvironmentSlug
-  );
-
-  // We consider a toolset to need env vars if it has relevant environment variables and the default environment is set
-  // The environment does not have any variables from the toolset's relevant environment variables set
-  const needsEnvVars =
-    defaultEnvironment &&
-    toolset.relevantEnvironmentVariables &&
-    toolset.relevantEnvironmentVariables.length > 0 &&
-    !toolset.relevantEnvironmentVariables.some((varName) =>
-      defaultEnvironment.entries.some(
-        (entry) =>
-          entry.name === varName &&
-          entry.value !== "" &&
-          entry.value !== "<EMPTY>"
-      )
-    );
-
-  const envBarBadge = toolset.defaultEnvironmentSlug && (
-    <Link to={`/environments/${toolset.defaultEnvironmentSlug}`}>
-      <Badge variant="outline" className="h-6 flex items-center gap-1">
-        {defaultEnvironment &&
-          (needsEnvVars ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <AlertTriangle className="w-3 h-3 text-orange-500 cursor-pointer" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    You have not set environment variables for this toolset.
-                    Navigate to the environment and use fill for toolset.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <Check className="w-3 h-3 text-green-500" />
-          ))}
-        Default Env
-      </Badge>
-    </Link>
-  );
 
   return (
     <Card>
@@ -209,11 +138,11 @@ function ToolsetCard({
             <NameAndSlug
               name={toolset.name}
               slug={toolset.slug}
-              linkTo={`/toolsets/${toolset.slug}`}
+              linkTo={routes.toolsets.subPages.toolset.href(toolset.slug)}
             />
           </Card.Title>
           <div className="flex gap-2 items-center">
-            {envBarBadge}
+            <ToolsetEnvironmentBadge toolset={toolset} size="sm" />
             <Badge className="h-6 flex items-center">
               {toolset.httpTools?.length || "No"} Tools
             </Badge>

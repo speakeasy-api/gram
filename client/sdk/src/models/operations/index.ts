@@ -20,6 +20,7 @@ export * from "./gettoolset.js";
 export * from "./listapikeys.js";
 export * from "./listdeployments.js";
 export * from "./listenvironments.js";
+export * from "./listintegrations.js";
 export * from "./listprojects.js";
 export * from "./listtools.js";
 export * from "./listtoolsets.js";
