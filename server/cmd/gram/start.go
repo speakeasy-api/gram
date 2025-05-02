@@ -16,7 +16,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/pgx-contrib/pgxotel"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
@@ -82,6 +84,12 @@ func newStartCommand() *cli.Command {
 				Usage:    "Database URL",
 				EnvVars:  []string{"GRAM_DATABASE_URL"},
 				Required: true,
+			},
+			&cli.BoolFlag{
+				Name:    "unsafe-db-log",
+				Usage:   "Turn on unsafe database logging. WARNING: This will log all database queries and data to the console.",
+				EnvVars: []string{"GRAM_UNSAFE_DB_LOG"},
+				Value:   false,
 			},
 			&cli.StringFlag{
 				Name:     "speakeasy-server-address",
@@ -163,10 +171,18 @@ func newStartCommand() *cli.Command {
 				}
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 
-				poolcfg.ConnConfig.Tracer = &pgxotel.QueryTracer{
-					Name:    "pgx",
-					Options: []trace.TracerOption{},
+				consoleLogLevel := tracelog.LogLevelNone
+				if c.Bool("unsafe-db-log") {
+					consoleLogLevel = tracelog.LogLevelDebug
 				}
+
+				poolcfg.ConnConfig.Tracer = multitracer.New(
+					&pgxotel.QueryTracer{
+						Name:    "pgx",
+						Options: []trace.TracerOption{},
+					},
+					o11y.NewPGXLogger(logger, consoleLogLevel),
+				)
 			}
 
 			db, err := pgxpool.NewWithConfig(ctx, poolcfg)

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5/tracelog"
 )
 
 type LevelMapping struct {
@@ -16,4 +17,12 @@ var LogLevels = map[string]LevelMapping{
 	"info":  {Slog: slog.LevelInfo, Charm: log.InfoLevel},
 	"warn":  {Slog: slog.LevelWarn, Charm: log.WarnLevel},
 	"error": {Slog: slog.LevelError, Charm: log.ErrorLevel},
+}
+
+var pgxLevels = map[tracelog.LogLevel]slog.Level{
+	tracelog.LogLevelTrace: slog.LevelDebug,
+	tracelog.LogLevelDebug: slog.LevelDebug,
+	tracelog.LogLevelInfo:  slog.LevelInfo,
+	tracelog.LogLevelWarn:  slog.LevelWarn,
+	tracelog.LogLevelError: slog.LevelError,
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	charmlog "github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5/tracelog"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -74,4 +75,33 @@ func LogDefer(ctx context.Context, logger *slog.Logger, cb func() error) error {
 
 func NoLogDefer(cb func() error) {
 	_ = cb()
+}
+
+type pgxLogger struct {
+	logger *slog.Logger
+}
+
+func (l *pgxLogger) Log(ctx context.Context, level tracelog.LogLevel, msg string, data map[string]any) {
+	if level == tracelog.LogLevelNone {
+		return
+	}
+
+	lvl, ok := pgxLevels[level]
+	if !ok {
+		lvl = slog.LevelDebug
+	}
+
+	attr := make([]any, 0, len(data))
+	for k, v := range data {
+		attr = append(attr, slog.Any(k, v))
+	}
+
+	l.logger.Log(ctx, lvl, msg, attr...)
+}
+
+func NewPGXLogger(logger *slog.Logger, level tracelog.LogLevel) *tracelog.TraceLog {
+	return &tracelog.TraceLog{
+		Logger:   &pgxLogger{logger: logger},
+		LogLevel: level,
+	}
 }
