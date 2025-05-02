@@ -66,7 +66,7 @@ SELECT
   , current.slug
 FROM deployments_openapiv3_assets as current
 WHERE current.deployment_id = $2
-  AND current.id != ANY ($3)
+  AND current.id <> ALL ($3::uuid[])
 RETURNING id
 `
 
@@ -108,7 +108,7 @@ SELECT
   , current.version_id
 FROM deployments_packages as current
 WHERE current.deployment_id = $2
-  AND current.id != ANY ($3)
+  AND current.id <> ALL ($3::uuid[])
 RETURNING id, package_id, version_id
 `
 

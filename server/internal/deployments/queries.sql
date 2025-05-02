@@ -146,7 +146,7 @@ SELECT
   , current.version_id
 FROM deployments_packages as current
 WHERE current.deployment_id = @original_deployment_id
-  AND current.id != ANY (sqlc.slice('excluded_ids'))
+  AND current.id <> ALL (@excluded_ids::uuid[])
 RETURNING id, package_id, version_id;
 
 -- name: CloneDeploymentOpenAPIv3Assets :many
@@ -163,7 +163,7 @@ SELECT
   , current.slug
 FROM deployments_openapiv3_assets as current
 WHERE current.deployment_id = @original_deployment_id
-  AND current.id != ANY (sqlc.slice('excluded_ids'))
+  AND current.id <> ALL (@excluded_ids::uuid[])
 RETURNING id;
 
 -- name: TransitionDeployment :one
