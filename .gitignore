@@ -15,3 +15,10 @@ mprocs.log
 __debug_bin*
 go.work
 go.work.sum
+.DS_Store
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+**/.claude/settings.local.json
