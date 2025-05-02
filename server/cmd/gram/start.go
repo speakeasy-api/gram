@@ -64,7 +64,7 @@ func newStartCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:     "environment",
-				Usage:    "The current environment", // local, dev, prod
+				Usage:    "The current server environment", // local, dev, prod
 				Required: true,
 				EnvVars:  []string{"GRAM_ENVIRONMENT"},
 			},
