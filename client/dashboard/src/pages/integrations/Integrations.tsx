@@ -14,6 +14,7 @@ import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { AddButton } from "@/components/add-button";
+import { CheckIcon } from "lucide-react";
 
 export default function Integrations() {
   const { data: integrations, refetch } = useListIntegrations();
@@ -132,7 +133,44 @@ function CreateIntegrationDialog({
   );
 }
 
-function IntegrationCard({ integration }: { integration: Integration }) {
+export function IntegrationCard({ integration }: { integration: Integration }) {
+  const { data: deployment, refetch } = useLatestDeployment();
+  const client = useSdkClient();
+
+  const handleEnable = async () => {
+    await client.deployments.evolveDeployment({
+      evolveForm: {
+        upsertPackages: [
+          {
+            name: integration.packageName,
+            version: integration.version,
+          },
+        ],
+      },
+    });
+  };
+
+  const handleDisable = async () => {
+    await client.deployments.evolveDeployment({
+      evolveForm: {
+        excludePackages: [integration.packageId],
+      },
+    });
+  };
+
+  const isEnabled = deployment?.deployment?.packages.some(
+    (p) => p.name === integration.packageName
+  );
+
+  const toggleEnabled = async () => {
+    if (isEnabled) {
+      await handleDisable();
+    } else {
+      await handleEnable();
+    }
+    refetch();
+  };
+
   return (
     <Card>
       <Card.Header>
@@ -154,9 +192,18 @@ function IntegrationCard({ integration }: { integration: Integration }) {
           </Type>
         </Stack>
       </Card.Header>
-      <Card.Content>
-        <Button variant="outline">Add to Toolset</Button>
-      </Card.Content>
+      <Card.Footer>
+        <Button variant="outline" onClick={toggleEnabled}>
+          {isEnabled ? (
+            <>
+              <CheckIcon className="w-4 h-4" />
+              Enabled
+            </>
+          ) : (
+            "Enable"
+          )}
+        </Button>
+      </Card.Footer>
     </Card>
   );
 }

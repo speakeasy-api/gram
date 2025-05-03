@@ -44,7 +44,7 @@ SELECT
   deployments_openapiv3_assets.asset_id as deployments_openapiv3_asset_store_id,
   deployments_openapiv3_assets.name as deployments_openapiv3_asset_name,
   deployments_openapiv3_assets.slug as deployments_openapiv3_asset_slug,
-  deployments_packages.id as deployment_package_id,
+  deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
   package_versions.minor as package_version_minor,
@@ -146,7 +146,7 @@ SELECT
   , current.version_id
 FROM deployments_packages as current
 WHERE current.deployment_id = @original_deployment_id
-  AND current.id <> ALL (@excluded_ids::uuid[])
+  AND current.package_id <> ALL (@excluded_ids::uuid[])
 RETURNING id, package_id, version_id;
 
 -- name: CloneDeploymentOpenAPIv3Assets :many
@@ -163,7 +163,7 @@ SELECT
   , current.slug
 FROM deployments_openapiv3_assets as current
 WHERE current.deployment_id = @original_deployment_id
-  AND current.id <> ALL (@excluded_ids::uuid[])
+  AND current.asset_id <> ALL (@excluded_ids::uuid[])
 RETURNING id;
 
 -- name: TransitionDeployment :one

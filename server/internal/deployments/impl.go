@@ -377,10 +377,6 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		})
 	}
 
-	if len(packagesToUpsert) == 0 && len(assetsToUpsert) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package is required").Log(ctx, logger)
-	}
-
 	excludeOpenapiv3Assets := make([]uuid.UUID, 0, len(form.ExcludeOpenapiv3Assets))
 	for _, assetID := range form.ExcludeOpenapiv3Assets {
 		id, err := uuid.Parse(assetID)
@@ -397,6 +393,10 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment package id to exclude").Log(ctx, s.logger)
 		}
 		excludePackages = append(excludePackages, id)
+	}
+
+	if len(packagesToUpsert) == 0 && len(assetsToUpsert) == 0 && len(excludeOpenapiv3Assets) == 0 && len(excludePackages) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package to upsert or exclude is required").Log(ctx, logger)
 	}
 
 	var cloneID uuid.UUID
@@ -531,8 +531,8 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 				Major:      semver.Major,
 				Minor:      semver.Minor,
 				Patch:      semver.Patch,
-				Prerelease: conv.ToPGText(semver.Prerelease),
-				Build:      conv.ToPGText(semver.Build),
+				Prerelease: conv.ToPGTextEmpty(semver.Prerelease),
+				Build:      conv.ToPGTextEmpty(semver.Build),
 			})
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, oops.E(oops.CodeBadRequest, err, "package version not found: %s@%s", name, version).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
@@ -694,7 +694,7 @@ func validatePackageInclusion(ctx context.Context, logger *slog.Logger, targetPr
 		"resolved package state",
 		"package id cannot be nil", resolved.packageID != uuid.Nil,
 		"version id cannot be nil", resolved.versionID != uuid.Nil,
-		"project id cannot be nil", resolved.projectID != targetProjectID,
+		"project id cannot be the same as the target project id", resolved.projectID != targetProjectID,
 	); err != nil {
 		return oops.E(oops.CodeInvariantViolation, err, "error resolving package: %s@%s", requirement[0], requirement[1]).Log(ctx, logger)
 	}

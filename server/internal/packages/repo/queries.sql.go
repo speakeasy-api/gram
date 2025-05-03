@@ -359,8 +359,8 @@ WHERE packages.name = $1
   AND package_versions.major = $2
   AND package_versions.minor = $3
   AND package_versions.patch = $4
-  AND package_versions.prerelease = $5
-  AND package_versions.build = $6
+  AND package_versions.prerelease IS NOT DISTINCT FROM $5
+  AND package_versions.build IS NOT DISTINCT FROM $6
 LIMIT 1
 `
 

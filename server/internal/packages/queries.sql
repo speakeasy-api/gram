@@ -14,8 +14,8 @@ WHERE packages.name = @name
   AND package_versions.major = @major
   AND package_versions.minor = @minor
   AND package_versions.patch = @patch
-  AND package_versions.prerelease = @prerelease
-  AND package_versions.build = @build
+  AND package_versions.prerelease IS NOT DISTINCT FROM @prerelease
+  AND package_versions.build IS NOT DISTINCT FROM @build
 LIMIT 1;
 
 -- name: ListPackagesByVersionIDs :many

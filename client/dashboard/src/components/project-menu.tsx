@@ -108,7 +108,7 @@ export function ProjectMenu() {
             <Type variant="small" className="px-2">
               {organization?.slug}
             </Type>
-            <Type muted variant="small" className="px-2">
+            <Type muted variant="small" className="px-2 truncate">
               {session.userEmail}
             </Type>
           </Stack>
