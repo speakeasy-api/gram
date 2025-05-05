@@ -33,8 +33,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.35.0
 	go.uber.org/automaxprocs v1.6.0
 	goa.design/clue v1.1.1
-	goa.design/goa/v3 v3.20.0
-	goa.design/plugins/v3 v3.20.0
+	goa.design/goa/v3 v3.21.0
+	goa.design/plugins/v3 v3.21.0
 )
 
 require (
@@ -190,9 +190,9 @@ require (
 	golang.org/x/sync v0.13.0
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
-	golang.org/x/tools v0.31.0 // indirect
+	golang.org/x/tools v0.32.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250425173222-7b384671a197 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250425173222-7b384671a197 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250428153025-10db94c68c34 // indirect
 	google.golang.org/grpc v1.72.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
