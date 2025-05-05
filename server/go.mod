@@ -18,7 +18,7 @@ require (
 	github.com/ettle/strcase v0.2.0
 	github.com/go-redis/cache/v9 v9.0.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
-	github.com/pb33f/libopenapi v0.21.9
+	github.com/pb33f/libopenapi v0.21.10
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.7.3
 	github.com/redis/go-redis/v9 v9.8.0
