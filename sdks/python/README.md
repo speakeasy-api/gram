@@ -275,9 +275,11 @@ By default, an API error will raise a models.APIError exception, which has the f
 
 When custom error responses are specified for an operation, the SDK may also raise their associated exceptions. You can refer to respective *Errors* tables in SDK docs for more details on possible exception types for each operation. For example, the `get_by_slug_async` method may raise the following exceptions:
 
-| Error Type      | Status Code | Content Type |
-| --------------- | ----------- | ------------ |
-| models.APIError | 4XX, 5XX    | \*/\*        |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| models.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| models.ServiceError | 500                               | application/json |
+| models.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ### Example
 
@@ -300,6 +302,12 @@ with GramAPI() as gram_api:
         # Handle response
         print(res)
 
+    except models.ServiceError as e:
+        # handle e.data: models.ServiceErrorData
+        raise(e)
+    except models.ServiceError as e:
+        # handle e.data: models.ServiceErrorData
+        raise(e)
     except models.APIError as e:
         # handle exception
         raise(e)

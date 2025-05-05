@@ -4,7 +4,7 @@ from .basesdk import BaseSDK
 from gram_ai import models, utils
 from gram_ai._hooks import HookContext
 from gram_ai.types import OptionalNullable, UNSET
-from typing import Mapping, Optional, Union
+from typing import Any, Mapping, Optional, Union
 
 
 class Instances(BaseSDK):
@@ -91,12 +91,34 @@ class Instances(BaseSDK):
                 security_source=security,
             ),
             request=req,
-            error_status_codes=["4XX", "5XX"],
+            error_status_codes=[
+                "400",
+                "401",
+                "403",
+                "404",
+                "409",
+                "415",
+                "422",
+                "4XX",
+                "500",
+                "5XX",
+            ],
             retry_config=retry_config,
         )
 
+        response_data: Any = None
         if utils.match_response(http_res, "200", "application/json"):
             return utils.unmarshal_json(http_res.text, models.GetInstanceResult)
+        if utils.match_response(
+            http_res,
+            ["400", "401", "403", "404", "409", "415", "422"],
+            "application/json",
+        ):
+            response_data = utils.unmarshal_json(http_res.text, models.ServiceErrorData)
+            raise models.ServiceError(data=response_data)
+        if utils.match_response(http_res, "500", "application/json"):
+            response_data = utils.unmarshal_json(http_res.text, models.ServiceErrorData)
+            raise models.ServiceError(data=response_data)
         if utils.match_response(http_res, "4XX", "*"):
             http_res_text = utils.stream_to_text(http_res)
             raise models.APIError(
@@ -198,12 +220,34 @@ class Instances(BaseSDK):
                 security_source=security,
             ),
             request=req,
-            error_status_codes=["4XX", "5XX"],
+            error_status_codes=[
+                "400",
+                "401",
+                "403",
+                "404",
+                "409",
+                "415",
+                "422",
+                "4XX",
+                "500",
+                "5XX",
+            ],
             retry_config=retry_config,
         )
 
+        response_data: Any = None
         if utils.match_response(http_res, "200", "application/json"):
             return utils.unmarshal_json(http_res.text, models.GetInstanceResult)
+        if utils.match_response(
+            http_res,
+            ["400", "401", "403", "404", "409", "415", "422"],
+            "application/json",
+        ):
+            response_data = utils.unmarshal_json(http_res.text, models.ServiceErrorData)
+            raise models.ServiceError(data=response_data)
+        if utils.match_response(http_res, "500", "application/json"):
+            response_data = utils.unmarshal_json(http_res.text, models.ServiceErrorData)
+            raise models.ServiceError(data=response_data)
         if utils.match_response(http_res, "4XX", "*"):
             http_res_text = await utils.stream_to_text_async(http_res)
             raise models.APIError(

@@ -16,6 +16,7 @@ from .getinstanceop import (
 from .getinstanceresult import GetInstanceResult, GetInstanceResultTypedDict
 from .httptooldefinition import HTTPToolDefinition, HTTPToolDefinitionTypedDict
 from .security import Security, SecurityTypedDict
+from .serviceerror import ServiceError, ServiceErrorData
 
 
 __all__ = [
@@ -38,4 +39,6 @@ __all__ = [
     "HTTPToolDefinitionTypedDict",
     "Security",
     "SecurityTypedDict",
+    "ServiceError",
+    "ServiceErrorData",
 ]

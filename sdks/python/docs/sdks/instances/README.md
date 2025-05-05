@@ -52,6 +52,8 @@ with GramAPI() as gram_api:
 
 ### Errors
 
-| Error Type      | Status Code     | Content Type    |
-| --------------- | --------------- | --------------- |
-| models.APIError | 4XX, 5XX        | \*/\*           |
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| models.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| models.ServiceError               | 500                               | application/json                  |
+| models.APIError                   | 4XX, 5XX                          | \*/\*                             |

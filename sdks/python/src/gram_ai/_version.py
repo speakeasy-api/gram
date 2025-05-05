@@ -3,10 +3,10 @@
 import importlib.metadata
 
 __title__: str = "gram-ai"
-__version__: str = "0.0.1"
+__version__: str = "0.1.0"
 __openapi_doc_version__: str = "0.0.1"
-__gen_version__: str = "2.593.4"
-__user_agent__: str = "speakeasy-sdk/python 0.0.1 2.593.4 0.0.1 gram-ai"
+__gen_version__: str = "2.597.9"
+__user_agent__: str = "speakeasy-sdk/python 0.1.0 2.597.9 0.0.1 gram-ai"
 
 try:
     if __package__ is not None:
