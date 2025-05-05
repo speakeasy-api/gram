@@ -12,7 +12,7 @@ tool (
 
 require (
 	cloud.google.com/go/storage v1.53.0
-	github.com/KimMachineGun/automemlimit v0.7.1
+	github.com/KimMachineGun/automemlimit v0.7.2
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/charmbracelet/log v0.4.1
 	github.com/ettle/strcase v0.2.0
