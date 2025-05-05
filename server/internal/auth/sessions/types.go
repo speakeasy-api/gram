@@ -30,10 +30,11 @@ func (s Session) AdditionalCacheKeys() []string {
 }
 
 type CachedUserInfo struct {
-	UserID        string
-	Admin         bool
-	Email         string
-	Organizations []auth.OrganizationEntry
+	UserID          string
+	UserWhitelisted bool
+	Admin           bool
+	Email           string
+	Organizations   []auth.OrganizationEntry
 }
 
 func UserInfoCacheKey(userID string) string {

@@ -20,6 +20,7 @@ type speakeasyProviderUser struct {
 	Admin        bool      `json:"admin"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	Whitelisted  bool      `json:"whitelisted"`
 }
 
 type speakeasyProviderOrganization struct {
@@ -93,15 +94,16 @@ func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, err
 	}
 
 	return &CachedUserInfo{
-		UserID:        validateResp.User.ID,
-		Email:         validateResp.User.Email,
-		Admin:         validateResp.User.Admin,
-		Organizations: organizations,
+		UserID:          validateResp.User.ID,
+		UserWhitelisted: validateResp.User.Whitelisted,
+		Email:           validateResp.User.Email,
+		Admin:           validateResp.User.Admin,
+		Organizations:   organizations,
 	}, nil
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false})
+	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false})
 }
 
 func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*CachedUserInfo, error) {

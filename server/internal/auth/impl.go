@@ -101,6 +101,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(err)
 	}
 
+	if !userInfo.UserWhitelisted {
+		// TODO: This will be replaced with a redirect to the gram marketing waitlist page
+		return redirectWithError(errors.New("user is not whitelisted"))
+	}
+
 	activeOrganizationID := ""
 	if len(userInfo.Organizations) > 0 {
 		activeOrganizationID = userInfo.Organizations[0].ID
