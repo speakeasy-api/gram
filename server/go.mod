@@ -21,7 +21,7 @@ require (
 	github.com/pb33f/libopenapi v0.21.9
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.7.3
-	github.com/redis/go-redis/v9 v9.7.3
+	github.com/redis/go-redis/v9 v9.8.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
