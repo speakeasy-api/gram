@@ -1,17 +1,17 @@
 lockVersion: 2.0.0
 id: 1536f638-1fda-4f8e-a2c3-c7ca9e12fb09
 management:
-  docChecksum: 4036e5c62666d6defb12211092ce77c0
+  docChecksum: e63c07d85b855a4ab74370eba31b11b7
   docVersion: 0.0.1
-  speakeasyVersion: 1.540.1
-  generationVersion: 2.593.4
-  releaseVersion: 0.0.2
-  configChecksum: 7f8527e2c8018c4047fe9e211f6bbc5a
+  speakeasyVersion: 1.542.3
+  generationVersion: 2.597.9
+  releaseVersion: 0.0.3
+  configChecksum: 28d3cdac6fecc9423ed412ce74a54a90
   published: true
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.6
+    core: 3.21.7
     defaultEnabledRetries: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurity: 2.82.13
@@ -36,6 +36,7 @@ generatedFiles:
   - docs/models/components/getinstanceresult.md
   - docs/models/components/httptooldefinition.md
   - docs/models/components/security.md
+  - docs/models/errors/serviceerror.md
   - docs/models/operations/getinstancerequest.md
   - docs/models/operations/getinstancesecurity.md
   - docs/models/operations/getinstancesecurityoption1.md
@@ -76,6 +77,7 @@ generatedFiles:
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
   - src/models/errors/sdkvalidationerror.ts
+  - src/models/errors/serviceerror.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/index.ts
   - src/sdk/index.ts
@@ -262,5 +264,9 @@ examples:
       responses:
         "200":
           application/json: {"environment": {"created_at": "2025-09-06T15:47:55.334Z", "entries": [{"created_at": "2023-10-17T17:29:24.836Z", "name": "<value>", "updated_at": "2023-05-13T16:40:27.328Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-10T09:37:31.701Z"}, "name": "<value>", "tools": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.1
 generatedTests: {}

@@ -19,7 +19,7 @@ Gram API Description: Gram is the tools platform for AI agents
 <!-- Start Table of Contents [toc] -->
 ## Table of Contents
 <!-- $toc-max-depth=2 -->
-* [openapi](#openapi)
+* [@gram-ai/sdk](#gram-aisdk)
   * [SDK Installation](#sdk-installation)
   * [Requirements](#requirements)
   * [SDK Example Usage](#sdk-example-usage)
@@ -264,15 +264,19 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-If the request fails due to, for example 4XX or 5XX status codes, it will throw a `APIError`.
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `getBySlug` method may throw the following errors:
 
-| Error Type      | Status Code | Content Type |
-| --------------- | ----------- | ------------ |
-| errors.APIError | 4XX, 5XX    | \*/\*        |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500                               | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
+
+If the method throws an error and it is not captured by the known errors, it will default to throwing a `APIError`.
 
 ```typescript
 import { GramAPI } from "@gram-ai/sdk";
-import { SDKValidationError } from "@gram-ai/sdk/models/errors";
+import { SDKValidationError, ServiceError } from "@gram-ai/sdk/models/errors";
 
 const gramAPI = new GramAPI();
 
@@ -293,19 +297,21 @@ async function run() {
   } catch (err) {
     switch (true) {
       // The server response does not match the expected SDK schema
-      case (err instanceof SDKValidationError):
-        {
-          // Pretty-print will provide a human-readable multi-line error message
-          console.error(err.pretty());
-          // Raw value may also be inspected
-          console.error(err.rawValue);
-          return;
-        }
-        apierror.js;
-      // Server returned an error status code or an unknown content type
-      case (err instanceof APIError): {
-        console.error(err.statusCode);
-        console.error(err.rawResponse.body);
+      case (err instanceof SDKValidationError): {
+        // Pretty-print will provide a human-readable multi-line error message
+        console.error(err.pretty());
+        // Raw value may also be inspected
+        console.error(err.rawValue);
+        return;
+      }
+      case (err instanceof ServiceError): {
+        // Handle err.data$: ServiceErrorData
+        console.error(err);
+        return;
+      }
+      case (err instanceof ServiceError): {
+        // Handle err.data$: ServiceErrorData
+        console.error(err);
         return;
       }
       default: {
