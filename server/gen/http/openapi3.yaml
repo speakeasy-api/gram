@@ -1629,6 +1629,100 @@ paths:
             x-speakeasy-name-override: getBySlug
             x-speakeasy-react-hook:
                 name: Instance
+    /rpc/integrations.get:
+        get:
+            tags:
+                - integrations
+            summary: get integrations
+            description: Get a third-party integration by ID or name.
+            operationId: integrations#get
+            parameters:
+                - name: id
+                  in: query
+                  description: The ID of the integration to get (refers to a package id).
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The ID of the integration to get (refers to a package id).
+                - name: name
+                  in: query
+                  description: The name of the integration to get (refers to a package name).
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The name of the integration to get (refers to a package name).
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetIntegrationResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
     /rpc/integrations.list:
         get:
             description: List available third-party integrations.
@@ -3243,6 +3337,10 @@ components:
         CreatePackageForm:
             type: object
             properties:
+                description:
+                    type: string
+                    description: The description of the package. Limited markdown syntax is supported.
+                    maxLength: 10000
                 image_asset_id:
                     type: string
                     description: The asset ID of the image to show for this package
@@ -3728,6 +3826,21 @@ components:
                 - name
                 - tools
                 - environment
+        GetIntegrationForm:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the integration to get (refers to a package id).
+                name:
+                    type: string
+                    description: The name of the integration to get (refers to a package name).
+            description: Get a third-party integration by ID or name.
+        GetIntegrationResult:
+            type: object
+            properties:
+                integration:
+                    $ref: '#/components/schemas/Integration'
         GetLatestDeploymentResult:
             type: object
             properties:
@@ -3820,6 +3933,45 @@ components:
                 - active_organization_id
                 - organizations
         Integration:
+            type: object
+            properties:
+                package_description:
+                    type: string
+                package_description_raw:
+                    type: string
+                package_id:
+                    type: string
+                package_image_asset_id:
+                    type: string
+                package_keywords:
+                    type: array
+                    items:
+                        type: string
+                package_name:
+                    type: string
+                package_summary:
+                    type: string
+                package_title:
+                    type: string
+                package_url:
+                    type: string
+                tool_count:
+                    type: integer
+                    format: int64
+                version:
+                    type: string
+                version_created_at:
+                    type: string
+                    format: date-time
+            required:
+                - package_id
+                - package_name
+                - package_title
+                - package_summary
+                - version
+                - version_created_at
+                - tool_count
+        IntegrationEntry:
             type: object
             properties:
                 package_id:
@@ -3940,7 +4092,7 @@ components:
                 integrations:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Integration'
+                        $ref: '#/components/schemas/IntegrationEntry'
                     description: List of available third-party integrations
         ListKeysResult:
             type: object
@@ -4075,6 +4227,12 @@ components:
                     type: string
                     description: The deletion date of the package
                     format: date-time
+                description:
+                    type: string
+                    description: The description of the package. This contains HTML content.
+                description_raw:
+                    type: string
+                    description: The unsanitized, user-supplied description of the package. Limited markdown syntax is supported.
                 id:
                     type: string
                     description: The ID of the package
@@ -4395,6 +4553,10 @@ components:
         UpdatePackageForm:
             type: object
             properties:
+                description:
+                    type: string
+                    description: The description of the package. Limited markdown syntax is supported.
+                    maxLength: 10000
                 id:
                     type: string
                     description: The id of the package to update

@@ -872,6 +872,8 @@ func marshalPackagesPackageToPackageResponseBody(v *packages.Package) *PackageRe
 		Name:           v.Name,
 		Title:          v.Title,
 		Summary:        v.Summary,
+		Description:    v.Description,
+		DescriptionRaw: v.DescriptionRaw,
 		URL:            v.URL,
 		ImageAssetID:   v.ImageAssetID,
 		LatestVersion:  v.LatestVersion,

@@ -23,6 +23,8 @@ type CreatePackageRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the package. Limited markdown syntax is supported.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// External URL for the package owner
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
@@ -40,6 +42,8 @@ type UpdatePackageRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the package. Limited markdown syntax is supported.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// External URL for the package owner
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
@@ -765,6 +769,11 @@ type PackageResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the package. This contains HTML content.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The unsanitized, user-supplied description of the package. Limited markdown
+	// syntax is supported.
+	DescriptionRaw *string `form:"description_raw,omitempty" json:"description_raw,omitempty" xml:"description_raw,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
 	// External URL for the package owner
@@ -1368,6 +1377,7 @@ func NewCreatePackagePayload(body *CreatePackageRequestBody, sessionToken *strin
 		Name:         *body.Name,
 		Title:        *body.Title,
 		Summary:      *body.Summary,
+		Description:  body.Description,
 		URL:          body.URL,
 		ImageAssetID: body.ImageAssetID,
 	}
@@ -1390,6 +1400,7 @@ func NewUpdatePackagePayload(body *UpdatePackageRequestBody, sessionToken *strin
 		ID:           *body.ID,
 		Title:        body.Title,
 		Summary:      body.Summary,
+		Description:  body.Description,
 		URL:          body.URL,
 		ImageAssetID: body.ImageAssetID,
 	}
@@ -1460,6 +1471,11 @@ func ValidateCreatePackageRequestBody(body *CreatePackageRequestBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 80, false))
 		}
 	}
+	if body.Description != nil {
+		if utf8.RuneCountInString(*body.Description) > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", *body.Description, utf8.RuneCountInString(*body.Description), 10000, false))
+		}
+	}
 	if body.URL != nil {
 		if utf8.RuneCountInString(*body.URL) > 100 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", *body.URL, utf8.RuneCountInString(*body.URL), 100, false))
@@ -1495,6 +1511,11 @@ func ValidateUpdatePackageRequestBody(body *UpdatePackageRequestBody) (err error
 	if body.Summary != nil {
 		if utf8.RuneCountInString(*body.Summary) > 80 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 80, false))
+		}
+	}
+	if body.Description != nil {
+		if utf8.RuneCountInString(*body.Description) > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", *body.Description, utf8.RuneCountInString(*body.Description), 10000, false))
 		}
 	}
 	if body.URL != nil {

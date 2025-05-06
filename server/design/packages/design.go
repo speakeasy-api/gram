@@ -132,6 +132,9 @@ var UpdatePackageForm = Type("UpdatePackageForm", func() {
 	Attribute("summary", String, "The summary of the package", func() {
 		MaxLength(80)
 	})
+	Attribute("description", String, "The description of the package. Limited markdown syntax is supported.", func() {
+		MaxLength(10000)
+	})
 	Attribute("url", String, "External URL for the package owner", func() {
 		MaxLength(100)
 	})
@@ -162,6 +165,9 @@ var CreatePackageForm = Type("CreatePackageForm", func() {
 	})
 	Attribute("summary", String, "The summary of the package", func() {
 		MaxLength(80)
+	})
+	Attribute("description", String, "The description of the package. Limited markdown syntax is supported.", func() {
+		MaxLength(10000)
 	})
 	Attribute("url", String, "External URL for the package owner", func() {
 		MaxLength(100)

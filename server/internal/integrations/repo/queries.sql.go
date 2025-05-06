@@ -12,6 +12,94 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getIntegration = `-- name: GetIntegration :one
+WITH package_id_lookup as (
+  SELECT id
+  FROM packages
+  WHERE (
+      ($1::UUID IS NOT NULL AND packages.id = $1::UUID)
+      OR ($2::TEXT IS NOT NULL AND packages.name = $2::TEXT)
+    )
+    AND packages.deleted IS FALSE
+  LIMIT 1
+),
+latest_public_version as (
+    SELECT
+        pv.package_id,
+        pv.deployment_id,
+        pv.major,
+        pv.minor,
+        pv.patch,
+        pv.prerelease,
+        pv.build,
+        pv.created_at
+    FROM package_versions pv
+    WHERE pv.package_id = (SELECT id FROM package_id_lookup)
+        AND pv.visibility = 'public'
+        AND pv.prerelease IS NULL -- Exclude prerelease versions
+        AND pv.deleted IS FALSE  -- Exclude soft-deleted versions
+    ORDER BY pv.major DESC, pv.minor DESC, pv.patch DESC
+    LIMIT 1
+)
+SELECT 
+    packages.id, packages.name, packages.title, packages.summary, packages.description_raw, packages.description_html, packages.url, packages.keywords, packages.image_asset_id, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
+  , lv.major AS version_major
+  , lv.minor AS version_minor
+  , lv.patch AS version_patch
+  , lv.prerelease AS version_prerelease
+  , lv.build AS version_build
+  , lv.created_at AS version_created_at
+  , (SELECT COUNT(id) FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_count
+FROM packages
+INNER JOIN latest_public_version lv ON packages.id = lv.package_id
+`
+
+type GetIntegrationParams struct {
+	PackageID   uuid.NullUUID
+	PackageName pgtype.Text
+}
+
+type GetIntegrationRow struct {
+	Package           Package
+	VersionMajor      int64
+	VersionMinor      int64
+	VersionPatch      int64
+	VersionPrerelease pgtype.Text
+	VersionBuild      pgtype.Text
+	VersionCreatedAt  pgtype.Timestamptz
+	ToolCount         int64
+}
+
+func (q *Queries) GetIntegration(ctx context.Context, arg GetIntegrationParams) (GetIntegrationRow, error) {
+	row := q.db.QueryRow(ctx, getIntegration, arg.PackageID, arg.PackageName)
+	var i GetIntegrationRow
+	err := row.Scan(
+		&i.Package.ID,
+		&i.Package.Name,
+		&i.Package.Title,
+		&i.Package.Summary,
+		&i.Package.DescriptionRaw,
+		&i.Package.DescriptionHtml,
+		&i.Package.Url,
+		&i.Package.Keywords,
+		&i.Package.ImageAssetID,
+		&i.Package.OrganizationID,
+		&i.Package.ProjectID,
+		&i.Package.CreatedAt,
+		&i.Package.UpdatedAt,
+		&i.Package.DeletedAt,
+		&i.Package.Deleted,
+		&i.VersionMajor,
+		&i.VersionMinor,
+		&i.VersionPatch,
+		&i.VersionPrerelease,
+		&i.VersionBuild,
+		&i.VersionCreatedAt,
+		&i.ToolCount,
+	)
+	return i, err
+}
+
 const listIntegrations = `-- name: ListIntegrations :many
 SELECT 
   p.id AS package_id,

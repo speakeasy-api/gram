@@ -97,15 +97,27 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 		imageAssetID = uuid.NullUUID{UUID: imgasset, Valid: imgasset != uuid.Nil}
 	}
 
+	var descriptionHTML *string
+	if form.Description != nil {
+		html, err := conv.MarkdownToHTML([]byte(*form.Description))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").Log(ctx, logger)
+		}
+
+		descriptionHTML = conv.Ptr(string(html))
+	}
+
 	packageID, err := tx.CreatePackage(ctx, repo.CreatePackageParams{
-		Name:           form.Name,
-		Title:          conv.ToPGText(form.Title),
-		Summary:        conv.ToPGText(form.Summary),
-		Url:            conv.PtrToPGTextEmpty(form.URL),
-		Keywords:       kw,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ImageAssetID:   imageAssetID,
+		Name:            form.Name,
+		Title:           conv.ToPGText(form.Title),
+		Summary:         conv.ToPGText(form.Summary),
+		Url:             conv.PtrToPGTextEmpty(form.URL),
+		Keywords:        kw,
+		DescriptionRaw:  conv.PtrToPGTextEmpty(form.Description),
+		DescriptionHtml: conv.PtrToPGTextEmpty(descriptionHTML),
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       *authCtx.ProjectID,
+		ImageAssetID:    imageAssetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating package").Log(ctx, logger)
@@ -151,6 +163,16 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 		imageAssetID = uuid.NullUUID{UUID: imgasset, Valid: imgasset != uuid.Nil}
 	}
 
+	var descriptionHTML *string
+	if form.Description != nil {
+		html, err := conv.MarkdownToHTML([]byte(*form.Description))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").Log(ctx, logger)
+		}
+
+		descriptionHTML = conv.Ptr(string(html))
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").Log(ctx, s.logger)
@@ -161,13 +183,15 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 
 	tx := s.repo.WithTx(dbtx)
 	id, err := tx.UpdatePackage(ctx, repo.UpdatePackageParams{
-		ID:           pkgID,
-		ProjectID:    *authCtx.ProjectID,
-		Url:          conv.PtrToPGTextEmpty(form.URL),
-		Title:        conv.PtrToPGTextEmpty(form.Title),
-		Summary:      conv.PtrToPGTextEmpty(form.Summary),
-		Keywords:     form.Keywords,
-		ImageAssetID: imageAssetID,
+		ID:              pkgID,
+		ProjectID:       *authCtx.ProjectID,
+		Url:             conv.PtrToPGTextEmpty(form.URL),
+		Title:           conv.PtrToPGTextEmpty(form.Title),
+		Summary:         conv.PtrToPGTextEmpty(form.Summary),
+		DescriptionRaw:  conv.PtrToPGTextEmpty(form.Description),
+		DescriptionHtml: conv.PtrToPGTextEmpty(descriptionHTML),
+		Keywords:        form.Keywords,
+		ImageAssetID:    imageAssetID,
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -375,6 +399,8 @@ func describePackage(
 		Title:          conv.FromPGText[string](row.Package.Title),
 		Summary:        conv.FromPGText[string](row.Package.Summary),
 		URL:            conv.FromPGText[string](row.Package.Url),
+		Description:    conv.FromPGText[string](row.Package.DescriptionHtml),
+		DescriptionRaw: conv.FromPGText[string](row.Package.DescriptionRaw),
 		Keywords:       row.Package.Keywords,
 		ProjectID:      row.Package.ProjectID.String(),
 		OrganizationID: row.Package.OrganizationID,

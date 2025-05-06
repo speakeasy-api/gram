@@ -78,6 +78,7 @@ linters:
         - '^github.com/go-redis/cache/v9\.Options$'
         - '^github.com/go-redis/cache/v9\.Item$'
         - '^github.com/pb33f/libopenapi/datamodel\.DocumentConfiguration$'
+        - '^github.com/gomarkdown/markdown/html\.RendererOptions$'
     exhaustive:
       check:
         - switch

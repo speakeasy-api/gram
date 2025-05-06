@@ -16,6 +16,42 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildGetPayload builds the payload for the integrations get endpoint from
+// CLI flags.
+func BuildGetPayload(integrationsGetID string, integrationsGetName string, integrationsGetSessionToken string, integrationsGetProjectSlugInput string) (*integrations.GetPayload, error) {
+	var id *string
+	{
+		if integrationsGetID != "" {
+			id = &integrationsGetID
+		}
+	}
+	var name *string
+	{
+		if integrationsGetName != "" {
+			name = &integrationsGetName
+		}
+	}
+	var sessionToken *string
+	{
+		if integrationsGetSessionToken != "" {
+			sessionToken = &integrationsGetSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if integrationsGetProjectSlugInput != "" {
+			projectSlugInput = &integrationsGetProjectSlugInput
+		}
+	}
+	v := &integrations.GetPayload{}
+	v.ID = id
+	v.Name = name
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListPayload builds the payload for the integrations list endpoint from
 // CLI flags.
 func BuildListPayload(integrationsListKeywords string, integrationsListSessionToken string, integrationsListProjectSlugInput string) (*integrations.ListPayload, error) {
@@ -25,7 +61,7 @@ func BuildListPayload(integrationsListKeywords string, integrationsListSessionTo
 		if integrationsListKeywords != "" {
 			err = json.Unmarshal([]byte(integrationsListKeywords), &keywords)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for keywords, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"5o7\",\n      \"atw\",\n      \"pr2\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for keywords, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"q4z\",\n      \"8bk\",\n      \"d3z\"\n   ]'")
 			}
 			for _, e := range keywords {
 				if utf8.RuneCountInString(e) > 20 {

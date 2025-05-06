@@ -934,6 +934,8 @@ func unmarshalPackageResponseBodyToPackagesPackage(v *PackageResponseBody) *pack
 		Name:           *v.Name,
 		Title:          v.Title,
 		Summary:        v.Summary,
+		Description:    v.Description,
+		DescriptionRaw: v.DescriptionRaw,
 		URL:            v.URL,
 		ImageAssetID:   v.ImageAssetID,
 		LatestVersion:  v.LatestVersion,

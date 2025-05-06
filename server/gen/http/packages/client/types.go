@@ -21,6 +21,8 @@ type CreatePackageRequestBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// The summary of the package
 	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// The description of the package. Limited markdown syntax is supported.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// External URL for the package owner
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
@@ -38,6 +40,8 @@ type UpdatePackageRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the package. Limited markdown syntax is supported.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// External URL for the package owner
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
@@ -763,6 +767,11 @@ type PackageResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the package. This contains HTML content.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The unsanitized, user-supplied description of the package. Limited markdown
+	// syntax is supported.
+	DescriptionRaw *string `form:"description_raw,omitempty" json:"description_raw,omitempty" xml:"description_raw,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
 	// External URL for the package owner
@@ -802,6 +811,7 @@ func NewCreatePackageRequestBody(p *packages.CreatePackagePayload) *CreatePackag
 		Name:         p.Name,
 		Title:        p.Title,
 		Summary:      p.Summary,
+		Description:  p.Description,
 		URL:          p.URL,
 		ImageAssetID: p.ImageAssetID,
 	}
@@ -821,6 +831,7 @@ func NewUpdatePackageRequestBody(p *packages.UpdatePackagePayload) *UpdatePackag
 		ID:           p.ID,
 		Title:        p.Title,
 		Summary:      p.Summary,
+		Description:  p.Description,
 		URL:          p.URL,
 		ImageAssetID: p.ImageAssetID,
 	}

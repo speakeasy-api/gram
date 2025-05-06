@@ -59,6 +59,8 @@ type CreatePackagePayload struct {
 	Title string
 	// The summary of the package
 	Summary string
+	// The description of the package. Limited markdown syntax is supported.
+	Description *string
 	// External URL for the package owner
 	URL *string
 	// The keywords of the package
@@ -103,6 +105,11 @@ type Package struct {
 	Title *string
 	// The summary of the package
 	Summary *string
+	// The description of the package. This contains HTML content.
+	Description *string
+	// The unsanitized, user-supplied description of the package. Limited markdown
+	// syntax is supported.
+	DescriptionRaw *string
 	// The keywords of the package
 	Keywords []string
 	// External URL for the package owner
@@ -168,6 +175,8 @@ type UpdatePackagePayload struct {
 	Title *string
 	// The summary of the package
 	Summary *string
+	// The description of the package. Limited markdown syntax is supported.
+	Description *string
 	// External URL for the package owner
 	URL *string
 	// The keywords of the package

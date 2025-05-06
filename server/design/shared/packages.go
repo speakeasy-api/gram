@@ -13,6 +13,8 @@ var ProjectPackage = Type("Package", func() {
 	Attribute("name", String, "The name of the package")
 	Attribute("title", String, "The title of the package")
 	Attribute("summary", String, "The summary of the package")
+	Attribute("description", String, "The description of the package. This contains HTML content.")
+	Attribute("description_raw", String, "The unsanitized, user-supplied description of the package. Limited markdown syntax is supported.")
 	Attribute("keywords", ArrayOf(String), "The keywords of the package")
 	Attribute("url", String, "External URL for the package owner")
 	Attribute("image_asset_id", String, "The asset ID of the image to show for this package")

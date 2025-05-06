@@ -16,6 +16,8 @@ import (
 
 // Explore third-party tools in Gram.
 type Service interface {
+	// Get a third-party integration by ID or name.
+	Get(context.Context, *GetPayload) (res *GetIntegrationResult, err error)
 	// List available third-party integrations.
 	List(context.Context, *ListPayload) (res *ListIntegrationsResult, err error)
 }
@@ -40,9 +42,40 @@ const ServiceName = "integrations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"list"}
+var MethodNames = [2]string{"get", "list"}
+
+// GetIntegrationResult is the result type of the integrations service get
+// method.
+type GetIntegrationResult struct {
+	Integration *Integration
+}
+
+// GetPayload is the payload type of the integrations service get method.
+type GetPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the integration to get (refers to a package id).
+	ID *string
+	// The name of the integration to get (refers to a package name).
+	Name *string
+}
 
 type Integration struct {
+	PackageID             string
+	PackageName           string
+	PackageTitle          string
+	PackageSummary        string
+	PackageDescription    *string
+	PackageDescriptionRaw *string
+	PackageURL            *string
+	PackageKeywords       []string
+	PackageImageAssetID   *string
+	Version               string
+	VersionCreatedAt      string
+	ToolCount             int
+}
+
+type IntegrationEntry struct {
 	PackageID           string
 	PackageName         string
 	PackageTitle        *string
@@ -59,7 +92,7 @@ type Integration struct {
 // method.
 type ListIntegrationsResult struct {
 	// List of available third-party integrations
-	Integrations []*Integration
+	Integrations []*IntegrationEntry
 }
 
 // ListPayload is the payload type of the integrations service list method.

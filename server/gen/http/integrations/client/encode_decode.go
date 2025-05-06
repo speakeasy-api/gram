@@ -18,6 +18,233 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildGetRequest instantiates a HTTP request object with method and path set
+// to call the "integrations" service "get" endpoint
+func (c *Client) BuildGetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetIntegrationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("integrations", "get", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRequest returns an encoder for requests sent to the integrations
+// get server.
+func EncodeGetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*integrations.GetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("integrations", "get", "*integrations.GetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.ID != nil {
+			values.Add("id", *p.ID)
+		}
+		if p.Name != nil {
+			values.Add("name", *p.Name)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetResponse returns a decoder for responses returned by the
+// integrations get endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
+func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			res := NewGetIntegrationResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("integrations", "get", err)
+				}
+				err = ValidateGetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("integrations", "get", err)
+				}
+				return nil, NewGetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("integrations", "get", err)
+				}
+				err = ValidateGetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("integrations", "get", err)
+				}
+				return nil, NewGetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("integrations", "get", resp.StatusCode, string(body))
+			}
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("integrations", "get", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRequest instantiates a HTTP request object with method and path set
 // to call the "integrations" service "list" endpoint
 func (c *Client) BuildListRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -249,6 +476,36 @@ func unmarshalIntegrationResponseBodyToIntegrationsIntegration(v *IntegrationRes
 		return nil
 	}
 	res := &integrations.Integration{
+		PackageID:             *v.PackageID,
+		PackageName:           *v.PackageName,
+		PackageTitle:          *v.PackageTitle,
+		PackageSummary:        *v.PackageSummary,
+		PackageDescription:    v.PackageDescription,
+		PackageDescriptionRaw: v.PackageDescriptionRaw,
+		PackageURL:            v.PackageURL,
+		PackageImageAssetID:   v.PackageImageAssetID,
+		Version:               *v.Version,
+		VersionCreatedAt:      *v.VersionCreatedAt,
+		ToolCount:             *v.ToolCount,
+	}
+	if v.PackageKeywords != nil {
+		res.PackageKeywords = make([]string, len(v.PackageKeywords))
+		for i, val := range v.PackageKeywords {
+			res.PackageKeywords[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalIntegrationEntryResponseBodyToIntegrationsIntegrationEntry builds a
+// value of type *integrations.IntegrationEntry from a value of type
+// *IntegrationEntryResponseBody.
+func unmarshalIntegrationEntryResponseBodyToIntegrationsIntegrationEntry(v *IntegrationEntryResponseBody) *integrations.IntegrationEntry {
+	if v == nil {
+		return nil
+	}
+	res := &integrations.IntegrationEntry{
 		PackageID:           *v.PackageID,
 		PackageName:         *v.PackageName,
 		PackageTitle:        v.PackageTitle,

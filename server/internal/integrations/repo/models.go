@@ -3,3 +3,26 @@
 //   sqlc v1.28.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Package struct {
+	ID              uuid.UUID
+	Name            string
+	Title           pgtype.Text
+	Summary         pgtype.Text
+	DescriptionRaw  pgtype.Text
+	DescriptionHtml pgtype.Text
+	Url             pgtype.Text
+	Keywords        []string
+	ImageAssetID    uuid.NullUUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}

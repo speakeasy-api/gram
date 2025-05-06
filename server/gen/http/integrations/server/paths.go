@@ -7,6 +7,11 @@
 
 package server
 
+// GetIntegrationsPath returns the URL path to the integrations service get HTTP endpoint.
+func GetIntegrationsPath() string {
+	return "/rpc/integrations.get"
+}
+
 // ListIntegrationsPath returns the URL path to the integrations service list HTTP endpoint.
 func ListIntegrationsPath() string {
 	return "/rpc/integrations.list"

@@ -1,3 +1,44 @@
+-- name: GetIntegration :one
+WITH package_id_lookup as (
+  SELECT id
+  FROM packages
+  WHERE (
+      (sqlc.narg(package_id)::UUID IS NOT NULL AND packages.id = sqlc.narg(package_id)::UUID)
+      OR (sqlc.narg(package_name)::TEXT IS NOT NULL AND packages.name = sqlc.narg(package_name)::TEXT)
+    )
+    AND packages.deleted IS FALSE
+  LIMIT 1
+),
+latest_public_version as (
+    SELECT
+        pv.package_id,
+        pv.deployment_id,
+        pv.major,
+        pv.minor,
+        pv.patch,
+        pv.prerelease,
+        pv.build,
+        pv.created_at
+    FROM package_versions pv
+    WHERE pv.package_id = (SELECT id FROM package_id_lookup)
+        AND pv.visibility = 'public'
+        AND pv.prerelease IS NULL -- Exclude prerelease versions
+        AND pv.deleted IS FALSE  -- Exclude soft-deleted versions
+    ORDER BY pv.major DESC, pv.minor DESC, pv.patch DESC
+    LIMIT 1
+)
+SELECT 
+    sqlc.embed(packages)
+  , lv.major AS version_major
+  , lv.minor AS version_minor
+  , lv.patch AS version_patch
+  , lv.prerelease AS version_prerelease
+  , lv.build AS version_build
+  , lv.created_at AS version_created_at
+  , (SELECT COUNT(id) FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_count
+FROM packages
+INNER JOIN latest_public_version lv ON packages.id = lv.package_id;
+
 -- name: ListIntegrations :many
 SELECT 
   p.id AS package_id,
