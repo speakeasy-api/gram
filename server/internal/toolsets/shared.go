@@ -52,13 +52,13 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 
 		httpTools = make([]*gen.HTTPToolDefinition, 0, len(definitions))
 		seen := make(map[string]bool, 0)
-		for i, def := range definitions {
+		for _, def := range definitions {
 			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
 				continue
 			}
 			seen[def.HttpToolDefinition.ID.String()] = true
 
-			httpTools[i] = &gen.HTTPToolDefinition{
+			httpTools = append(httpTools, &gen.HTTPToolDefinition{
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
@@ -75,7 +75,7 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 				Schema:              string(def.HttpToolDefinition.Schema),
 				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
-			}
+			})
 		}
 		relevantEnvVars, err = t.GetRelevantEnvironmentVariables(ctx, definitions)
 		if err != nil {
