@@ -1,18 +1,19 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: be84303c25cff68601604bedfa6b4a49
+  docChecksum: 8ff2fe52aaed418b686349fdd0b0f08e
   docVersion: 0.0.1
   speakeasyVersion: 1.542.3
   generationVersion: 2.597.9
-  releaseVersion: 0.9.9
-  configChecksum: 3651a7e83cf1699f6daf6d2152b79a7d
+  releaseVersion: 0.10.0
+  configChecksum: 8f8668cac2906691fd9c51e9ed7ff73a
 features:
   typescript:
     additionalDependencies: 0.1.0
     core: 3.21.7
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
+    downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurity: 2.82.13
@@ -59,10 +60,12 @@ generatedFiles:
   - docs/models/components/evolveresult.md
   - docs/models/components/getdeploymentresult.md
   - docs/models/components/getinstanceresult.md
+  - docs/models/components/getintegrationresult.md
   - docs/models/components/getlatestdeploymentresult.md
   - docs/models/components/httptooldefinition.md
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
+  - docs/models/components/integrationentry.md
   - docs/models/components/key.md
   - docs/models/components/kind.md
   - docs/models/components/listdeploymentresult.md
@@ -73,6 +76,7 @@ generatedFiles:
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
   - docs/models/components/listversionsresult.md
+  - docs/models/components/notmodified.md
   - docs/models/components/openapiv3deploymentasset.md
   - docs/models/components/organizationentry.md
   - docs/models/components/package.md
@@ -85,7 +89,10 @@ generatedFiles:
   - docs/models/components/toolentry.md
   - docs/models/components/toolsetdetails.md
   - docs/models/components/updateenvironmentrequestbody.md
+  - docs/models/components/updatepackageform.md
+  - docs/models/components/updatepackageresult.md
   - docs/models/components/updatetoolsetrequestbody.md
+  - docs/models/components/uploadimageresult.md
   - docs/models/components/uploadopenapiv3result.md
   - docs/models/components/visibility.md
   - docs/models/errors/serviceerror.md
@@ -110,6 +117,7 @@ generatedFiles:
   - docs/models/operations/getinstancesecurityoption2.md
   - docs/models/operations/getlatestdeploymentrequest.md
   - docs/models/operations/gettoolsetrequest.md
+  - docs/models/operations/integrationsnumbergetrequest.md
   - docs/models/operations/listapikeysrequest.md
   - docs/models/operations/listapikeyssecurity.md
   - docs/models/operations/listdeploymentsrequest.md
@@ -126,6 +134,9 @@ generatedFiles:
   - docs/models/operations/publishrequest.md
   - docs/models/operations/revokeapikeyrequest.md
   - docs/models/operations/revokeapikeysecurity.md
+  - docs/models/operations/serveimagerequest.md
+  - docs/models/operations/serveimageresponse.md
+  - docs/models/operations/serveimagesecurity.md
   - docs/models/operations/sessioninforequest.md
   - docs/models/operations/sessioninforesponse.md
   - docs/models/operations/sessioninfosecurity.md
@@ -133,7 +144,10 @@ generatedFiles:
   - docs/models/operations/switchauthscopesresponse.md
   - docs/models/operations/switchauthscopessecurity.md
   - docs/models/operations/updateenvironmentrequest.md
+  - docs/models/operations/updatepackagerequest.md
+  - docs/models/operations/updatepackageresponse.md
   - docs/models/operations/updatetoolsetrequest.md
+  - docs/models/operations/uploadimagerequest.md
   - docs/models/operations/uploadopenapiv3assetrequest.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
@@ -151,6 +165,8 @@ generatedFiles:
   - jsr.json
   - package.json
   - src/core.ts
+  - src/funcs/assetsServeImage.ts
+  - src/funcs/assetsUploadImage.ts
   - src/funcs/assetsUploadOpenAPIv3.ts
   - src/funcs/authCallback.ts
   - src/funcs/authInfo.ts
@@ -167,6 +183,7 @@ generatedFiles:
   - src/funcs/environmentsList.ts
   - src/funcs/environmentsUpdateBySlug.ts
   - src/funcs/instancesGetBySlug.ts
+  - src/funcs/integrationsIntegrationsNumberGet.ts
   - src/funcs/integrationsList.ts
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
@@ -174,6 +191,7 @@ generatedFiles:
   - src/funcs/packagesCreate.ts
   - src/funcs/packagesListVersions.ts
   - src/funcs/packagesPublish.ts
+  - src/funcs/packagesUpdate.ts
   - src/funcs/projectsCreate.ts
   - src/funcs/projectsList.ts
   - src/funcs/toolsList.ts
@@ -225,11 +243,13 @@ generatedFiles:
   - src/models/components/evolveresult.ts
   - src/models/components/getdeploymentresult.ts
   - src/models/components/getinstanceresult.ts
+  - src/models/components/getintegrationresult.ts
   - src/models/components/getlatestdeploymentresult.ts
   - src/models/components/httptooldefinition.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
   - src/models/components/integration.ts
+  - src/models/components/integrationentry.ts
   - src/models/components/key.ts
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
@@ -239,6 +259,7 @@ generatedFiles:
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
   - src/models/components/listversionsresult.ts
+  - src/models/components/notmodified.ts
   - src/models/components/openapiv3deploymentasset.ts
   - src/models/components/organizationentry.ts
   - src/models/components/package.ts
@@ -251,7 +272,10 @@ generatedFiles:
   - src/models/components/toolentry.ts
   - src/models/components/toolsetdetails.ts
   - src/models/components/updateenvironmentrequestbody.ts
+  - src/models/components/updatepackageform.ts
+  - src/models/components/updatepackageresult.ts
   - src/models/components/updatetoolsetrequestbody.ts
+  - src/models/components/uploadimageresult.ts
   - src/models/components/uploadopenapiv3result.ts
   - src/models/errors/apierror.ts
   - src/models/errors/httpclienterrors.ts
@@ -274,6 +298,7 @@ generatedFiles:
   - src/models/operations/getlatestdeployment.ts
   - src/models/operations/gettoolset.ts
   - src/models/operations/index.ts
+  - src/models/operations/integrationsnumberget.ts
   - src/models/operations/listapikeys.ts
   - src/models/operations/listdeployments.ts
   - src/models/operations/listenvironments.ts
@@ -285,10 +310,13 @@ generatedFiles:
   - src/models/operations/logout.ts
   - src/models/operations/publish.ts
   - src/models/operations/revokeapikey.ts
+  - src/models/operations/serveimage.ts
   - src/models/operations/sessioninfo.ts
   - src/models/operations/switchauthscopes.ts
   - src/models/operations/updateenvironment.ts
+  - src/models/operations/updatepackage.ts
   - src/models/operations/updatetoolset.ts
+  - src/models/operations/uploadimage.ts
   - src/models/operations/uploadopenapiv3asset.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
@@ -304,6 +332,7 @@ generatedFiles:
   - src/react-query/evolveDeployment.ts
   - src/react-query/index.ts
   - src/react-query/instance.ts
+  - src/react-query/integrationsIntegrationsNumberGet.ts
   - src/react-query/latestDeployment.ts
   - src/react-query/listAPIKeys.ts
   - src/react-query/listDeployments.ts
@@ -316,11 +345,14 @@ generatedFiles:
   - src/react-query/logout.ts
   - src/react-query/publishPackage.ts
   - src/react-query/revokeAPIKey.ts
+  - src/react-query/serveImage.ts
   - src/react-query/sessionInfo.ts
   - src/react-query/switchScopes.ts
   - src/react-query/toolset.ts
   - src/react-query/updateEnvironment.ts
+  - src/react-query/updatePackage.ts
   - src/react-query/updateToolset.ts
+  - src/react-query/uploadImage.ts
   - src/react-query/uploadOpenAPIv3.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
@@ -505,7 +537,7 @@ examples:
           Content-Length: 342044
       responses:
         "200":
-          application/json: {"asset": {"content_length": 980702, "content_type": "<value>", "created_at": "2023-05-05T02:34:33.347Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-21T22:57:42.919Z", "url": "https://sad-sonar.biz"}}
+          application/json: {"asset": {"content_length": 980702, "content_type": "<value>", "created_at": "2023-05-05T02:34:33.347Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-21T22:57:42.919Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -827,7 +859,7 @@ examples:
   createPackage:
     speakeasy-default-create-package:
       requestBody:
-        application/json: {"name": "<value>"}
+        application/json: {"name": "<value>", "summary": "<value>", "title": "<value>"}
       responses:
         "200":
           application/json: {"package": {"created_at": "2024-06-17T07:14:55.338Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-11-30T17:06:07.804Z"}}
@@ -868,5 +900,52 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  serveImage:
+    speakeasy-default-serve-image:
+      parameters:
+        query:
+          id: "<id>"
+        header: {}
+      responses:
+        "200":
+          application/json: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  uploadImage:
+    speakeasy-default-upload-image:
+      parameters:
+        header:
+          Content-Length: 461855
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 456449, "content_type": "<value>", "created_at": "2024-01-26T17:57:26.765Z", "id": "<id>", "kind": "image", "sha256": "<value>", "updated_at": "2023-07-16T04:21:23.399Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  integrations#get:
+    speakeasy-default-integrations#get:
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updatePackage:
+    speakeasy-default-update-package:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2025-07-28T19:04:48.565Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-10-16T10:52:42.015Z"}}
+        "304":
+          application/json: {"location": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.1
 generatedTests: {}

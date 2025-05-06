@@ -30,14 +30,26 @@ targets:
     gram-public-py:
         target: python
         source: Gram Public
+        output: sdks/python
         publish:
             pypi:
                 token: $pypi_token
-        output: sdks/python
+        codeSamples:
+            registry:
+                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-python-code-samples
+            labelOverride:
+                fixedValue: Python (SDK)
+            blocking: false
     gram-public-ts:
         target: typescript
         source: Gram Public
+        output: sdks/typescript
         publish:
             npm:
                 token: $npm_token
-        output: sdks/typescript
+        codeSamples:
+            registry:
+                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
+            labelOverride:
+                fixedValue: Typescript (SDK)
+            blocking: false

@@ -20,21 +20,18 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { assetsServeImage } from "@gram/client/funcs/assetsServeImage.js";
 import { SDKValidationError } from "@gram/client/models/errors/sdkvalidationerror.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const gram = new GramCore({
-  security: {
-    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  },
-});
+const gram = new GramCore();
 
 async function run() {
-  const res = await assetsUploadOpenAPIv3(gram, {
-    contentLength: 342044,
+  const res = await assetsServeImage(gram, {
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
+    id: "<id>",
   });
 
   switch (true) {

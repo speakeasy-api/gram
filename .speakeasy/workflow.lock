@@ -2,8 +2,8 @@ speakeasyVersion: 1.542.3
 sources:
     Gram Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:78116a81fd594dd8a45e6f3c678a0330d2350904cdfb9d8bc30e75cc72b09ad5
-        sourceBlobDigest: sha256:463bab8c82cae600d6f86a5d7cbd869fec26c523d57acc2adade3f3fc9d9a46b
+        sourceRevisionDigest: sha256:af8b5ae36984bcd64fe7f794f2501791fd6f662b0330ebac579d0df48b933082
+        sourceBlobDigest: sha256:582b9bc867c1e0570dcaf4ac8124c66854b7465851509418c7629c11a6bf006d
         tags:
             - latest
             - 0.0.1
@@ -11,10 +11,10 @@ targets:
     gram-internal:
         source: Gram Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:78116a81fd594dd8a45e6f3c678a0330d2350904cdfb9d8bc30e75cc72b09ad5
-        sourceBlobDigest: sha256:463bab8c82cae600d6f86a5d7cbd869fec26c523d57acc2adade3f3fc9d9a46b
+        sourceRevisionDigest: sha256:af8b5ae36984bcd64fe7f794f2501791fd6f662b0330ebac579d0df48b933082
+        sourceBlobDigest: sha256:582b9bc867c1e0570dcaf4ac8124c66854b7465851509418c7629c11a6bf006d
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:49df9d00ddedabbe3ab551021900699fc325507f5ce2614bc2c66b986d6b31f6
+        codeSamplesRevisionDigest: sha256:c4a735b7721b9c024c9a0d7fd13bc2a10b19905b756fa193cc023239bc1a9bda
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest
@@ -52,6 +52,12 @@ workflow:
             publish:
                 pypi:
                     token: $pypi_token
+            codeSamples:
+                registry:
+                    location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-python-code-samples
+                labelOverride:
+                    fixedValue: Python (SDK)
+                blocking: false
         gram-public-ts:
             target: typescript
             source: Gram Public
@@ -59,3 +65,9 @@ workflow:
             publish:
                 npm:
                     token: $npm_token
+            codeSamples:
+                registry:
+                    location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
+                labelOverride:
+                    fixedValue: Typescript (SDK)
+                blocking: false

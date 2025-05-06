@@ -105,18 +105,14 @@ For supported JavaScript runtimes, please consult [RUNTIMES.md](RUNTIMES.md).
 ```typescript
 import { Gram } from "@gram/client";
 
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
-});
+const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 342044,
+  const result = await gram.assets.serveImage({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  }, {
+    id: "<id>",
   });
 
   // Handle the result
@@ -154,8 +150,8 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 342044,
+  const result = await gram.assets.uploadImage({
+    contentLength: 461855,
   });
 
   // Handle the result
@@ -175,9 +171,11 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.info({
+  const result = await gram.assets.serveImage({
     sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
       ?? "",
+  }, {
+    id: "<id>",
   });
 
   // Handle the result
@@ -197,6 +195,8 @@ run();
 
 ### [assets](docs/sdks/assets/README.md)
 
+* [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
+* [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
 ### [auth](docs/sdks/auth/README.md)
@@ -229,6 +229,7 @@ run();
 
 ### [integrations](docs/sdks/integrations/README.md)
 
+* [integrationsNumberGet](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 * [list](docs/sdks/integrations/README.md#list) - list integrations
 
 ### [keys](docs/sdks/keys/README.md)
@@ -242,6 +243,7 @@ run();
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
 * [listVersions](docs/sdks/packages/README.md#listversions) - listVersions packages
 * [publish](docs/sdks/packages/README.md#publish) - publish packages
+* [update](docs/sdks/packages/README.md#update) - updatePackage packages
 
 ### [projects](docs/sdks/projects/README.md)
 
@@ -278,6 +280,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
+- [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
 - [`authInfo`](docs/sdks/auth/README.md#info) - info auth
@@ -294,6 +298,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
+- [`integrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`integrationsList`](docs/sdks/integrations/README.md#list) - list integrations
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
@@ -301,6 +306,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`packagesPublish`](docs/sdks/packages/README.md#publish) - publish packages
+- [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
@@ -346,6 +352,7 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
+- [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
@@ -358,11 +365,14 @@ To learn about this feature and how to get started, check
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
 </details>
@@ -377,18 +387,14 @@ To change the default retry strategy for a single API call, simply provide a ret
 ```typescript
 import { Gram } from "@gram/client";
 
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
-});
+const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 342044,
+  const result = await gram.assets.serveImage({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  }, {
+    id: "<id>",
   }, {
     retries: {
       strategy: "backoff",
@@ -425,17 +431,14 @@ const gram = new Gram({
     },
     retryConnectionErrors: false,
   },
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
 });
 
 async function run() {
-  const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 342044,
+  const result = await gram.assets.serveImage({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  }, {
+    id: "<id>",
   });
 
   // Handle the result
@@ -450,7 +453,7 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `uploadOpenAPIv3` method may throw the following errors:
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `serveImage` method may throw the following errors:
 
 | Error Type          | Status Code                       | Content Type     |
 | ------------------- | --------------------------------- | ---------------- |
@@ -464,20 +467,16 @@ If the method throws an error and it is not captured by the known errors, it wil
 import { Gram } from "@gram/client";
 import { SDKValidationError, ServiceError } from "@gram/client/models/errors";
 
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
-});
+const gram = new Gram();
 
 async function run() {
   let result;
   try {
-    result = await gram.assets.uploadOpenAPIv3({
-      contentLength: 342044,
+    result = await gram.assets.serveImage({
+      sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+        ?? "",
+    }, {
+      id: "<id>",
     });
 
     // Handle the result
@@ -538,17 +537,14 @@ import { Gram } from "@gram/client";
 
 const gram = new Gram({
   serverURL: "http://localhost:80",
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
 });
 
 async function run() {
-  const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 342044,
+  const result = await gram.assets.serveImage({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  }, {
+    id: "<id>",
   });
 
   // Handle the result

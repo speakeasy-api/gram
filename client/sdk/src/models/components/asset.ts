@@ -11,6 +11,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export const Kind = {
   Openapiv3: "openapiv3",
+  Image: "image",
   Unknown: "unknown",
 } as const;
 export type Kind = ClosedEnum<typeof Kind>;
@@ -41,10 +42,6 @@ export type Asset = {
    * The last update date of the asset.
    */
   updatedAt: Date;
-  /**
-   * The URL to the uploaded asset
-   */
-  url: string;
 };
 
 /** @internal */
@@ -81,7 +78,6 @@ export const Asset$inboundSchema: z.ZodType<Asset, z.ZodTypeDef, unknown> = z
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
-    url: z.string(),
   }).transform((v) => {
     return remap$(v, {
       "content_length": "contentLength",
@@ -100,7 +96,6 @@ export type Asset$Outbound = {
   kind: string;
   sha256: string;
   updated_at: string;
-  url: string;
 };
 
 /** @internal */
@@ -116,7 +111,6 @@ export const Asset$outboundSchema: z.ZodType<
   kind: Kind$outboundSchema,
   sha256: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
-  url: z.string(),
 }).transform((v) => {
   return remap$(v, {
     contentLength: "content_length",

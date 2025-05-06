@@ -10,10 +10,9 @@ let value: Asset = {
   contentType: "<value>",
   createdAt: new Date("2025-11-12T07:39:23.206Z"),
   id: "<id>",
-  kind: "openapiv3",
+  kind: "image",
   sha256: "<value>",
   updatedAt: new Date("2023-04-08T11:11:06.209Z"),
-  url: "https://wretched-humor.biz",
 };
 ```
 
@@ -28,4 +27,3 @@ let value: Asset = {
 | `kind`                                                                                        | [components.Kind](../../models/components/kind.md)                                            | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `sha256`                                                                                      | *string*                                                                                      | :heavy_check_mark:                                                                            | The SHA256 hash of the asset                                                                  |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The last update date of the asset.                                                            |
-| `url`                                                                                         | *string*                                                                                      | :heavy_check_mark:                                                                            | The URL to the uploaded asset                                                                 |

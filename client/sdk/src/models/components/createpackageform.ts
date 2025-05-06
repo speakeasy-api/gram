@@ -3,11 +3,20 @@
  */
 
 import * as z from "zod";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type CreatePackageForm = {
+  /**
+   * The description of the package. Limited markdown syntax is supported.
+   */
+  description?: string | undefined;
+  /**
+   * The asset ID of the image to show for this package
+   */
+  imageAssetId?: string | undefined;
   /**
    * The keywords of the package
    */
@@ -19,11 +28,15 @@ export type CreatePackageForm = {
   /**
    * The summary of the package
    */
-  summary?: string | undefined;
+  summary: string;
   /**
    * The title of the package
    */
-  title?: string | undefined;
+  title: string;
+  /**
+   * External URL for the package owner
+   */
+  url?: string | undefined;
 };
 
 /** @internal */
@@ -32,18 +45,28 @@ export const CreatePackageForm$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  description: z.string().optional(),
+  image_asset_id: z.string().optional(),
   keywords: z.array(z.string()).optional(),
   name: z.string(),
-  summary: z.string().optional(),
-  title: z.string().optional(),
+  summary: z.string(),
+  title: z.string(),
+  url: z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "image_asset_id": "imageAssetId",
+  });
 });
 
 /** @internal */
 export type CreatePackageForm$Outbound = {
+  description?: string | undefined;
+  image_asset_id?: string | undefined;
   keywords?: Array<string> | undefined;
   name: string;
-  summary?: string | undefined;
-  title?: string | undefined;
+  summary: string;
+  title: string;
+  url?: string | undefined;
 };
 
 /** @internal */
@@ -52,10 +75,17 @@ export const CreatePackageForm$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreatePackageForm
 > = z.object({
+  description: z.string().optional(),
+  imageAssetId: z.string().optional(),
   keywords: z.array(z.string()).optional(),
   name: z.string(),
-  summary: z.string().optional(),
-  title: z.string().optional(),
+  summary: z.string(),
+  title: z.string(),
+  url: z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    imageAssetId: "image_asset_id",
+  });
 });
 
 /**

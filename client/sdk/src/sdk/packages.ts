@@ -5,6 +5,7 @@
 import { packagesCreate } from "../funcs/packagesCreate.js";
 import { packagesListVersions } from "../funcs/packagesListVersions.js";
 import { packagesPublish } from "../funcs/packagesPublish.js";
+import { packagesUpdate } from "../funcs/packagesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -56,6 +57,23 @@ export class Packages extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.PublishPackageResult> {
     return unwrapAsync(packagesPublish(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * updatePackage packages
+   *
+   * @remarks
+   * Update package details.
+   */
+  async update(
+    request: operations.UpdatePackageRequest,
+    options?: RequestOptions,
+  ): Promise<operations.UpdatePackageResponse> {
+    return unwrapAsync(packagesUpdate(
       this,
       request,
       options,

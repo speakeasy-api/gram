@@ -22,12 +22,7 @@ import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
 
 const queryClient = new QueryClient();
-const gram = new GramCore({
-  security: {
-    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  },
-});
+const gram = new GramCore();
 
 // Retries are handled by the underlying SDK.
 queryClient.setQueryDefaults(["@gram/client"], { retry: false });
@@ -53,11 +48,13 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useAuthCallback } from "@gram/client/react-query/authCallback.js";
+import { useServeImage } from "@gram/client/react-query/assetsServeImage.js";
 
 export function Example() {
-  const { data, error, status } = useAuthCallback({
-    idToken: "<value>",
+  const { data, error, status } = useServeImage({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
+    id: "<id>",
   });
 
   // Render the UI here...
@@ -71,13 +68,15 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useAuthCallback } from "@gram/client/react-query/authCallback.js";
+import { useServeImage } from "@gram/client/react-query/assetsServeImage.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useAuthCallback(
+  const { data, error, status } = useServeImage(
     {
-      idToken: "<value>",
+      sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+    }, {
+      id: "<id>",
     },
     {
       // TanStack Query options:
@@ -115,10 +114,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsUploadOpenAPIv3.js";
+import { useUploadImageMutation } from "@gram/client/react-query/assetsUploadImage.js";
 
 export function Example() {
-  const { mutate, status } = useUploadOpenAPIv3Mutation();
+  const { mutate, status } = useUploadImageMutation();
 
   return (
     <form
@@ -128,7 +127,7 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          contentLength: 342044,
+          contentLength: 461855,
         });
       }}
     >
@@ -145,10 +144,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUploadOpenAPIv3Mutation } from "@gram/client/react-query/assetsUploadOpenAPIv3.js";
+import { useUploadImageMutation } from "@gram/client/react-query/assetsUploadImage.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useUploadOpenAPIv3Mutation({
+  const { mutate, status } = useUploadImageMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -180,7 +179,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateAuthCallback, invalidateAllAuthCallback } from "@gram/client/react-query/authCallback.js";
+import { invalidateServeImage, invalidateAllServeImage } from "@gram/client/react-query/assetsServeImage.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/client/react-query/example.js";
 
@@ -198,9 +197,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateAuthCallback(queryClient, /* ... arguments ... */);
+            invalidateServeImage(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllAuthCallback(queryClient);
+            invalidateAllServeImage(queryClient);
           },
         });
       }}
@@ -228,15 +227,10 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
-import { useAuthCallbackSuspense } from "@gram/client/react-query/authCallback.js";
+import { useServeImageSuspense } from "@gram/client/react-query/assetsServeImage.js";
 
 const queryClient = new QueryClient();
-const gram = new GramCore({
-  security: {
-    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  },
-});
+const gram = new GramCore();
 
 export function App() {
   return (
@@ -266,8 +260,10 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useAuthCallbackSuspense({
-    idToken: "<value>",
+  const { data } = useServeImageSuspense({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
+    id: "<id>",
   });
 
   // Render the UI here...
@@ -288,19 +284,16 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/client";
-import { prefetchAuthCallback } from "@gram/client/react-query/authCallback.js";
+import { prefetchServeImage } from "@gram/client/react-query/assetsServeImage.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
-  const gram = new GramCore({
-    security: {
-      projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-      sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-    },
-  });
+  const gram = new GramCore();
 
-  await prefetchAuthCallback(queryClient, gram, {
-    idToken: "<value>",
+  await prefetchServeImage(queryClient, gram, {
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
+  }, {
+    id: "<id>",
   });
 
   return (

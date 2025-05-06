@@ -7,17 +7,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  Integration,
-  Integration$inboundSchema,
-  Integration$Outbound,
-  Integration$outboundSchema,
-} from "./integration.js";
+  IntegrationEntry,
+  IntegrationEntry$inboundSchema,
+  IntegrationEntry$Outbound,
+  IntegrationEntry$outboundSchema,
+} from "./integrationentry.js";
 
 export type ListIntegrationsResult = {
   /**
    * List of available third-party integrations
    */
-  integrations?: Array<Integration> | undefined;
+  integrations?: Array<IntegrationEntry> | undefined;
 };
 
 /** @internal */
@@ -26,12 +26,12 @@ export const ListIntegrationsResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  integrations: z.array(Integration$inboundSchema).optional(),
+  integrations: z.array(IntegrationEntry$inboundSchema).optional(),
 });
 
 /** @internal */
 export type ListIntegrationsResult$Outbound = {
-  integrations?: Array<Integration$Outbound> | undefined;
+  integrations?: Array<IntegrationEntry$Outbound> | undefined;
 };
 
 /** @internal */
@@ -40,7 +40,7 @@ export const ListIntegrationsResult$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListIntegrationsResult
 > = z.object({
-  integrations: z.array(Integration$outboundSchema).optional(),
+  integrations: z.array(IntegrationEntry$outboundSchema).optional(),
 });
 
 /**

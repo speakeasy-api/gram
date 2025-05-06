@@ -18,9 +18,21 @@ export type Package = {
    */
   deletedAt?: Date | undefined;
   /**
+   * The description of the package. This contains HTML content.
+   */
+  description?: string | undefined;
+  /**
+   * The unsanitized, user-supplied description of the package. Limited markdown syntax is supported.
+   */
+  descriptionRaw?: string | undefined;
+  /**
    * The ID of the package
    */
   id: string;
+  /**
+   * The asset ID of the image to show for this package
+   */
+  imageAssetId?: string | undefined;
   /**
    * The keywords of the package
    */
@@ -53,6 +65,10 @@ export type Package = {
    * The last update date of the package
    */
   updatedAt: Date;
+  /**
+   * External URL for the package owner
+   */
+  url?: string | undefined;
 };
 
 /** @internal */
@@ -64,7 +80,10 @@ export const Package$inboundSchema: z.ZodType<Package, z.ZodTypeDef, unknown> =
     deleted_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ).optional(),
+    description: z.string().optional(),
+    description_raw: z.string().optional(),
     id: z.string(),
+    image_asset_id: z.string().optional(),
     keywords: z.array(z.string()).optional(),
     latest_version: z.string().optional(),
     name: z.string(),
@@ -75,10 +94,13 @@ export const Package$inboundSchema: z.ZodType<Package, z.ZodTypeDef, unknown> =
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
+    url: z.string().optional(),
   }).transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
       "deleted_at": "deletedAt",
+      "description_raw": "descriptionRaw",
+      "image_asset_id": "imageAssetId",
       "latest_version": "latestVersion",
       "organization_id": "organizationId",
       "project_id": "projectId",
@@ -90,7 +112,10 @@ export const Package$inboundSchema: z.ZodType<Package, z.ZodTypeDef, unknown> =
 export type Package$Outbound = {
   created_at: string;
   deleted_at?: string | undefined;
+  description?: string | undefined;
+  description_raw?: string | undefined;
   id: string;
+  image_asset_id?: string | undefined;
   keywords?: Array<string> | undefined;
   latest_version?: string | undefined;
   name: string;
@@ -99,6 +124,7 @@ export type Package$Outbound = {
   summary?: string | undefined;
   title?: string | undefined;
   updated_at: string;
+  url?: string | undefined;
 };
 
 /** @internal */
@@ -109,7 +135,10 @@ export const Package$outboundSchema: z.ZodType<
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
   deletedAt: z.date().transform(v => v.toISOString()).optional(),
+  description: z.string().optional(),
+  descriptionRaw: z.string().optional(),
   id: z.string(),
+  imageAssetId: z.string().optional(),
   keywords: z.array(z.string()).optional(),
   latestVersion: z.string().optional(),
   name: z.string(),
@@ -118,10 +147,13 @@ export const Package$outboundSchema: z.ZodType<
   summary: z.string().optional(),
   title: z.string().optional(),
   updatedAt: z.date().transform(v => v.toISOString()),
+  url: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
     deletedAt: "deleted_at",
+    descriptionRaw: "description_raw",
+    imageAssetId: "image_asset_id",
     latestVersion: "latest_version",
     organizationId: "organization_id",
     projectId: "project_id",

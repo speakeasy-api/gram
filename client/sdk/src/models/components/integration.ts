@@ -9,11 +9,15 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type Integration = {
+  packageDescription?: string | undefined;
+  packageDescriptionRaw?: string | undefined;
   packageId: string;
+  packageImageAssetId?: string | undefined;
   packageKeywords?: Array<string> | undefined;
   packageName: string;
-  packageSummary?: string | undefined;
-  packageTitle?: string | undefined;
+  packageSummary: string;
+  packageTitle: string;
+  packageUrl?: string | undefined;
   toolCount: number;
   version: string;
   versionCreatedAt: Date;
@@ -25,11 +29,15 @@ export const Integration$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  package_description: z.string().optional(),
+  package_description_raw: z.string().optional(),
   package_id: z.string(),
+  package_image_asset_id: z.string().optional(),
   package_keywords: z.array(z.string()).optional(),
   package_name: z.string(),
-  package_summary: z.string().optional(),
-  package_title: z.string().optional(),
+  package_summary: z.string(),
+  package_title: z.string(),
+  package_url: z.string().optional(),
   tool_count: z.number().int(),
   version: z.string(),
   version_created_at: z.string().datetime({ offset: true }).transform(v =>
@@ -37,11 +45,15 @@ export const Integration$inboundSchema: z.ZodType<
   ),
 }).transform((v) => {
   return remap$(v, {
+    "package_description": "packageDescription",
+    "package_description_raw": "packageDescriptionRaw",
     "package_id": "packageId",
+    "package_image_asset_id": "packageImageAssetId",
     "package_keywords": "packageKeywords",
     "package_name": "packageName",
     "package_summary": "packageSummary",
     "package_title": "packageTitle",
+    "package_url": "packageUrl",
     "tool_count": "toolCount",
     "version_created_at": "versionCreatedAt",
   });
@@ -49,11 +61,15 @@ export const Integration$inboundSchema: z.ZodType<
 
 /** @internal */
 export type Integration$Outbound = {
+  package_description?: string | undefined;
+  package_description_raw?: string | undefined;
   package_id: string;
+  package_image_asset_id?: string | undefined;
   package_keywords?: Array<string> | undefined;
   package_name: string;
-  package_summary?: string | undefined;
-  package_title?: string | undefined;
+  package_summary: string;
+  package_title: string;
+  package_url?: string | undefined;
   tool_count: number;
   version: string;
   version_created_at: string;
@@ -65,21 +81,29 @@ export const Integration$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   Integration
 > = z.object({
+  packageDescription: z.string().optional(),
+  packageDescriptionRaw: z.string().optional(),
   packageId: z.string(),
+  packageImageAssetId: z.string().optional(),
   packageKeywords: z.array(z.string()).optional(),
   packageName: z.string(),
-  packageSummary: z.string().optional(),
-  packageTitle: z.string().optional(),
+  packageSummary: z.string(),
+  packageTitle: z.string(),
+  packageUrl: z.string().optional(),
   toolCount: z.number().int(),
   version: z.string(),
   versionCreatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
+    packageDescription: "package_description",
+    packageDescriptionRaw: "package_description_raw",
     packageId: "package_id",
+    packageImageAssetId: "package_image_asset_id",
     packageKeywords: "package_keywords",
     packageName: "package_name",
     packageSummary: "package_summary",
     packageTitle: "package_title",
+    packageUrl: "package_url",
     toolCount: "tool_count",
     versionCreatedAt: "version_created_at",
   });

@@ -2,18 +2,14 @@
 ```typescript
 import { Gram } from "@gram/client";
 
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
-});
+const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 342044,
+  const result = await gram.assets.serveImage({
+    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
+      ?? "",
+  }, {
+    id: "<id>",
   });
 
   // Handle the result

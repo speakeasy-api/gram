@@ -8,7 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { useIsAdmin } from "@/contexts/Auth";
 import { Button } from "@/components/ui/button";
-import { Integration } from "@gram/client/models/components";
+import { IntegrationEntry } from "@gram/client/models/components";
 import { Card, Cards } from "@/components/ui/card";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
@@ -133,7 +133,11 @@ function CreateIntegrationDialog({
   );
 }
 
-export function IntegrationCard({ integration }: { integration: Integration }) {
+export function IntegrationCard({
+  integration,
+}: {
+  integration: IntegrationEntry;
+}) {
   const { data: deployment, refetch } = useLatestDeployment();
   const client = useSdkClient();
 

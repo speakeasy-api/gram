@@ -11,5 +11,5 @@ let value: Kind = "openapiv3";
 ## Values
 
 ```typescript
-"openapiv3" | "unknown"
+"openapiv3" | "image" | "unknown"
 ```

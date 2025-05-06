@@ -11,10 +11,9 @@ let value: UploadOpenAPIv3Result = {
     contentType: "<value>",
     createdAt: new Date("2025-07-18T05:10:44.635Z"),
     id: "<id>",
-    kind: "unknown",
+    kind: "image",
     sha256: "<value>",
     updatedAt: new Date("2023-11-05T23:49:28.974Z"),
-    url: "https://scented-safe.com/",
   },
 };
 ```
