@@ -59,6 +59,8 @@ type CreatePackagePayload struct {
 	Title string
 	// The summary of the package
 	Summary string
+	// External URL for the package owner
+	URL *string
 	// The keywords of the package
 	Keywords []string
 	// The asset ID of the image to show for this package
@@ -103,6 +105,8 @@ type Package struct {
 	Summary *string
 	// The keywords of the package
 	Keywords []string
+	// External URL for the package owner
+	URL *string
 	// The asset ID of the image to show for this package
 	ImageAssetID *string
 	// The latest version of the package
@@ -164,6 +168,8 @@ type UpdatePackagePayload struct {
 	Title *string
 	// The summary of the package
 	Summary *string
+	// External URL for the package owner
+	URL *string
 	// The keywords of the package
 	Keywords []string
 	// The asset ID of the image to show for this package

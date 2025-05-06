@@ -187,6 +187,7 @@ type IntegrationResponseBody struct {
 	PackageName         string   `form:"package_name" json:"package_name" xml:"package_name"`
 	PackageTitle        *string  `form:"package_title,omitempty" json:"package_title,omitempty" xml:"package_title,omitempty"`
 	PackageSummary      *string  `form:"package_summary,omitempty" json:"package_summary,omitempty" xml:"package_summary,omitempty"`
+	PackageURL          *string  `form:"package_url,omitempty" json:"package_url,omitempty" xml:"package_url,omitempty"`
 	PackageKeywords     []string `form:"package_keywords,omitempty" json:"package_keywords,omitempty" xml:"package_keywords,omitempty"`
 	PackageImageAssetID *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
 	Version             string   `form:"version" json:"version" xml:"version"`

@@ -21,6 +21,8 @@ type CreatePackageRequestBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// The summary of the package
 	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// External URL for the package owner
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
 	// The asset ID of the image to show for this package
@@ -36,6 +38,8 @@ type UpdatePackageRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// External URL for the package owner
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
 	// The asset ID of the image to show for this package
@@ -761,6 +765,8 @@ type PackageResponseBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// External URL for the package owner
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The asset ID of the image to show for this package
 	ImageAssetID *string `form:"image_asset_id,omitempty" json:"image_asset_id,omitempty" xml:"image_asset_id,omitempty"`
 	// The latest version of the package
@@ -796,6 +802,7 @@ func NewCreatePackageRequestBody(p *packages.CreatePackagePayload) *CreatePackag
 		Name:         p.Name,
 		Title:        p.Title,
 		Summary:      p.Summary,
+		URL:          p.URL,
 		ImageAssetID: p.ImageAssetID,
 	}
 	if p.Keywords != nil {
@@ -814,6 +821,7 @@ func NewUpdatePackageRequestBody(p *packages.UpdatePackagePayload) *UpdatePackag
 		ID:           p.ID,
 		Title:        p.Title,
 		Summary:      p.Summary,
+		URL:          p.URL,
 		ImageAssetID: p.ImageAssetID,
 	}
 	if p.Keywords != nil {

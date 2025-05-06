@@ -23,6 +23,8 @@ type CreatePackageRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// External URL for the package owner
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
 	// The asset ID of the image to show for this package
@@ -38,6 +40,8 @@ type UpdatePackageRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// The summary of the package
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// External URL for the package owner
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
 	// The asset ID of the image to show for this package
@@ -763,6 +767,8 @@ type PackageResponseBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// External URL for the package owner
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The asset ID of the image to show for this package
 	ImageAssetID *string `form:"image_asset_id,omitempty" json:"image_asset_id,omitempty" xml:"image_asset_id,omitempty"`
 	// The latest version of the package
@@ -1362,6 +1368,7 @@ func NewCreatePackagePayload(body *CreatePackageRequestBody, sessionToken *strin
 		Name:         *body.Name,
 		Title:        *body.Title,
 		Summary:      *body.Summary,
+		URL:          body.URL,
 		ImageAssetID: body.ImageAssetID,
 	}
 	if body.Keywords != nil {
@@ -1383,6 +1390,7 @@ func NewUpdatePackagePayload(body *UpdatePackageRequestBody, sessionToken *strin
 		ID:           *body.ID,
 		Title:        body.Title,
 		Summary:      body.Summary,
+		URL:          body.URL,
 		ImageAssetID: body.ImageAssetID,
 	}
 	if body.Keywords != nil {
@@ -1452,6 +1460,11 @@ func ValidateCreatePackageRequestBody(body *CreatePackageRequestBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 80, false))
 		}
 	}
+	if body.URL != nil {
+		if utf8.RuneCountInString(*body.URL) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", *body.URL, utf8.RuneCountInString(*body.URL), 100, false))
+		}
+	}
 	if len(body.Keywords) > 5 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.keywords", body.Keywords, len(body.Keywords), 5, false))
 	}
@@ -1482,6 +1495,11 @@ func ValidateUpdatePackageRequestBody(body *UpdatePackageRequestBody) (err error
 	if body.Summary != nil {
 		if utf8.RuneCountInString(*body.Summary) > 80 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 80, false))
+		}
+	}
+	if body.URL != nil {
+		if utf8.RuneCountInString(*body.URL) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", *body.URL, utf8.RuneCountInString(*body.URL), 100, false))
 		}
 	}
 	if len(body.Keywords) > 5 {

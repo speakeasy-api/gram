@@ -17,12 +17,13 @@ INSERT INTO packages (
     name
   , title
   , summary
+  , url
   , keywords
   , organization_id
   , project_id
   , image_asset_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id
 `
 
@@ -30,6 +31,7 @@ type CreatePackageParams struct {
 	Name           string
 	Title          pgtype.Text
 	Summary        pgtype.Text
+	Url            pgtype.Text
 	Keywords       []string
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -41,6 +43,7 @@ func (q *Queries) CreatePackage(ctx context.Context, arg CreatePackageParams) (u
 		arg.Name,
 		arg.Title,
 		arg.Summary,
+		arg.Url,
 		arg.Keywords,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -137,7 +140,7 @@ latest_version as (
   LIMIT 1
 )
 SELECT
-    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.image_asset_id, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
+    packages.id, packages.name, packages.title, packages.summary, packages.url, packages.keywords, packages.image_asset_id, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
   , latest_version.id as version_id
   , latest_version.deployment_id as version_deployment_id
   , latest_version.major as version_major
@@ -177,6 +180,7 @@ func (q *Queries) GetPackageWithLatestVersion(ctx context.Context, arg GetPackag
 		&i.Package.Name,
 		&i.Package.Title,
 		&i.Package.Summary,
+		&i.Package.Url,
 		&i.Package.Keywords,
 		&i.Package.ImageAssetID,
 		&i.Package.OrganizationID,
@@ -258,7 +262,7 @@ WITH package_id_lookup as (
   LIMIT 1
 )
 SELECT 
-    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.image_asset_id, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
+    packages.id, packages.name, packages.title, packages.summary, packages.url, packages.keywords, packages.image_asset_id, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
   , pv.id as version_id
   , pv.deployment_id as version_deployment_id
   , pv.major as version_major
@@ -306,6 +310,7 @@ func (q *Queries) ListVersions(ctx context.Context, arg ListVersionsParams) ([]L
 			&i.Package.Name,
 			&i.Package.Title,
 			&i.Package.Summary,
+			&i.Package.Url,
 			&i.Package.Keywords,
 			&i.Package.ImageAssetID,
 			&i.Package.OrganizationID,
@@ -424,9 +429,10 @@ SET
     title = coalesce($1, title)
   , summary = coalesce($2, summary)
   , keywords = coalesce($3, keywords)
-  , image_asset_id = coalesce($4, image_asset_id)
+  , url = coalesce($4, url)
+  , image_asset_id = coalesce($5, image_asset_id)
   , updated_at = clock_timestamp()
-WHERE id = $5 AND project_id = $6
+WHERE id = $6 AND project_id = $7
 RETURNING id
 `
 
@@ -434,6 +440,7 @@ type UpdatePackageParams struct {
 	Title        pgtype.Text
 	Summary      pgtype.Text
 	Keywords     []string
+	Url          pgtype.Text
 	ImageAssetID uuid.NullUUID
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
@@ -444,6 +451,7 @@ func (q *Queries) UpdatePackage(ctx context.Context, arg UpdatePackageParams) (u
 		arg.Title,
 		arg.Summary,
 		arg.Keywords,
+		arg.Url,
 		arg.ImageAssetID,
 		arg.ID,
 		arg.ProjectID,

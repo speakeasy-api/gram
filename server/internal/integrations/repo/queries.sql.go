@@ -18,6 +18,7 @@ SELECT
   p.name AS package_name,
   p.title AS package_title,
   p.summary AS package_summary,
+  p.url AS package_url,
   p.keywords AS package_keywords,
   p.image_asset_id AS package_image_asset_id,
   lv.major AS version_major,
@@ -53,6 +54,7 @@ type ListIntegrationsRow struct {
 	PackageName         string
 	PackageTitle        pgtype.Text
 	PackageSummary      pgtype.Text
+	PackageUrl          pgtype.Text
 	PackageKeywords     []string
 	PackageImageAssetID uuid.NullUUID
 	VersionMajor        int64
@@ -78,6 +80,7 @@ func (q *Queries) ListIntegrations(ctx context.Context) ([]ListIntegrationsRow, 
 			&i.PackageName,
 			&i.PackageTitle,
 			&i.PackageSummary,
+			&i.PackageUrl,
 			&i.PackageKeywords,
 			&i.PackageImageAssetID,
 			&i.VersionMajor,

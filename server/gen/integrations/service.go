@@ -47,6 +47,7 @@ type Integration struct {
 	PackageName         string
 	PackageTitle        *string
 	PackageSummary      *string
+	PackageURL          *string
 	PackageKeywords     []string
 	PackageImageAssetID *string
 	Version             string

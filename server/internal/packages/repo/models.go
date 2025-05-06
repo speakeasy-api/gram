@@ -14,6 +14,7 @@ type Package struct {
 	Name           string
 	Title          pgtype.Text
 	Summary        pgtype.Text
+	Url            pgtype.Text
 	Keywords       []string
 	ImageAssetID   uuid.NullUUID
 	OrganizationID string

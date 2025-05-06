@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS packages (
   
   title TEXT CHECK (title <> '' AND CHAR_LENGTH(title) <= 100),
   summary TEXT CHECK (summary <> '' AND CHAR_LENGTH(summary) <= 80),
+  url TEXT CHECK (url <> '' AND CHAR_LENGTH(url) <= 200),
   keywords TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(keywords, 1) <= 8),
   image_asset_id uuid,
   organization_id TEXT NOT NULL,

@@ -14,6 +14,7 @@ var ProjectPackage = Type("Package", func() {
 	Attribute("title", String, "The title of the package")
 	Attribute("summary", String, "The summary of the package")
 	Attribute("keywords", ArrayOf(String), "The keywords of the package")
+	Attribute("url", String, "External URL for the package owner")
 	Attribute("image_asset_id", String, "The asset ID of the image to show for this package")
 	Attribute("latest_version", String, "The latest version of the package")
 	Attribute("created_at", String, "The creation date of the package", func() {

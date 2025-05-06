@@ -3266,6 +3266,10 @@ components:
                     type: string
                     description: The title of the package
                     maxLength: 100
+                url:
+                    type: string
+                    description: External URL for the package owner
+                    maxLength: 100
             required:
                 - name
                 - title
@@ -3832,6 +3836,8 @@ components:
                     type: string
                 package_title:
                     type: string
+                package_url:
+                    type: string
                 tool_count:
                     type: integer
                     format: int64
@@ -4102,6 +4108,9 @@ components:
                     type: string
                     description: The last update date of the package
                     format: date-time
+                url:
+                    type: string
+                    description: External URL for the package owner
             required:
                 - id
                 - name
@@ -4407,6 +4416,10 @@ components:
                 title:
                     type: string
                     description: The title of the package
+                    maxLength: 100
+                url:
+                    type: string
+                    description: External URL for the package owner
                     maxLength: 100
             required:
                 - id

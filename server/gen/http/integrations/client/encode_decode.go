@@ -253,6 +253,7 @@ func unmarshalIntegrationResponseBodyToIntegrationsIntegration(v *IntegrationRes
 		PackageName:         *v.PackageName,
 		PackageTitle:        v.PackageTitle,
 		PackageSummary:      v.PackageSummary,
+		PackageURL:          v.PackageURL,
 		PackageImageAssetID: v.PackageImageAssetID,
 		Version:             *v.Version,
 		VersionCreatedAt:    *v.VersionCreatedAt,

@@ -132,6 +132,9 @@ var UpdatePackageForm = Type("UpdatePackageForm", func() {
 	Attribute("summary", String, "The summary of the package", func() {
 		MaxLength(80)
 	})
+	Attribute("url", String, "External URL for the package owner", func() {
+		MaxLength(100)
+	})
 	Attribute("keywords", ArrayOf(String), "The keywords of the package", func() {
 		MaxLength(5)
 	})
@@ -159,6 +162,9 @@ var CreatePackageForm = Type("CreatePackageForm", func() {
 	})
 	Attribute("summary", String, "The summary of the package", func() {
 		MaxLength(80)
+	})
+	Attribute("url", String, "External URL for the package owner", func() {
+		MaxLength(100)
 	})
 	Attribute("keywords", ArrayOf(String), "The keywords of the package", func() {
 		MaxLength(5)

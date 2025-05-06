@@ -79,21 +79,23 @@ INSERT INTO packages (
     name
   , title
   , summary
+  , url
   , keywords
   , organization_id
   , project_id
   , image_asset_id
 )
-VALUES (@name, @title, @summary, @keywords, @organization_id, @project_id, @image_asset_id)
+VALUES (@name, @title, @summary, @url, @keywords, @organization_id, @project_id, @image_asset_id)
 RETURNING id;
 
 -- name: UpdatePackage :one
 UPDATE packages
 SET
-    title = coalesce(@title, title)
-  , summary = coalesce(@summary, summary)
-  , keywords = coalesce(@keywords, keywords)
-  , image_asset_id = coalesce(@image_asset_id, image_asset_id)
+    title = coalesce(sqlc.narg(title), title)
+  , summary = coalesce(sqlc.narg(summary), summary)
+  , keywords = coalesce(sqlc.narg(keywords), keywords)
+  , url = coalesce(sqlc.narg(url), url)
+  , image_asset_id = coalesce(sqlc.narg(image_asset_id), image_asset_id)
   , updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id
 RETURNING id;

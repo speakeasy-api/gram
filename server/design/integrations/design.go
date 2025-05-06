@@ -56,6 +56,7 @@ var Integration = Type("Integration", func() {
 	Attribute("package_name", String)
 	Attribute("package_title", String)
 	Attribute("package_summary", String)
+	Attribute("package_url", String)
 	Attribute("package_keywords", ArrayOf(String))
 	Attribute("package_image_asset_id", String)
 	Attribute("version", String)

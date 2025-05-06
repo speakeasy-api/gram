@@ -1,6 +1,7 @@
-h1:ql/IAKEdbKE8WwAqrVoWUf/UenXAmEoakku3Pvzy0/k=
+h1:SbrvTIY8feUXhnaoxgAXbe3EaWh/z50eyq7CQs8qXic=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
 20250502184009_toolset_names_can_be_null.sql h1:mC50amaapCF6EfAzQqumWGLiFuGCfkXZ+pnpUwSJ/hg=
 20250506120944_packages-add-image.sql h1:6g7+QonXpw7fzK7d0vDc/Q9G/Ak5U40NBPSIMXkqcEQ=
+20250506141139_packages-url-column.sql h1:lR2EDs/c/yE3KcNXbeSy/7x9KiZkLlZUlePnNN1M6eA=

@@ -84,6 +84,7 @@ func (s *Service) List(ctx context.Context, form *gen.ListPayload) (res *gen.Lis
 			PackageName:         row.PackageName,
 			PackageTitle:        conv.FromPGText[string](row.PackageTitle),
 			PackageSummary:      conv.FromPGText[string](row.PackageSummary),
+			PackageURL:          conv.FromPGText[string](row.PackageUrl),
 			PackageKeywords:     row.PackageKeywords,
 			Version:             v.String(),
 			VersionCreatedAt:    row.VersionCreatedAt.Time.Format(time.RFC3339),

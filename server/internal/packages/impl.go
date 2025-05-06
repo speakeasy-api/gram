@@ -101,6 +101,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 		Name:           form.Name,
 		Title:          conv.ToPGText(form.Title),
 		Summary:        conv.ToPGText(form.Summary),
+		Url:            conv.PtrToPGTextEmpty(form.URL),
 		Keywords:       kw,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
@@ -162,8 +163,9 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 	id, err := tx.UpdatePackage(ctx, repo.UpdatePackageParams{
 		ID:           pkgID,
 		ProjectID:    *authCtx.ProjectID,
-		Title:        conv.PtrToPGText(form.Title),
-		Summary:      conv.PtrToPGText(form.Summary),
+		Url:          conv.PtrToPGTextEmpty(form.URL),
+		Title:        conv.PtrToPGTextEmpty(form.Title),
+		Summary:      conv.PtrToPGTextEmpty(form.Summary),
 		Keywords:     form.Keywords,
 		ImageAssetID: imageAssetID,
 	})
@@ -372,6 +374,7 @@ func describePackage(
 		Name:           row.Package.Name,
 		Title:          conv.FromPGText[string](row.Package.Title),
 		Summary:        conv.FromPGText[string](row.Package.Summary),
+		URL:            conv.FromPGText[string](row.Package.Url),
 		Keywords:       row.Package.Keywords,
 		ProjectID:      row.Package.ProjectID.String(),
 		OrganizationID: row.Package.OrganizationID,
