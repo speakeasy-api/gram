@@ -67,7 +67,7 @@ func FormSignInRedirectURL(env string) string {
 	case "dev":
 		return "https://dev.getgram.ai"
 	case "prod":
-		return "https://getgram.ai"
+		return "https://app.getgram.ai"
 	default:
 		return ""
 	}

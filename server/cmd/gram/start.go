@@ -200,7 +200,7 @@ func newStartCommand() *cli.Command {
 			case "dev":
 				serverURL = "https://dev.getgram.ai"
 			case "prod":
-				serverURL = "https://getgram.ai"
+				serverURL = "https://app.getgram.ai"
 			default:
 				return fmt.Errorf("invalid environment: %s", c.String("environment"))
 			}
