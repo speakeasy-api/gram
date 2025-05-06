@@ -7,6 +7,16 @@
 
 package client
 
+// ServeImageAssetsPath returns the URL path to the assets service serveImage HTTP endpoint.
+func ServeImageAssetsPath() string {
+	return "/rpc/assets.serveImage"
+}
+
+// UploadImageAssetsPath returns the URL path to the assets service uploadImage HTTP endpoint.
+func UploadImageAssetsPath() string {
+	return "/rpc/assets.uploadImage"
+}
+
 // UploadOpenAPIv3AssetsPath returns the URL path to the assets service uploadOpenAPIv3 HTTP endpoint.
 func UploadOpenAPIv3AssetsPath() string {
 	return "/rpc/assets.uploadOpenAPIv3"

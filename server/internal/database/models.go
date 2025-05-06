@@ -160,6 +160,7 @@ type Package struct {
 	Title          pgtype.Text
 	Summary        pgtype.Text
 	Keywords       []string
+	ImageAssetID   uuid.NullUUID
 	OrganizationID string
 	ProjectID      uuid.UUID
 	CreatedAt      pgtype.Timestamptz

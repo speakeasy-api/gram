@@ -11,12 +11,21 @@ import (
 	"context"
 	"net/http"
 
+	assets "github.com/speakeasy-api/gram/gen/assets"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client lists the assets service endpoint HTTP clients.
 type Client struct {
+	// ServeImage Doer is the HTTP client used to make requests to the serveImage
+	// endpoint.
+	ServeImageDoer goahttp.Doer
+
+	// UploadImage Doer is the HTTP client used to make requests to the uploadImage
+	// endpoint.
+	UploadImageDoer goahttp.Doer
+
 	// UploadOpenAPIv3 Doer is the HTTP client used to make requests to the
 	// uploadOpenAPIv3 endpoint.
 	UploadOpenAPIv3Doer goahttp.Doer
@@ -41,12 +50,67 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ServeImageDoer:      doer,
+		UploadImageDoer:     doer,
 		UploadOpenAPIv3Doer: doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
 		decoder:             dec,
 		encoder:             enc,
+	}
+}
+
+// ServeImage returns an endpoint that makes HTTP requests to the assets
+// service serveImage server.
+func (c *Client) ServeImage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeServeImageRequest(c.encoder)
+		decodeResponse = DecodeServeImageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildServeImageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ServeImageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "serveImage", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &assets.ServeImageResponseData{Result: res.(*assets.ServeImageResult), Body: resp.Body}, nil
+	}
+}
+
+// UploadImage returns an endpoint that makes HTTP requests to the assets
+// service uploadImage server.
+func (c *Client) UploadImage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUploadImageRequest(c.encoder)
+		decodeResponse = DecodeUploadImageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUploadImageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UploadImageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "uploadImage", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

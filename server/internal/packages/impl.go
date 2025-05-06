@@ -84,13 +84,24 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 		kw = []string{}
 	}
 
+	imageAssetID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if form.ImageAssetID != nil {
+		imgasset, err := uuid.Parse(*form.ImageAssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "image id is not a valid uuid").Log(ctx, logger)
+		}
+
+		imageAssetID = uuid.NullUUID{UUID: imgasset, Valid: imgasset != uuid.Nil}
+	}
+
 	packageID, err := tx.CreatePackage(ctx, repo.CreatePackageParams{
 		Name:           form.Name,
-		Title:          conv.PtrToPGTextEmpty(form.Title),
-		Summary:        conv.PtrToPGTextEmpty(form.Summary),
+		Title:          conv.ToPGText(form.Title),
+		Summary:        conv.ToPGText(form.Summary),
 		Keywords:       kw,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
+		ImageAssetID:   imageAssetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating package").Log(ctx, logger)
@@ -298,6 +309,7 @@ func describePackage(
 		Keywords:       row.Package.Keywords,
 		ProjectID:      row.Package.ProjectID.String(),
 		OrganizationID: row.Package.OrganizationID,
+		ImageAssetID:   conv.FromNullableUUID(row.Package.ImageAssetID),
 		CreatedAt:      row.Package.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      row.Package.UpdatedAt.Time.Format(time.RFC3339),
 		DeletedAt:      deletedAt,

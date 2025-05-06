@@ -249,13 +249,14 @@ func unmarshalIntegrationResponseBodyToIntegrationsIntegration(v *IntegrationRes
 		return nil
 	}
 	res := &integrations.Integration{
-		PackageID:        *v.PackageID,
-		PackageName:      *v.PackageName,
-		PackageTitle:     v.PackageTitle,
-		PackageSummary:   v.PackageSummary,
-		Version:          *v.Version,
-		VersionCreatedAt: *v.VersionCreatedAt,
-		ToolCount:        *v.ToolCount,
+		PackageID:           *v.PackageID,
+		PackageName:         *v.PackageName,
+		PackageTitle:        v.PackageTitle,
+		PackageSummary:      v.PackageSummary,
+		PackageImageAssetID: v.PackageImageAssetID,
+		Version:             *v.Version,
+		VersionCreatedAt:    *v.VersionCreatedAt,
+		ToolCount:           *v.ToolCount,
 	}
 	if v.PackageKeywords != nil {
 		res.PackageKeywords = make([]string, len(v.PackageKeywords))

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createAsset = `-- name: CreateAsset :one
@@ -70,6 +71,29 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getImageAssetURL = `-- name: GetImageAssetURL :one
+SELECT url, content_type, content_length, updated_at FROM assets WHERE id = $1 AND kind = 'image'
+`
+
+type GetImageAssetURLRow struct {
+	Url           string
+	ContentType   string
+	ContentLength int64
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetImageAssetURL(ctx context.Context, id uuid.UUID) (GetImageAssetURLRow, error) {
+	row := q.db.QueryRow(ctx, getImageAssetURL, id)
+	var i GetImageAssetURLRow
+	err := row.Scan(
+		&i.Url,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

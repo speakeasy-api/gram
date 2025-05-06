@@ -17,6 +17,14 @@ import (
 
 // Manages assets used by Gram projects.
 type Service interface {
+	// Serve an image from Gram.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
+	// Upload an image to Gram.
+	UploadImage(context.Context, *UploadImageForm, io.ReadCloser) (res *UploadImageResult, err error)
 	// Upload an OpenAPI v3 document to Gram.
 	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Form, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
 }
@@ -41,13 +49,11 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"uploadOpenAPIv3"}
+var MethodNames = [3]string{"serveImage", "uploadImage", "uploadOpenAPIv3"}
 
 type Asset struct {
 	// The ID of the asset
-	ID string
-	// The URL to the uploaded asset
-	URL  string
+	ID   string
 	Kind string
 	// The SHA256 hash of the asset
 	Sha256 string
@@ -59,6 +65,35 @@ type Asset struct {
 	CreatedAt string
 	// The last update date of the asset.
 	UpdatedAt string
+}
+
+// ServeImageForm is the payload type of the assets service serveImage method.
+type ServeImageForm struct {
+	SessionToken *string
+	// The ID of the asset to serve
+	ID string
+}
+
+// ServeImageResult is the result type of the assets service serveImage method.
+type ServeImageResult struct {
+	ContentType   string
+	ContentLength int64
+	LastModified  string
+}
+
+// UploadImageForm is the payload type of the assets service uploadImage method.
+type UploadImageForm struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	ContentType      string
+	ContentLength    int64
+}
+
+// UploadImageResult is the result type of the assets service uploadImage
+// method.
+type UploadImageResult struct {
+	// The asset entry that was created in Gram
+	Asset *Asset
 }
 
 // UploadOpenAPIv3Form is the payload type of the assets service
@@ -73,7 +108,7 @@ type UploadOpenAPIv3Form struct {
 // UploadOpenAPIv3Result is the result type of the assets service
 // uploadOpenAPIv3 method.
 type UploadOpenAPIv3Result struct {
-	// The URL to the uploaded OpenAPI document
+	// The asset entry that was created in Gram
 	Asset *Asset
 }
 

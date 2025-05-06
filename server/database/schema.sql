@@ -102,6 +102,26 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   CONSTRAINT deployment_logs_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS assets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  url TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  content_length BIGINT NOT NULL,
+  sha256 TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assets_pkey PRIMARY KEY (id),
+  CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
+);
+
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
@@ -109,7 +129,7 @@ CREATE TABLE IF NOT EXISTS packages (
   title TEXT CHECK (title <> '' AND CHAR_LENGTH(title) <= 100),
   summary TEXT CHECK (summary <> '' AND CHAR_LENGTH(summary) <= 80),
   keywords TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(keywords, 1) <= 8),
-
+  image_asset_id uuid,
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
 
@@ -119,7 +139,8 @@ CREATE TABLE IF NOT EXISTS packages (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT packages_pkey PRIMARY KEY (id),
-  CONSTRAINT packages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT packages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT packages_image_asset_id_fkey FOREIGN KEY (image_asset_id) REFERENCES assets (id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS packages_name_idx ON packages (name);
@@ -159,26 +180,6 @@ CREATE TABLE IF NOT EXISTS package_versions (
 CREATE UNIQUE INDEX IF NOT EXISTS package_versions_package_id_semver_key
 ON package_versions (package_id DESC, major DESC, minor DESC, patch DESC, prerelease, build)
 WHERE deleted IS FALSE;
-
-CREATE TABLE IF NOT EXISTS assets (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
-  url TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  content_type TEXT NOT NULL,
-  content_length BIGINT NOT NULL,
-  sha256 TEXT NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT assets_pkey PRIMARY KEY (id),
-  CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
-);
 
 CREATE TABLE IF NOT EXISTS api_keys (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

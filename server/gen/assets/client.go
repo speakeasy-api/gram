@@ -16,14 +16,61 @@ import (
 
 // Client is the "assets" service client.
 type Client struct {
+	ServeImageEndpoint      goa.Endpoint
+	UploadImageEndpoint     goa.Endpoint
 	UploadOpenAPIv3Endpoint goa.Endpoint
 }
 
 // NewClient initializes a "assets" service client given the endpoints.
-func NewClient(uploadOpenAPIv3 goa.Endpoint) *Client {
+func NewClient(serveImage, uploadImage, uploadOpenAPIv3 goa.Endpoint) *Client {
 	return &Client{
+		ServeImageEndpoint:      serveImage,
+		UploadImageEndpoint:     uploadImage,
 		UploadOpenAPIv3Endpoint: uploadOpenAPIv3,
 	}
+}
+
+// ServeImage calls the "serveImage" endpoint of the "assets" service.
+// ServeImage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ServeImage(ctx context.Context, p *ServeImageForm) (res *ServeImageResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.ServeImageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*ServeImageResponseData)
+	return o.Result, o.Body, nil
+}
+
+// UploadImage calls the "uploadImage" endpoint of the "assets" service.
+// UploadImage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UploadImage(ctx context.Context, p *UploadImageForm, req io.ReadCloser) (res *UploadImageResult, err error) {
+	var ires any
+	ires, err = c.UploadImageEndpoint(ctx, &UploadImageRequestData{Payload: p, Body: req})
+	if err != nil {
+		return
+	}
+	return ires.(*UploadImageResult), nil
 }
 
 // UploadOpenAPIv3 calls the "uploadOpenAPIv3" endpoint of the "assets" service.

@@ -5,6 +5,7 @@ SELECT
   p.title AS package_title,
   p.summary AS package_summary,
   p.keywords AS package_keywords,
+  p.image_asset_id AS package_image_asset_id,
   lv.major AS version_major,
   lv.minor AS version_minor,
   lv.patch AS version_patch,

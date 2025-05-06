@@ -17,7 +17,27 @@ import (
 
 // Endpoints wraps the "assets" service endpoints.
 type Endpoints struct {
+	ServeImage      goa.Endpoint
+	UploadImage     goa.Endpoint
 	UploadOpenAPIv3 goa.Endpoint
+}
+
+// ServeImageResponseData holds both the result and the HTTP response body
+// reader of the "serveImage" method.
+type ServeImageResponseData struct {
+	// Result is the method result.
+	Result *ServeImageResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
+// UploadImageRequestData holds both the payload and the HTTP request body
+// reader of the "uploadImage" method.
+type UploadImageRequestData struct {
+	// Payload is the method payload.
+	Payload *UploadImageForm
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
 }
 
 // UploadOpenAPIv3RequestData holds both the payload and the HTTP request body
@@ -34,13 +54,79 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		ServeImage:      NewServeImageEndpoint(s, a.APIKeyAuth),
+		UploadImage:     NewUploadImageEndpoint(s, a.APIKeyAuth),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "assets" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ServeImage = m(e.ServeImage)
+	e.UploadImage = m(e.UploadImage)
 	e.UploadOpenAPIv3 = m(e.UploadOpenAPIv3)
+}
+
+// NewServeImageEndpoint returns an endpoint function that calls the method
+// "serveImage" of service "assets".
+func NewServeImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ServeImageForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.ServeImage(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &ServeImageResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewUploadImageEndpoint returns an endpoint function that calls the method
+// "uploadImage" of service "assets".
+func NewUploadImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*UploadImageRequestData)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if ep.Payload.SessionToken != nil {
+			key = *ep.Payload.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if ep.Payload.ProjectSlugInput != nil {
+				key = *ep.Payload.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UploadImage(ctx, ep.Payload, ep.Body)
+	}
 }
 
 // NewUploadOpenAPIv3Endpoint returns an endpoint function that calls the

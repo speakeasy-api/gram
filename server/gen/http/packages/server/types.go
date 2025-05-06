@@ -25,6 +25,8 @@ type CreatePackageRequestBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// The asset ID of the image to show for this package
+	ImageAssetID *string `form:"image_asset_id,omitempty" json:"image_asset_id,omitempty" xml:"image_asset_id,omitempty"`
 }
 
 // PublishRequestBody is the type of the "packages" service "publish" endpoint
@@ -569,6 +571,8 @@ type PackageResponseBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// The asset ID of the image to show for this package
+	ImageAssetID *string `form:"image_asset_id,omitempty" json:"image_asset_id,omitempty" xml:"image_asset_id,omitempty"`
 	// The latest version of the package
 	LatestVersion *string `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
 	// The creation date of the package
@@ -1018,9 +1022,10 @@ func NewPublishUnexpectedResponseBody(res *goa.ServiceError) *PublishUnexpectedR
 // payload.
 func NewCreatePackagePayload(body *CreatePackageRequestBody, sessionToken *string, projectSlugInput *string) *packages.CreatePackagePayload {
 	v := &packages.CreatePackagePayload{
-		Name:    *body.Name,
-		Title:   body.Title,
-		Summary: body.Summary,
+		Name:         *body.Name,
+		Title:        *body.Title,
+		Summary:      *body.Summary,
+		ImageAssetID: body.ImageAssetID,
 	}
 	if body.Keywords != nil {
 		v.Keywords = make([]string, len(body.Keywords))
@@ -1065,6 +1070,12 @@ func ValidateCreatePackageRequestBody(body *CreatePackageRequestBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
 	if body.Name != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 	}
@@ -1085,6 +1096,11 @@ func ValidateCreatePackageRequestBody(body *CreatePackageRequestBody) (err error
 	}
 	if len(body.Keywords) > 5 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.keywords", body.Keywords, len(body.Keywords), 5, false))
+	}
+	if body.ImageAssetID != nil {
+		if utf8.RuneCountInString(*body.ImageAssetID) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.image_asset_id", *body.ImageAssetID, utf8.RuneCountInString(*body.ImageAssetID), 50, false))
+		}
 	}
 	return
 }

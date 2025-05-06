@@ -27,3 +27,6 @@ SELECT * FROM assets WHERE project_id = @project_id AND id = @id;
 
 -- name: GetProjectAssetBySHA256 :one
 SELECT * FROM assets WHERE project_id = @project_id AND sha256 = @sha256;
+
+-- name: GetImageAssetURL :one
+SELECT url, content_type, content_length, updated_at FROM assets WHERE id = @id AND kind = 'image';

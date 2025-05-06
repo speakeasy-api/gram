@@ -12,11 +12,343 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// UploadImageResponseBody is the type of the "assets" service "uploadImage"
+// endpoint HTTP response body.
+type UploadImageResponseBody struct {
+	// The asset entry that was created in Gram
+	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+}
+
 // UploadOpenAPIv3ResponseBody is the type of the "assets" service
 // "uploadOpenAPIv3" endpoint HTTP response body.
 type UploadOpenAPIv3ResponseBody struct {
-	// The URL to the uploaded OpenAPI document
+	// The asset entry that was created in Gram
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+}
+
+// ServeImageUnauthorizedResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "unauthorized" error.
+type ServeImageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageForbiddenResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "forbidden" error.
+type ServeImageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageBadRequestResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "bad_request" error.
+type ServeImageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageNotFoundResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "not_found" error.
+type ServeImageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageConflictResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "conflict" error.
+type ServeImageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageUnsupportedMediaResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "unsupported_media" error.
+type ServeImageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageInvalidResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "invalid" error.
+type ServeImageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageInvariantViolationResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "invariant_violation" error.
+type ServeImageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageUnexpectedResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "unexpected" error.
+type ServeImageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageUnauthorizedResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "unauthorized" error.
+type UploadImageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageForbiddenResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "forbidden" error.
+type UploadImageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageBadRequestResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "bad_request" error.
+type UploadImageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageNotFoundResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "not_found" error.
+type UploadImageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageConflictResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "conflict" error.
+type UploadImageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageUnsupportedMediaResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "unsupported_media" error.
+type UploadImageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageInvalidResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "invalid" error.
+type UploadImageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageInvariantViolationResponseBody is the type of the "assets"
+// service "uploadImage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UploadImageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageUnexpectedResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "unexpected" error.
+type UploadImageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // UploadOpenAPIv3UnauthorizedResponseBody is the type of the "assets" service
@@ -186,9 +518,7 @@ type UploadOpenAPIv3UnexpectedResponseBody struct {
 // AssetResponseBody is used to define fields on response body types.
 type AssetResponseBody struct {
 	// The ID of the asset
-	ID string `form:"id" json:"id" xml:"id"`
-	// The URL to the uploaded asset
-	URL  string `form:"url" json:"url" xml:"url"`
+	ID   string `form:"id" json:"id" xml:"id"`
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The SHA256 hash of the asset
 	Sha256 string `form:"sha256" json:"sha256" xml:"sha256"`
@@ -202,12 +532,274 @@ type AssetResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// NewUploadImageResponseBody builds the HTTP response body from the result of
+// the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageResponseBody(res *assets.UploadImageResult) *UploadImageResponseBody {
+	body := &UploadImageResponseBody{}
+	if res.Asset != nil {
+		body.Asset = marshalAssetsAssetToAssetResponseBody(res.Asset)
+	}
+	return body
+}
+
 // NewUploadOpenAPIv3ResponseBody builds the HTTP response body from the result
 // of the "uploadOpenAPIv3" endpoint of the "assets" service.
 func NewUploadOpenAPIv3ResponseBody(res *assets.UploadOpenAPIv3Result) *UploadOpenAPIv3ResponseBody {
 	body := &UploadOpenAPIv3ResponseBody{}
 	if res.Asset != nil {
 		body.Asset = marshalAssetsAssetToAssetResponseBody(res.Asset)
+	}
+	return body
+}
+
+// NewServeImageUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageUnauthorizedResponseBody(res *goa.ServiceError) *ServeImageUnauthorizedResponseBody {
+	body := &ServeImageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageForbiddenResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageForbiddenResponseBody(res *goa.ServiceError) *ServeImageForbiddenResponseBody {
+	body := &ServeImageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageBadRequestResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageBadRequestResponseBody(res *goa.ServiceError) *ServeImageBadRequestResponseBody {
+	body := &ServeImageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageNotFoundResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageNotFoundResponseBody(res *goa.ServiceError) *ServeImageNotFoundResponseBody {
+	body := &ServeImageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageConflictResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageConflictResponseBody(res *goa.ServiceError) *ServeImageConflictResponseBody {
+	body := &ServeImageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageUnsupportedMediaResponseBody(res *goa.ServiceError) *ServeImageUnsupportedMediaResponseBody {
+	body := &ServeImageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageInvalidResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageInvalidResponseBody(res *goa.ServiceError) *ServeImageInvalidResponseBody {
+	body := &ServeImageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageInvariantViolationResponseBody(res *goa.ServiceError) *ServeImageInvariantViolationResponseBody {
+	body := &ServeImageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageUnexpectedResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageUnexpectedResponseBody(res *goa.ServiceError) *ServeImageUnexpectedResponseBody {
+	body := &ServeImageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageUnauthorizedResponseBody(res *goa.ServiceError) *UploadImageUnauthorizedResponseBody {
+	body := &UploadImageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageForbiddenResponseBody builds the HTTP response body from the
+// result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageForbiddenResponseBody(res *goa.ServiceError) *UploadImageForbiddenResponseBody {
+	body := &UploadImageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageBadRequestResponseBody builds the HTTP response body from the
+// result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageBadRequestResponseBody(res *goa.ServiceError) *UploadImageBadRequestResponseBody {
+	body := &UploadImageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageNotFoundResponseBody builds the HTTP response body from the
+// result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageNotFoundResponseBody(res *goa.ServiceError) *UploadImageNotFoundResponseBody {
+	body := &UploadImageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageConflictResponseBody builds the HTTP response body from the
+// result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageConflictResponseBody(res *goa.ServiceError) *UploadImageConflictResponseBody {
+	body := &UploadImageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageUnsupportedMediaResponseBody(res *goa.ServiceError) *UploadImageUnsupportedMediaResponseBody {
+	body := &UploadImageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageInvalidResponseBody builds the HTTP response body from the
+// result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageInvalidResponseBody(res *goa.ServiceError) *UploadImageInvalidResponseBody {
+	body := &UploadImageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageInvariantViolationResponseBody(res *goa.ServiceError) *UploadImageInvariantViolationResponseBody {
+	body := &UploadImageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageUnexpectedResponseBody builds the HTTP response body from the
+// result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageUnexpectedResponseBody(res *goa.ServiceError) *UploadImageUnexpectedResponseBody {
+	body := &UploadImageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -337,6 +929,26 @@ func NewUploadOpenAPIv3UnexpectedResponseBody(res *goa.ServiceError) *UploadOpen
 		Fault:     res.Fault,
 	}
 	return body
+}
+
+// NewServeImageForm builds a assets service serveImage endpoint payload.
+func NewServeImageForm(id string, sessionToken *string) *assets.ServeImageForm {
+	v := &assets.ServeImageForm{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUploadImageForm builds a assets service uploadImage endpoint payload.
+func NewUploadImageForm(contentType string, contentLength int64, projectSlugInput *string, sessionToken *string) *assets.UploadImageForm {
+	v := &assets.UploadImageForm{}
+	v.ContentType = contentType
+	v.ContentLength = contentLength
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v
 }
 
 // NewUploadOpenAPIv3Form builds a assets service uploadOpenAPIv3 endpoint

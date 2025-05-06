@@ -86,7 +86,7 @@ var _ = Service("packages", func() {
 })
 
 var CreatePackageForm = Type("CreatePackageForm", func() {
-	Required("name")
+	Required("name", "title", "summary")
 
 	Attribute("name", String, func() {
 		Description("The name of the package")
@@ -101,6 +101,9 @@ var CreatePackageForm = Type("CreatePackageForm", func() {
 	})
 	Attribute("keywords", ArrayOf(String), "The keywords of the package", func() {
 		MaxLength(5)
+	})
+	Attribute("image_asset_id", String, "The asset ID of the image to show for this package", func() {
+		MaxLength(50)
 	})
 })
 

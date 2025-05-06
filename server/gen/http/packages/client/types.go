@@ -18,11 +18,13 @@ type CreatePackageRequestBody struct {
 	// The name of the package
 	Name string `form:"name" json:"name" xml:"name"`
 	// The title of the package
-	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	Title string `form:"title" json:"title" xml:"title"`
 	// The summary of the package
-	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	Summary string `form:"summary" json:"summary" xml:"summary"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// The asset ID of the image to show for this package
+	ImageAssetID *string `form:"image_asset_id,omitempty" json:"image_asset_id,omitempty" xml:"image_asset_id,omitempty"`
 }
 
 // PublishRequestBody is the type of the "packages" service "publish" endpoint
@@ -567,6 +569,8 @@ type PackageResponseBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The keywords of the package
 	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+	// The asset ID of the image to show for this package
+	ImageAssetID *string `form:"image_asset_id,omitempty" json:"image_asset_id,omitempty" xml:"image_asset_id,omitempty"`
 	// The latest version of the package
 	LatestVersion *string `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
 	// The creation date of the package
@@ -597,9 +601,10 @@ type PackageVersionResponseBody struct {
 // the "createPackage" endpoint of the "packages" service.
 func NewCreatePackageRequestBody(p *packages.CreatePackagePayload) *CreatePackageRequestBody {
 	body := &CreatePackageRequestBody{
-		Name:    p.Name,
-		Title:   p.Title,
-		Summary: p.Summary,
+		Name:         p.Name,
+		Title:        p.Title,
+		Summary:      p.Summary,
+		ImageAssetID: p.ImageAssetID,
 	}
 	if p.Keywords != nil {
 		body.Keywords = make([]string, len(p.Keywords))

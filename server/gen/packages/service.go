@@ -54,11 +54,13 @@ type CreatePackagePayload struct {
 	// The name of the package
 	Name string
 	// The title of the package
-	Title *string
+	Title string
 	// The summary of the package
-	Summary *string
+	Summary string
 	// The keywords of the package
 	Keywords []string
+	// The asset ID of the image to show for this package
+	ImageAssetID *string
 }
 
 // CreatePackageResult is the result type of the packages service createPackage
@@ -99,6 +101,8 @@ type Package struct {
 	Summary *string
 	// The keywords of the package
 	Keywords []string
+	// The asset ID of the image to show for this package
+	ImageAssetID *string
 	// The latest version of the package
 	LatestVersion *string
 	// The creation date of the package

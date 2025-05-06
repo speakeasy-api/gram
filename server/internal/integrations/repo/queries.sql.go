@@ -19,6 +19,7 @@ SELECT
   p.title AS package_title,
   p.summary AS package_summary,
   p.keywords AS package_keywords,
+  p.image_asset_id AS package_image_asset_id,
   lv.major AS version_major,
   lv.minor AS version_minor,
   lv.patch AS version_patch,
@@ -48,18 +49,19 @@ WHERE p.deleted IS FALSE
 `
 
 type ListIntegrationsRow struct {
-	PackageID         uuid.UUID
-	PackageName       string
-	PackageTitle      pgtype.Text
-	PackageSummary    pgtype.Text
-	PackageKeywords   []string
-	VersionMajor      int64
-	VersionMinor      int64
-	VersionPatch      int64
-	VersionPrerelease pgtype.Text
-	VersionBuild      pgtype.Text
-	VersionCreatedAt  pgtype.Timestamptz
-	ToolCount         int64
+	PackageID           uuid.UUID
+	PackageName         string
+	PackageTitle        pgtype.Text
+	PackageSummary      pgtype.Text
+	PackageKeywords     []string
+	PackageImageAssetID uuid.NullUUID
+	VersionMajor        int64
+	VersionMinor        int64
+	VersionPatch        int64
+	VersionPrerelease   pgtype.Text
+	VersionBuild        pgtype.Text
+	VersionCreatedAt    pgtype.Timestamptz
+	ToolCount           int64
 }
 
 func (q *Queries) ListIntegrations(ctx context.Context) ([]ListIntegrationsRow, error) {
@@ -77,6 +79,7 @@ func (q *Queries) ListIntegrations(ctx context.Context) ([]ListIntegrationsRow, 
 			&i.PackageTitle,
 			&i.PackageSummary,
 			&i.PackageKeywords,
+			&i.PackageImageAssetID,
 			&i.VersionMajor,
 			&i.VersionMinor,
 			&i.VersionPatch,

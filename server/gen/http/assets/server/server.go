@@ -8,7 +8,9 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"net/http"
 
 	assets "github.com/speakeasy-api/gram/gen/assets"
@@ -20,6 +22,8 @@ import (
 // Server lists the assets service endpoint HTTP handlers.
 type Server struct {
 	Mounts          []*MountPoint
+	ServeImage      http.Handler
+	UploadImage     http.Handler
 	UploadOpenAPIv3 http.Handler
 }
 
@@ -50,8 +54,12 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"ServeImage", "GET", "/rpc/assets.serveImage"},
+			{"UploadImage", "POST", "/rpc/assets.uploadImage"},
 			{"UploadOpenAPIv3", "POST", "/rpc/assets.uploadOpenAPIv3"},
 		},
+		ServeImage:      NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
+		UploadImage:     NewUploadImageHandler(e.UploadImage, mux, decoder, encoder, errhandler, formatter),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Handler(e.UploadOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -61,6 +69,8 @@ func (s *Server) Service() string { return "assets" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.ServeImage = m(s.ServeImage)
+	s.UploadImage = m(s.UploadImage)
 	s.UploadOpenAPIv3 = m(s.UploadOpenAPIv3)
 }
 
@@ -69,12 +79,154 @@ func (s *Server) MethodNames() []string { return assets.MethodNames[:] }
 
 // Mount configures the mux to serve the assets endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountServeImageHandler(mux, h.ServeImage)
+	MountUploadImageHandler(mux, h.UploadImage)
 	MountUploadOpenAPIv3Handler(mux, h.UploadOpenAPIv3)
 }
 
 // Mount configures the mux to serve the assets endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountServeImageHandler configures the mux to serve the "assets" service
+// "serveImage" endpoint.
+func MountServeImageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/assets.serveImage", otelhttp.WithRouteTag("/rpc/assets.serveImage", f).ServeHTTP)
+}
+
+// NewServeImageHandler creates a HTTP handler which loads the HTTP request and
+// calls the "assets" service "serveImage" endpoint.
+func NewServeImageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeServeImageRequest(mux, decoder)
+		encodeResponse = EncodeServeImageResponse(encoder)
+		encodeError    = EncodeServeImageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "serveImage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*assets.ServeImageResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				errhandler(ctx, w, err)
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+					}
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			errhandler(ctx, w, err)
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountUploadImageHandler configures the mux to serve the "assets" service
+// "uploadImage" endpoint.
+func MountUploadImageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/assets.uploadImage", otelhttp.WithRouteTag("/rpc/assets.uploadImage", f).ServeHTTP)
+}
+
+// NewUploadImageHandler creates a HTTP handler which loads the HTTP request
+// and calls the "assets" service "uploadImage" endpoint.
+func NewUploadImageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUploadImageRequest(mux, decoder)
+		encodeResponse = EncodeUploadImageResponse(encoder)
+		encodeError    = EncodeUploadImageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "uploadImage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		data := &assets.UploadImageRequestData{Payload: payload.(*assets.UploadImageForm), Body: r.Body}
+		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
 }
 
 // MountUploadOpenAPIv3Handler configures the mux to serve the "assets" service

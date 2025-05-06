@@ -82,8 +82,9 @@ INSERT INTO packages (
   , keywords
   , organization_id
   , project_id
+  , image_asset_id
 )
-VALUES (@name, @title, @summary, @keywords, @organization_id, @project_id)
+VALUES (@name, @title, @summary, @keywords, @organization_id, @project_id, @image_asset_id)
 RETURNING id;
 
 -- name: ListVersions :many

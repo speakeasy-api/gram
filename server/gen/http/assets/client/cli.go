@@ -14,6 +14,62 @@ import (
 	assets "github.com/speakeasy-api/gram/gen/assets"
 )
 
+// BuildServeImagePayload builds the payload for the assets serveImage endpoint
+// from CLI flags.
+func BuildServeImagePayload(assetsServeImageID string, assetsServeImageSessionToken string) (*assets.ServeImageForm, error) {
+	var id string
+	{
+		id = assetsServeImageID
+	}
+	var sessionToken *string
+	{
+		if assetsServeImageSessionToken != "" {
+			sessionToken = &assetsServeImageSessionToken
+		}
+	}
+	v := &assets.ServeImageForm{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUploadImagePayload builds the payload for the assets uploadImage
+// endpoint from CLI flags.
+func BuildUploadImagePayload(assetsUploadImageContentType string, assetsUploadImageContentLength string, assetsUploadImageProjectSlugInput string, assetsUploadImageSessionToken string) (*assets.UploadImageForm, error) {
+	var err error
+	var contentType string
+	{
+		contentType = assetsUploadImageContentType
+	}
+	var contentLength int64
+	{
+		contentLength, err = strconv.ParseInt(assetsUploadImageContentLength, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assetsUploadImageProjectSlugInput != "" {
+			projectSlugInput = &assetsUploadImageProjectSlugInput
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsUploadImageSessionToken != "" {
+			sessionToken = &assetsUploadImageSessionToken
+		}
+	}
+	v := &assets.UploadImageForm{}
+	v.ContentType = contentType
+	v.ContentLength = contentLength
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUploadOpenAPIv3Payload builds the payload for the assets
 // uploadOpenAPIv3 endpoint from CLI flags.
 func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assetsUploadOpenAPIv3ContentLength string, assetsUploadOpenAPIv3ProjectSlugInput string, assetsUploadOpenAPIv3SessionToken string) (*assets.UploadOpenAPIv3Form, error) {

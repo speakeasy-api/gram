@@ -12,6 +12,53 @@ var _ = Service("assets", func() {
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
+	Method("serveImage", func() {
+		Description("Serve an image from Gram.")
+		Security(security.Session)
+
+		Payload(ServeImageForm)
+		Result(ServeImageResult)
+
+		HTTP(func() {
+			GET("/rpc/assets.serveImage")
+			Param("id")
+
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+			})
+
+			security.SessionHeader()
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "serveImage")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveImage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveImage"}`)
+	})
+
+	Method("uploadImage", func() {
+		Description("Upload an image to Gram.")
+
+		Payload(UploadImageForm)
+
+		Result(UploadImageResult)
+
+		HTTP(func() {
+			POST("/rpc/assets.uploadImage")
+			Header("content_type:Content-Type")
+			Header("content_length:Content-Length")
+			security.ProjectHeader()
+			security.SessionHeader()
+			SkipRequestBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "uploadImage")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadImage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadImage"}`)
+	})
+
 	Method("uploadOpenAPIv3", func() {
 		Description("Upload an OpenAPI v3 document to Gram.")
 
@@ -34,6 +81,21 @@ var _ = Service("assets", func() {
 	})
 })
 
+var ServeImageForm = Type("ServeImageForm", func() {
+	Required("id")
+	security.SessionPayload()
+
+	Attribute("id", String, "The ID of the asset to serve")
+})
+
+var ServeImageResult = Type("ServeImageResult", func() {
+	Required("content_type", "content_length", "last_modified")
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+	Attribute("last_modified", String)
+})
+
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
 	Required("content_type", "content_length")
 	security.SessionPayload()
@@ -46,16 +108,30 @@ var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
 var UploadOpenAPIv3Result = Type("UploadOpenAPIv3Result", func() {
 	Required("asset")
 
-	Attribute("asset", Asset, "The URL to the uploaded OpenAPI document")
+	Attribute("asset", Asset, "The asset entry that was created in Gram")
+})
+
+var UploadImageForm = Type("UploadImageForm", func() {
+	Required("content_type", "content_length")
+	security.SessionPayload()
+	security.ProjectPayload()
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+})
+
+var UploadImageResult = Type("UploadImageResult", func() {
+	Required("asset")
+
+	Attribute("asset", Asset, "The asset entry that was created in Gram")
 })
 
 var Asset = Type("Asset", func() {
-	Required("id", "url", "kind", "sha256", "content_type", "content_length", "created_at", "updated_at")
+	Required("id", "kind", "sha256", "content_type", "content_length", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the asset")
-	Attribute("url", String, "The URL to the uploaded asset")
 	Attribute("kind", String, func() {
-		Enum("openapiv3", "unknown")
+		Enum("openapiv3", "image", "unknown")
 	})
 	Attribute("sha256", String, "The SHA256 hash of the asset")
 	Attribute("content_type", String, "The content type of the asset")

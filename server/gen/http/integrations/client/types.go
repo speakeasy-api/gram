@@ -183,14 +183,15 @@ type ListUnexpectedResponseBody struct {
 
 // IntegrationResponseBody is used to define fields on response body types.
 type IntegrationResponseBody struct {
-	PackageID        *string  `form:"package_id,omitempty" json:"package_id,omitempty" xml:"package_id,omitempty"`
-	PackageName      *string  `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
-	PackageTitle     *string  `form:"package_title,omitempty" json:"package_title,omitempty" xml:"package_title,omitempty"`
-	PackageSummary   *string  `form:"package_summary,omitempty" json:"package_summary,omitempty" xml:"package_summary,omitempty"`
-	PackageKeywords  []string `form:"package_keywords,omitempty" json:"package_keywords,omitempty" xml:"package_keywords,omitempty"`
-	Version          *string  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	VersionCreatedAt *string  `form:"version_created_at,omitempty" json:"version_created_at,omitempty" xml:"version_created_at,omitempty"`
-	ToolCount        *int     `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	PackageID           *string  `form:"package_id,omitempty" json:"package_id,omitempty" xml:"package_id,omitempty"`
+	PackageName         *string  `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
+	PackageTitle        *string  `form:"package_title,omitempty" json:"package_title,omitempty" xml:"package_title,omitempty"`
+	PackageSummary      *string  `form:"package_summary,omitempty" json:"package_summary,omitempty" xml:"package_summary,omitempty"`
+	PackageKeywords     []string `form:"package_keywords,omitempty" json:"package_keywords,omitempty" xml:"package_keywords,omitempty"`
+	PackageImageAssetID *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
+	Version             *string  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	VersionCreatedAt    *string  `form:"version_created_at,omitempty" json:"version_created_at,omitempty" xml:"version_created_at,omitempty"`
+	ToolCount           *int     `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
 }
 
 // NewListIntegrationsResultOK builds a "integrations" service "list" endpoint

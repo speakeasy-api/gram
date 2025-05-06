@@ -43,14 +43,15 @@ const ServiceName = "integrations"
 var MethodNames = [1]string{"list"}
 
 type Integration struct {
-	PackageID        string
-	PackageName      string
-	PackageTitle     *string
-	PackageSummary   *string
-	PackageKeywords  []string
-	Version          string
-	VersionCreatedAt string
-	ToolCount        int
+	PackageID           string
+	PackageName         string
+	PackageTitle        *string
+	PackageSummary      *string
+	PackageKeywords     []string
+	PackageImageAssetID *string
+	Version             string
+	VersionCreatedAt    string
+	ToolCount           int
 }
 
 // ListIntegrationsResult is the result type of the integrations service list

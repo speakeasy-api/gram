@@ -7,6 +7,197 @@ servers:
     - url: http://localhost:80
       description: Default server for gram
 paths:
+    /rpc/assets.serveImage:
+        get:
+            description: Serve an image from Gram.
+            operationId: serveImage
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the asset to serve
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the asset to serve
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Content-Length:
+                            schema:
+                                format: int64
+                                type: integer
+                        Content-Type:
+                            schema:
+                                type: string
+                        Last-Modified:
+                            schema:
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: serveImage assets
+            tags:
+                - assets
+            x-speakeasy-name-override: serveImage
+            x-speakeasy-react-hook:
+                name: serveImage
+    /rpc/assets.uploadImage:
+        post:
+            description: Upload an image to Gram.
+            operationId: uploadImage
+            parameters:
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Type
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Length
+                  required: true
+                  schema:
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadImageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: uploadImage assets
+            tags:
+                - assets
+            x-speakeasy-name-override: uploadImage
+            x-speakeasy-react-hook:
+                name: UploadImage
     /rpc/assets.uploadOpenAPIv3:
         post:
             description: Upload an OpenAPI v3 document to Gram.
@@ -2835,6 +3026,7 @@ components:
                     type: string
                     enum:
                         - openapiv3
+                        - image
                         - unknown
                 sha256:
                     type: string
@@ -2843,12 +3035,8 @@ components:
                     type: string
                     description: The last update date of the asset.
                     format: date-time
-                url:
-                    type: string
-                    description: The URL to the uploaded asset
             required:
                 - id
-                - url
                 - kind
                 - sha256
                 - content_type
@@ -2960,6 +3148,10 @@ components:
         CreatePackageForm:
             type: object
             properties:
+                image_asset_id:
+                    type: string
+                    description: The asset ID of the image to show for this package
+                    maxLength: 50
                 keywords:
                     type: array
                     items:
@@ -2981,6 +3173,8 @@ components:
                     maxLength: 100
             required:
                 - name
+                - title
+                - summary
         CreatePackageResult:
             type: object
             properties:
@@ -3531,6 +3725,8 @@ components:
             properties:
                 package_id:
                     type: string
+                package_image_asset_id:
+                    type: string
                 package_keywords:
                     type: array
                     items:
@@ -3774,6 +3970,9 @@ components:
                 id:
                     type: string
                     description: The ID of the package
+                image_asset_id:
+                    type: string
+                    description: The asset ID of the image to show for this package
                 keywords:
                     type: array
                     items:
@@ -3920,6 +4119,30 @@ components:
             required:
                 - package
                 - version
+        ServeImageForm:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the asset to serve
+                session_token:
+                    type: string
+            required:
+                - id
+        ServeImageResult:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                last_modified:
+                    type: string
+            required:
+                - content_type
+                - content_length
+                - last_modified
         ToolEntry:
             type: object
             properties:
@@ -4105,6 +4328,28 @@ components:
                 name:
                     type: string
                     description: The new name of the toolset
+        UploadImageForm:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - content_type
+                - content_length
+        UploadImageResult:
+            type: object
+            properties:
+                asset:
+                    $ref: '#/components/schemas/Asset'
+            required:
+                - asset
         UploadOpenAPIv3Form:
             type: object
             properties:

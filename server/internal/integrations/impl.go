@@ -80,14 +80,15 @@ func (s *Service) List(ctx context.Context, form *gen.ListPayload) (res *gen.Lis
 		}
 
 		integrations = append(integrations, &gen.Integration{
-			PackageID:        row.PackageID.String(),
-			PackageName:      row.PackageName,
-			PackageTitle:     conv.FromPGText[string](row.PackageTitle),
-			PackageSummary:   conv.FromPGText[string](row.PackageSummary),
-			PackageKeywords:  row.PackageKeywords,
-			Version:          v.String(),
-			VersionCreatedAt: row.VersionCreatedAt.Time.Format(time.RFC3339),
-			ToolCount:        int(row.ToolCount),
+			PackageID:           row.PackageID.String(),
+			PackageName:         row.PackageName,
+			PackageTitle:        conv.FromPGText[string](row.PackageTitle),
+			PackageSummary:      conv.FromPGText[string](row.PackageSummary),
+			PackageKeywords:     row.PackageKeywords,
+			Version:             v.String(),
+			VersionCreatedAt:    row.VersionCreatedAt.Time.Format(time.RFC3339),
+			ToolCount:           int(row.ToolCount),
+			PackageImageAssetID: conv.FromNullableUUID(row.PackageImageAssetID),
 		})
 	}
 

@@ -57,6 +57,7 @@ var Integration = Type("Integration", func() {
 	Attribute("package_title", String)
 	Attribute("package_summary", String)
 	Attribute("package_keywords", ArrayOf(String))
+	Attribute("package_image_asset_id", String)
 	Attribute("version", String)
 	Attribute("version_created_at", String, func() {
 		Format(FormatDateTime)

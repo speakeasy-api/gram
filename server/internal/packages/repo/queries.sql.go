@@ -20,8 +20,9 @@ INSERT INTO packages (
   , keywords
   , organization_id
   , project_id
+  , image_asset_id
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id
 `
 
@@ -32,6 +33,7 @@ type CreatePackageParams struct {
 	Keywords       []string
 	OrganizationID string
 	ProjectID      uuid.UUID
+	ImageAssetID   uuid.NullUUID
 }
 
 func (q *Queries) CreatePackage(ctx context.Context, arg CreatePackageParams) (uuid.UUID, error) {
@@ -42,6 +44,7 @@ func (q *Queries) CreatePackage(ctx context.Context, arg CreatePackageParams) (u
 		arg.Keywords,
 		arg.OrganizationID,
 		arg.ProjectID,
+		arg.ImageAssetID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -134,7 +137,7 @@ latest_version as (
   LIMIT 1
 )
 SELECT
-    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
+    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.image_asset_id, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
   , latest_version.id as version_id
   , latest_version.deployment_id as version_deployment_id
   , latest_version.major as version_major
@@ -175,6 +178,7 @@ func (q *Queries) GetPackageWithLatestVersion(ctx context.Context, arg GetPackag
 		&i.Package.Title,
 		&i.Package.Summary,
 		&i.Package.Keywords,
+		&i.Package.ImageAssetID,
 		&i.Package.OrganizationID,
 		&i.Package.ProjectID,
 		&i.Package.CreatedAt,
@@ -254,7 +258,7 @@ WITH package_id_lookup as (
   LIMIT 1
 )
 SELECT 
-    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
+    packages.id, packages.name, packages.title, packages.summary, packages.keywords, packages.image_asset_id, packages.organization_id, packages.project_id, packages.created_at, packages.updated_at, packages.deleted_at, packages.deleted
   , pv.id as version_id
   , pv.deployment_id as version_deployment_id
   , pv.major as version_major
@@ -303,6 +307,7 @@ func (q *Queries) ListVersions(ctx context.Context, arg ListVersionsParams) ([]L
 			&i.Package.Title,
 			&i.Package.Summary,
 			&i.Package.Keywords,
+			&i.Package.ImageAssetID,
 			&i.Package.OrganizationID,
 			&i.Package.ProjectID,
 			&i.Package.CreatedAt,
