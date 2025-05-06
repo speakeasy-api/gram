@@ -12,7 +12,7 @@ import {
   useToolsetSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Outlet, useParams } from "react-router-dom";
+import { Outlet, useParams } from "react-router";
 import { useState } from "react";
 import { ToolsetDetails } from "@gram/client/models/components";
 import { InputDialog } from "@/components/input-dialog";
@@ -48,7 +48,7 @@ export default function Toolsets() {
   const createToolsetMutation = useCreateToolsetMutation({
     onSuccess: async (data) => {
       await toolsets.refetch();
-      routes.toolsets.subPages.toolset.goTo(data.slug);
+      routes.toolsets.toolset.goTo(data.slug);
     },
     onError: (error) => {
       console.error("Failed to create toolset:", error);
@@ -138,7 +138,7 @@ function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
             <NameAndSlug
               name={toolset.name}
               slug={toolset.slug}
-              linkTo={routes.toolsets.subPages.toolset.href(toolset.slug)}
+              linkTo={routes.toolsets.toolset.href(toolset.slug)}
             />
           </Card.Title>
           <div className="flex gap-2 items-center">
@@ -160,19 +160,19 @@ function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
       </Card.Header>
       <Card.Content>
         <div className="flex items-center gap-2">
-          <routes.toolsets.subPages.toolset.Link params={[toolset.slug]}>
+          <routes.toolsets.toolset.Link params={[toolset.slug]}>
             <Button variant="outline">Edit</Button>
-          </routes.toolsets.subPages.toolset.Link>
-          <routes.sandbox.Link queryParams={{ toolset: toolset.slug }}>
+          </routes.toolsets.toolset.Link>
+          <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
             <Button
               variant="outline"
               className="group"
-              tooltip="Open in chat sandbox"
+              tooltip="Open in chat playground"
             >
-              Sandbox
-              <routes.sandbox.Icon className="text-muted-foreground group-hover:text-foreground trans" />
+              Playground
+              <routes.playground.Icon className="text-muted-foreground group-hover:text-foreground trans" />
             </Button>
-          </routes.sandbox.Link>
+          </routes.playground.Link>
         </div>
       </Card.Content>
     </Card>

@@ -8,7 +8,7 @@ import {
   Deployment,
   UploadOpenAPIv3Result,
 } from "@gram/client/models/components";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {

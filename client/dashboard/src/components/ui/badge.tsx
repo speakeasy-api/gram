@@ -34,6 +34,7 @@ const badgeVariants = cva(
 export function Badge({
   className,
   variant,
+  size = "md",
   asChild = false,
   tooltip,
   ...props
@@ -41,13 +42,19 @@ export function Badge({
   VariantProps<typeof badgeVariants> & {
     asChild?: boolean;
     tooltip?: string;
+    size?: "sm" | "md";
   }) {
   const Comp = asChild ? Slot : "span";
+
+  const sizeClass = {
+    sm: "text-xs h-5 px-1 rounded-sm",
+    md: "text-sm h-6 px-2 rounded-md",
+  }[size];
 
   const base = (
     <Comp
       data-slot="badge"
-      className={cn(badgeVariants({ variant }), className)}
+      className={cn(badgeVariants({ variant }), sizeClass, className)}
       {...props}
     />
   );

@@ -28,18 +28,24 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { CheckIcon } from "lucide-react";
 import { useRoutes } from "@/routes";
 import { ToolEntry } from "@gram/client/models/components/toolentry.js";
+import { useSdkClient } from "@/contexts/Sdk";
 
 function DeploymentCards() {
   const { data: deployment, refetch } = useLatestDeployment();
 
-  if (!deployment?.deployment) {
+  const deploymentEmpty =
+    !deployment?.deployment ||
+    (deployment.deployment.openapiv3Assets.length === 0 &&
+    deployment.deployment.packages.length === 0);
+
+  if (deploymentEmpty) {
     return <OnboardingContent onOnboardingComplete={() => refetch()} />;
   }
 
   return (
     <Suspense fallback={<Cards loading={true} />}>
       <DeploymentTools
-        deploymentId={deployment.deployment.id}
+        deploymentId={deployment.deployment!.id}
         onNewDeployment={refetch}
       />
     </Suspense>
@@ -66,6 +72,7 @@ function DeploymentTools({
   onNewDeployment: () => void;
 }) {
   const routes = useRoutes();
+  const client = useSdkClient();
   const { data: deployment } = useDeploymentSuspense({
     id: deploymentId,
   });
@@ -99,9 +106,15 @@ function DeploymentTools({
     onNewDeployment();
   };
 
-  // TODO: We need to support this in the API
-  const removeDocument = (slug: string) => {
-    alert(`TODO: We need to support this ${slug}`);
+  const removeDocument = async (assetId: string) => {
+    await client.deployments.evolveDeployment({
+      evolveForm: {
+        deploymentId: deploymentId,
+        excludeOpenapiv3Assets: [assetId],
+      },
+    });
+
+    onNewDeployment();
   };
 
   return (
@@ -215,7 +228,7 @@ function DeploymentCard({
 }: {
   tools: ToolEntry[];
   asset: GetDeploymentResult["openapiv3Assets"][0];
-  removeDocument: (slug: string) => void;
+  removeDocument: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const latestToolTimestamp =
@@ -278,7 +291,7 @@ function DeploymentCard({
         <Stack direction="horizontal" gap={2}>
           <Button
             variant="destructiveGhost"
-            onClick={() => removeDocument(asset.slug)}
+            onClick={() => removeDocument(asset.assetId)}
             tooltip="Remove this document and related tools"
             icon="trash"
           >
@@ -321,7 +334,9 @@ function PackageCard({ packageId }: { packageId: string }) {
           <Card.Title>{pkg.packageTitle}</Card.Title>
           <div className="flex gap-2 items-center">
             <Badge className="h-6 flex items-center">Third Party</Badge>
-            <Badge className="h-6 flex items-center">{"TODO"} Tools</Badge>
+            <Badge className="h-6 flex items-center">
+              {pkg.toolCount} Tools
+            </Badge>
           </div>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>

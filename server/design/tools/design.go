@@ -45,14 +45,17 @@ var ListToolsResult = Type("ListToolsResult", func() {
 })
 
 var ToolEntry = Type("ToolEntry", func() {
-	Required("id", "deploymentId", "name", "summary", "openapiv3DocumentId", "created_at")
+	Required("id", "deploymentId", "name", "summary", "description", "openapiv3DocumentId", "httpMethod", "path", "created_at")
 
 	Attribute("id", String, "The tool ID")
 	Attribute("deploymentId", String, "The deployment ID")
 	Attribute("name", String, "The tool name")
 	Attribute("summary", String, "The tool summary")
+	Attribute("description", String, "The tool description")
 	Attribute("openapiv3DocumentId", String, "The OpenAPI v3 document ID")
 	Attribute("packageName", String, "The package name")
+	Attribute("httpMethod", String, "The HTTP method")
+	Attribute("path", String, "The path")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the tool.")
 		Format(FormatDateTime)

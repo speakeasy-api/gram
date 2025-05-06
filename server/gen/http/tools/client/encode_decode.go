@@ -253,8 +253,11 @@ func unmarshalToolEntryResponseBodyToToolsToolEntry(v *ToolEntryResponseBody) *t
 		DeploymentID:        *v.DeploymentID,
 		Name:                *v.Name,
 		Summary:             *v.Summary,
+		Description:         *v.Description,
 		Openapiv3DocumentID: *v.Openapiv3DocumentID,
 		PackageName:         v.PackageName,
+		HTTPMethod:          *v.HTTPMethod,
+		Path:                *v.Path,
 		CreatedAt:           *v.CreatedAt,
 	}
 

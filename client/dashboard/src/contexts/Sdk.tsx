@@ -4,7 +4,7 @@ import { HTTPClient } from "@gram/client/lib/http.js";
 import { GramProvider } from "@gram/client/react-query/index.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, useEffect, useRef } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router";
 
 export const SdkContext = createContext<Gram>({} as Gram);
 

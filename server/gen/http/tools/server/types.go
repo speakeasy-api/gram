@@ -193,10 +193,16 @@ type ToolEntryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The tool summary
 	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// The tool description
+	Description string `form:"description" json:"description" xml:"description"`
 	// The OpenAPI v3 document ID
 	Openapiv3DocumentID string `form:"openapiv3DocumentId" json:"openapiv3DocumentId" xml:"openapiv3DocumentId"`
 	// The package name
 	PackageName *string `form:"packageName,omitempty" json:"packageName,omitempty" xml:"packageName,omitempty"`
+	// The HTTP method
+	HTTPMethod string `form:"httpMethod" json:"httpMethod" xml:"httpMethod"`
+	// The path
+	Path string `form:"path" json:"path" xml:"path"`
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }

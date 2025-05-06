@@ -15,7 +15,7 @@ import {
   useListEnvironments,
 } from "@gram/client/react-query/index.js";
 import { jsonSchema } from "ai";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { Type } from "@/components/ui/type";
 import { Heading } from "@/components/ui/heading";
 import { Combobox } from "@/components/ui/combobox";
@@ -32,7 +32,7 @@ type ChatConfig = React.RefObject<{
   isOnboarding: boolean;
 }>;
 
-export default function Sandbox() {
+export default function Playground() {
   const [searchParams] = useSearchParams();
 
   const [selectedToolset, setSelectedToolset] = useState<string | null>(
@@ -320,7 +320,9 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
       console.log("Received new tool call:", toolCall);
 
       const response = await fetch(
-        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${tool.id}&environment_slug=${configRef.current.environmentSlug}`,
+        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
+          tool.id
+        }&environment_slug=${configRef.current.environmentSlug}`,
         {
           method: "POST",
           headers: {

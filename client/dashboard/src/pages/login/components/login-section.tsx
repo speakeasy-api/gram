@@ -3,7 +3,7 @@
 import { GramLogo } from "@/components/gram-logo";
 import { Button } from "@/components/ui/button";
 import { getServerURL } from "@/lib/utils";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 
 export function LoginSection() {
   const [searchParams] = useSearchParams();
@@ -33,7 +33,8 @@ export function LoginSection() {
         <Button
           className="w-80 py-6 text-lg text-white font-mono font-light tracking-wide uppercase"
           style={{
-            background: "linear-gradient(2.77deg, #1E1E21 1.88%, #2B2B2F 97.5%)",
+            background:
+              "linear-gradient(2.77deg, #1E1E21 1.88%, #2B2B2F 97.5%)",
             border: "none",
             fontFamily: "var(--font-ibm-plex-mono)", // Add explicit font-family
           }}

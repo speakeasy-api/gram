@@ -1,10 +1,10 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { useEffect, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout } from "./components/app-layout.tsx";
-import { AppRoute, useRoutes } from "@/routes";
+import { AppRoute, useRoutes } from "./routes";
 import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { ThemeContext } from "./components/ui/theme-toggle.tsx";
 import { AuthProvider } from "./contexts/Auth.tsx";
@@ -54,7 +54,7 @@ const RouteProvider = () => {
     (route) => !route.unauthenticated
   );
 
-  return (
+  const routeElements = useMemo(() => (
     <Routes>
       {/* Register these unauthenticated paths outside of root layout */}
       {routesWithSubroutes(unauthenticatedRoutes)}
@@ -64,7 +64,9 @@ const RouteProvider = () => {
         </Route>
       </Route>
     </Routes>
-  );
+  ), [routes]);
+
+  return routeElements;
 };
 
 const routesWithSubroutes = (routes: AppRoute[]) => {
@@ -79,7 +81,16 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
         {item.indexComponent && (
           <Route index element={<item.indexComponent />} />
         )}
-        {routesWithSubroutes(Object.values(item.subPages ?? {}))}
+        {/* Check for any children routes stored on this item */}
+        {routesWithSubroutes(
+          Object.values(item).filter(
+            (value) =>
+              value &&
+              typeof value === "object" &&
+              "title" in value &&
+              "url" in value
+          ) as unknown as AppRoute[]
+        )}
       </Route>
     ));
 };

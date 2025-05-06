@@ -18,6 +18,14 @@ export type ToolEntry = {
    */
   deploymentId: string;
   /**
+   * The tool description
+   */
+  description: string;
+  /**
+   * The HTTP method
+   */
+  httpMethod: string;
+  /**
    * The tool ID
    */
   id: string;
@@ -34,6 +42,10 @@ export type ToolEntry = {
    */
   packageName?: string | undefined;
   /**
+   * The path
+   */
+  path: string;
+  /**
    * The tool summary
    */
   summary: string;
@@ -47,10 +59,13 @@ export const ToolEntry$inboundSchema: z.ZodType<
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   deploymentId: z.string(),
+  description: z.string(),
+  httpMethod: z.string(),
   id: z.string(),
   name: z.string(),
   openapiv3DocumentId: z.string(),
   packageName: z.string().optional(),
+  path: z.string(),
   summary: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -62,10 +77,13 @@ export const ToolEntry$inboundSchema: z.ZodType<
 export type ToolEntry$Outbound = {
   created_at: string;
   deploymentId: string;
+  description: string;
+  httpMethod: string;
   id: string;
   name: string;
   openapiv3DocumentId: string;
   packageName?: string | undefined;
+  path: string;
   summary: string;
 };
 
@@ -77,10 +95,13 @@ export const ToolEntry$outboundSchema: z.ZodType<
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
   deploymentId: z.string(),
+  description: z.string(),
+  httpMethod: z.string(),
   id: z.string(),
   name: z.string(),
   openapiv3DocumentId: z.string(),
   packageName: z.string().optional(),
+  path: z.string(),
   summary: z.string(),
 }).transform((v) => {
   return remap$(v, {

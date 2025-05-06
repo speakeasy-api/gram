@@ -4,25 +4,21 @@ import { Type } from "@/components/ui/type";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
-  useListTools,
   useToolset,
   useUpdateEnvironmentMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import {
   EnvironmentEntryInput,
-  ToolEntry,
   ToolsetDetails,
 } from "@gram/client/models/components";
 import { EditableText } from "@/components/editable-text";
 import { CreateThingCard, useToolsets } from "./Toolsets";
-import { useParams } from "react-router-dom";
+import { useParams, Outlet } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
 import { AlertTriangle, Check } from "lucide-react";
-import { Dialog } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { useState } from "react";
 import { DeleteButton } from "@/components/delete-button";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
 import { Badge } from "@/components/ui/badge";
@@ -41,75 +37,17 @@ import {
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AddButton } from "@/components/add-button";
+import { useSdkClient } from "@/contexts/Sdk";
+import { HttpRoute } from "@/components/http-route";
 
-export default function ToolsetPage() {
+export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
-
-  if (!toolsetSlug) {
-    return <div>Toolset not found</div>;
-  }
-
-  return <ToolsetView toolsetSlug={toolsetSlug} isPage />;
-}
-
-export function ToolsetView({
-  toolsetSlug,
-  isPage,
-  className,
-  environmentSlug,
-}: {
-  toolsetSlug: string;
-  isPage?: boolean;
-  className?: string;
-  environmentSlug?: string;
-}) {
   const toolsets = useToolsets();
   const routes = useRoutes();
 
-  const toolsetResult = useToolset({
-    slug: toolsetSlug,
+  const { data: toolset } = useToolset({
+    slug: toolsetSlug || "",
   });
-
-  let toolset = toolsetResult.data;
-  const refetch = toolsetResult.refetch;
-
-  const environment = useEnvironment(
-    environmentSlug || toolset?.defaultEnvironmentSlug
-  );
-
-  const [addToolDialogOpen, setAddToolDialogOpen] = useState(false);
-  const [envVarsDialogOpen, setEnvVarsDialogOpen] = useState(false);
-  const [envVars, setEnvVars] = useState<Record<string, string>>({});
-
-  const updateToolsetMutation = useUpdateToolsetMutation({
-    onSuccess: () => {
-      refetch?.();
-    },
-  });
-
-  const updateEnvironmentMutation = useUpdateEnvironmentMutation({
-    onSuccess: () => {
-      environment?.refetch();
-    },
-  });
-
-  const updateToolset = (changes: Partial<ToolsetDetails>) => {
-    if (!toolset) {
-      return;
-    }
-
-    // Immediately update in-memory toolset
-    toolset = { ...toolset, ...changes };
-    updateToolsetMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          name: changes.name,
-          description: changes.description,
-        },
-      },
-    });
-  };
 
   const deleteToolsetMutation = useDeleteToolsetMutation({
     onSuccess: async () => {
@@ -117,6 +55,10 @@ export function ToolsetView({
       routes.toolsets.goTo();
     },
   });
+
+  if (!toolsetSlug) {
+    return <div>Toolset not found</div>;
+  }
 
   const deleteButton = (
     <DeleteButton
@@ -138,28 +80,66 @@ export function ToolsetView({
     />
   );
 
-  const updateToolsetTools = (toolNames: string[]) => {
-    if (!toolset) {
-      return;
-    }
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+        <Page.Header.Actions>
+          {toolset && deleteButton}
+          <AddButton
+            onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
+            tooltip="Add Tool"
+          />
+        </Page.Header.Actions>
+      </Page.Header>
+      <Outlet />
+    </Page>
+  );
+}
 
-    updateToolsetMutation.mutate(
-      {
-        request: {
-          slug: toolset.slug,
-          updateToolsetRequestBody: {
-            httpToolNames: toolNames,
-          },
-        },
-      },
-      {
-        onSuccess: () => {
-          console.log("mutated");
-          setAddToolDialogOpen(false);
-        },
-      }
-    );
-  };
+export default function ToolsetPage() {
+  const { toolsetSlug } = useParams();
+
+  if (!toolsetSlug) {
+    return <div>Toolset not found</div>;
+  }
+
+  return <ToolsetView toolsetSlug={toolsetSlug} />;
+}
+
+export function ToolsetView({
+  toolsetSlug,
+  className,
+  environmentSlug,
+}: {
+  toolsetSlug: string;
+  className?: string;
+  environmentSlug?: string;
+}) {
+  const routes = useRoutes();
+
+  const { data: toolset, refetch } = useToolset({
+    slug: toolsetSlug,
+  });
+
+  const environment = useEnvironment(
+    environmentSlug || toolset?.defaultEnvironmentSlug
+  );
+
+  const [envVarsDialogOpen, setEnvVarsDialogOpen] = useState(false);
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: () => {
+      refetch?.();
+    },
+  });
+
+  const updateEnvironmentMutation = useUpdateEnvironmentMutation({
+    onSuccess: () => {
+      environment?.refetch();
+    },
+  });
 
   const removeToolFromToolset = (toolName: string) => {
     if (!toolset) {
@@ -194,9 +174,6 @@ export function ToolsetView({
       throw new Error("Environment not found");
     }
 
-    console.log(missingEnvVars);
-    console.log(envVars);
-
     const envVarsToUpdate = missingEnvVars
       ?.map((envVar) => ({
         name: envVar,
@@ -204,10 +181,7 @@ export function ToolsetView({
       }))
       .filter((envVar): envVar is EnvironmentEntryInput => !!envVar.value);
 
-    console.log(envVarsToUpdate);
-
     if (envVarsToUpdate) {
-      console.log("mutating");
       updateEnvironmentMutation.mutate(
         {
           request: {
@@ -230,7 +204,7 @@ export function ToolsetView({
   const missingEnvVarsAlert = isMissingRequiredEnvVars && (
     <Alert
       variant="warning"
-      className="rounded-md my-4 p-4 max-w-4xl"
+      className="rounded-md my-2 p-4 max-w-4xl"
       dismissible={false}
     >
       <Stack gap={4}>
@@ -240,7 +214,6 @@ export function ToolsetView({
           {missingEnvVars!.join(", ")}
         </Type>
         <Button
-          variant="outline"
           size="sm"
           className="w-fit"
           onClick={() => setEnvVarsDialogOpen(true)}
@@ -270,14 +243,68 @@ export function ToolsetView({
     </Alert>
   );
 
-  const content = (
-    <Page.Body className={className}>
-      <Stack
-        direction="horizontal"
-        justify="space-between"
-        align="center"
-        className="max-w-2xl"
-      >
+  const actions = (
+    <Button
+      icon="plus"
+      onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
+    >
+      Add Tools
+    </Button>
+  );
+
+  return (
+    <Page.Body className={cn(className, "max-w-2xl")}>
+      <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
+      {missingEnvVarsAlert}
+      <Cards loading={!toolset}>
+        {toolset?.httpTools.map((tool) => (
+          <ToolCard
+            key={tool.id}
+            tool={tool}
+            onRemove={() => removeToolFromToolset(tool.name)}
+          />
+        ))}
+        <CreateThingCard
+          onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
+        >
+          + Add Tool
+        </CreateThingCard>
+      </Cards>
+    </Page.Body>
+  );
+}
+
+export const ToolsetHeader = ({
+  toolsetSlug,
+  actions,
+}: {
+  toolsetSlug: string;
+  actions?: React.ReactNode;
+}) => {
+  const client = useSdkClient();
+  const { data: toolset, refetch } = useToolset({
+    slug: toolsetSlug,
+  });
+
+  const updateToolset = async (changes: Partial<ToolsetDetails>) => {
+    if (!toolset) {
+      return;
+    }
+
+    await client.toolsets.updateBySlug({
+      slug: toolset.slug,
+      updateToolsetRequestBody: {
+        name: changes.name,
+        description: changes.description,
+      },
+    });
+
+    refetch?.();
+  };
+
+  return (
+    <Stack gap={2} className="mb-4">
+      <Stack direction="horizontal" justify="space-between" className="h-10">
         <EditableText
           value={toolset?.name}
           onSubmit={(newValue) => updateToolset({ name: newValue })}
@@ -290,70 +317,17 @@ export function ToolsetView({
             />
           </Heading>
         </EditableText>
-        <Stack direction="horizontal" gap={2}>
-          <ToolsetEnvironmentBadge toolset={toolset} />
-          <Badge className="h-8">
-            {toolset?.httpTools?.length || "No"} Tools
-          </Badge>
-        </Stack>
+        {actions}
       </Stack>
-      <EditableText
-        value={toolset?.description || ""}
-        onSubmit={(newValue) => updateToolset({ description: newValue })}
-        label={"Toolset Description"}
-      >
-        <Type
-          variant="subheading"
-          className="whitespace-nowrap"
-          skeleton="line"
-        >
-          {toolset ? toolset.description || "Add a description..." : undefined}
-        </Type>
-      </EditableText>
-      {missingEnvVarsAlert}
-      <Cards loading={!toolset}>
-        {toolset?.httpTools.map((tool) => (
-          <ToolCard
-            key={tool.id}
-            tool={tool}
-            onRemove={() => removeToolFromToolset(tool.name)}
-          />
-        ))}
-        <CreateThingCard onClick={() => setAddToolDialogOpen(true)}>
-          + Add Tool
-        </CreateThingCard>
-      </Cards>
-      {toolset && (
-        <AddToolDialog
-          open={addToolDialogOpen}
-          onOpenChange={setAddToolDialogOpen}
-          toolset={toolset}
-          onSubmit={updateToolsetTools}
-        />
-      )}
-    </Page.Body>
+      <Stack direction="horizontal" gap={2}>
+        <Badge className="h-8">
+          {toolset?.httpTools?.length || "No"} Tools
+        </Badge>
+        <ToolsetEnvironmentBadge toolset={toolset} />
+      </Stack>
+    </Stack>
   );
-
-  if (isPage) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-          <Page.Header.Actions>
-            {toolset && deleteButton}
-            <AddButton
-              onClick={() => setAddToolDialogOpen(true)}
-              tooltip="Add Tool"
-            />
-          </Page.Header.Actions>
-        </Page.Header>
-        {content}
-      </Page>
-    );
-  }
-
-  return content;
-}
+};
 
 function ToolCard({
   tool,
@@ -392,31 +366,14 @@ function ToolCard({
     </>
   );
 
-  const methodStyle = {
-    GET: "text-blue-600! dark:text-blue-400!",
-    POST: "text-emerald-600! dark:text-emerald-400!",
-    PATCH: "text-amber-600! dark:text-amber-300!",
-    PUT: "text-amber-600! dark:text-amber-300!",
-    DELETE: "text-rose-600! dark:text-rose-400!",
-  }[tool.httpMethod];
-
-  const path = (
-    <div className="flex items-center gap-2 overflow-hidden font-mono">
-      <Type className={cn("text-xs font-semibold", methodStyle)}>
-        {tool.httpMethod}
-      </Type>
-      <Type className="overflow-hidden text-ellipsis text-xs text-muted-foreground">
-        {tool.path}
-      </Type>
-    </div>
-  );
-
   return (
     <Card size="sm">
       <Card.Header>
         <Card.Title>{header}</Card.Title>
         <Card.Info>{tags}</Card.Info>
-        <Card.Description>{path}</Card.Description>
+        <Card.Description>
+          <HttpRoute method={tool.httpMethod} path={tool.path} />
+        </Card.Description>
         <Card.Actions>
           <DeleteButton
             tooltip="Remove tool from this toolset"
@@ -437,75 +394,6 @@ function ToolCard({
         </div>
       </Card.Content>
     </Card>
-  );
-}
-
-function AddToolDialog({
-  open,
-  onOpenChange,
-  toolset,
-  onSubmit,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  toolset: ToolsetDetails;
-  onSubmit: (newToolIds: string[]) => void;
-}) {
-  const [selectedTools, setSelectedTools] = useState<string[]>(
-    toolset.httpTools.map((tool) => tool.name)
-  );
-
-  // Reset selected tools when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setSelectedTools(toolset.httpTools.map((tool) => tool.name));
-    }
-  }, [open, toolset.httpTools]);
-
-  const tools = useListTools();
-
-  const options = tools.data?.tools.map((tool: ToolEntry) => ({
-    label: tool.name,
-    value: tool.name,
-  }));
-
-  if (!options) {
-    return <div>Loading...</div>;
-  }
-
-  const selector = (
-    <MultiSelect
-      options={options}
-      onValueChange={setSelectedTools}
-      defaultValue={selectedTools}
-      placeholder="Select tools"
-      variant="inverted"
-    />
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content>
-        <Dialog.Header>
-          <Dialog.Title>Add Tools to {toolset.name}</Dialog.Title>
-          <Dialog.Description>
-            Add one or many tools to your toolset.
-          </Dialog.Description>
-        </Dialog.Header>
-        {selector}
-        <Dialog.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => onSubmit(selectedTools)}
-            disabled={selectedTools.length === 0}
-          >
-            Add to Toolset
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
   );
 }
 
@@ -549,7 +437,7 @@ export const ToolsetEnvironmentBadge = ({
 
   return (
     toolset.defaultEnvironmentSlug && (
-      <routes.environments.subPages.environment.Link
+      <routes.environments.environment.Link
         params={[toolset.defaultEnvironmentSlug]}
       >
         <Badge
@@ -578,7 +466,7 @@ export const ToolsetEnvironmentBadge = ({
             ))}
           Default Env
         </Badge>
-      </routes.environments.subPages.environment.Link>
+      </routes.environments.environment.Link>
     )
   );
 };

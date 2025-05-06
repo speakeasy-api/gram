@@ -28,20 +28,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const secondaryNavItems = [routes.sdk, routes.settings, routes.docs];
 
-  const sandboxCTA = (
+  const playgroundCTA = (
     <SidebarMenuButton
-      tooltip={routes.sandbox.title}
+      tooltip={routes.playground.title}
       className={cn(
         "bg-primary! text-primary-foreground! hover:bg-primary/90 hover:text-primary-foreground min-w-8 trans",
-        routes.sandbox.active && "border-violet-300 border-2 scale-105"
+        routes.playground.active && "border-violet-300 border-2 scale-105"
       )}
       onClick={() => {
-        routes.sandbox.goTo();
+        routes.playground.goTo();
       }}
-      isActive={routes.sandbox.active}
+      isActive={routes.playground.active}
     >
-      <routes.sandbox.Icon />
-      <span>{routes.sandbox.title}</span>
+      <routes.playground.Icon />
+      <span>{routes.playground.title}</span>
     </SidebarMenuButton>
   );
 
@@ -66,7 +66,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupContent className="flex flex-col gap-6">
             <SidebarMenu>
               <SidebarMenuItem className="flex items-center gap-2">
-                {sandboxCTA}
+                {playgroundCTA}
               </SidebarMenuItem>
             </SidebarMenu>
             <NavMenu items={topNavItems} />

@@ -60,7 +60,7 @@ export function Button({
   const Comp = asChild ? Slot : "button";
 
   const iconColors = {
-    default: "text-muted-foreground group-hover:text-foreground",
+    default: "text-primary-foreground/60 group-hover:text-primary-foreground",
     destructive: "text-destructive/80 group-hover:text-foreground",
     destructiveGhost: "text-muted-foreground group-hover:text-foreground",
     outline: "text-muted-foreground group-hover:text-foreground",

@@ -1,5 +1,5 @@
 import { Stack } from "@speakeasy-api/moonshine";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 export const NameAndSlug = ({
   name,

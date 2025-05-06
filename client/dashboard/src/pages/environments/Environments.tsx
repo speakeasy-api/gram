@@ -9,7 +9,7 @@ import {
   useListEnvironmentsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Outlet } from "react-router-dom";
+import { Outlet } from "react-router";
 import { useProject } from "@/contexts/Auth";
 import { useState } from "react";
 import { Environment } from "@gram/client/models/components/environment.js";
@@ -41,7 +41,7 @@ export default function Environments() {
   const createEnvironmentMutation = useCreateEnvironmentMutation({
     onSuccess: async (data) => {
       await environments.refetch();
-      routes.environments.subPages.environment.goTo(data.slug);
+      routes.environments.environment.goTo(data.slug);
     },
     onError: (error) => {
       console.error("Failed to create environment:", error);
@@ -105,13 +105,13 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <routes.environments.subPages.environment.Link
+          <routes.environments.environment.Link
             params={[environment.slug]}
           >
             <Card.Title className="hover:underline">
               {environment.name}
             </Card.Title>
-          </routes.environments.subPages.environment.Link>
+          </routes.environments.environment.Link>
           <Badge>{environment.entries.length || "No"} Entries</Badge>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
@@ -123,11 +123,11 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
         </Stack>
       </Card.Header>
       <Card.Content>
-        <routes.environments.subPages.environment.Link
+        <routes.environments.environment.Link
           params={[environment.slug]}
         >
           <Button variant="outline">Edit</Button>
-        </routes.environments.subPages.environment.Link>
+        </routes.environments.environment.Link>
       </Card.Content>
     </Card>
   );

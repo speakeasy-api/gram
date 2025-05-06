@@ -41,6 +41,9 @@ SELECT
   http_tool_definitions.id,
   http_tool_definitions.name,
   http_tool_definitions.summary,
+  http_tool_definitions.description,
+  http_tool_definitions.http_method,
+  http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
   http_tool_definitions.created_at,
   (CASE

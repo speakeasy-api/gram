@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 8ff2fe52aaed418b686349fdd0b0f08e
+  docChecksum: 74720e6d1d3fff8631c0ad908c38c732
   docVersion: 0.0.1
-  speakeasyVersion: 1.542.3
-  generationVersion: 2.597.9
-  releaseVersion: 0.10.0
-  configChecksum: 8f8668cac2906691fd9c51e9ed7ff73a
+  speakeasyVersion: 1.533.0
+  generationVersion: 2.578.0
+  releaseVersion: 0.10.3
+  configChecksum: 8c080fdde2db2da13ac558b691c532ad
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.7
+    core: 3.21.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -715,7 +715,7 @@ examples:
     speakeasy-default-list-tools:
       responses:
         "200":
-          application/json: {"tools": [{"created_at": "2024-08-22T19:26:20.850Z", "deploymentId": "<id>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "summary": "<value>"}, {"created_at": "2025-07-06T02:51:23.749Z", "deploymentId": "<id>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "summary": "<value>"}, {"created_at": "2023-04-20T19:52:18.966Z", "deploymentId": "<id>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "summary": "<value>"}]}
+          application/json: {"tools": [{"created_at": "2024-08-22T19:26:20.850Z", "deploymentId": "<id>", "description": "that bah since zowie loudly aha although gosh whenever", "httpMethod": "<value>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "path": "/usr/libexec", "summary": "<value>"}, {"created_at": "2025-07-06T02:51:23.749Z", "deploymentId": "<id>", "description": "beneath meanwhile synthesise angrily", "httpMethod": "<value>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "path": "/root", "summary": "<value>"}, {"created_at": "2023-04-20T19:52:18.966Z", "deploymentId": "<id>", "description": "kindheartedly nor fooey a supposing regarding times uselessly", "httpMethod": "<value>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "path": "/usr", "summary": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

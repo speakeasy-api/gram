@@ -193,10 +193,16 @@ type ToolEntryResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The tool summary
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The tool description
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The OpenAPI v3 document ID
 	Openapiv3DocumentID *string `form:"openapiv3DocumentId,omitempty" json:"openapiv3DocumentId,omitempty" xml:"openapiv3DocumentId,omitempty"`
 	// The package name
 	PackageName *string `form:"packageName,omitempty" json:"packageName,omitempty" xml:"packageName,omitempty"`
+	// The HTTP method
+	HTTPMethod *string `form:"httpMethod,omitempty" json:"httpMethod,omitempty" xml:"httpMethod,omitempty"`
+	// The path
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
 	// The creation date of the tool.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
@@ -596,8 +602,17 @@ func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 	if body.Summary == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
 	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
 	if body.Openapiv3DocumentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3DocumentId", "body"))
+	}
+	if body.HTTPMethod == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("httpMethod", "body"))
+	}
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

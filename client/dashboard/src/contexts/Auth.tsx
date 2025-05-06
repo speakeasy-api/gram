@@ -13,7 +13,7 @@ import {
 import { ErrorBoundary } from "react-error-boundary";
 import { GramLogo } from "@/components/gram-logo";
 import { useSlugs } from "./Sdk";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { MinimumSuspense } from "@/components/ui/minimum-suspense";
 
 type Session = InfoResponseBody & {

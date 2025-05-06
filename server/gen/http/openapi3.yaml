@@ -4422,6 +4422,12 @@ components:
                 deploymentId:
                     type: string
                     description: The deployment ID
+                description:
+                    type: string
+                    description: The tool description
+                httpMethod:
+                    type: string
+                    description: The HTTP method
                 id:
                     type: string
                     description: The tool ID
@@ -4434,6 +4440,9 @@ components:
                 packageName:
                     type: string
                     description: The package name
+                path:
+                    type: string
+                    description: The path
                 summary:
                     type: string
                     description: The tool summary
@@ -4442,7 +4451,10 @@ components:
                 - deploymentId
                 - name
                 - summary
+                - description
                 - openapiv3DocumentId
+                - httpMethod
+                - path
                 - created_at
         ToolsetDetails:
             type: object

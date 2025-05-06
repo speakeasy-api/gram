@@ -1,7 +1,7 @@
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Heading } from "./ui/heading.tsx";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router";
 import React from "react";
 import { useSlugs } from "@/contexts/Sdk.tsx";
 
@@ -44,7 +44,7 @@ function PageHeaderBreadcrumbs() {
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
       const isCurrentPage = location.pathname.endsWith(url);
-      const title = segment.toLowerCase() === 'sdk' ? 'SDK' : segment;
+      const title = segment.toLowerCase() === "sdk" ? "SDK" : segment;
 
       return {
         url,

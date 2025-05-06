@@ -4,7 +4,7 @@ import {
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query/index.js";
 import { EnvironmentEntry } from "@gram/client/models/components";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
 import { useEnvironments } from "./Environments";

@@ -275,6 +275,9 @@ SELECT
   http_tool_definitions.id,
   http_tool_definitions.name,
   http_tool_definitions.summary,
+  http_tool_definitions.description,
+  http_tool_definitions.http_method,
+  http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
   http_tool_definitions.created_at,
   (CASE
@@ -302,6 +305,9 @@ type ListToolsRow struct {
 	ID                  uuid.UUID
 	Name                string
 	Summary             string
+	Description         string
+	HttpMethod          string
+	Path                string
 	Openapiv3DocumentID uuid.NullUUID
 	CreatedAt           pgtype.Timestamptz
 	PackageName         string
@@ -321,6 +327,9 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 			&i.ID,
 			&i.Name,
 			&i.Summary,
+			&i.Description,
+			&i.HttpMethod,
+			&i.Path,
 			&i.Openapiv3DocumentID,
 			&i.CreatedAt,
 			&i.PackageName,

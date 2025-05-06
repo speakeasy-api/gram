@@ -1,10 +1,7 @@
-"use client";
-
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
 import { cn } from "@/lib/utils";
-import { Heading } from "./heading";
 import { XIcon } from "lucide-react";
 
 function DialogRoot({
@@ -102,12 +99,16 @@ function DialogTitle({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
+    // Pulls styles from <Heading variant="h3">
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn(
+        "text-xl leading-none font-light font-[Mona_Sans] capitalize",
+        className
+      )}
       {...props}
     >
-      <Heading variant="h3">{children}</Heading>
+      {children}
     </DialogPrimitive.Title>
   );
 }

@@ -10,9 +10,12 @@ let value: ListToolsResult = {
     {
       createdAt: new Date("2024-07-22T19:54:53.930Z"),
       deploymentId: "<id>",
+      description: "ack shoddy soliloquy cleaner drag catalog",
+      httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
       openapiv3DocumentId: "<id>",
+      path: "/usr/lib",
       summary: "<value>",
     },
   ],

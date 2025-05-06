@@ -69,10 +69,16 @@ type ToolEntry struct {
 	Name string
 	// The tool summary
 	Summary string
+	// The tool description
+	Description string
 	// The OpenAPI v3 document ID
 	Openapiv3DocumentID string
 	// The package name
 	PackageName *string
+	// The HTTP method
+	HTTPMethod string
+	// The path
+	Path string
 	// The creation date of the tool.
 	CreatedAt string
 }

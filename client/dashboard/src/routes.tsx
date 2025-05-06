@@ -2,8 +2,8 @@ import Integrations from "./pages/integrations/Integrations";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Home from "./pages/home/Home";
 import Onboarding from "./pages/onboarding/Onboarding";
-import ToolsetPage from "./pages/toolsets/Toolset";
-import Sandbox from "./pages/sandbox/Sandbox";
+import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
+import Playground from "./pages/playground/Playground";
 import Settings from "./pages/settings/Settings";
 import Environments from "./pages/environments/Environments";
 import { EnvironmentsRoot } from "./pages/environments/Environments";
@@ -11,9 +11,10 @@ import EnvironmentPage from "./pages/environments/Environment";
 import Login from "./pages/login/Login";
 import SDK from "./pages/sdk/SDK";
 import { useSlugs } from "./contexts/Sdk";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router";
 import { useMemo } from "react";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
+import { ToolSelect } from "./pages/toolsets/ToolSelect";
 
 type AppRouteBasic = {
   title: string;
@@ -35,7 +36,7 @@ type AppRoutesBasic = Record<string, AppRouteBasic>;
 export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
   Icon: React.ComponentType<Omit<IconProps, "name">>;
   active: boolean;
-  subPages?: AppRoutes;
+  // subPages?: AppRoutes;
   href: (...params: string[]) => string;
   goTo: GoToFunction;
   Link: React.ComponentType<{
@@ -58,11 +59,11 @@ const ROUTE_STRUCTURE = {
     icon: "circle-gauge" as IconName,
     component: Home,
   },
-  sandbox: {
-    title: "Sandbox",
-    url: "sandbox",
+  playground: {
+    title: "Playground",
+    url: "playground",
     icon: "message-circle" as IconName,
-    component: Sandbox,
+    component: Playground,
   },
   integrations: {
     title: "Integrations",
@@ -80,7 +81,15 @@ const ROUTE_STRUCTURE = {
       toolset: {
         title: "Toolset",
         url: ":toolsetSlug",
-        component: ToolsetPage,
+        component: ToolsetRoot,
+        indexComponent: ToolsetPage,
+        subPages: {
+          update: {
+            title: "Update",
+            url: "update",
+            component: ToolSelect,
+          },
+        },
       },
     },
   },
@@ -136,9 +145,7 @@ type RouteStructure = typeof ROUTE_STRUCTURE;
 type TransformAppRoute<T extends AppRouteBasic> = T extends {
   subPages: AppRoutesBasic;
 }
-  ? Omit<AppRoute, "subPages"> & {
-      subPages: TransformRouteToGoTo<T["subPages"]>;
-    }
+  ? Omit<AppRoute, "subPages"> & TransformRouteToGoTo<T["subPages"]>
   : AppRoute;
 
 type TransformElem<T> = T extends AppRouteBasic
@@ -242,7 +249,7 @@ export const useRoutes = (): RoutesWithGoTo => {
       href: resolveUrl,
       goTo,
       Link: linkComponent,
-      subPages,
+      ...subPages,
     };
 
     if (route.url.startsWith("/")) {
