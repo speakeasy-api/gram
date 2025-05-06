@@ -40,6 +40,21 @@ var _ = Service("tools", func() {
 
 var ListToolsResult = Type("ListToolsResult", func() {
 	Attribute("next_cursor", String, "The cursor to fetch results from")
-	Attribute("tools", ArrayOf(HTTPToolDefinition), "The list of tools")
+	Attribute("tools", ArrayOf(ToolEntry), "The list of tools")
 	Required("tools")
+})
+
+var ToolEntry = Type("ToolEntry", func() {
+	Required("id", "deploymentId", "name", "summary", "openapiv3DocumentId", "created_at")
+
+	Attribute("id", String, "The tool ID")
+	Attribute("deploymentId", String, "The deployment ID")
+	Attribute("name", String, "The tool name")
+	Attribute("summary", String, "The tool summary")
+	Attribute("openapiv3DocumentId", String, "The OpenAPI v3 document ID")
+	Attribute("packageName", String, "The package name")
+	Attribute("created_at", String, func() {
+		Description("The creation date of the tool.")
+		Format(FormatDateTime)
+	})
 })

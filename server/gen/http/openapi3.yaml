@@ -3683,7 +3683,7 @@ components:
                 tools:
                     type: array
                     items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
+                        $ref: '#/components/schemas/ToolEntry'
                     description: The list of tools
             required:
                 - tools
@@ -3920,6 +3920,38 @@ components:
             required:
                 - package
                 - version
+        ToolEntry:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the tool.
+                    format: date-time
+                deploymentId:
+                    type: string
+                    description: The deployment ID
+                id:
+                    type: string
+                    description: The tool ID
+                name:
+                    type: string
+                    description: The tool name
+                openapiv3DocumentId:
+                    type: string
+                    description: The OpenAPI v3 document ID
+                packageName:
+                    type: string
+                    description: The package name
+                summary:
+                    type: string
+                    description: The tool summary
+            required:
+                - id
+                - deploymentId
+                - name
+                - summary
+                - openapiv3DocumentId
+                - created_at
         ToolsetDetails:
             type: object
             properties:

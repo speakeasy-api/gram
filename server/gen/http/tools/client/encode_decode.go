@@ -245,30 +245,17 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
-// unmarshalHTTPToolDefinitionResponseBodyToToolsHTTPToolDefinition builds a
-// value of type *tools.HTTPToolDefinition from a value of type
-// *HTTPToolDefinitionResponseBody.
-func unmarshalHTTPToolDefinitionResponseBodyToToolsHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *tools.HTTPToolDefinition {
-	res := &tools.HTTPToolDefinition{
+// unmarshalToolEntryResponseBodyToToolsToolEntry builds a value of type
+// *tools.ToolEntry from a value of type *ToolEntryResponseBody.
+func unmarshalToolEntryResponseBodyToToolsToolEntry(v *ToolEntryResponseBody) *tools.ToolEntry {
+	res := &tools.ToolEntry{
 		ID:                  *v.ID,
-		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
-		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Name:                *v.Name,
 		Summary:             *v.Summary,
-		Description:         *v.Description,
-		Openapiv3Operation:  v.Openapiv3Operation,
-		Security:            v.Security,
-		HTTPMethod:          *v.HTTPMethod,
-		Path:                *v.Path,
-		SchemaVersion:       v.SchemaVersion,
-		Schema:              *v.Schema,
+		Openapiv3DocumentID: *v.Openapiv3DocumentID,
+		PackageName:         v.PackageName,
 		CreatedAt:           *v.CreatedAt,
-		UpdatedAt:           *v.UpdatedAt,
-	}
-	res.Tags = make([]string, len(v.Tags))
-	for i, val := range v.Tags {
-		res.Tags[i] = val
 	}
 
 	return res

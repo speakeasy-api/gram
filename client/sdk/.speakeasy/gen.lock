@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: f011d56b07ca372f86a7f3f0f35cf9ef
+  docChecksum: be84303c25cff68601604bedfa6b4a49
   docVersion: 0.0.1
-  speakeasyVersion: 1.533.0
-  generationVersion: 2.578.0
-  releaseVersion: 0.9.6
-  configChecksum: 7f4464baada0156b15fb8214bb0caccd
+  speakeasyVersion: 1.542.3
+  generationVersion: 2.597.9
+  releaseVersion: 0.9.9
+  configChecksum: 3651a7e83cf1699f6daf6d2152b79a7d
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.6
+    core: 3.21.7
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     enumUnions: 0.1.0
@@ -82,6 +82,7 @@ generatedFiles:
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
   - docs/models/components/security.md
+  - docs/models/components/toolentry.md
   - docs/models/components/toolsetdetails.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
@@ -247,6 +248,7 @@ generatedFiles:
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
   - src/models/components/security.ts
+  - src/models/components/toolentry.ts
   - src/models/components/toolsetdetails.ts
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatetoolsetrequestbody.ts
@@ -681,7 +683,7 @@ examples:
     speakeasy-default-list-tools:
       responses:
         "200":
-          application/json: {"tools": [{"created_at": "2024-08-22T19:26:20.850Z", "deployment_id": "<id>", "description": "mmm avalanche jungle unto meanwhile beside tromp worth", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/dev", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2023-03-23T01:47:30.770Z"}, {"created_at": "2025-07-06T02:51:23.749Z", "deployment_id": "<id>", "description": "as plastic via during someplace woot excepting gah only", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2024-09-14T02:22:04.749Z"}, {"created_at": "2023-04-20T19:52:18.966Z", "deployment_id": "<id>", "description": "dramatic damp inasmuch unlined monthly lampoon", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/local/bin", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-02T02:57:15.201Z"}]}
+          application/json: {"tools": [{"created_at": "2024-08-22T19:26:20.850Z", "deploymentId": "<id>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "summary": "<value>"}, {"created_at": "2025-07-06T02:51:23.749Z", "deploymentId": "<id>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "summary": "<value>"}, {"created_at": "2023-04-20T19:52:18.966Z", "deploymentId": "<id>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "summary": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

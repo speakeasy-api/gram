@@ -219,34 +219,17 @@ func EncodeListToolsError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
-// marshalToolsHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
-// value of type *HTTPToolDefinitionResponseBody from a value of type
-// *tools.HTTPToolDefinition.
-func marshalToolsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *tools.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
-	res := &HTTPToolDefinitionResponseBody{
+// marshalToolsToolEntryToToolEntryResponseBody builds a value of type
+// *ToolEntryResponseBody from a value of type *tools.ToolEntry.
+func marshalToolsToolEntryToToolEntryResponseBody(v *tools.ToolEntry) *ToolEntryResponseBody {
+	res := &ToolEntryResponseBody{
 		ID:                  v.ID,
-		ProjectID:           v.ProjectID,
 		DeploymentID:        v.DeploymentID,
-		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Name:                v.Name,
 		Summary:             v.Summary,
-		Description:         v.Description,
-		Openapiv3Operation:  v.Openapiv3Operation,
-		Security:            v.Security,
-		HTTPMethod:          v.HTTPMethod,
-		Path:                v.Path,
-		SchemaVersion:       v.SchemaVersion,
-		Schema:              v.Schema,
+		Openapiv3DocumentID: v.Openapiv3DocumentID,
+		PackageName:         v.PackageName,
 		CreatedAt:           v.CreatedAt,
-		UpdatedAt:           v.UpdatedAt,
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
-	} else {
-		res.Tags = []string{}
 	}
 
 	return res

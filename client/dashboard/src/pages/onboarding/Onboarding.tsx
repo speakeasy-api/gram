@@ -11,7 +11,10 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useLatestDeployment, useListTools } from "@gram/client/react-query/index.js";
+import {
+  useLatestDeployment,
+  useListTools,
+} from "@gram/client/react-query/index.js";
 import { Input } from "@/components/ui/input";
 import { Stepper, StepProps } from "@/components/stepper";
 import { getServerURL } from "@/lib/utils";

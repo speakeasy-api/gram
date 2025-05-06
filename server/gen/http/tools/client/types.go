@@ -18,7 +18,7 @@ type ListToolsResponseBody struct {
 	// The cursor to fetch results from
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// The list of tools
-	Tools []*HTTPToolDefinitionResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 
 // ListToolsUnauthorizedResponseBody is the type of the "tools" service
@@ -183,41 +183,22 @@ type ListToolsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// HTTPToolDefinitionResponseBody is used to define fields on response body
-// types.
-type HTTPToolDefinitionResponseBody struct {
-	// The ID of the HTTP tool
+// ToolEntryResponseBody is used to define fields on response body types.
+type ToolEntryResponseBody struct {
+	// The tool ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the project
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The ID of the deployment
-	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
-	// The name of the tool
+	// The deployment ID
+	DeploymentID *string `form:"deploymentId,omitempty" json:"deploymentId,omitempty" xml:"deploymentId,omitempty"`
+	// The tool name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Summary of the tool
+	// The tool summary
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
-	// Description of the tool
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// OpenAPI v3 operation
-	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
-	// The tags list for this http tool
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
-	// Security requirements for the underlying HTTP endpoint
-	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
-	// HTTP method for the request
-	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
-	// Path for the request
-	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// Version of the schema
-	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
-	// JSON schema for the request
-	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	// The OpenAPI v3 document ID
+	Openapiv3DocumentID *string `form:"openapiv3DocumentId,omitempty" json:"openapiv3DocumentId,omitempty" xml:"openapiv3DocumentId,omitempty"`
+	// The package name
+	PackageName *string `form:"packageName,omitempty" json:"packageName,omitempty" xml:"packageName,omitempty"`
 	// The creation date of the tool.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// The last update date of the tool.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewListToolsResultOK builds a "tools" service "listTools" endpoint result
@@ -226,9 +207,9 @@ func NewListToolsResultOK(body *ListToolsResponseBody) *tools.ListToolsResult {
 	v := &tools.ListToolsResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Tools = make([]*tools.HTTPToolDefinition, len(body.Tools))
+	v.Tools = make([]*tools.ToolEntry, len(body.Tools))
 	for i, val := range body.Tools {
-		v.Tools[i] = unmarshalHTTPToolDefinitionResponseBodyToToolsHTTPToolDefinition(val)
+		v.Tools[i] = unmarshalToolEntryResponseBodyToToolsToolEntry(val)
 	}
 
 	return v
@@ -376,7 +357,7 @@ func ValidateListToolsResponseBody(body *ListToolsResponseBody) (err error) {
 	}
 	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+			if err2 := ValidateToolEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -600,17 +581,14 @@ func ValidateListToolsUnexpectedResponseBody(body *ListToolsUnexpectedResponseBo
 	return
 }
 
-// ValidateHTTPToolDefinitionResponseBody runs the validations defined on
-// HTTPToolDefinitionResponseBody
-func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody) (err error) {
+// ValidateToolEntryResponseBody runs the validations defined on
+// ToolEntryResponseBody
+func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
 	if body.DeploymentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+		err = goa.MergeErrors(err, goa.MissingFieldError("deploymentId", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -618,32 +596,14 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	if body.Summary == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
 	}
-	if body.Description == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
-	}
-	if body.Tags == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
-	}
-	if body.HTTPMethod == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_method", "body"))
-	}
-	if body.Path == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
-	}
-	if body.Schema == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
+	if body.Openapiv3DocumentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3DocumentId", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

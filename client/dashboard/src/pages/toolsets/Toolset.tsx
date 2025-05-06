@@ -11,6 +11,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import {
   EnvironmentEntryInput,
+  ToolEntry,
   ToolsetDetails,
 } from "@gram/client/models/components";
 import { EditableText } from "@/components/editable-text";
@@ -463,7 +464,7 @@ function AddToolDialog({
 
   const tools = useListTools();
 
-  const options = tools.data?.tools.map((tool: HTTPToolDefinition) => ({
+  const options = tools.data?.tools.map((tool: ToolEntry) => ({
     label: tool.name,
     value: tool.name,
   }));

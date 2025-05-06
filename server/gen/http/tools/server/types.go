@@ -18,7 +18,7 @@ type ListToolsResponseBody struct {
 	// The cursor to fetch results from
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// The list of tools
-	Tools []*HTTPToolDefinitionResponseBody `form:"tools" json:"tools" xml:"tools"`
+	Tools []*ToolEntryResponseBody `form:"tools" json:"tools" xml:"tools"`
 }
 
 // ListToolsUnauthorizedResponseBody is the type of the "tools" service
@@ -183,41 +183,22 @@ type ListToolsUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// HTTPToolDefinitionResponseBody is used to define fields on response body
-// types.
-type HTTPToolDefinitionResponseBody struct {
-	// The ID of the HTTP tool
+// ToolEntryResponseBody is used to define fields on response body types.
+type ToolEntryResponseBody struct {
+	// The tool ID
 	ID string `form:"id" json:"id" xml:"id"`
-	// The ID of the project
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The ID of the deployment
-	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
-	// The name of the tool
+	// The deployment ID
+	DeploymentID string `form:"deploymentId" json:"deploymentId" xml:"deploymentId"`
+	// The tool name
 	Name string `form:"name" json:"name" xml:"name"`
-	// Summary of the tool
+	// The tool summary
 	Summary string `form:"summary" json:"summary" xml:"summary"`
-	// Description of the tool
-	Description string `form:"description" json:"description" xml:"description"`
-	// OpenAPI v3 operation
-	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
-	// The tags list for this http tool
-	Tags []string `form:"tags" json:"tags" xml:"tags"`
-	// Security requirements for the underlying HTTP endpoint
-	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
-	// HTTP method for the request
-	HTTPMethod string `form:"http_method" json:"http_method" xml:"http_method"`
-	// Path for the request
-	Path string `form:"path" json:"path" xml:"path"`
-	// Version of the schema
-	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
-	// JSON schema for the request
-	Schema string `form:"schema" json:"schema" xml:"schema"`
+	// The OpenAPI v3 document ID
+	Openapiv3DocumentID string `form:"openapiv3DocumentId" json:"openapiv3DocumentId" xml:"openapiv3DocumentId"`
+	// The package name
+	PackageName *string `form:"packageName,omitempty" json:"packageName,omitempty" xml:"packageName,omitempty"`
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// The last update date of the tool.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewListToolsResponseBody builds the HTTP response body from the result of
@@ -227,12 +208,12 @@ func NewListToolsResponseBody(res *tools.ListToolsResult) *ListToolsResponseBody
 		NextCursor: res.NextCursor,
 	}
 	if res.Tools != nil {
-		body.Tools = make([]*HTTPToolDefinitionResponseBody, len(res.Tools))
+		body.Tools = make([]*ToolEntryResponseBody, len(res.Tools))
 		for i, val := range res.Tools {
-			body.Tools[i] = marshalToolsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			body.Tools[i] = marshalToolsToolEntryToToolEntryResponseBody(val)
 		}
 	} else {
-		body.Tools = []*HTTPToolDefinitionResponseBody{}
+		body.Tools = []*ToolEntryResponseBody{}
 	}
 	return body
 }

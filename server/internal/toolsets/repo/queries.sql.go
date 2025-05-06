@@ -91,16 +91,16 @@ func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) er
 const getHTTPSecurityDefinitions = `-- name: GetHTTPSecurityDefinitions :many
 SELECT id, key, deployment_id, type, name, in_placement, scheme, bearer_format, env_variables, created_at, updated_at, deleted_at, deleted
 FROM http_security
-WHERE key = ANY($1::TEXT[]) AND deployment_id = $2
+WHERE key = ANY($1::TEXT[]) AND deployment_id = ANY($2::UUID[])
 `
 
 type GetHTTPSecurityDefinitionsParams struct {
-	SecurityKeys []string
-	DeploymentID uuid.UUID
+	SecurityKeys  []string
+	DeploymentIds []uuid.UUID
 }
 
 func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSecurityDefinitionsParams) ([]HttpSecurity, error) {
-	rows, err := q.db.Query(ctx, getHTTPSecurityDefinitions, arg.SecurityKeys, arg.DeploymentID)
+	rows, err := q.db.Query(ctx, getHTTPSecurityDefinitions, arg.SecurityKeys, arg.DeploymentIds)
 	if err != nil {
 		return nil, err
 	}
@@ -122,99 +122,6 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getHTTPToolDefinitionsForToolset = `-- name: GetHTTPToolDefinitionsForToolset :many
-WITH latest_deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = $1
-    ORDER BY seq DESC
-    LIMIT 1
-)
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, latest_deployment.id
-FROM http_tool_definitions
-INNER JOIN latest_deployment ON http_tool_definitions.deployment_id = latest_deployment.id
-WHERE http_tool_definitions.project_id = $1 AND http_tool_definitions.name = ANY($2::text[]) AND http_tool_definitions.deleted IS FALSE
-`
-
-type GetHTTPToolDefinitionsForToolsetParams struct {
-	ProjectID uuid.UUID
-	Names     []string
-}
-
-type GetHTTPToolDefinitionsForToolsetRow struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	DeploymentID        uuid.UUID
-	Openapiv3DocumentID uuid.NullUUID
-	Name                string
-	Summary             string
-	Description         string
-	Openapiv3Operation  pgtype.Text
-	Tags                []string
-	ServerEnvVar        string
-	DefaultServerUrl    pgtype.Text
-	Security            []byte
-	HttpMethod          string
-	Path                string
-	SchemaVersion       string
-	Schema              []byte
-	HeaderSettings      []byte
-	QuerySettings       []byte
-	PathSettings        []byte
-	RequestContentType  pgtype.Text
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
-	ID_2                uuid.UUID
-}
-
-func (q *Queries) GetHTTPToolDefinitionsForToolset(ctx context.Context, arg GetHTTPToolDefinitionsForToolsetParams) ([]GetHTTPToolDefinitionsForToolsetRow, error) {
-	rows, err := q.db.Query(ctx, getHTTPToolDefinitionsForToolset, arg.ProjectID, arg.Names)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetHTTPToolDefinitionsForToolsetRow
-	for rows.Next() {
-		var i GetHTTPToolDefinitionsForToolsetRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.DeploymentID,
-			&i.Openapiv3DocumentID,
-			&i.Name,
-			&i.Summary,
-			&i.Description,
-			&i.Openapiv3Operation,
-			&i.Tags,
-			&i.ServerEnvVar,
-			&i.DefaultServerUrl,
-			&i.Security,
-			&i.HttpMethod,
-			&i.Path,
-			&i.SchemaVersion,
-			&i.Schema,
-			&i.HeaderSettings,
-			&i.QuerySettings,
-			&i.PathSettings,
-			&i.RequestContentType,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-			&i.ID_2,
 		); err != nil {
 			return nil, err
 		}

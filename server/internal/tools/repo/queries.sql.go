@@ -12,6 +12,100 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const findToolsByName = `-- name: FindToolsByName :many
+WITH deployment AS (
+    SELECT id
+    FROM deployments
+    WHERE deployments.project_id = $1
+      AND (
+        $3::uuid IS NULL
+        OR id = $3::uuid
+      )
+    ORDER BY seq DESC
+    LIMIT 1
+),
+external_deployments AS (
+  SELECT package_versions.deployment_id as id
+  FROM deployments_packages
+  INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
+  WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
+)
+SELECT 
+  http_tool_definitions.id, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
+  (select id from deployment) as owning_deployment_id,
+  (CASE
+    WHEN http_tool_definitions.project_id = $1 THEN ''
+    WHEN packages.id IS NOT NULL THEN packages.name
+    ELSE ''
+  END) as package_name
+FROM http_tool_definitions
+LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
+WHERE
+  http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
+  AND http_tool_definitions.deleted IS FALSE
+  AND http_tool_definitions.name = ANY ($2::text[])
+ORDER BY http_tool_definitions.id DESC
+`
+
+type FindToolsByNameParams struct {
+	ProjectID    uuid.UUID
+	Names        []string
+	DeploymentID uuid.NullUUID
+}
+
+type FindToolsByNameRow struct {
+	HttpToolDefinition HttpToolDefinition
+	OwningDeploymentID uuid.UUID
+	PackageName        string
+}
+
+func (q *Queries) FindToolsByName(ctx context.Context, arg FindToolsByNameParams) ([]FindToolsByNameRow, error) {
+	rows, err := q.db.Query(ctx, findToolsByName, arg.ProjectID, arg.Names, arg.DeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindToolsByNameRow
+	for rows.Next() {
+		var i FindToolsByNameRow
+		if err := rows.Scan(
+			&i.HttpToolDefinition.ID,
+			&i.HttpToolDefinition.ProjectID,
+			&i.HttpToolDefinition.DeploymentID,
+			&i.HttpToolDefinition.Openapiv3DocumentID,
+			&i.HttpToolDefinition.Name,
+			&i.HttpToolDefinition.Summary,
+			&i.HttpToolDefinition.Description,
+			&i.HttpToolDefinition.Openapiv3Operation,
+			&i.HttpToolDefinition.Tags,
+			&i.HttpToolDefinition.ServerEnvVar,
+			&i.HttpToolDefinition.DefaultServerUrl,
+			&i.HttpToolDefinition.Security,
+			&i.HttpToolDefinition.HttpMethod,
+			&i.HttpToolDefinition.Path,
+			&i.HttpToolDefinition.SchemaVersion,
+			&i.HttpToolDefinition.Schema,
+			&i.HttpToolDefinition.HeaderSettings,
+			&i.HttpToolDefinition.QuerySettings,
+			&i.HttpToolDefinition.PathSettings,
+			&i.HttpToolDefinition.RequestContentType,
+			&i.HttpToolDefinition.CreatedAt,
+			&i.HttpToolDefinition.UpdatedAt,
+			&i.HttpToolDefinition.DeletedAt,
+			&i.HttpToolDefinition.Deleted,
+			&i.OwningDeploymentID,
+			&i.PackageName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getHTTPToolDefinitionByID = `-- name: GetHTTPToolDefinitionByID :one
 SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
@@ -57,7 +151,7 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 	return i, err
 }
 
-const listAllHttpToolDefinitions = `-- name: ListAllHttpToolDefinitions :many
+const listFirstPartyHTTPTools = `-- name: ListFirstPartyHTTPTools :many
 WITH deployment AS (
     SELECT id
     FROM deployments
@@ -78,13 +172,13 @@ WHERE http_tool_definitions.project_id = $1
 ORDER BY http_tool_definitions.id DESC
 `
 
-type ListAllHttpToolDefinitionsParams struct {
+type ListFirstPartyHTTPToolsParams struct {
 	ProjectID    uuid.UUID
 	Cursor       uuid.NullUUID
 	DeploymentID uuid.NullUUID
 }
 
-type ListAllHttpToolDefinitionsRow struct {
+type ListFirstPartyHTTPToolsRow struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
@@ -112,15 +206,15 @@ type ListAllHttpToolDefinitionsRow struct {
 	ID_2                uuid.UUID
 }
 
-func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHttpToolDefinitionsParams) ([]ListAllHttpToolDefinitionsRow, error) {
-	rows, err := q.db.Query(ctx, listAllHttpToolDefinitions, arg.ProjectID, arg.Cursor, arg.DeploymentID)
+func (q *Queries) ListFirstPartyHTTPTools(ctx context.Context, arg ListFirstPartyHTTPToolsParams) ([]ListFirstPartyHTTPToolsRow, error) {
+	rows, err := q.db.Query(ctx, listFirstPartyHTTPTools, arg.ProjectID, arg.Cursor, arg.DeploymentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAllHttpToolDefinitionsRow
+	var items []ListFirstPartyHTTPToolsRow
 	for rows.Next() {
-		var i ListAllHttpToolDefinitionsRow
+		var i ListFirstPartyHTTPToolsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -147,6 +241,89 @@ func (q *Queries) ListAllHttpToolDefinitions(ctx context.Context, arg ListAllHtt
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.ID_2,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTools = `-- name: ListTools :many
+WITH deployment AS (
+    SELECT id
+    FROM deployments
+    WHERE deployments.project_id = $1
+      AND (
+        $3::uuid IS NULL
+        OR id = $3::uuid
+      )
+    ORDER BY seq DESC
+    LIMIT 1
+),
+external_deployments AS (
+  SELECT package_versions.deployment_id as id
+  FROM deployments_packages
+  INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
+  WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
+)
+SELECT 
+  (SELECT id FROM deployment) as deployment_id,
+  http_tool_definitions.id,
+  http_tool_definitions.name,
+  http_tool_definitions.summary,
+  http_tool_definitions.openapiv3_document_id,
+  http_tool_definitions.created_at,
+  (CASE
+    WHEN http_tool_definitions.project_id = $1 THEN ''
+    WHEN packages.id IS NOT NULL THEN packages.name
+    ELSE ''
+  END) as package_name
+FROM http_tool_definitions
+LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
+WHERE
+  http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
+  AND http_tool_definitions.deleted IS FALSE
+  AND ($2::uuid IS NULL OR http_tool_definitions.id < $2)
+ORDER BY http_tool_definitions.id DESC
+`
+
+type ListToolsParams struct {
+	ProjectID    uuid.UUID
+	Cursor       uuid.NullUUID
+	DeploymentID uuid.NullUUID
+}
+
+type ListToolsRow struct {
+	DeploymentID        uuid.UUID
+	ID                  uuid.UUID
+	Name                string
+	Summary             string
+	Openapiv3DocumentID uuid.NullUUID
+	CreatedAt           pgtype.Timestamptz
+	PackageName         string
+}
+
+func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToolsRow, error) {
+	rows, err := q.db.Query(ctx, listTools, arg.ProjectID, arg.Cursor, arg.DeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsRow
+	for rows.Next() {
+		var i ListToolsRow
+		if err := rows.Scan(
+			&i.DeploymentID,
+			&i.ID,
+			&i.Name,
+			&i.Summary,
+			&i.Openapiv3DocumentID,
+			&i.CreatedAt,
+			&i.PackageName,
 		); err != nil {
 			return nil, err
 		}

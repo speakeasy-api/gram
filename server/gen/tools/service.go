@@ -42,41 +42,6 @@ const ServiceName = "tools"
 // MethodKey key.
 var MethodNames = [1]string{"listTools"}
 
-type HTTPToolDefinition struct {
-	// The ID of the HTTP tool
-	ID string
-	// The ID of the project
-	ProjectID string
-	// The ID of the deployment
-	DeploymentID string
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string
-	// The name of the tool
-	Name string
-	// Summary of the tool
-	Summary string
-	// Description of the tool
-	Description string
-	// OpenAPI v3 operation
-	Openapiv3Operation *string
-	// The tags list for this http tool
-	Tags []string
-	// Security requirements for the underlying HTTP endpoint
-	Security *string
-	// HTTP method for the request
-	HTTPMethod string
-	// Path for the request
-	Path string
-	// Version of the schema
-	SchemaVersion *string
-	// JSON schema for the request
-	Schema string
-	// The creation date of the tool.
-	CreatedAt string
-	// The last update date of the tool.
-	UpdatedAt string
-}
-
 // ListToolsPayload is the payload type of the tools service listTools method.
 type ListToolsPayload struct {
 	SessionToken     *string
@@ -92,7 +57,24 @@ type ListToolsResult struct {
 	// The cursor to fetch results from
 	NextCursor *string
 	// The list of tools
-	Tools []*HTTPToolDefinition
+	Tools []*ToolEntry
+}
+
+type ToolEntry struct {
+	// The tool ID
+	ID string
+	// The deployment ID
+	DeploymentID string
+	// The tool name
+	Name string
+	// The tool summary
+	Summary string
+	// The OpenAPI v3 document ID
+	Openapiv3DocumentID string
+	// The package name
+	PackageName *string
+	// The creation date of the tool.
+	CreatedAt string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

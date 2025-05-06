@@ -14,11 +14,12 @@ generation:
     parameterOrderingFeb2024: true
     requestResponseComponentNamesFeb2024: true
     securityFeb2025: true
+    sharedErrorComponentsApr2025: false
   auth:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
 typescript:
-  version: 0.9.6
+  version: 0.9.9
   additionalDependencies:
     dependencies: {}
     devDependencies:

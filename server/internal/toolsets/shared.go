@@ -18,14 +18,14 @@ import (
 
 // Shared service for aggregating toolset details
 type Toolsets struct {
-	repo     *repo.Queries
-	toolRepo *toolsRepo.Queries
+	repo      *repo.Queries
+	toolsRepo *toolsRepo.Queries
 }
 
 func NewToolsets(db *pgxpool.Pool) *Toolsets {
 	return &Toolsets{
-		repo:     repo.New(db),
-		toolRepo: toolsRepo.New(db),
+		repo:      repo.New(db),
+		toolsRepo: toolsRepo.New(db),
 	}
 }
 
@@ -41,33 +41,40 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 	var httpTools []*gen.HTTPToolDefinition
 	var relevantEnvVars []string
 	if len(toolset.HttpToolNames) > 0 {
-		definitions, err := t.repo.GetHTTPToolDefinitionsForToolset(ctx, repo.GetHTTPToolDefinitionsForToolsetParams{
-			ProjectID: projectID,
-			Names:     toolset.HttpToolNames,
+		definitions, err := t.toolsRepo.FindToolsByName(ctx, toolsRepo.FindToolsByNameParams{
+			ProjectID:    projectID,
+			Names:        toolset.HttpToolNames,
+			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		httpTools = make([]*gen.HTTPToolDefinition, len(definitions))
+		httpTools = make([]*gen.HTTPToolDefinition, 0, len(definitions))
+		seen := make(map[string]bool, 0)
 		for i, def := range definitions {
+			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
+				continue
+			}
+			seen[def.HttpToolDefinition.ID.String()] = true
+
 			httpTools[i] = &gen.HTTPToolDefinition{
-				ID:                  def.ID.String(),
-				ProjectID:           def.ProjectID.String(),
-				DeploymentID:        def.DeploymentID.String(),
-				Openapiv3DocumentID: conv.FromNullableUUID(def.Openapiv3DocumentID),
-				Name:                def.Name,
-				Summary:             def.Summary,
-				Description:         def.Description,
-				Openapiv3Operation:  conv.FromPGText[string](def.Openapiv3Operation),
-				Tags:                def.Tags,
-				Security:            conv.FromBytes(def.Security),
-				HTTPMethod:          def.HttpMethod,
-				Path:                def.Path,
-				SchemaVersion:       &def.SchemaVersion,
-				Schema:              string(def.Schema),
-				CreatedAt:           def.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:           def.UpdatedAt.Time.Format(time.RFC3339),
+				ID:                  def.HttpToolDefinition.ID.String(),
+				ProjectID:           def.HttpToolDefinition.Description,
+				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
+				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
+				Name:                def.HttpToolDefinition.Name,
+				Summary:             def.HttpToolDefinition.Summary,
+				Description:         def.HttpToolDefinition.Description,
+				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
+				Tags:                def.HttpToolDefinition.Tags,
+				Security:            conv.FromBytes(def.HttpToolDefinition.Security),
+				HTTPMethod:          def.HttpToolDefinition.HttpMethod,
+				Path:                def.HttpToolDefinition.Path,
+				SchemaVersion:       &def.HttpToolDefinition.SchemaVersion,
+				Schema:              string(def.HttpToolDefinition.Schema),
+				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
 			}
 		}
 		relevantEnvVars, err = t.GetRelevantEnvironmentVariables(ctx, definitions)
@@ -91,7 +98,7 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 	}, nil
 }
 
-func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []repo.GetHTTPToolDefinitionsForToolsetRow) ([]string, error) {
+func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []toolsRepo.FindToolsByNameRow) ([]string, error) {
 	if len(tools) == 0 {
 		return []string{}, nil
 	}
@@ -99,7 +106,7 @@ func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []
 	relevantSecurityKeysMap := make(map[string]bool)
 	serverEnvVarsMap := make(map[string]bool)
 	for _, tool := range tools {
-		securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.Security)
+		securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.HttpToolDefinition.Security)
 		if err != nil {
 			return nil, err
 		}
@@ -108,14 +115,19 @@ func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []
 			relevantSecurityKeysMap[key] = true
 		}
 
-		if tool.ServerEnvVar != "" {
-			serverEnvVarsMap[tool.ServerEnvVar] = true
+		if tool.HttpToolDefinition.ServerEnvVar != "" {
+			serverEnvVarsMap[tool.HttpToolDefinition.ServerEnvVar] = true
 		}
 	}
 
+	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
+	for _, tool := range tools {
+		uniqueDeploymentIDs[tool.HttpToolDefinition.DeploymentID] = true
+	}
+
 	securityEntries, err := t.repo.GetHTTPSecurityDefinitions(ctx, repo.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys: slices.Collect(maps.Keys(relevantSecurityKeysMap)),
-		DeploymentID: tools[0].DeploymentID, // all selected tools share the same deployment
+		SecurityKeys:  slices.Collect(maps.Keys(relevantSecurityKeysMap)),
+		DeploymentIds: slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
 	})
 	if err != nil {
 		return nil, err
@@ -141,7 +153,7 @@ type HTTPToolExecutionInfo struct {
 }
 
 func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
-	tool, err := t.toolRepo.GetHTTPToolDefinitionByID(ctx, toolsRepo.GetHTTPToolDefinitionByIDParams{
+	tool, err := t.toolsRepo.GetHTTPToolDefinitionByID(ctx, toolsRepo.GetHTTPToolDefinitionByIDParams{
 		ID:        id,
 		ProjectID: projectID,
 	})
@@ -159,8 +171,8 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 	}
 
 	securityEntries, err := t.repo.GetHTTPSecurityDefinitions(ctx, repo.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys: slices.Collect(maps.Keys(relevantSecurityKeysMap)),
-		DeploymentID: tool.DeploymentID,
+		SecurityKeys:  slices.Collect(maps.Keys(relevantSecurityKeysMap)),
+		DeploymentIds: []uuid.UUID{tool.DeploymentID},
 	})
 	if err != nil {
 		return nil, err

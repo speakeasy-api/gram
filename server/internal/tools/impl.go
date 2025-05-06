@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/tools/repo"
@@ -59,7 +58,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	params := repo.ListAllHttpToolDefinitionsParams{
+	params := repo.ListToolsParams{
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
@@ -73,34 +72,30 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		params.DeploymentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DeploymentID), Valid: true}
 	}
 
-	tools, err := s.repo.ListAllHttpToolDefinitions(ctx, params)
+	tools, err := s.repo.ListTools(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
 	result := &gen.ListToolsResult{
-		Tools:      make([]*gen.HTTPToolDefinition, len(tools)),
+		Tools:      make([]*gen.ToolEntry, len(tools)),
 		NextCursor: nil,
 	}
 
 	for i, tool := range tools {
-		result.Tools[i] = &gen.HTTPToolDefinition{
+		var pkg *string
+		if tool.PackageName != "" {
+			pkg = &tool.PackageName
+		}
+
+		result.Tools[i] = &gen.ToolEntry{
 			ID:                  tool.ID.String(),
-			ProjectID:           tool.ProjectID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
-			Openapiv3DocumentID: conv.FromNullableUUID(tool.Openapiv3DocumentID),
 			Name:                tool.Name,
 			Summary:             tool.Summary,
-			Description:         tool.Description,
-			Openapiv3Operation:  conv.FromPGText[string](tool.Openapiv3Operation),
-			Tags:                tool.Tags,
-			Security:            conv.FromBytes(tool.Security),
-			HTTPMethod:          tool.HttpMethod,
-			Path:                tool.Path,
-			SchemaVersion:       &tool.SchemaVersion,
-			Schema:              string(tool.Schema),
+			Openapiv3DocumentID: tool.Openapiv3DocumentID.UUID.String(),
+			PackageName:         pkg,
 			CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 

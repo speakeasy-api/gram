@@ -11,7 +11,6 @@ import {
   useLatestDeployment,
   useListIntegrations,
 } from "@gram/client/react-query/index.js";
-import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
 import {
   Tooltip,
@@ -28,6 +27,7 @@ import { NameAndSlug } from "@/components/name-and-slug";
 import { HumanizeDateTime } from "@/lib/dates";
 import { CheckIcon } from "lucide-react";
 import { useRoutes } from "@/routes";
+import { ToolEntry } from "@gram/client/models/components/toolentry.js";
 
 function DeploymentCards() {
   const { data: deployment, refetch } = useLatestDeployment();
@@ -46,7 +46,7 @@ function DeploymentCards() {
   );
 }
 
-function ToolsTooltipContent({ tools }: { tools: HTTPToolDefinition[] }) {
+function ToolsTooltipContent({ tools }: { tools: ToolEntry[] }) {
   if (tools.length === 0) return null;
 
   return (
@@ -213,7 +213,7 @@ function DeploymentCard({
   removeDocument,
   setChangeDocumentTargetSlug,
 }: {
-  tools: HTTPToolDefinition[];
+  tools: ToolEntry[];
   asset: GetDeploymentResult["openapiv3Assets"][0];
   removeDocument: (slug: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
@@ -344,8 +344,8 @@ function PackageCard({ packageId }: { packageId: string }) {
   );
 }
 
-function groupToolsByDocument(tools: HTTPToolDefinition[]) {
-  return tools.reduce<Record<string, HTTPToolDefinition[]>>((groups, tool) => {
+function groupToolsByDocument(tools: ToolEntry[]) {
+  return tools.reduce<Record<string, ToolEntry[]>>((groups, tool) => {
     const docId = tool.openapiv3DocumentId;
     if (!docId) return groups;
 

@@ -24,7 +24,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 	{
 		err = json.Unmarshal([]byte(packagesCreatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keywords\": [\n         \"Rem provident aspernatur beatae voluptatem.\",\n         \"Qui aut quia officiis officiis similique voluptatem.\",\n         \"Odit eligendi atque.\"\n      ],\n      \"name\": \"ykz\",\n      \"summary\": \"cdl\",\n      \"title\": \"dzm\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keywords\": [\n         \"Tempora voluptas sed amet et molestiae unde.\",\n         \"Sit temporibus.\",\n         \"Expedita necessitatibus.\"\n      ],\n      \"name\": \"miz\",\n      \"summary\": \"n8a\",\n      \"title\": \"2am\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 100 {
@@ -111,7 +111,7 @@ func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken
 	{
 		err = json.Unmarshal([]byte(packagesPublishBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Omnis tempora velit fugit.\",\n      \"name\": \"Aut perferendis nihil tempora aspernatur dolor dolorem.\",\n      \"version\": \"Dolores nisi quos magni quo.\",\n      \"visibility\": \"public\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Assumenda odit temporibus.\",\n      \"name\": \"Doloribus fugiat.\",\n      \"version\": \"Eos eum reiciendis et hic consequatur.\",\n      \"visibility\": \"public\"\n   }'")
 		}
 		if !(body.Visibility == "public" || body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))
