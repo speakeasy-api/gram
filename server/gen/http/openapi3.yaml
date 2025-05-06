@@ -2226,6 +2226,101 @@ paths:
             x-speakeasy-name-override: publish
             x-speakeasy-react-hook:
                 name: PublishPackage
+    /rpc/packages.update:
+        put:
+            description: Update package details.
+            operationId: updatePackage
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePackageForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdatePackageResult'
+                    description: OK response.
+                "304":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NotModified'
+                    description: 'not_modified: Not Modified response.'
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updatePackage packages
+            tags:
+                - packages
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdatePackage
     /rpc/projects.create:
         post:
             description: Create a new project.
@@ -3913,6 +4008,13 @@ components:
             required:
                 - package
                 - versions
+        NotModified:
+            type: object
+            properties:
+                location:
+                    type: string
+            required:
+                - location
         OpenAPIv3DeploymentAsset:
             type: object
             properties:
@@ -4281,6 +4383,40 @@ components:
             required:
                 - entries_to_update
                 - entries_to_remove
+        UpdatePackageForm:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The id of the package to update
+                    maxLength: 50
+                image_asset_id:
+                    type: string
+                    description: The asset ID of the image to show for this package
+                    maxLength: 50
+                keywords:
+                    type: array
+                    items:
+                        type: string
+                    description: The keywords of the package
+                    maxItems: 5
+                summary:
+                    type: string
+                    description: The summary of the package
+                    maxLength: 80
+                title:
+                    type: string
+                    description: The title of the package
+                    maxLength: 100
+            required:
+                - id
+        UpdatePackageResult:
+            type: object
+            properties:
+                package:
+                    $ref: '#/components/schemas/Package'
+            required:
+                - package
         UpdateToolsetForm:
             type: object
             properties:

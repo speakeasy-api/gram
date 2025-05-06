@@ -18,6 +18,8 @@ import (
 type Service interface {
 	// Create a new package for a project.
 	CreatePackage(context.Context, *CreatePackagePayload) (res *CreatePackageResult, err error)
+	// Update package details.
+	UpdatePackage(context.Context, *UpdatePackagePayload) (res *UpdatePackageResult, err error)
 	// List published versions of a package.
 	ListVersions(context.Context, *ListVersionsPayload) (res *ListVersionsResult, err error)
 	// Publish a new version of a package.
@@ -44,7 +46,7 @@ const ServiceName = "packages"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"createPackage", "listVersions", "publish"}
+var MethodNames = [4]string{"createPackage", "updatePackage", "listVersions", "publish"}
 
 // CreatePackagePayload is the payload type of the packages service
 // createPackage method.
@@ -149,6 +151,51 @@ type PublishPayload struct {
 	DeploymentID string
 	// The visibility of the package version
 	Visibility string
+}
+
+// UpdatePackagePayload is the payload type of the packages service
+// updatePackage method.
+type UpdatePackagePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The id of the package to update
+	ID string
+	// The title of the package
+	Title *string
+	// The summary of the package
+	Summary *string
+	// The keywords of the package
+	Keywords []string
+	// The asset ID of the image to show for this package
+	ImageAssetID *string
+}
+
+// UpdatePackageResult is the result type of the packages service updatePackage
+// method.
+type UpdatePackageResult struct {
+	// The newly created package
+	Package *Package
+}
+
+type NotModified struct {
+	Location string
+}
+
+// Error returns an error description.
+func (e *NotModified) Error() string {
+	return ""
+}
+
+// ErrorName returns "not_modified".
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
+func (e *NotModified) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns "not_modified".
+func (e *NotModified) GoaErrorName() string {
+	return "not_modified"
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

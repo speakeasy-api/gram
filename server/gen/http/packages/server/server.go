@@ -21,6 +21,7 @@ import (
 type Server struct {
 	Mounts        []*MountPoint
 	CreatePackage http.Handler
+	UpdatePackage http.Handler
 	ListVersions  http.Handler
 	Publish       http.Handler
 }
@@ -53,10 +54,12 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreatePackage", "POST", "/rpc/packages.create"},
+			{"UpdatePackage", "PUT", "/rpc/packages.update"},
 			{"ListVersions", "GET", "/rpc/packages.listVersions"},
 			{"Publish", "POST", "/rpc/packages.publish"},
 		},
 		CreatePackage: NewCreatePackageHandler(e.CreatePackage, mux, decoder, encoder, errhandler, formatter),
+		UpdatePackage: NewUpdatePackageHandler(e.UpdatePackage, mux, decoder, encoder, errhandler, formatter),
 		ListVersions:  NewListVersionsHandler(e.ListVersions, mux, decoder, encoder, errhandler, formatter),
 		Publish:       NewPublishHandler(e.Publish, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -68,6 +71,7 @@ func (s *Server) Service() string { return "packages" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreatePackage = m(s.CreatePackage)
+	s.UpdatePackage = m(s.UpdatePackage)
 	s.ListVersions = m(s.ListVersions)
 	s.Publish = m(s.Publish)
 }
@@ -78,6 +82,7 @@ func (s *Server) MethodNames() []string { return packages.MethodNames[:] }
 // Mount configures the mux to serve the packages endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreatePackageHandler(mux, h.CreatePackage)
+	MountUpdatePackageHandler(mux, h.UpdatePackage)
 	MountListVersionsHandler(mux, h.ListVersions)
 	MountPublishHandler(mux, h.Publish)
 }
@@ -117,6 +122,57 @@ func NewCreatePackageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createPackage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "packages")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
+// MountUpdatePackageHandler configures the mux to serve the "packages" service
+// "updatePackage" endpoint.
+func MountUpdatePackageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/packages.update", otelhttp.WithRouteTag("/rpc/packages.update", f).ServeHTTP)
+}
+
+// NewUpdatePackageHandler creates a HTTP handler which loads the HTTP request
+// and calls the "packages" service "updatePackage" endpoint.
+func NewUpdatePackageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdatePackageRequest(mux, decoder)
+		encodeResponse = EncodeUpdatePackageResponse(encoder)
+		encodeError    = EncodeUpdatePackageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updatePackage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "packages")
 		payload, err := decodeRequest(r)
 		if err != nil {

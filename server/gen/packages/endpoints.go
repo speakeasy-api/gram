@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "packages" service endpoints.
 type Endpoints struct {
 	CreatePackage goa.Endpoint
+	UpdatePackage goa.Endpoint
 	ListVersions  goa.Endpoint
 	Publish       goa.Endpoint
 }
@@ -27,6 +28,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		CreatePackage: NewCreatePackageEndpoint(s, a.APIKeyAuth),
+		UpdatePackage: NewUpdatePackageEndpoint(s, a.APIKeyAuth),
 		ListVersions:  NewListVersionsEndpoint(s, a.APIKeyAuth),
 		Publish:       NewPublishEndpoint(s, a.APIKeyAuth),
 	}
@@ -35,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "packages" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreatePackage = m(e.CreatePackage)
+	e.UpdatePackage = m(e.UpdatePackage)
 	e.ListVersions = m(e.ListVersions)
 	e.Publish = m(e.Publish)
 }
@@ -71,6 +74,41 @@ func NewCreatePackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.CreatePackage(ctx, p)
+	}
+}
+
+// NewUpdatePackageEndpoint returns an endpoint function that calls the method
+// "updatePackage" of service "packages".
+func NewUpdatePackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdatePackagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdatePackage(ctx, p)
 	}
 }
 

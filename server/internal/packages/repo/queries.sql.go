@@ -417,3 +417,38 @@ func (q *Queries) PokePackageByName(ctx context.Context, arg PokePackageByNamePa
 	err := row.Scan(&id)
 	return id, err
 }
+
+const updatePackage = `-- name: UpdatePackage :one
+UPDATE packages
+SET
+    title = coalesce($1, title)
+  , summary = coalesce($2, summary)
+  , keywords = coalesce($3, keywords)
+  , image_asset_id = coalesce($4, image_asset_id)
+  , updated_at = clock_timestamp()
+WHERE id = $5 AND project_id = $6
+RETURNING id
+`
+
+type UpdatePackageParams struct {
+	Title        pgtype.Text
+	Summary      pgtype.Text
+	Keywords     []string
+	ImageAssetID uuid.NullUUID
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) UpdatePackage(ctx context.Context, arg UpdatePackageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, updatePackage,
+		arg.Title,
+		arg.Summary,
+		arg.Keywords,
+		arg.ImageAssetID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}

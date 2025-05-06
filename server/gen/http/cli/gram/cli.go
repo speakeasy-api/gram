@@ -38,7 +38,7 @@ deployments (get-deployment|get-latest-deployment|create-deployment|evolve|list-
 environments (create-environment|list-environments|update-environment|delete-environment)
 integrations list
 keys (create-key|list-keys|revoke-key)
-packages (create-package|list-versions|publish)
+packages (create-package|update-package|list-versions|publish)
 projects (create-project|list-projects)
 tools list-tools
 instances get-instance
@@ -206,6 +206,11 @@ func ParseEndpoint(
 		packagesCreatePackageSessionTokenFlag     = packagesCreatePackageFlags.String("session-token", "", "")
 		packagesCreatePackageProjectSlugInputFlag = packagesCreatePackageFlags.String("project-slug-input", "", "")
 
+		packagesUpdatePackageFlags                = flag.NewFlagSet("update-package", flag.ExitOnError)
+		packagesUpdatePackageBodyFlag             = packagesUpdatePackageFlags.String("body", "REQUIRED", "")
+		packagesUpdatePackageSessionTokenFlag     = packagesUpdatePackageFlags.String("session-token", "", "")
+		packagesUpdatePackageProjectSlugInputFlag = packagesUpdatePackageFlags.String("project-slug-input", "", "")
+
 		packagesListVersionsFlags                = flag.NewFlagSet("list-versions", flag.ExitOnError)
 		packagesListVersionsNameFlag             = packagesListVersionsFlags.String("name", "REQUIRED", "")
 		packagesListVersionsSessionTokenFlag     = packagesListVersionsFlags.String("session-token", "", "")
@@ -305,6 +310,7 @@ func ParseEndpoint(
 
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
+	packagesUpdatePackageFlags.Usage = packagesUpdatePackageUsage
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
 
@@ -468,6 +474,9 @@ func ParseEndpoint(
 			switch epn {
 			case "create-package":
 				epf = packagesCreatePackageFlags
+
+			case "update-package":
+				epf = packagesUpdatePackageFlags
 
 			case "list-versions":
 				epf = packagesListVersionsFlags
@@ -638,6 +647,9 @@ func ParseEndpoint(
 			case "create-package":
 				endpoint = c.CreatePackage()
 				data, err = packagesc.BuildCreatePackagePayload(*packagesCreatePackageBodyFlag, *packagesCreatePackageSessionTokenFlag, *packagesCreatePackageProjectSlugInputFlag)
+			case "update-package":
+				endpoint = c.UpdatePackage()
+				data, err = packagesc.BuildUpdatePackagePayload(*packagesUpdatePackageBodyFlag, *packagesUpdatePackageSessionTokenFlag, *packagesUpdatePackageProjectSlugInputFlag)
 			case "list-versions":
 				endpoint = c.ListVersions()
 				data, err = packagesc.BuildListVersionsPayload(*packagesListVersionsNameFlag, *packagesListVersionsSessionTokenFlag, *packagesListVersionsProjectSlugInputFlag)
@@ -1196,6 +1208,7 @@ Usage:
 
 COMMAND:
     create-package: Create a new package for a project.
+    update-package: Update package details.
     list-versions: List published versions of a package.
     publish: Publish a new version of a package.
 
@@ -1226,6 +1239,29 @@ Example:
 `, os.Args[0])
 }
 
+func packagesUpdatePackageUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages update-package -body JSON -session-token STRING -project-slug-input STRING
+
+Update package details.
+    -body JSON: 
+    -session-token STRING: 
+    -project-slug-input STRING: 
+
+Example:
+    %[1]s packages update-package --body '{
+      "id": "aqf",
+      "image_asset_id": "yz1",
+      "keywords": [
+         "Fugit id dolores aut.",
+         "Laudantium quo ipsum.",
+         "Aut qui."
+      ],
+      "summary": "ko3",
+      "title": "j21"
+   }' --session-token "Perspiciatis amet." --project-slug-input "Nihil ex velit qui."
+`, os.Args[0])
+}
+
 func packagesListVersionsUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages list-versions -name STRING -session-token STRING -project-slug-input STRING
 
@@ -1235,7 +1271,7 @@ List published versions of a package.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-versions --name "Et accusantium odio exercitationem eligendi inventore." --session-token "Hic modi numquam quia qui." --project-slug-input "Fugit id dolores aut."
+    %[1]s packages list-versions --name "Qui rerum quod minima omnis odio ea." --session-token "Ut impedit." --project-slug-input "Quis quo alias quia facere autem placeat."
 `, os.Args[0])
 }
 
@@ -1249,11 +1285,11 @@ Publish a new version of a package.
 
 Example:
     %[1]s packages publish --body '{
-      "deployment_id": "Exercitationem in cum.",
-      "name": "Labore numquam consectetur nihil ab quo.",
-      "version": "Aut hic suscipit rerum autem ut.",
+      "deployment_id": "Aut consequuntur nostrum deserunt est tenetur debitis.",
+      "name": "Eligendi quod quasi molestiae quia dolores id.",
+      "version": "Praesentium omnis ducimus.",
       "visibility": "private"
-   }' --session-token "Distinctio harum nulla recusandae libero nulla." --project-slug-input "Doloremque id ut sint ratione."
+   }' --session-token "Expedita ipsam corporis." --project-slug-input "Ut rerum."
 `, os.Args[0])
 }
 
@@ -1280,9 +1316,9 @@ Create a new project.
 
 Example:
     %[1]s projects create-project --body '{
-      "name": "4us",
-      "organization_id": "Eos repudiandae tenetur odit."
-   }' --session-token "Quae perspiciatis vel."
+      "name": "rtn",
+      "organization_id": "Fuga cumque."
+   }' --session-token "Enim deleniti facere quod."
 `, os.Args[0])
 }
 
@@ -1294,7 +1330,7 @@ List all projects for an organization.
     -session-token STRING: 
 
 Example:
-    %[1]s projects list-projects --organization-id "Praesentium culpa quaerat cum rem aut." --session-token "Ullam quo architecto hic."
+    %[1]s projects list-projects --organization-id "Fugit incidunt est ut velit ut quisquam." --session-token "Quas consequatur sit qui impedit sapiente est."
 `, os.Args[0])
 }
 
@@ -1321,7 +1357,7 @@ List all tools for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s tools list-tools --cursor "Inventore similique." --deployment-id "Qui nobis inventore architecto aspernatur." --session-token "Aut amet dolorum necessitatibus enim officiis." --project-slug-input "Placeat ut sit."
+    %[1]s tools list-tools --cursor "Quis dolores quos." --deployment-id "Nihil provident." --session-token "Aliquam culpa quis repudiandae voluptatum." --project-slug-input "Voluptatem nulla nesciunt qui sapiente."
 `, os.Args[0])
 }
 
@@ -1350,7 +1386,7 @@ Load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances get-instance --toolset-slug "lo2" --environment-slug "ksb" --session-token "Dolor maiores accusantium velit velit." --project-slug-input "Maxime ducimus expedita et dolorem sit magnam." --apikey-token "Illum dolor laborum."
+    %[1]s instances get-instance --toolset-slug "z21" --environment-slug "2pn" --session-token "Doloremque similique sunt amet." --project-slug-input "Voluptas est possimus qui est voluptates eligendi." --apikey-token "Vero quisquam officiis."
 `, os.Args[0])
 }
 
@@ -1381,14 +1417,16 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_slug": "bz3",
-      "description": "Natus eaque.",
+      "default_environment_slug": "yvb",
+      "description": "Necessitatibus rerum omnis voluptates quibusdam non.",
       "http_tool_names": [
-         "Nihil illo repellendus quisquam est.",
-         "Ut autem sapiente."
+         "Itaque placeat iusto consectetur praesentium consequatur.",
+         "Modi ducimus et et.",
+         "Praesentium omnis corporis ex tenetur distinctio non.",
+         "Nihil vel est ea debitis ex."
       ],
-      "name": "Atque sit debitis et soluta illum quod."
-   }' --session-token "Provident amet." --project-slug-input "Recusandae sit et voluptates."
+      "name": "Quia et eos at tempore est temporibus."
+   }' --session-token "Iusto non et dolor." --project-slug-input "Aut doloremque animi assumenda rem tempore."
 `, os.Args[0])
 }
 
@@ -1400,7 +1438,7 @@ List all toolsets for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Distinctio ut autem debitis dolorum." --project-slug-input "Harum quis ducimus vitae recusandae maxime."
+    %[1]s toolsets list-toolsets --session-token "Enim et aut quasi numquam eum." --project-slug-input "Voluptatem qui totam est sit maxime aut."
 `, os.Args[0])
 }
 
@@ -1415,14 +1453,16 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "default_environment_slug": "mge",
-      "description": "Quasi quia et consequatur et.",
+      "default_environment_slug": "unf",
+      "description": "Quo laboriosam quae.",
       "http_tool_names": [
-         "Maxime voluptatem occaecati nisi.",
-         "Autem blanditiis."
+         "Corrupti quae necessitatibus voluptas et impedit in.",
+         "Nobis dolore facilis atque nesciunt.",
+         "Qui voluptatibus exercitationem nihil voluptatum eligendi.",
+         "Harum ut velit accusamus architecto voluptate."
       ],
-      "name": "Delectus autem placeat rem nihil."
-   }' --slug "ypq" --session-token "Est dolores." --project-slug-input "Et molestiae temporibus vero labore consequatur."
+      "name": "Laudantium dignissimos similique iusto."
+   }' --slug "pol" --session-token "Eum rerum voluptates et." --project-slug-input "Reiciendis nulla exercitationem aut aut quos."
 `, os.Args[0])
 }
 
@@ -1435,7 +1475,7 @@ Delete a toolset by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "spg" --session-token "Cumque nemo officiis omnis quis." --project-slug-input "Sunt inventore."
+    %[1]s toolsets delete-toolset --slug "k8e" --session-token "Aut quam maiores dolore consequatur." --project-slug-input "Quia qui consectetur fugiat repudiandae laboriosam voluptates."
 `, os.Args[0])
 }
 
@@ -1448,6 +1488,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset --slug "9rq" --session-token "Aut magni aut natus rerum." --project-slug-input "Et ea."
+    %[1]s toolsets get-toolset --slug "cch" --session-token "Voluptas dolore aut quae quia adipisci." --project-slug-input "Explicabo error eveniet magnam voluptates facere."
 `, os.Args[0])
 }

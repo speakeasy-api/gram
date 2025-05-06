@@ -87,6 +87,17 @@ INSERT INTO packages (
 VALUES (@name, @title, @summary, @keywords, @organization_id, @project_id, @image_asset_id)
 RETURNING id;
 
+-- name: UpdatePackage :one
+UPDATE packages
+SET
+    title = coalesce(@title, title)
+  , summary = coalesce(@summary, summary)
+  , keywords = coalesce(@keywords, keywords)
+  , image_asset_id = coalesce(@image_asset_id, image_asset_id)
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id
+RETURNING id;
+
 -- name: ListVersions :many
 WITH package_id_lookup as (
   SELECT id

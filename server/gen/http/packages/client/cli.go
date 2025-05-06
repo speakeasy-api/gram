@@ -78,6 +78,71 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 	return v, nil
 }
 
+// BuildUpdatePackagePayload builds the payload for the packages updatePackage
+// endpoint from CLI flags.
+func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdatePackageSessionToken string, packagesUpdatePackageProjectSlugInput string) (*packages.UpdatePackagePayload, error) {
+	var err error
+	var body UpdatePackageRequestBody
+	{
+		err = json.Unmarshal([]byte(packagesUpdatePackageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aqf\",\n      \"image_asset_id\": \"yz1\",\n      \"keywords\": [\n         \"Fugit id dolores aut.\",\n         \"Laudantium quo ipsum.\",\n         \"Aut qui.\"\n      ],\n      \"summary\": \"ko3\",\n      \"title\": \"j21\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 50, false))
+		}
+		if body.Title != nil {
+			if utf8.RuneCountInString(*body.Title) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 100, false))
+			}
+		}
+		if body.Summary != nil {
+			if utf8.RuneCountInString(*body.Summary) > 80 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 80, false))
+			}
+		}
+		if len(body.Keywords) > 5 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.keywords", body.Keywords, len(body.Keywords), 5, false))
+		}
+		if body.ImageAssetID != nil {
+			if utf8.RuneCountInString(*body.ImageAssetID) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.image_asset_id", *body.ImageAssetID, utf8.RuneCountInString(*body.ImageAssetID), 50, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if packagesUpdatePackageSessionToken != "" {
+			sessionToken = &packagesUpdatePackageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if packagesUpdatePackageProjectSlugInput != "" {
+			projectSlugInput = &packagesUpdatePackageProjectSlugInput
+		}
+	}
+	v := &packages.UpdatePackagePayload{
+		ID:           body.ID,
+		Title:        body.Title,
+		Summary:      body.Summary,
+		ImageAssetID: body.ImageAssetID,
+	}
+	if body.Keywords != nil {
+		v.Keywords = make([]string, len(body.Keywords))
+		for i, val := range body.Keywords {
+			v.Keywords[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListVersionsPayload builds the payload for the packages listVersions
 // endpoint from CLI flags.
 func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersionsSessionToken string, packagesListVersionsProjectSlugInput string) (*packages.ListVersionsPayload, error) {
@@ -113,7 +178,7 @@ func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken
 	{
 		err = json.Unmarshal([]byte(packagesPublishBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Exercitationem in cum.\",\n      \"name\": \"Labore numquam consectetur nihil ab quo.\",\n      \"version\": \"Aut hic suscipit rerum autem ut.\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Aut consequuntur nostrum deserunt est tenetur debitis.\",\n      \"name\": \"Eligendi quod quasi molestiae quia dolores id.\",\n      \"version\": \"Praesentium omnis ducimus.\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if !(body.Visibility == "public" || body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))

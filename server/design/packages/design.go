@@ -35,6 +35,40 @@ var _ = Service("packages", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreatePackage"}`)
 	})
 
+	Method("updatePackage", func() {
+		Description("Update package details.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(UpdatePackageForm)
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(UpdatePackageResult)
+
+		Error("not_modified", func() {
+			Required("location")
+			Attribute("location", String)
+		})
+
+		HTTP(func() {
+			PUT("/rpc/packages.update")
+			security.SessionHeader()
+			security.ProjectHeader()
+
+			Response(StatusOK)
+			Response("not_modified", StatusNotModified, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "updatePackage")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdatePackage"}`)
+	})
+
 	Method("listVersions", func() {
 		Description("List published versions of a package.")
 
@@ -83,6 +117,33 @@ var _ = Service("packages", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "publish")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishPackage"}`)
 	})
+})
+
+var UpdatePackageForm = Type("UpdatePackageForm", func() {
+	Required("id")
+
+	Attribute("id", String, "The id of the package to update", func() {
+		MaxLength(50)
+	})
+
+	Attribute("title", String, "The title of the package", func() {
+		MaxLength(100)
+	})
+	Attribute("summary", String, "The summary of the package", func() {
+		MaxLength(80)
+	})
+	Attribute("keywords", ArrayOf(String), "The keywords of the package", func() {
+		MaxLength(5)
+	})
+	Attribute("image_asset_id", String, "The asset ID of the image to show for this package", func() {
+		MaxLength(50)
+	})
+})
+
+var UpdatePackageResult = Type("UpdatePackageResult", func() {
+	Required("package")
+
+	Attribute("package", shared.ProjectPackage, "The newly created package")
 })
 
 var CreatePackageForm = Type("CreatePackageForm", func() {

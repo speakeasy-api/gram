@@ -2,6 +2,8 @@ package packages
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
@@ -122,6 +125,69 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 	}
 
 	return &gen.CreatePackageResult{Package: pkg}, nil
+}
+
+func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayload) (*gen.UpdatePackageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
+
+	pkgID, err := uuid.Parse(form.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing package id").Log(ctx, logger)
+	}
+
+	imageAssetID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if form.ImageAssetID != nil {
+		imgasset, err := uuid.Parse(*form.ImageAssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "image id is not a valid uuid").Log(ctx, logger)
+		}
+
+		imageAssetID = uuid.NullUUID{UUID: imgasset, Valid: imgasset != uuid.Nil}
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	tx := s.repo.WithTx(dbtx)
+	id, err := tx.UpdatePackage(ctx, repo.UpdatePackageParams{
+		ID:           pkgID,
+		ProjectID:    *authCtx.ProjectID,
+		Title:        conv.PtrToPGText(form.Title),
+		Summary:      conv.PtrToPGText(form.Summary),
+		Keywords:     form.Keywords,
+		ImageAssetID: imageAssetID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating package").Log(ctx, logger)
+	}
+
+	if err := inv.Check("package update result", "id is set", id != uuid.Nil); err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "error updating package").Log(ctx, logger)
+	}
+
+	pkg, err := describePackage(ctx, logger, tx, ProjectID(*authCtx.ProjectID), NullablePackageID(uuid.NullUUID{UUID: id, Valid: true}), NullablePackageName(nil))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving package").Log(ctx, logger)
+	}
+
+	return &gen.UpdatePackageResult{Package: pkg}, nil
 }
 
 func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayload) (res *gen.ListVersionsResult, err error) {

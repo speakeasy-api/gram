@@ -12,6 +12,11 @@ func CreatePackagePackagesPath() string {
 	return "/rpc/packages.create"
 }
 
+// UpdatePackagePackagesPath returns the URL path to the packages service updatePackage HTTP endpoint.
+func UpdatePackagePackagesPath() string {
+	return "/rpc/packages.update"
+}
+
 // ListVersionsPackagesPath returns the URL path to the packages service listVersions HTTP endpoint.
 func ListVersionsPackagesPath() string {
 	return "/rpc/packages.listVersions"
