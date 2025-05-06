@@ -1,6 +1,6 @@
 {
   "name": "@gram-ai/sdk",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "author": "gram-ai",
   "type": "module",
   "main": "./esm/index.js",

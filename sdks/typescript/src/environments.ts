@@ -4,8 +4,8 @@ export function getServerUrlByKey(key: string): string {
     } else if (key.startsWith("gram_test_")) {
         return "https://dev.getgram.ai";
     } else if (key.startsWith("gram_live_")) {
-        return "https://app.getgram.ai";
+        return "https://api.getgram.ai";
     } else {
-        return "https://app.getgram.ai";
+        return "https://api.getgram.ai";
     }
 }
