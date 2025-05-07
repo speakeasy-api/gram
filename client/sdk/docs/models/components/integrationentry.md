@@ -8,9 +8,11 @@ import { IntegrationEntry } from "@gram/client/models/components";
 let value: IntegrationEntry = {
   packageId: "<id>",
   packageName: "<value>",
-  toolCount: 163191,
+  toolNames: [
+    "<value>",
+  ],
   version: "<value>",
-  versionCreatedAt: new Date("2025-11-21T22:12:24.981Z"),
+  versionCreatedAt: new Date("2023-06-28T20:35:33.025Z"),
 };
 ```
 
@@ -25,6 +27,6 @@ let value: IntegrationEntry = {
 | `packageSummary`                                                                              | *string*                                                                                      | :heavy_minus_sign:                                                                            | N/A                                                                                           |
 | `packageTitle`                                                                                | *string*                                                                                      | :heavy_minus_sign:                                                                            | N/A                                                                                           |
 | `packageUrl`                                                                                  | *string*                                                                                      | :heavy_minus_sign:                                                                            | N/A                                                                                           |
-| `toolCount`                                                                                   | *number*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| `toolNames`                                                                                   | *string*[]                                                                                    | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `version`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `versionCreatedAt`                                                                            | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | N/A                                                                                           |

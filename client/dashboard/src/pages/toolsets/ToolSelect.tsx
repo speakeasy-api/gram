@@ -6,12 +6,14 @@ import { Type } from "@/components/ui/type";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ToolEntry } from "@gram/client/models/components";
 import { Badge } from "@/components/ui/badge";
 import { HttpMethod } from "@/components/http-route";
 import { useParams } from "react-router";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { groupTools } from "@/lib/toolNames";
+import { Button } from "@/components/ui/button";
 
 type Tool = ToolEntry & {
   enabled: boolean;
@@ -21,6 +23,8 @@ type Tool = ToolEntry & {
 
 type ToolGroup = {
   key: string;
+  defaultExpanded: boolean;
+  toggleAll: () => void;
   tools: Tool[];
 };
 
@@ -47,6 +51,28 @@ const groupColumns: Column<ToolGroup>[] = [
         </span>
       </Type>
     ),
+  },
+  {
+    header: "Toggle All",
+    key: "toggleAll",
+    width: "0.35fr",
+    render: (row) => {
+      const allEnabled = row.tools.every((t) => t.enabled);
+
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          icon={allEnabled ? "x" : "check"}
+          onClick={(e) => {
+            e.stopPropagation();
+            row.toggleAll();
+          }}
+        >
+          {allEnabled ? "Disable All" : "Enable All"}
+        </Button>
+      );
+    },
   },
 ];
 
@@ -97,7 +123,7 @@ export function ToolSelect() {
   const { data: toolset, refetch } = useToolset({
     slug: toolsetSlug ?? "",
   });
-  const { data: tools } = useListTools();
+  const { data: tools, isLoading: isLoadingTools } = useListTools();
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -109,107 +135,71 @@ export function ToolSelect() {
     setSelectedTools(toolset?.httpTools.map((t) => t.name) ?? []);
   }, [toolset]);
 
+  const setToolsEnabled = (tools: string[], enabled: boolean) => {
+    setSelectedTools((prev) => {
+      const excluded = prev.filter((t) => !tools.includes(t));
+
+      // Append from excluded so we don't add duplicates to the list
+      const updated = enabled ? [...excluded, ...tools] : excluded;
+
+      updateToolsetMutation.mutate({
+        request: {
+          slug: toolsetSlug ?? "",
+          updateToolsetRequestBody: {
+            httpToolNames: updated,
+          },
+        },
+      });
+      return updated;
+    });
+  };
+
+  const toolGroups = useMemo(() => {
+    const toggleAll = (tools: Tool[]) => {
+      setToolsEnabled(
+        tools.map((t) => t.name),
+        tools.some((t) => !t.enabled) // Disable iff all are already enabled
+      );
+    };
+
+    const toolGroups = groupTools(tools?.tools ?? []).map((group) => ({
+      ...group,
+      tools: group.tools.map((tool) => ({
+        ...tool,
+        enabled: selectedTools.includes(tool.name),
+        setEnabled: (enabled: boolean) => setToolsEnabled([tool.name], enabled),
+      })),
+    }));
+
+    const toolGroupsFinal = toolGroups.map((group) => ({
+      ...group,
+      toggleAll: () => toggleAll(group.tools),
+      defaultExpanded:
+        toolGroups.length < 3 || group.tools.some((tool) => tool.enabled),
+    }));
+
+    toolGroupsFinal.sort((a, b) => {
+      const aEnabled = a.tools.some((t) => t.enabled);
+      const bEnabled = b.tools.some((t) => t.enabled);
+      if (aEnabled && !bEnabled) return -1;
+      if (!aEnabled && bEnabled) return 1;
+      return b.key.localeCompare(a.key);
+    });
+
+    return toolGroupsFinal;
+  }, [tools, selectedTools, toolsetSlug]);
+
   if (!toolsetSlug) {
     return <div>Toolset not found</div>;
   }
 
-  const toolGroups = tools?.tools.reduce((acc, tool) => {
-    const toolWithEnabled = {
-      ...tool,
-      enabled: selectedTools.includes(tool.name),
-      setEnabled: (enabled: boolean) => {
-        setSelectedTools((prev) => {
-          const updated = enabled
-            ? [...prev, tool.name]
-            : prev.filter((t) => t !== tool.name);
-          updateToolsetMutation.mutate({
-            request: {
-              slug: toolsetSlug,
-              updateToolsetRequestBody: {
-                httpToolNames: updated,
-              },
-            },
-          });
-          return updated;
-        });
-      },
-    };
-
-    const group = acc.find((g) => g.key === tool.openapiv3DocumentId);
-
-    if (group) {
-      group.tools.push(toolWithEnabled);
-    } else {
-      acc.push({
-        key: tool.openapiv3DocumentId ?? "unknown",
-        tools: [toolWithEnabled],
-      });
-    }
-    return acc;
-  }, [] as Omit<ToolGroup, "setAllEnabled">[]);
-
-  toolGroups?.sort((a, b) => {
-    const aEnabled = a.tools.some((t) => t.enabled);
-    const bEnabled = b.tools.some((t) => t.enabled);
-    if (aEnabled && !bEnabled) return -1;
-    if (!aEnabled && bEnabled) return 1;
-    return b.key.localeCompare(a.key);
-  });
-
-  const toolGroupsFinal: ToolGroup[] | undefined = toolGroups?.map((group) => {
-    // Find the longest common prefix among all tool names in the group
-    const findLongestCommonPrefix = (strings: string[]): string => {
-      if (strings.length === 0) return "";
-      if (strings.length === 1) return strings[0] || "";
-
-      let prefix = "";
-      const firstString = strings[0] || "";
-
-      for (let i = 0; i < firstString.length; i++) {
-        const char = firstString[i];
-        if (strings.every((str) => str[i] === char)) {
-          prefix += char;
-        } else {
-          break;
-        }
-      }
-
-      return prefix;
-    };
-
-    const toolNames = group.tools.map((tool) => tool.name);
-    const commonPrefix = findLongestCommonPrefix(toolNames).replace(/_$/, "");
-
-    // If prefix is meaningful (not empty and at least includes an underscore or similar separator)
-    const prefixToUse =
-      commonPrefix && (commonPrefix.includes("_") || commonPrefix.length >= 3)
-        ? commonPrefix
-        : "";
-
-    // Update all items in the group to have a displayName without the prefix
-    const updatedItems = group.tools.map((tool) => ({
-      ...tool,
-      displayName: prefixToUse
-        ? tool.name.substring(prefixToUse.length).replace(/^_/, "")
-        : tool.name,
-    }));
-
-    return {
-      ...group,
-      key: prefixToUse || group.key,
-      tools: updatedItems,
-      defaultExpanded:
-        toolGroups.length < 3 || group.tools.some((tool) => tool.enabled),
-    };
-  });
-
   return (
     <Page.Body>
       <ToolsetHeader toolsetSlug={toolsetSlug} />
-      {toolGroupsFinal ? (
+      {!isLoadingTools ? (
         <Table
           columns={groupColumns}
-          data={toolGroupsFinal}
+          data={toolGroups}
           rowKey={(row) => row.key}
           className="mb-6"
           hideHeader

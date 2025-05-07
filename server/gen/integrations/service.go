@@ -72,7 +72,7 @@ type Integration struct {
 	PackageImageAssetID   *string
 	Version               string
 	VersionCreatedAt      string
-	ToolCount             int
+	ToolNames             []string
 }
 
 type IntegrationEntry struct {
@@ -85,7 +85,7 @@ type IntegrationEntry struct {
 	PackageImageAssetID *string
 	Version             string
 	VersionCreatedAt    string
-	ToolCount           int
+	ToolNames           []string
 }
 
 // ListIntegrationsResult is the result type of the integrations service list

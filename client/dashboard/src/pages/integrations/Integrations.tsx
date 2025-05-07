@@ -1,21 +1,23 @@
+import { AddButton } from "@/components/add-button";
+import { AssetImage } from "@/components/asset-image";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ToolsBadge } from "@/components/tools-badge";
+import { Button } from "@/components/ui/button";
+import { Card, Cards } from "@/components/ui/card";
+import { Type } from "@/components/ui/type";
+import { useIsAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { HumanizeDateTime } from "@/lib/dates";
+import { IntegrationEntry } from "@gram/client/models/components";
 import {
   useLatestDeployment,
   useListIntegrations,
 } from "@gram/client/react-query";
-import { useEffect, useState } from "react";
-import { useIsAdmin } from "@/contexts/Auth";
-import { Button } from "@/components/ui/button";
-import { IntegrationEntry } from "@gram/client/models/components";
-import { Card, Cards } from "@/components/ui/card";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
-import { HumanizeDateTime } from "@/lib/dates";
-import { AddButton } from "@/components/add-button";
+import { Stack } from "@speakeasy-api/moonshine";
 import { CheckIcon } from "lucide-react";
-import { AssetImage } from "@/components/asset-image";
+import { useEffect, useState } from "react";
+
 export default function Integrations() {
   const { data: integrations, refetch } = useListIntegrations();
   const isAdmin = useIsAdmin();
@@ -149,6 +151,8 @@ export function IntegrationCard({
   const { data: deployment, refetch } = useLatestDeployment();
   const client = useSdkClient();
 
+  console.log(deployment?.deployment, integration);
+
   const handleEnable = async () => {
     await client.deployments.evolveDeployment({
       evolveForm: {
@@ -196,11 +200,7 @@ export function IntegrationCard({
             )}
             <Card.Title>{integration.packageTitle}</Card.Title>
           </Stack>
-          <div className="flex gap-2 items-center">
-            <Badge className="h-6 flex items-center">
-              {integration.toolCount || "No"} Tools
-            </Badge>
-          </div>
+          <ToolsBadge tools={integration.toolNames} />
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           <Card.Description className="max-w-2/3">

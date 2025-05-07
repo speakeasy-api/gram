@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "./tooltip";
+import { Skeleton } from "./skeleton";
 
 const badgeVariants = cva(
   "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
@@ -28,7 +29,7 @@ const badgeVariants = cva(
     defaultVariants: {
       variant: "default",
     },
-  },
+  }
 );
 
 export function Badge({
@@ -37,19 +38,32 @@ export function Badge({
   size = "md",
   asChild = false,
   tooltip,
+  isLoading = false,
   ...props
 }: React.ComponentProps<"span"> &
   VariantProps<typeof badgeVariants> & {
     asChild?: boolean;
     tooltip?: string;
     size?: "sm" | "md";
+    isLoading?: boolean;
   }) {
   const Comp = asChild ? Slot : "span";
 
+  const heightModifier = {
+    outline: 2, // Outline badges look smaller than they really are
+    default: 0,
+    secondary: 0,
+    destructive: 0,
+  }[variant ?? "default"];
+
   const sizeClass = {
-    sm: "text-xs h-5 px-1 rounded-sm",
-    md: "text-sm h-6 px-2 rounded-md",
+    sm: `text-xs px-1 rounded-sm h-${5 + heightModifier}`,
+    md: `text-sm px-2 rounded-md h-${6 + heightModifier}`,
   }[size];
+
+  if (isLoading || props.children === undefined) {
+    return <Skeleton className={cn(sizeClass, "w-24")} />;
+  }
 
   const base = (
     <Comp

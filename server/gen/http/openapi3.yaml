@@ -3955,9 +3955,10 @@ components:
                     type: string
                 package_url:
                     type: string
-                tool_count:
-                    type: integer
-                    format: int64
+                tool_names:
+                    type: array
+                    items:
+                        type: string
                 version:
                     type: string
                 version_created_at:
@@ -3970,7 +3971,7 @@ components:
                 - package_summary
                 - version
                 - version_created_at
-                - tool_count
+                - tool_names
         IntegrationEntry:
             type: object
             properties:
@@ -3990,9 +3991,10 @@ components:
                     type: string
                 package_url:
                     type: string
-                tool_count:
-                    type: integer
-                    format: int64
+                tool_names:
+                    type: array
+                    items:
+                        type: string
                 version:
                     type: string
                 version_created_at:
@@ -4003,7 +4005,7 @@ components:
                 - package_name
                 - version
                 - version_created_at
-                - tool_count
+                - tool_names
         Key:
             type: object
             properties:

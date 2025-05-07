@@ -486,13 +486,16 @@ func unmarshalIntegrationResponseBodyToIntegrationsIntegration(v *IntegrationRes
 		PackageImageAssetID:   v.PackageImageAssetID,
 		Version:               *v.Version,
 		VersionCreatedAt:      *v.VersionCreatedAt,
-		ToolCount:             *v.ToolCount,
 	}
 	if v.PackageKeywords != nil {
 		res.PackageKeywords = make([]string, len(v.PackageKeywords))
 		for i, val := range v.PackageKeywords {
 			res.PackageKeywords[i] = val
 		}
+	}
+	res.ToolNames = make([]string, len(v.ToolNames))
+	for i, val := range v.ToolNames {
+		res.ToolNames[i] = val
 	}
 
 	return res
@@ -514,13 +517,16 @@ func unmarshalIntegrationEntryResponseBodyToIntegrationsIntegrationEntry(v *Inte
 		PackageImageAssetID: v.PackageImageAssetID,
 		Version:             *v.Version,
 		VersionCreatedAt:    *v.VersionCreatedAt,
-		ToolCount:           *v.ToolCount,
 	}
 	if v.PackageKeywords != nil {
 		res.PackageKeywords = make([]string, len(v.PackageKeywords))
 		for i, val := range v.PackageKeywords {
 			res.PackageKeywords[i] = val
 		}
+	}
+	res.ToolNames = make([]string, len(v.ToolNames))
+	for i, val := range v.ToolNames {
+		res.ToolNames[i] = val
 	}
 
 	return res

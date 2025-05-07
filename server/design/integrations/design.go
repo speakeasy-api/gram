@@ -79,7 +79,7 @@ var ListIntegrationsResult = Type("ListIntegrationsResult", func() {
 })
 
 var IntegrationEntry = Type("IntegrationEntry", func() {
-	Required("package_id", "package_name", "version", "version_created_at", "tool_count")
+	Required("package_id", "package_name", "version", "version_created_at", "tool_names")
 
 	Attribute("package_id", String)
 	Attribute("package_name", String)
@@ -92,11 +92,11 @@ var IntegrationEntry = Type("IntegrationEntry", func() {
 	Attribute("version_created_at", String, func() {
 		Format(FormatDateTime)
 	})
-	Attribute("tool_count", Int)
+	Attribute("tool_names", ArrayOf(String))
 })
 
 var Integration = Type("Integration", func() {
-	Required("package_id", "package_name", "package_title", "package_summary", "version", "version_created_at", "tool_count")
+	Required("package_id", "package_name", "package_title", "package_summary", "version", "version_created_at", "tool_names")
 
 	Attribute("package_id", String)
 	Attribute("package_name", String)
@@ -111,5 +111,5 @@ var Integration = Type("Integration", func() {
 	Attribute("version_created_at", String, func() {
 		Format(FormatDateTime)
 	})
-	Attribute("tool_count", Int)
+	Attribute("tool_names", ArrayOf(String))
 })

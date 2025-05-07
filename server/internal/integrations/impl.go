@@ -117,7 +117,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 			PackageDescriptionRaw: conv.FromPGText[string](row.Package.DescriptionRaw),
 			Version:               v.String(),
 			VersionCreatedAt:      row.VersionCreatedAt.Time.Format(time.RFC3339),
-			ToolCount:             int(row.ToolCount),
+			ToolNames:             row.ToolNames,
 		},
 	}, nil
 }
@@ -152,7 +152,7 @@ func (s *Service) List(ctx context.Context, form *gen.ListPayload) (res *gen.Lis
 			PackageKeywords:     row.PackageKeywords,
 			Version:             v.String(),
 			VersionCreatedAt:    row.VersionCreatedAt.Time.Format(time.RFC3339),
-			ToolCount:           int(row.ToolCount),
+			ToolNames:           row.ToolNames,
 			PackageImageAssetID: conv.FromNullableUUID(row.PackageImageAssetID),
 		})
 	}

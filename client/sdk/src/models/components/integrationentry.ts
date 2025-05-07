@@ -16,7 +16,7 @@ export type IntegrationEntry = {
   packageSummary?: string | undefined;
   packageTitle?: string | undefined;
   packageUrl?: string | undefined;
-  toolCount: number;
+  toolNames: Array<string>;
   version: string;
   versionCreatedAt: Date;
 };
@@ -34,7 +34,7 @@ export const IntegrationEntry$inboundSchema: z.ZodType<
   package_summary: z.string().optional(),
   package_title: z.string().optional(),
   package_url: z.string().optional(),
-  tool_count: z.number().int(),
+  tool_names: z.array(z.string()),
   version: z.string(),
   version_created_at: z.string().datetime({ offset: true }).transform(v =>
     new Date(v)
@@ -48,7 +48,7 @@ export const IntegrationEntry$inboundSchema: z.ZodType<
     "package_summary": "packageSummary",
     "package_title": "packageTitle",
     "package_url": "packageUrl",
-    "tool_count": "toolCount",
+    "tool_names": "toolNames",
     "version_created_at": "versionCreatedAt",
   });
 });
@@ -62,7 +62,7 @@ export type IntegrationEntry$Outbound = {
   package_summary?: string | undefined;
   package_title?: string | undefined;
   package_url?: string | undefined;
-  tool_count: number;
+  tool_names: Array<string>;
   version: string;
   version_created_at: string;
 };
@@ -80,7 +80,7 @@ export const IntegrationEntry$outboundSchema: z.ZodType<
   packageSummary: z.string().optional(),
   packageTitle: z.string().optional(),
   packageUrl: z.string().optional(),
-  toolCount: z.number().int(),
+  toolNames: z.array(z.string()),
   version: z.string(),
   versionCreatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
@@ -92,7 +92,7 @@ export const IntegrationEntry$outboundSchema: z.ZodType<
     packageSummary: "package_summary",
     packageTitle: "package_title",
     packageUrl: "package_url",
-    toolCount: "tool_count",
+    toolNames: "tool_names",
     versionCreatedAt: "version_created_at",
   });
 });

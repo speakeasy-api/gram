@@ -49,7 +49,7 @@ SELECT
   , lv.prerelease AS version_prerelease
   , lv.build AS version_build
   , lv.created_at AS version_created_at
-  , (SELECT COUNT(id) FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_count
+  , (SELECT ARRAY_AGG(name)::text[] FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_names
 FROM packages
 INNER JOIN latest_public_version lv ON packages.id = lv.package_id
 `
@@ -67,7 +67,7 @@ type GetIntegrationRow struct {
 	VersionPrerelease pgtype.Text
 	VersionBuild      pgtype.Text
 	VersionCreatedAt  pgtype.Timestamptz
-	ToolCount         int64
+	ToolNames         []string
 }
 
 func (q *Queries) GetIntegration(ctx context.Context, arg GetIntegrationParams) (GetIntegrationRow, error) {
@@ -95,7 +95,7 @@ func (q *Queries) GetIntegration(ctx context.Context, arg GetIntegrationParams) 
 		&i.VersionPrerelease,
 		&i.VersionBuild,
 		&i.VersionCreatedAt,
-		&i.ToolCount,
+		&i.ToolNames,
 	)
 	return i, err
 }
@@ -115,7 +115,7 @@ SELECT
   lv.prerelease AS version_prerelease,
   lv.build AS version_build,
   lv.created_at AS version_created_at,
-  (SELECT COUNT(id) FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_count
+  (SELECT ARRAY_AGG(name)::text[] FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_names
 FROM packages p
 JOIN LATERAL (
     SELECT
@@ -151,7 +151,7 @@ type ListIntegrationsRow struct {
 	VersionPrerelease   pgtype.Text
 	VersionBuild        pgtype.Text
 	VersionCreatedAt    pgtype.Timestamptz
-	ToolCount           int64
+	ToolNames           []string
 }
 
 func (q *Queries) ListIntegrations(ctx context.Context) ([]ListIntegrationsRow, error) {
@@ -177,7 +177,7 @@ func (q *Queries) ListIntegrations(ctx context.Context) ([]ListIntegrationsRow, 
 			&i.VersionPrerelease,
 			&i.VersionBuild,
 			&i.VersionCreatedAt,
-			&i.ToolCount,
+			&i.ToolNames,
 		); err != nil {
 			return nil, err
 		}

@@ -35,7 +35,7 @@ SELECT
   , lv.prerelease AS version_prerelease
   , lv.build AS version_build
   , lv.created_at AS version_created_at
-  , (SELECT COUNT(id) FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_count
+  , (SELECT ARRAY_AGG(name)::text[] FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_names
 FROM packages
 INNER JOIN latest_public_version lv ON packages.id = lv.package_id;
 
@@ -54,7 +54,7 @@ SELECT
   lv.prerelease AS version_prerelease,
   lv.build AS version_build,
   lv.created_at AS version_created_at,
-  (SELECT COUNT(id) FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_count
+  (SELECT ARRAY_AGG(name)::text[] FROM http_tool_definitions WHERE http_tool_definitions.deployment_id = lv.deployment_id) as tool_names
 FROM packages p
 JOIN LATERAL (
     SELECT

@@ -362,7 +362,7 @@ type IntegrationResponseBody struct {
 	PackageImageAssetID   *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
 	Version               *string  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	VersionCreatedAt      *string  `form:"version_created_at,omitempty" json:"version_created_at,omitempty" xml:"version_created_at,omitempty"`
-	ToolCount             *int     `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	ToolNames             []string `form:"tool_names,omitempty" json:"tool_names,omitempty" xml:"tool_names,omitempty"`
 }
 
 // IntegrationEntryResponseBody is used to define fields on response body types.
@@ -376,7 +376,7 @@ type IntegrationEntryResponseBody struct {
 	PackageImageAssetID *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
 	Version             *string  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	VersionCreatedAt    *string  `form:"version_created_at,omitempty" json:"version_created_at,omitempty" xml:"version_created_at,omitempty"`
-	ToolCount           *int     `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	ToolNames           []string `form:"tool_names,omitempty" json:"tool_names,omitempty" xml:"tool_names,omitempty"`
 }
 
 // NewGetIntegrationResultOK builds a "integrations" service "get" endpoint
@@ -1140,8 +1140,8 @@ func ValidateIntegrationResponseBody(body *IntegrationResponseBody) (err error) 
 	if body.VersionCreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version_created_at", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.ToolNames == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_names", "body"))
 	}
 	if body.VersionCreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.version_created_at", *body.VersionCreatedAt, goa.FormatDateTime))
@@ -1164,8 +1164,8 @@ func ValidateIntegrationEntryResponseBody(body *IntegrationEntryResponseBody) (e
 	if body.VersionCreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version_created_at", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.ToolNames == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_names", "body"))
 	}
 	if body.VersionCreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.version_created_at", *body.VersionCreatedAt, goa.FormatDateTime))

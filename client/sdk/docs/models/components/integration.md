@@ -10,9 +10,11 @@ let value: Integration = {
   packageName: "<value>",
   packageSummary: "<value>",
   packageTitle: "<value>",
-  toolCount: 515013,
+  toolNames: [
+    "<value>",
+  ],
   version: "<value>",
-  versionCreatedAt: new Date("2025-10-27T14:06:45.597Z"),
+  versionCreatedAt: new Date("2024-07-18T10:54:14.712Z"),
 };
 ```
 
@@ -29,6 +31,6 @@ let value: Integration = {
 | `packageSummary`                                                                              | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `packageTitle`                                                                                | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `packageUrl`                                                                                  | *string*                                                                                      | :heavy_minus_sign:                                                                            | N/A                                                                                           |
-| `toolCount`                                                                                   | *number*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| `toolNames`                                                                                   | *string*[]                                                                                    | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `version`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `versionCreatedAt`                                                                            | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | N/A                                                                                           |

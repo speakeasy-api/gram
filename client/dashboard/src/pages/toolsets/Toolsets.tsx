@@ -1,24 +1,24 @@
+import { AddButton } from "@/components/add-button";
+import { InputDialog } from "@/components/input-dialog";
+import { NameAndSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
+import { ToolsBadge } from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
+import { ToolsetDetails } from "@gram/client/models/components";
 import {
   useCreateToolsetMutation,
   useListToolsetsSuspense,
   useToolsetSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Outlet, useParams } from "react-router";
 import { useState } from "react";
-import { ToolsetDetails } from "@gram/client/models/components";
-import { InputDialog } from "@/components/input-dialog";
-import { NameAndSlug } from "@/components/name-and-slug";
+import { Outlet, useParams } from "react-router";
 import { ToolsetEnvironmentBadge } from "./Toolset";
-import { AddButton } from "@/components/add-button";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -141,12 +141,10 @@ function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
               linkTo={routes.toolsets.toolset.href(toolset.slug)}
             />
           </Card.Title>
-          <div className="flex gap-2 items-center">
+          <Stack direction="horizontal" gap={2} align="center">
             <ToolsetEnvironmentBadge toolset={toolset} size="sm" />
-            <Badge className="h-6 flex items-center">
-              {toolset.httpTools?.length || "No"} Tools
-            </Badge>
-          </div>
+            <ToolsBadge tools={toolset.httpTools} />
+          </Stack>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           <Card.Description className="max-w-2/3">

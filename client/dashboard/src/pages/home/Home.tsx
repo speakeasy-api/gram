@@ -1,34 +1,35 @@
+import { NameAndSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { Card, Cards } from "@/components/ui/card";
-import { formatDistanceToNow } from "date-fns";
-import { Suspense, useState } from "react";
-import { Stack } from "@speakeasy-api/moonshine";
+import { ToolsBadge } from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
-import { Type } from "@/components/ui/type";
-import {
-  useDeploymentSuspense,
-  useListToolsSuspense,
-  useLatestDeployment,
-  useListIntegrations,
-} from "@gram/client/react-query/index.js";
-import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
+import { Button } from "@/components/ui/button";
+import { Card, Cards } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
+import { Heading } from "@/components/ui/heading";
 import {
   Tooltip,
   TooltipContent,
-  TooltipTrigger,
   TooltipProvider,
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Heading } from "@/components/ui/heading";
-import { CreateThingCard } from "../toolsets/Toolsets";
-import { Dialog } from "@/components/ui/dialog";
-import { OnboardingContent } from "../onboarding/Onboarding";
-import { Button } from "@/components/ui/button";
-import { NameAndSlug } from "@/components/name-and-slug";
-import { HumanizeDateTime } from "@/lib/dates";
-import { CheckIcon } from "lucide-react";
-import { useRoutes } from "@/routes";
-import { ToolEntry } from "@gram/client/models/components/toolentry.js";
+import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { HumanizeDateTime } from "@/lib/dates";
+import { useRoutes } from "@/routes";
+import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
+import { ToolEntry } from "@gram/client/models/components/toolentry.js";
+import {
+  useDeploymentSuspense,
+  useLatestDeployment,
+  useListIntegrations,
+  useListToolsSuspense,
+} from "@gram/client/react-query/index.js";
+import { Stack } from "@speakeasy-api/moonshine";
+import { formatDistanceToNow } from "date-fns";
+import { CheckIcon } from "lucide-react";
+import { Suspense, useState } from "react";
+import { OnboardingContent } from "../onboarding/Onboarding";
+import { CreateThingCard } from "../toolsets/Toolsets";
 
 function DeploymentCards() {
   const { data: deployment, refetch } = useLatestDeployment();
@@ -36,7 +37,7 @@ function DeploymentCards() {
   const deploymentEmpty =
     !deployment?.deployment ||
     (deployment.deployment.openapiv3Assets.length === 0 &&
-    deployment.deployment.packages.length === 0);
+      deployment.deployment.packages.length === 0);
 
   if (deploymentEmpty) {
     return <OnboardingContent onOnboardingComplete={() => refetch()} />;
@@ -49,18 +50,6 @@ function DeploymentCards() {
         onNewDeployment={refetch}
       />
     </Suspense>
-  );
-}
-
-function ToolsTooltipContent({ tools }: { tools: ToolEntry[] }) {
-  if (tools.length === 0) return null;
-
-  return (
-    <Stack gap={1}>
-      {tools.map((tool) => (
-        <p key={tool.id}>{tool.name}</p>
-      ))}
-    </Stack>
   );
 }
 
@@ -243,22 +232,7 @@ function DeploymentCard({
           <Card.Title>
             <NameAndSlug name={asset.name} slug={asset.slug} />
           </Card.Title>
-          {tools.length > 0 ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge>{tools.length} Tools</Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <div className="max-h-[300px] overflow-y-auto">
-                    <ToolsTooltipContent tools={tools} />
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <Badge>No Tools</Badge>
-          )}
+          <ToolsBadge tools={tools} />
         </Stack>
         {latestToolTimestamp && (
           <Type variant="body" muted className="text-sm italic">
@@ -334,9 +308,7 @@ function PackageCard({ packageId }: { packageId: string }) {
           <Card.Title>{pkg.packageTitle}</Card.Title>
           <div className="flex gap-2 items-center">
             <Badge className="h-6 flex items-center">Third Party</Badge>
-            <Badge className="h-6 flex items-center">
-              {pkg.toolCount} Tools
-            </Badge>
+            <ToolsBadge tools={pkg.toolNames} />
           </div>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>

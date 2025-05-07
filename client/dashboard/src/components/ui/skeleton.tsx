@@ -36,7 +36,7 @@ export function SkeletonTable() {
     <Table
       columns={columns}
       data={[{ a: "a" }, { a: "b" }, { a: "c" }, { a: "d" }, { a: "e" }]}
-      rowKey={(row) => row.toString()}
+      rowKey={(row) => row.a}
       hideHeader
     />
   );

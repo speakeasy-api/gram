@@ -1,6 +1,30 @@
+import { AddButton } from "@/components/add-button";
+import { DeleteButton } from "@/components/delete-button";
+import { EditableText } from "@/components/editable-text";
+import { HttpRoute } from "@/components/http-route";
+import { InputDialog } from "@/components/input-dialog";
+import { NameAndSlug } from "@/components/name-and-slug";
+import { Page } from "@/components/page-layout";
+import { ToolsBadge } from "@/components/tools-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
+import { Dot } from "@/components/ui/dot";
 import { Heading } from "@/components/ui/heading";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { useSdkClient } from "@/contexts/Sdk";
+import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import {
+  EnvironmentEntryInput,
+  ToolsetDetails,
+} from "@gram/client/models/components";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
@@ -8,37 +32,13 @@ import {
   useUpdateEnvironmentMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
-import {
-  EnvironmentEntryInput,
-  ToolsetDetails,
-} from "@gram/client/models/components";
-import { EditableText } from "@/components/editable-text";
-import { CreateThingCard, useToolsets } from "./Toolsets";
-import { useParams, Outlet } from "react-router";
-import { Button } from "@/components/ui/button";
-import { Page } from "@/components/page-layout";
+import { Alert, Stack } from "@speakeasy-api/moonshine";
 import { AlertTriangle, Check } from "lucide-react";
 import { useState } from "react";
-import { DeleteButton } from "@/components/delete-button";
-import { Alert, Stack } from "@speakeasy-api/moonshine";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { Dot } from "@/components/ui/dot";
+import { Outlet, useParams } from "react-router";
 import { useEnvironment } from "../environments/Environment";
-import { InputDialog } from "@/components/input-dialog";
-import { NameAndSlug } from "@/components/name-and-slug";
-import { useRoutes } from "@/routes";
 import { useEnvironments } from "../environments/Environments";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AddButton } from "@/components/add-button";
-import { useSdkClient } from "@/contexts/Sdk";
-import { HttpRoute } from "@/components/http-route";
+import { CreateThingCard, useToolsets } from "./Toolsets";
 
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
@@ -320,10 +320,12 @@ export const ToolsetHeader = ({
         {actions}
       </Stack>
       <Stack direction="horizontal" gap={2}>
-        <Badge className="h-8">
-          {toolset?.httpTools?.length || "No"} Tools
-        </Badge>
-        <ToolsetEnvironmentBadge toolset={toolset} />
+        <ToolsBadge tools={toolset?.httpTools} size="md" variant="outline" />
+        <ToolsetEnvironmentBadge
+          toolset={toolset}
+          size="md"
+          variant="outline"
+        />
       </Stack>
     </Stack>
   );
@@ -400,20 +402,17 @@ function ToolCard({
 export const ToolsetEnvironmentBadge = ({
   toolset,
   size = "md",
+  variant = "default",
 }: {
   toolset: ToolsetDetails | undefined;
   size?: "sm" | "md";
+  variant?: "outline" | "default";
 }) => {
   const environments = useEnvironments();
   const routes = useRoutes();
 
-  const sizeClass = {
-    sm: "h-6",
-    md: "h-8",
-  }[size];
-
   if (!toolset) {
-    return <Skeleton className={cn("w-24", sizeClass)} />;
+    return <Badge size={size} isLoading />;
   }
 
   const defaultEnvironment = environments.find(
@@ -435,14 +434,26 @@ export const ToolsetEnvironmentBadge = ({
       )
     );
 
+  const colors = {
+    default: {
+      warn: "text-orange-800",
+      success: "text-green-800",
+    },
+    outline: {
+      warn: "text-orange-500",
+      success: "text-green-500",
+    },
+  }[variant];
+
   return (
     toolset.defaultEnvironmentSlug && (
       <routes.environments.environment.Link
         params={[toolset.defaultEnvironmentSlug]}
       >
         <Badge
-          variant="outline"
-          className={cn("flex items-center gap-1", sizeClass)}
+          size={size}
+          variant={variant}
+          className={"flex items-center gap-1"}
         >
           {defaultEnvironment &&
             (needsEnvVars ? (
@@ -450,7 +461,7 @@ export const ToolsetEnvironmentBadge = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
-                      <AlertTriangle className="w-3 h-3 text-orange-500 cursor-pointer" />
+                      <AlertTriangle className={cn("w-3 h-3", colors.warn)} />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -462,7 +473,7 @@ export const ToolsetEnvironmentBadge = ({
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <Check className="w-3 h-3 text-green-500" />
+              <Check className={cn("w-3 h-3", colors.success)} />
             ))}
           Default Env
         </Badge>

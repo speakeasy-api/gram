@@ -362,7 +362,7 @@ type IntegrationResponseBody struct {
 	PackageImageAssetID   *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
 	Version               string   `form:"version" json:"version" xml:"version"`
 	VersionCreatedAt      string   `form:"version_created_at" json:"version_created_at" xml:"version_created_at"`
-	ToolCount             int      `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	ToolNames             []string `form:"tool_names" json:"tool_names" xml:"tool_names"`
 }
 
 // IntegrationEntryResponseBody is used to define fields on response body types.
@@ -376,7 +376,7 @@ type IntegrationEntryResponseBody struct {
 	PackageImageAssetID *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
 	Version             string   `form:"version" json:"version" xml:"version"`
 	VersionCreatedAt    string   `form:"version_created_at" json:"version_created_at" xml:"version_created_at"`
-	ToolCount           int      `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	ToolNames           []string `form:"tool_names" json:"tool_names" xml:"tool_names"`
 }
 
 // NewGetResponseBody builds the HTTP response body from the result of the
