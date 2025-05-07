@@ -15,11 +15,14 @@
   "license": "ISC",
   "packageManager": "pnpm@10.6.1",
   "devDependencies": {
+    "@ai-sdk/openai": "catalog:",
     "@iarna/toml": "^2.2.5",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.13.17",
+    "ai": "catalog:",
     "typescript": "catalog:",
     "yaml": "^2.3.1",
+    "zod": "^3.24.3",
     "zx": "^8.4.0"
   }
 }
