@@ -24,6 +24,29 @@ services:
       - "${GRAM_REDIS_CACHE_ADDR}:35299"
     command: redis-server --port 35299 --requirepass xi9XILbY
 
+  gram-temporal:
+    image: temporalio/server:1.27.2
+    restart: unless-stopped
+    ports:
+      - "${TEMPORAL_PORT}:7233"
+      - "${TEMPORAL_WEB_PORT}:8233"
+    entrypoint: ["temporal"]
+    command:
+      [
+        "server",
+        "start-dev",
+        "--ip",
+        "0.0.0.0",
+        "--ui-ip",
+        "0.0.0.0",
+        "--namespace",
+        "default",
+        "--db-filename",
+        "/home/temporal/dev.db",
+      ]
+    volumes:
+      - temporal_data:/home/temporal
+
   grafana:
     profiles: [observability]
     image: grafana/grafana-enterprise:11.6.0
@@ -87,4 +110,6 @@ volumes:
   grafana_data:
     driver: local
   tempo_data:
+    driver: local
+  temporal_data:
     driver: local
