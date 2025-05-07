@@ -4,6 +4,7 @@
     "golang.go",
     "hverlin.mise-vscode",
     "esbenp.prettier-vscode",
-    "redhat.vscode-yaml"
+    "redhat.vscode-yaml",
+    "stateful.runme"
   ]
 }
