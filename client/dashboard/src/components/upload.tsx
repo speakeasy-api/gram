@@ -1,24 +1,67 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { UploadIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-export default function FileUpload({
+import { Asset, UploadImageResult } from "@gram/client/models/components";
+import { useFetcher } from "@/contexts/Fetcher";
+import { AssetImage } from "./asset-image";
+
+export function ImageUpload({
   onUpload,
   className,
 }: {
-  onUpload: (file: File) => void;
+  onUpload: (asset: Asset) => void;
   className?: string;
 }) {
-  const [file, setFile] = useState<File | null>(null);
+  const { fetch } = useFetcher();
+  const [asset, setAsset] = useState<Asset | null>(null);
+
+  const onImageUpload = async (file: File) => {
+    const res = await fetch("/rpc/assets.uploadImage", {
+      method: "POST",
+      body: file,
+      headers: {
+        "content-type": file.type,
+        "content-length": file.size.toString(),
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error("Upload failed");
+    }
+
+    const assetResult: UploadImageResult = await res.json();
+
+    setAsset(assetResult.asset);
+    onUpload(assetResult.asset);
+  };
+
+  if (asset) {
+    return <AssetImage assetId={asset.id} className={className} />;
+  }
+
+  return (
+    <FileUpload
+      onUpload={onImageUpload}
+      className={className}
+      allowedExtensions={["png", "jpg", "jpeg"]}
+    />
+  );
+}
+
+export default function FileUpload({
+  onUpload,
+  className,
+  allowedExtensions,
+}: {
+  onUpload: (file: File) => void;
+  allowedExtensions?: string[];
+  className?: string;
+}) {
   const [isInvalidFile, setIsInvalidFile] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     console.log("File changed:", e.target.files?.[0]);
-    setFile(e.target.files?.[0] ?? null);
-  };
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+    const file = e.target.files?.[0];
     if (file) {
       onUpload(file);
     }
@@ -26,7 +69,6 @@ export default function FileUpload({
 
   return (
     <form
-      onSubmit={handleSubmit}
       className={cn("grid gap-4 w-full max-w-2xl", className)}
       onDragOver={(e) => {
         e.preventDefault();
@@ -46,11 +88,16 @@ export default function FileUpload({
         const droppedFile = e.dataTransfer.files[0];
         if (droppedFile) {
           const fileExtension = droppedFile.name.toLowerCase().split(".").pop();
-          if (["json", "yaml", "yml"].includes(fileExtension ?? "")) {
-            setFile(droppedFile);
+          if (
+            !allowedExtensions ||
+            allowedExtensions.includes(fileExtension ?? "")
+          ) {
+            onUpload(droppedFile);
           } else {
             console.warn(
-              "Invalid file type. Please upload a JSON or YAML file.",
+              `Invalid file type. Please upload one of the following: ${allowedExtensions?.join(
+                ", "
+              )}`
             );
           }
         }
@@ -72,7 +119,8 @@ export default function FileUpload({
               drop
             </p>
             <p className="text-xs text-muted-foreground">
-              OpenAPI YAML or JSON (max 8MiB)
+              {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max
+              8MiB)
             </p>
           </div>
           <input
@@ -80,23 +128,10 @@ export default function FileUpload({
             type="file"
             className="hidden"
             onChange={handleFileChange}
-            accept=".json,.yaml,.yml"
+            accept={allowedExtensions?.map((ext) => `.${ext}`)?.join(",")}
           />
         </label>
       </div>
-      {file && (
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium">{file.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {(file.size / 1024).toFixed(2)} KB
-            </p>
-          </div>
-          <Button type="submit" className="cursor-pointer">
-            Upload
-          </Button>
-        </div>
-      )}
     </form>
   );
 }

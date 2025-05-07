@@ -67,12 +67,17 @@ const columns: Column<Tool>[] = [
     header: "Name",
     key: "name",
     render: (row) => (
-      <Stack direction={"horizontal"} gap={2} align={"center"}>
-        <Type>{row.displayName || row.name}</Type>
-        <HttpMethod method={row.httpMethod} variant="badge" path={row.path} />
-      </Stack>
+      <Type className="text-wrap break-all">{row.displayName || row.name}</Type>
     ),
-    width: "0.4fr",
+    width: "250px",
+  },
+  {
+    header: "Method",
+    key: "httpMethod",
+    render: (row) => (
+      <HttpMethod method={row.httpMethod} variant="badge" path={row.path} />
+    ),
+    width: "0.1fr",
   },
   {
     header: "Description",

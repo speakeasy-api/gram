@@ -9,7 +9,8 @@ import { useLocation, useParams } from "react-router";
 export const SdkContext = createContext<Gram>({} as Gram);
 
 export const useSdkClient = () => {
-  return useContext(SdkContext);
+  const client = useContext(SdkContext);
+  return client;
 };
 
 export const SdkProvider = ({ children }: { children: React.ReactNode }) => {

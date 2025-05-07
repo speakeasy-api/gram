@@ -3,17 +3,27 @@ import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
+import { ImageUpload } from "./upload";
 
-type InputProps = {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChange: (value: string) => void;
-  validate?: (value: string) => boolean;
-  onSubmit?: (value: string) => void;
-  submitButtonText?: string;
-  optional?: boolean;
-};
+type InputProps =
+  | {
+      type?: "text";
+      label: string;
+      placeholder: string;
+      value: string;
+      onChange: (value: string) => void;
+      validate?: (value: string) => boolean;
+      onSubmit?: (value: string) => void;
+      optional?: boolean;
+    }
+  | {
+      type: "image";
+      label: string;
+      value: string;
+      onChange: (assetId: string) => void;
+      onSubmit?: (assetId: string) => void;
+      optional?: boolean;
+    };
 
 export function InputDialog({
   open,
@@ -50,6 +60,9 @@ export function InputDialog({
       if (input.optional) {
         return true;
       }
+      if (input.type === "image") {
+        return input.value !== "";
+      }
       return input.validate?.(input.value) ?? true;
     }) && inputsArray.some((input) => input.value !== "");
 
@@ -69,12 +82,17 @@ export function InputDialog({
                   <span className="text-muted-foreground">(optional)</span>
                 )}
               </Label>
-              <Input
-                placeholder={input.placeholder}
-                value={input.value}
-                onChange={(e) => input.onChange(e.target.value)}
-                onEnter={submit}
-              />
+              {input.type !== "image" && (
+                <Input
+                  placeholder={input.placeholder}
+                  value={input.value}
+                  onChange={(e) => input.onChange(e.target.value)}
+                  onEnter={submit}
+                />
+              )}
+              {input.type === "image" && (
+                <ImageUpload onUpload={(asset) => input.onChange(asset.id)} />
+              )}
             </Stack>
           ))}
         </Stack>

@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import FileUpload from "@/components/ui/upload";
+import FileUpload from "@/components/upload";
 import { Type } from "@/components/ui/type";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useProject, useSession } from "@/contexts/Auth";
@@ -143,7 +143,12 @@ export function OnboardingContent({
     {
       heading: "Upload OpenAPI Specification",
       description: "Upload your OpenAPI specification to get started.",
-      display: <FileUpload onUpload={handleUpload} />,
+      display: (
+        <FileUpload
+          onUpload={handleUpload}
+          allowedExtensions={["yaml", "yml", "json"]}
+        />
+      ),
       displayComplete: (
         <Stack direction={"horizontal"} gap={2} align={"center"}>
           <Type>✓ Uploaded {file?.name}</Type>

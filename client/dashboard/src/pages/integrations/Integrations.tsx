@@ -15,7 +15,7 @@ import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { AddButton } from "@/components/add-button";
 import { CheckIcon } from "lucide-react";
-
+import { AssetImage } from "@/components/asset-image";
 export default function Integrations() {
   const { data: integrations, refetch } = useListIntegrations();
   const isAdmin = useIsAdmin();
@@ -73,6 +73,7 @@ function CreateIntegrationDialog({
   const [name, setName] = useState("");
   const [summary, setSummary] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
+  const [imageAssetId, setImageAssetId] = useState<string>();
 
   const handleSubmit = async () => {
     if (!deployment?.deployment) {
@@ -87,6 +88,7 @@ function CreateIntegrationDialog({
         name: packageName,
         summary,
         keywords,
+        imageAssetId,
       },
     });
 
@@ -126,6 +128,12 @@ function CreateIntegrationDialog({
           value: keywords.join(", "),
           onChange: (value) => setKeywords(value.split(", ")),
           placeholder: "hubspot, crm",
+        },
+        {
+          label: "Integration Image",
+          type: "image",
+          value: imageAssetId ?? "",
+          onChange: setImageAssetId,
         },
       ]}
       onSubmit={handleSubmit}
@@ -179,7 +187,15 @@ export function IntegrationCard({
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Card.Title>{integration.packageTitle}</Card.Title>
+          <Stack direction="horizontal" gap={2} align={"center"}>
+            {integration.packageImageAssetId && (
+              <AssetImage
+                assetId={integration.packageImageAssetId}
+                className="w-8 h-8 rounded-md"
+              />
+            )}
+            <Card.Title>{integration.packageTitle}</Card.Title>
+          </Stack>
           <div className="flex gap-2 items-center">
             <Badge className="h-6 flex items-center">
               {integration.toolCount || "No"} Tools
