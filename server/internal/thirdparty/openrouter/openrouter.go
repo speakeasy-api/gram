@@ -61,7 +61,7 @@ func (o *OpenRouter) GetAPIKey(ctx context.Context, orgID string) (string, error
 			if err != nil {
 				return "", err
 			}
-			openrouterKey = keyResponse.Data.Key
+			openrouterKey = keyResponse.Key
 		case err != nil:
 			return "", err
 		}
@@ -80,9 +80,10 @@ type createKeyRequest struct {
 
 type createKeyResponse struct {
 	Data struct {
-		Key  string `json:"key"`
-		Hash string `json:"hash"`
+		Limit string `json:"limit"`
+		Hash  string `json:"hash"`
 	} `json:"data"`
+	Key string `json:"key"`
 }
 
 func (o *OpenRouter) CreateOpenRouterAPIKey(ctx context.Context, orgID string) (*createKeyResponse, error) {
@@ -122,7 +123,7 @@ func (o *OpenRouter) CreateOpenRouterAPIKey(ctx context.Context, orgID string) (
 		return nil, err
 	}
 
-	if response.Data.Key == "" {
+	if response.Key == "" {
 		o.logger.ErrorContext(ctx, "missing key in OpenRouter response")
 		return nil, errors.New("missing key in OpenRouter response")
 	}
