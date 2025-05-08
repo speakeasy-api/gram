@@ -61,6 +61,14 @@ func (o *OpenRouter) GetAPIKey(ctx context.Context, orgID string) (string, error
 			if err != nil {
 				return "", err
 			}
+			_, err = o.repo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				Key:            keyResponse.Key,
+				KeyHash:        keyResponse.Data.Hash,
+			})
+			if err != nil {
+				return "", err
+			}
 			openrouterKey = keyResponse.Key
 		case err != nil:
 			return "", err
