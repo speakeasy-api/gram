@@ -83,6 +83,7 @@ type ServeImageResult struct {
 
 // UploadImageForm is the payload type of the assets service uploadImage method.
 type UploadImageForm struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	ContentType      string
@@ -99,6 +100,7 @@ type UploadImageResult struct {
 // UploadOpenAPIv3Form is the payload type of the assets service
 // uploadOpenAPIv3 method.
 type UploadOpenAPIv3Form struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	ContentType      string

@@ -296,6 +296,10 @@ func EncodeUploadImageRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			headStr := strconv.FormatInt(head, 10)
 			req.Header.Set("Content-Length", headStr)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
@@ -545,6 +549,10 @@ func EncodeUploadOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) f
 			head := p.ContentLength
 			headStr := strconv.FormatInt(head, 10)
 			req.Header.Set("Content-Length", headStr)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput

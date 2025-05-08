@@ -18,13 +18,13 @@ import (
 
 // BuildCreatePackagePayload builds the payload for the packages createPackage
 // endpoint from CLI flags.
-func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreatePackageSessionToken string, packagesCreatePackageProjectSlugInput string) (*packages.CreatePackagePayload, error) {
+func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreatePackageApikeyToken string, packagesCreatePackageSessionToken string, packagesCreatePackageProjectSlugInput string) (*packages.CreatePackagePayload, error) {
 	var err error
 	var body CreatePackageRequestBody
 	{
 		err = json.Unmarshal([]byte(packagesCreatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"odf\",\n      \"image_asset_id\": \"cki\",\n      \"keywords\": [\n         \"Tempora dolorum enim molestiae impedit voluptas veritatis.\",\n         \"Dicta quasi.\",\n         \"Voluptas mollitia hic repellendus in enim.\"\n      ],\n      \"name\": \"b10\",\n      \"summary\": \"4vy\",\n      \"title\": \"1lb\",\n      \"url\": \"wey\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"edf\",\n      \"image_asset_id\": \"o1y\",\n      \"keywords\": [\n         \"Architecto aspernatur et aut amet dolorum necessitatibus.\",\n         \"Officiis laudantium placeat.\",\n         \"Sit earum dignissimos dolor.\"\n      ],\n      \"name\": \"4qf\",\n      \"summary\": \"9h5\",\n      \"title\": \"adz\",\n      \"url\": \"d8b\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 100 {
@@ -58,6 +58,12 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 			return nil, err
 		}
 	}
+	var apikeyToken *string
+	{
+		if packagesCreatePackageApikeyToken != "" {
+			apikeyToken = &packagesCreatePackageApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if packagesCreatePackageSessionToken != "" {
@@ -84,6 +90,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 			v.Keywords[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -92,13 +99,13 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 
 // BuildUpdatePackagePayload builds the payload for the packages updatePackage
 // endpoint from CLI flags.
-func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdatePackageSessionToken string, packagesUpdatePackageProjectSlugInput string) (*packages.UpdatePackagePayload, error) {
+func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdatePackageApikeyToken string, packagesUpdatePackageSessionToken string, packagesUpdatePackageProjectSlugInput string) (*packages.UpdatePackagePayload, error) {
 	var err error
 	var body UpdatePackageRequestBody
 	{
 		err = json.Unmarshal([]byte(packagesUpdatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"2pn\",\n      \"id\": \"dsy\",\n      \"image_asset_id\": \"clj\",\n      \"keywords\": [\n         \"Voluptas est possimus qui est voluptates eligendi.\",\n         \"Vero quisquam officiis.\",\n         \"Non autem ratione animi et quia.\"\n      ],\n      \"summary\": \"z21\",\n      \"title\": \"84b\",\n      \"url\": \"0ha\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"kys\",\n      \"id\": \"ofi\",\n      \"image_asset_id\": \"a2s\",\n      \"keywords\": [\n         \"Rem quia veniam.\",\n         \"Eos recusandae.\",\n         \"Eum est praesentium voluptate.\"\n      ],\n      \"summary\": \"qch\",\n      \"title\": \"cfe\",\n      \"url\": \"yd4\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.ID) > 50 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 50, false))
@@ -135,6 +142,12 @@ func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdateP
 			return nil, err
 		}
 	}
+	var apikeyToken *string
+	{
+		if packagesUpdatePackageApikeyToken != "" {
+			apikeyToken = &packagesUpdatePackageApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if packagesUpdatePackageSessionToken != "" {
@@ -161,6 +174,7 @@ func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdateP
 			v.Keywords[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -169,10 +183,16 @@ func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdateP
 
 // BuildListVersionsPayload builds the payload for the packages listVersions
 // endpoint from CLI flags.
-func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersionsSessionToken string, packagesListVersionsProjectSlugInput string) (*packages.ListVersionsPayload, error) {
+func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersionsApikeyToken string, packagesListVersionsSessionToken string, packagesListVersionsProjectSlugInput string) (*packages.ListVersionsPayload, error) {
 	var name string
 	{
 		name = packagesListVersionsName
+	}
+	var apikeyToken *string
+	{
+		if packagesListVersionsApikeyToken != "" {
+			apikeyToken = &packagesListVersionsApikeyToken
+		}
 	}
 	var sessionToken *string
 	{
@@ -188,6 +208,7 @@ func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersi
 	}
 	v := &packages.ListVersionsPayload{}
 	v.Name = name
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -196,19 +217,25 @@ func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersi
 
 // BuildPublishPayload builds the payload for the packages publish endpoint
 // from CLI flags.
-func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken string, packagesPublishProjectSlugInput string) (*packages.PublishPayload, error) {
+func BuildPublishPayload(packagesPublishBody string, packagesPublishApikeyToken string, packagesPublishSessionToken string, packagesPublishProjectSlugInput string) (*packages.PublishPayload, error) {
 	var err error
 	var body PublishRequestBody
 	{
 		err = json.Unmarshal([]byte(packagesPublishBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Est sit ut autem.\",\n      \"name\": \"Debitis et soluta illum quod qui.\",\n      \"version\": \"Eaque aliquid veritatis nihil illo repellendus.\",\n      \"visibility\": \"public\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Et dolor nisi aut doloremque animi assumenda.\",\n      \"name\": \"Est nihil vel est ea.\",\n      \"version\": \"Ex atque iure aut commodi ullam iusto.\",\n      \"visibility\": \"public\"\n   }'")
 		}
 		if !(body.Visibility == "public" || body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if packagesPublishApikeyToken != "" {
+			apikeyToken = &packagesPublishApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -229,6 +256,7 @@ func BuildPublishPayload(packagesPublishBody string, packagesPublishSessionToken
 		DeploymentID: body.DeploymentID,
 		Visibility:   body.Visibility,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

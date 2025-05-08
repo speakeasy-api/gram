@@ -77,6 +77,7 @@ type AddPackageForm struct {
 // CreateDeploymentPayload is the payload type of the deployments service
 // createDeployment method.
 type CreateDeploymentPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// A unique identifier that will mitigate against duplicate deployments.
@@ -160,6 +161,7 @@ type DeploymentSummary struct {
 
 // EvolvePayload is the payload type of the deployments service evolve method.
 type EvolvePayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The ID of the deployment to evolve. If omitted, the latest deployment will
@@ -186,6 +188,7 @@ type EvolveResult struct {
 // GetDeploymentPayload is the payload type of the deployments service
 // getDeployment method.
 type GetDeploymentPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The ID of the deployment
@@ -231,6 +234,7 @@ type GetDeploymentResult struct {
 // GetLatestDeploymentPayload is the payload type of the deployments service
 // getLatestDeployment method.
 type GetLatestDeploymentPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -254,6 +258,7 @@ type ListDeploymentResult struct {
 // ListDeploymentsPayload is the payload type of the deployments service
 // listDeployments method.
 type ListDeploymentsPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The cursor to fetch results from

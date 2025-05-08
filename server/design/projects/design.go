@@ -10,6 +10,9 @@ import (
 var _ = Service("projects", func() {
 	Description("Manages projects in Gram.")
 
+	Security(security.ByKey, func() {
+		Scope("producer")
+	})
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
@@ -18,12 +21,14 @@ var _ = Service("projects", func() {
 
 		Payload(func() {
 			Extend(CreateProjectForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 		Result(CreateProjectResult)
 
 		HTTP(func() {
 			POST("/rpc/projects.create")
+			security.ByKeyHeader()
 			security.SessionHeader()
 		})
 
@@ -53,6 +58,7 @@ var _ = Service("projects", func() {
 
 var CreateProjectForm = Type("CreateProjectForm", func() {
 	Required("organization_id", "name")
+	security.ByKeyPayload()
 	security.SessionPayload()
 
 	Attribute("organization_id", String, "The ID of the organization to create the project in")
@@ -67,6 +73,7 @@ var CreateProjectResult = Type("CreateProjectResult", func() {
 
 var ListProjectsPayload = Type("ListProjectsPayload", func() {
 	Required("organization_id")
+	security.ByKeyPayload()
 	security.SessionPayload()
 
 	Attribute("organization_id", String, "The ID of the organization to list projects for")

@@ -230,6 +230,7 @@ func DecodeUploadImageRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		var (
 			contentType      string
 			contentLength    int64
+			apikeyToken      *string
 			projectSlugInput *string
 			sessionToken     *string
 			err              error
@@ -249,6 +250,10 @@ func DecodeUploadImageRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			}
 			contentLength = v
 		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		projectSlugInputRaw := r.Header.Get("Gram-Project")
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
@@ -260,12 +265,12 @@ func DecodeUploadImageRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return nil, err
 		}
-		payload := NewUploadImageForm(contentType, contentLength, projectSlugInput, sessionToken)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
+		payload := NewUploadImageForm(contentType, contentLength, apikeyToken, projectSlugInput, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -273,6 +278,13 @@ func DecodeUploadImageRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 
@@ -441,6 +453,7 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			contentType      string
 			contentLength    int64
+			apikeyToken      *string
 			projectSlugInput *string
 			sessionToken     *string
 			err              error
@@ -460,6 +473,10 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 			}
 			contentLength = v
 		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		projectSlugInputRaw := r.Header.Get("Gram-Project")
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
@@ -471,12 +488,12 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return nil, err
 		}
-		payload := NewUploadOpenAPIv3Form(contentType, contentLength, projectSlugInput, sessionToken)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
+		payload := NewUploadOpenAPIv3Form(contentType, contentLength, apikeyToken, projectSlugInput, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -484,6 +501,13 @@ func DecodeUploadOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request)
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 

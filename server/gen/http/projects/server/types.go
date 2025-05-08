@@ -670,11 +670,12 @@ func NewListProjectsUnexpectedResponseBody(res *goa.ServiceError) *ListProjectsU
 
 // NewCreateProjectPayload builds a projects service createProject endpoint
 // payload.
-func NewCreateProjectPayload(body *CreateProjectRequestBody, sessionToken *string) *projects.CreateProjectPayload {
+func NewCreateProjectPayload(body *CreateProjectRequestBody, apikeyToken *string, sessionToken *string) *projects.CreateProjectPayload {
 	v := &projects.CreateProjectPayload{
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -682,10 +683,11 @@ func NewCreateProjectPayload(body *CreateProjectRequestBody, sessionToken *strin
 
 // NewListProjectsPayload builds a projects service listProjects endpoint
 // payload.
-func NewListProjectsPayload(organizationID string, sessionToken *string) *projects.ListProjectsPayload {
+func NewListProjectsPayload(organizationID string, sessionToken *string, apikeyToken *string) *projects.ListProjectsPayload {
 	v := &projects.ListProjectsPayload{}
 	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 
 	return v
 }

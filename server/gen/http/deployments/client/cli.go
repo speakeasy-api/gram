@@ -17,10 +17,16 @@ import (
 
 // BuildGetDeploymentPayload builds the payload for the deployments
 // getDeployment endpoint from CLI flags.
-func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentSessionToken string, deploymentsGetDeploymentProjectSlugInput string) (*deployments.GetDeploymentPayload, error) {
+func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGetDeploymentApikeyToken string, deploymentsGetDeploymentSessionToken string, deploymentsGetDeploymentProjectSlugInput string) (*deployments.GetDeploymentPayload, error) {
 	var id string
 	{
 		id = deploymentsGetDeploymentID
+	}
+	var apikeyToken *string
+	{
+		if deploymentsGetDeploymentApikeyToken != "" {
+			apikeyToken = &deploymentsGetDeploymentApikeyToken
+		}
 	}
 	var sessionToken *string
 	{
@@ -36,6 +42,7 @@ func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGet
 	}
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -44,7 +51,13 @@ func BuildGetDeploymentPayload(deploymentsGetDeploymentID string, deploymentsGet
 
 // BuildGetLatestDeploymentPayload builds the payload for the deployments
 // getLatestDeployment endpoint from CLI flags.
-func BuildGetLatestDeploymentPayload(deploymentsGetLatestDeploymentSessionToken string, deploymentsGetLatestDeploymentProjectSlugInput string) (*deployments.GetLatestDeploymentPayload, error) {
+func BuildGetLatestDeploymentPayload(deploymentsGetLatestDeploymentApikeyToken string, deploymentsGetLatestDeploymentSessionToken string, deploymentsGetLatestDeploymentProjectSlugInput string) (*deployments.GetLatestDeploymentPayload, error) {
+	var apikeyToken *string
+	{
+		if deploymentsGetLatestDeploymentApikeyToken != "" {
+			apikeyToken = &deploymentsGetLatestDeploymentApikeyToken
+		}
+	}
 	var sessionToken *string
 	{
 		if deploymentsGetLatestDeploymentSessionToken != "" {
@@ -58,6 +71,7 @@ func BuildGetLatestDeploymentPayload(deploymentsGetLatestDeploymentSessionToken 
 		}
 	}
 	v := &deployments.GetLatestDeploymentPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -66,13 +80,13 @@ func BuildGetLatestDeploymentPayload(deploymentsGetLatestDeploymentSessionToken 
 
 // BuildCreateDeploymentPayload builds the payload for the deployments
 // createDeployment endpoint from CLI flags.
-func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentSessionToken string, deploymentsCreateDeploymentProjectSlugInput string, deploymentsCreateDeploymentIdempotencyKey string) (*deployments.CreateDeploymentPayload, error) {
+func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentApikeyToken string, deploymentsCreateDeploymentSessionToken string, deploymentsCreateDeploymentProjectSlugInput string, deploymentsCreateDeploymentIdempotencyKey string) (*deployments.CreateDeploymentPayload, error) {
 	var err error
 	var body CreateDeploymentRequestBody
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Est sed error.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Qui consequatur assumenda aut quia nobis.\",\n            \"name\": \"Facilis esse.\",\n            \"slug\": \"h6r\"\n         },\n         {\n            \"asset_id\": \"Qui consequatur assumenda aut quia nobis.\",\n            \"name\": \"Facilis esse.\",\n            \"slug\": \"h6r\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Suscipit mollitia voluptatem dolorem perspiciatis deleniti.\",\n            \"version\": \"Aliquid commodi dolorem asperiores aut.\"\n         },\n         {\n            \"name\": \"Suscipit mollitia voluptatem dolorem perspiciatis deleniti.\",\n            \"version\": \"Aliquid commodi dolorem asperiores aut.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Alias soluta nobis quaerat voluptates dignissimos.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Distinctio veritatis dignissimos voluptatem.\",\n            \"name\": \"Distinctio consectetur commodi eos soluta pariatur excepturi.\",\n            \"slug\": \"j7z\"\n         },\n         {\n            \"asset_id\": \"Distinctio veritatis dignissimos voluptatem.\",\n            \"name\": \"Distinctio consectetur commodi eos soluta pariatur excepturi.\",\n            \"slug\": \"j7z\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Animi esse unde molestiae iure modi.\",\n            \"version\": \"Corrupti voluptas.\"\n         },\n         {\n            \"name\": \"Animi esse unde molestiae iure modi.\",\n            \"version\": \"Corrupti voluptas.\"\n         },\n         {\n            \"name\": \"Animi esse unde molestiae iure modi.\",\n            \"version\": \"Corrupti voluptas.\"\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.Openapiv3Assets {
 			if e != nil {
@@ -83,6 +97,12 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if deploymentsCreateDeploymentApikeyToken != "" {
+			apikeyToken = &deploymentsCreateDeploymentApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -120,6 +140,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			v.Packages[i] = marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(val)
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
@@ -129,13 +150,19 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 
 // BuildEvolvePayload builds the payload for the deployments evolve endpoint
 // from CLI flags.
-func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveSessionToken string, deploymentsEvolveProjectSlugInput string) (*deployments.EvolvePayload, error) {
+func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyToken string, deploymentsEvolveSessionToken string, deploymentsEvolveProjectSlugInput string) (*deployments.EvolvePayload, error) {
 	var err error
 	var body EvolveRequestBody
 	{
 		err = json.Unmarshal([]byte(deploymentsEvolveBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Dolorem quasi quibusdam dolorem enim rem natus.\",\n      \"exclude_openapiv3_assets\": [\n         \"Nam odio veniam nisi.\",\n         \"Harum id.\",\n         \"Sunt non et dolores qui facere necessitatibus.\"\n      ],\n      \"exclude_packages\": [\n         \"Ut quidem.\",\n         \"Quod eligendi omnis voluptate laboriosam.\",\n         \"Voluptatem saepe soluta.\",\n         \"Earum blanditiis voluptatibus nostrum.\"\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Qui consequatur assumenda aut quia nobis.\",\n            \"name\": \"Facilis esse.\",\n            \"slug\": \"h6r\"\n         },\n         {\n            \"asset_id\": \"Qui consequatur assumenda aut quia nobis.\",\n            \"name\": \"Facilis esse.\",\n            \"slug\": \"h6r\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Repellat enim possimus quis inventore.\",\n            \"version\": \"Cupiditate enim.\"\n         },\n         {\n            \"name\": \"Repellat enim possimus quis inventore.\",\n            \"version\": \"Cupiditate enim.\"\n         },\n         {\n            \"name\": \"Repellat enim possimus quis inventore.\",\n            \"version\": \"Cupiditate enim.\"\n         },\n         {\n            \"name\": \"Repellat enim possimus quis inventore.\",\n            \"version\": \"Cupiditate enim.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Quae voluptatum fugiat labore aut.\",\n      \"exclude_openapiv3_assets\": [\n         \"Quibusdam labore sapiente neque deleniti.\",\n         \"Rerum iusto quia tempora.\",\n         \"Minus sed iusto ea provident voluptatem.\"\n      ],\n      \"exclude_packages\": [\n         \"Vero ipsa rem quaerat consectetur optio explicabo.\",\n         \"Ea ut.\",\n         \"Odit ut molestiae accusamus aut dignissimos.\"\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Distinctio veritatis dignissimos voluptatem.\",\n            \"name\": \"Distinctio consectetur commodi eos soluta pariatur excepturi.\",\n            \"slug\": \"j7z\"\n         },\n         {\n            \"asset_id\": \"Distinctio veritatis dignissimos voluptatem.\",\n            \"name\": \"Distinctio consectetur commodi eos soluta pariatur excepturi.\",\n            \"slug\": \"j7z\"\n         },\n         {\n            \"asset_id\": \"Distinctio veritatis dignissimos voluptatem.\",\n            \"name\": \"Distinctio consectetur commodi eos soluta pariatur excepturi.\",\n            \"slug\": \"j7z\"\n         },\n         {\n            \"asset_id\": \"Distinctio veritatis dignissimos voluptatem.\",\n            \"name\": \"Distinctio consectetur commodi eos soluta pariatur excepturi.\",\n            \"slug\": \"j7z\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Ipsa voluptatum consequatur atque dolor odit.\",\n            \"version\": \"Facilis voluptatum rerum.\"\n         },\n         {\n            \"name\": \"Ipsa voluptatum consequatur atque dolor odit.\",\n            \"version\": \"Facilis voluptatum rerum.\"\n         },\n         {\n            \"name\": \"Ipsa voluptatum consequatur atque dolor odit.\",\n            \"version\": \"Facilis voluptatum rerum.\"\n         },\n         {\n            \"name\": \"Ipsa voluptatum consequatur atque dolor odit.\",\n            \"version\": \"Facilis voluptatum rerum.\"\n         }\n      ]\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if deploymentsEvolveApikeyToken != "" {
+			apikeyToken = &deploymentsEvolveApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -177,6 +204,7 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveSessionTo
 			v.ExcludePackages[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -185,11 +213,17 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveSessionTo
 
 // BuildListDeploymentsPayload builds the payload for the deployments
 // listDeployments endpoint from CLI flags.
-func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsSessionToken string, deploymentsListDeploymentsProjectSlugInput string) (*deployments.ListDeploymentsPayload, error) {
+func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsApikeyToken string, deploymentsListDeploymentsSessionToken string, deploymentsListDeploymentsProjectSlugInput string) (*deployments.ListDeploymentsPayload, error) {
 	var cursor *string
 	{
 		if deploymentsListDeploymentsCursor != "" {
 			cursor = &deploymentsListDeploymentsCursor
+		}
+	}
+	var apikeyToken *string
+	{
+		if deploymentsListDeploymentsApikeyToken != "" {
+			apikeyToken = &deploymentsListDeploymentsApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -206,6 +240,7 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 	}
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

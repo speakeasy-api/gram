@@ -1372,7 +1372,7 @@ func NewPublishUnexpectedResponseBody(res *goa.ServiceError) *PublishUnexpectedR
 
 // NewCreatePackagePayload builds a packages service createPackage endpoint
 // payload.
-func NewCreatePackagePayload(body *CreatePackageRequestBody, sessionToken *string, projectSlugInput *string) *packages.CreatePackagePayload {
+func NewCreatePackagePayload(body *CreatePackageRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *packages.CreatePackagePayload {
 	v := &packages.CreatePackagePayload{
 		Name:         *body.Name,
 		Title:        *body.Title,
@@ -1387,6 +1387,7 @@ func NewCreatePackagePayload(body *CreatePackageRequestBody, sessionToken *strin
 			v.Keywords[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1395,7 +1396,7 @@ func NewCreatePackagePayload(body *CreatePackageRequestBody, sessionToken *strin
 
 // NewUpdatePackagePayload builds a packages service updatePackage endpoint
 // payload.
-func NewUpdatePackagePayload(body *UpdatePackageRequestBody, sessionToken *string, projectSlugInput *string) *packages.UpdatePackagePayload {
+func NewUpdatePackagePayload(body *UpdatePackageRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *packages.UpdatePackagePayload {
 	v := &packages.UpdatePackagePayload{
 		ID:           *body.ID,
 		Title:        body.Title,
@@ -1410,6 +1411,7 @@ func NewUpdatePackagePayload(body *UpdatePackageRequestBody, sessionToken *strin
 			v.Keywords[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1418,9 +1420,10 @@ func NewUpdatePackagePayload(body *UpdatePackageRequestBody, sessionToken *strin
 
 // NewListVersionsPayload builds a packages service listVersions endpoint
 // payload.
-func NewListVersionsPayload(name string, sessionToken *string, projectSlugInput *string) *packages.ListVersionsPayload {
+func NewListVersionsPayload(name string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *packages.ListVersionsPayload {
 	v := &packages.ListVersionsPayload{}
 	v.Name = name
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1428,13 +1431,14 @@ func NewListVersionsPayload(name string, sessionToken *string, projectSlugInput 
 }
 
 // NewPublishPayload builds a packages service publish endpoint payload.
-func NewPublishPayload(body *PublishRequestBody, sessionToken *string, projectSlugInput *string) *packages.PublishPayload {
+func NewPublishPayload(body *PublishRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *packages.PublishPayload {
 	v := &packages.PublishPayload{
 		Name:         *body.Name,
 		Version:      *body.Version,
 		DeploymentID: *body.DeploymentID,
 		Visibility:   *body.Visibility,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

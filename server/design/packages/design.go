@@ -11,14 +11,18 @@ var _ = Service("packages", func() {
 	Description("Manages packages in Gram.")
 	shared.DeclareErrorResponses()
 
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
+	Security(security.Session, security.ProjectSlug)
+
 	Method("createPackage", func() {
 		Description("Create a new package for a project.")
-
-		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
 			Extend(CreatePackageForm)
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -26,6 +30,7 @@ var _ = Service("packages", func() {
 
 		HTTP(func() {
 			POST("/rpc/packages.create")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 		})
@@ -38,11 +43,10 @@ var _ = Service("packages", func() {
 	Method("updatePackage", func() {
 		Description("Update package details.")
 
-		Security(security.Session, security.ProjectSlug)
-
 		Payload(func() {
 			Extend(UpdatePackageForm)
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -55,6 +59,7 @@ var _ = Service("packages", func() {
 
 		HTTP(func() {
 			PUT("/rpc/packages.update")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 
@@ -72,11 +77,10 @@ var _ = Service("packages", func() {
 	Method("listVersions", func() {
 		Description("List published versions of a package.")
 
-		Security(security.Session, security.ProjectSlug)
-
 		Payload(func() {
 			Extend(ListVersionsForm)
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -85,6 +89,7 @@ var _ = Service("packages", func() {
 		HTTP(func() {
 			GET("/rpc/packages.listVersions")
 			Param("name")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 		})
@@ -97,11 +102,10 @@ var _ = Service("packages", func() {
 	Method("publish", func() {
 		Description("Publish a new version of a package.")
 
-		Security(security.Session, security.ProjectSlug)
-
 		Payload(func() {
 			Extend(PublishPackageForm)
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -109,6 +113,7 @@ var _ = Service("packages", func() {
 
 		HTTP(func() {
 			POST("/rpc/packages.publish")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 		})

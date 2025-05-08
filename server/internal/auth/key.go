@@ -24,7 +24,7 @@ func NewKeyAuth(db *pgxpool.Pool) *ByKey {
 
 func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []string) (context.Context, error) {
 	if key == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
 	apiKey, err := k.keyDB.GetAPIKeyByToken(ctx, key)

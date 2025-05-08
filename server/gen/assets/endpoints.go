@@ -101,26 +101,50 @@ func NewUploadImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		ep := req.(*UploadImageRequestData)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if ep.Payload.SessionToken != nil {
-			key = *ep.Payload.SessionToken
+		if ep.Payload.ApikeyToken != nil {
+			key = *ep.Payload.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if ep.Payload.ProjectSlugInput != nil {
 				key = *ep.Payload.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if ep.Payload.SessionToken != nil {
+				key = *ep.Payload.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if ep.Payload.ProjectSlugInput != nil {
+					key = *ep.Payload.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -136,26 +160,50 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		ep := req.(*UploadOpenAPIv3RequestData)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if ep.Payload.SessionToken != nil {
-			key = *ep.Payload.SessionToken
+		if ep.Payload.ApikeyToken != nil {
+			key = *ep.Payload.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if ep.Payload.ProjectSlugInput != nil {
 				key = *ep.Payload.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if ep.Payload.SessionToken != nil {
+				key = *ep.Payload.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if ep.Payload.ProjectSlugInput != nil {
+					key = *ep.Payload.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err

@@ -56,13 +56,25 @@ func DecodeCreateProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		}
 
 		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload := NewCreateProjectPayload(&body, sessionToken)
+		payload := NewCreateProjectPayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -236,6 +248,7 @@ func DecodeListProjectsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		var (
 			organizationID string
 			sessionToken   *string
+			apikeyToken    *string
 			err            error
 		)
 		organizationID = r.URL.Query().Get("organization_id")
@@ -246,10 +259,21 @@ func DecodeListProjectsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		apikeyTokenRaw := r.Header.Get("Authorization")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListProjectsPayload(organizationID, sessionToken)
+		payload := NewListProjectsPayload(organizationID, sessionToken, apikeyToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

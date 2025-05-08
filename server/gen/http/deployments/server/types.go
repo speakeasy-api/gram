@@ -1785,9 +1785,10 @@ func NewListDeploymentsUnexpectedResponseBody(res *goa.ServiceError) *ListDeploy
 
 // NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
-func NewGetDeploymentPayload(id string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentPayload {
+func NewGetDeploymentPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentPayload {
 	v := &deployments.GetDeploymentPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1796,8 +1797,9 @@ func NewGetDeploymentPayload(id string, sessionToken *string, projectSlugInput *
 
 // NewGetLatestDeploymentPayload builds a deployments service
 // getLatestDeployment endpoint payload.
-func NewGetLatestDeploymentPayload(sessionToken *string, projectSlugInput *string) *deployments.GetLatestDeploymentPayload {
+func NewGetLatestDeploymentPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.GetLatestDeploymentPayload {
 	v := &deployments.GetLatestDeploymentPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1806,7 +1808,7 @@ func NewGetLatestDeploymentPayload(sessionToken *string, projectSlugInput *strin
 
 // NewCreateDeploymentPayload builds a deployments service createDeployment
 // endpoint payload.
-func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken *string, projectSlugInput *string, idempotencyKey string) *deployments.CreateDeploymentPayload {
+func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string, idempotencyKey string) *deployments.CreateDeploymentPayload {
 	v := &deployments.CreateDeploymentPayload{
 		GithubRepo:  body.GithubRepo,
 		GithubPr:    body.GithubPr,
@@ -1826,6 +1828,7 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 			v.Packages[i] = unmarshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackageForm(val)
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
@@ -1834,7 +1837,7 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, sessionToken 
 }
 
 // NewEvolvePayload builds a deployments service evolve endpoint payload.
-func NewEvolvePayload(body *EvolveRequestBody, sessionToken *string, projectSlugInput *string) *deployments.EvolvePayload {
+func NewEvolvePayload(body *EvolveRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.EvolvePayload {
 	v := &deployments.EvolvePayload{
 		DeploymentID: body.DeploymentID,
 	}
@@ -1862,6 +1865,7 @@ func NewEvolvePayload(body *EvolveRequestBody, sessionToken *string, projectSlug
 			v.ExcludePackages[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1870,9 +1874,10 @@ func NewEvolvePayload(body *EvolveRequestBody, sessionToken *string, projectSlug
 
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
-func NewListDeploymentsPayload(cursor *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
+func NewListDeploymentsPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

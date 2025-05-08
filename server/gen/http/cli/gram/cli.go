@@ -48,29 +48,25 @@ toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets serve-image --id "Ut velit ab sit nostrum iste eum." --session-token "A accusamus qui quidem corrupti."` + "\n" +
-		os.Args[0] + ` auth callback --id-token "Atque provident quos."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Quisquam officia ut exercitationem aut inventore." --session-token "Vero enim incidunt qui est." --project-slug-input "Consectetur velit."` + "\n" +
+	return os.Args[0] + ` assets serve-image --id "Beatae quibusdam tempora." --session-token "Vero nostrum hic dolores qui."` + "\n" +
+		os.Args[0] + ` auth callback --id-token "Sint ut distinctio atque non eum eveniet."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Maiores eius." --apikey-token "Tempora aut quis culpa deserunt ea minima." --session-token "Eveniet vero." --project-slug-input "Cumque blanditiis ipsa officiis sapiente."` + "\n" +
 		os.Args[0] + ` environments create-environment --body '{
-      "description": "Quas magni vitae corporis.",
+      "description": "Quis dignissimos molestias quo quia dolorem.",
       "entries": [
          {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
+            "name": "Consequatur ratione autem.",
+            "value": "Pariatur rerum."
          },
          {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
-         },
-         {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
+            "name": "Consequatur ratione autem.",
+            "value": "Pariatur rerum."
          }
       ],
-      "name": "Voluptates voluptas nihil id doloribus aut aspernatur.",
-      "organization_id": "Qui tempore itaque corporis qui molestiae reprehenderit."
-   }' --session-token "Quo et deleniti." --project-slug-input "Architecto a occaecati."` + "\n" +
-		os.Args[0] + ` integrations get --id "Autem dolorum." --name "Dolorem sit eius quia rem." --session-token "Aspernatur beatae." --project-slug-input "Repellat qui aut quia officiis officiis."` + "\n" +
+      "name": "Nulla omnis est.",
+      "organization_id": "Non enim."
+   }' --session-token "Non cum." --project-slug-input "Facere eum temporibus veniam eos fugit."` + "\n" +
+		os.Args[0] + ` integrations get --id "Ad aut nemo perspiciatis pariatur aut eos." --name "Et natus quia aliquid architecto." --session-token "Ut doloribus mollitia saepe iure." --project-slug-input "Quis tempora voluptas."` + "\n" +
 		""
 }
 
@@ -93,6 +89,7 @@ func ParseEndpoint(
 		assetsUploadImageFlags                = flag.NewFlagSet("upload-image", flag.ExitOnError)
 		assetsUploadImageContentTypeFlag      = assetsUploadImageFlags.String("content-type", "REQUIRED", "")
 		assetsUploadImageContentLengthFlag    = assetsUploadImageFlags.String("content-length", "REQUIRED", "")
+		assetsUploadImageApikeyTokenFlag      = assetsUploadImageFlags.String("apikey-token", "", "")
 		assetsUploadImageProjectSlugInputFlag = assetsUploadImageFlags.String("project-slug-input", "", "")
 		assetsUploadImageSessionTokenFlag     = assetsUploadImageFlags.String("session-token", "", "")
 		assetsUploadImageStreamFlag           = assetsUploadImageFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
@@ -100,6 +97,7 @@ func ParseEndpoint(
 		assetsUploadOpenAPIv3Flags                = flag.NewFlagSet("upload-open-ap-iv3", flag.ExitOnError)
 		assetsUploadOpenAPIv3ContentTypeFlag      = assetsUploadOpenAPIv3Flags.String("content-type", "REQUIRED", "")
 		assetsUploadOpenAPIv3ContentLengthFlag    = assetsUploadOpenAPIv3Flags.String("content-length", "REQUIRED", "")
+		assetsUploadOpenAPIv3ApikeyTokenFlag      = assetsUploadOpenAPIv3Flags.String("apikey-token", "", "")
 		assetsUploadOpenAPIv3ProjectSlugInputFlag = assetsUploadOpenAPIv3Flags.String("project-slug-input", "", "")
 		assetsUploadOpenAPIv3SessionTokenFlag     = assetsUploadOpenAPIv3Flags.String("session-token", "", "")
 		assetsUploadOpenAPIv3StreamFlag           = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
@@ -126,26 +124,31 @@ func ParseEndpoint(
 
 		deploymentsGetDeploymentFlags                = flag.NewFlagSet("get-deployment", flag.ExitOnError)
 		deploymentsGetDeploymentIDFlag               = deploymentsGetDeploymentFlags.String("id", "REQUIRED", "")
+		deploymentsGetDeploymentApikeyTokenFlag      = deploymentsGetDeploymentFlags.String("apikey-token", "", "")
 		deploymentsGetDeploymentSessionTokenFlag     = deploymentsGetDeploymentFlags.String("session-token", "", "")
 		deploymentsGetDeploymentProjectSlugInputFlag = deploymentsGetDeploymentFlags.String("project-slug-input", "", "")
 
 		deploymentsGetLatestDeploymentFlags                = flag.NewFlagSet("get-latest-deployment", flag.ExitOnError)
+		deploymentsGetLatestDeploymentApikeyTokenFlag      = deploymentsGetLatestDeploymentFlags.String("apikey-token", "", "")
 		deploymentsGetLatestDeploymentSessionTokenFlag     = deploymentsGetLatestDeploymentFlags.String("session-token", "", "")
 		deploymentsGetLatestDeploymentProjectSlugInputFlag = deploymentsGetLatestDeploymentFlags.String("project-slug-input", "", "")
 
 		deploymentsCreateDeploymentFlags                = flag.NewFlagSet("create-deployment", flag.ExitOnError)
 		deploymentsCreateDeploymentBodyFlag             = deploymentsCreateDeploymentFlags.String("body", "REQUIRED", "")
+		deploymentsCreateDeploymentApikeyTokenFlag      = deploymentsCreateDeploymentFlags.String("apikey-token", "", "")
 		deploymentsCreateDeploymentSessionTokenFlag     = deploymentsCreateDeploymentFlags.String("session-token", "", "")
 		deploymentsCreateDeploymentProjectSlugInputFlag = deploymentsCreateDeploymentFlags.String("project-slug-input", "", "")
 		deploymentsCreateDeploymentIdempotencyKeyFlag   = deploymentsCreateDeploymentFlags.String("idempotency-key", "REQUIRED", "")
 
 		deploymentsEvolveFlags                = flag.NewFlagSet("evolve", flag.ExitOnError)
 		deploymentsEvolveBodyFlag             = deploymentsEvolveFlags.String("body", "REQUIRED", "")
+		deploymentsEvolveApikeyTokenFlag      = deploymentsEvolveFlags.String("apikey-token", "", "")
 		deploymentsEvolveSessionTokenFlag     = deploymentsEvolveFlags.String("session-token", "", "")
 		deploymentsEvolveProjectSlugInputFlag = deploymentsEvolveFlags.String("project-slug-input", "", "")
 
 		deploymentsListDeploymentsFlags                = flag.NewFlagSet("list-deployments", flag.ExitOnError)
 		deploymentsListDeploymentsCursorFlag           = deploymentsListDeploymentsFlags.String("cursor", "", "")
+		deploymentsListDeploymentsApikeyTokenFlag      = deploymentsListDeploymentsFlags.String("apikey-token", "", "")
 		deploymentsListDeploymentsSessionTokenFlag     = deploymentsListDeploymentsFlags.String("session-token", "", "")
 		deploymentsListDeploymentsProjectSlugInputFlag = deploymentsListDeploymentsFlags.String("project-slug-input", "", "")
 
@@ -201,21 +204,25 @@ func ParseEndpoint(
 
 		packagesCreatePackageFlags                = flag.NewFlagSet("create-package", flag.ExitOnError)
 		packagesCreatePackageBodyFlag             = packagesCreatePackageFlags.String("body", "REQUIRED", "")
+		packagesCreatePackageApikeyTokenFlag      = packagesCreatePackageFlags.String("apikey-token", "", "")
 		packagesCreatePackageSessionTokenFlag     = packagesCreatePackageFlags.String("session-token", "", "")
 		packagesCreatePackageProjectSlugInputFlag = packagesCreatePackageFlags.String("project-slug-input", "", "")
 
 		packagesUpdatePackageFlags                = flag.NewFlagSet("update-package", flag.ExitOnError)
 		packagesUpdatePackageBodyFlag             = packagesUpdatePackageFlags.String("body", "REQUIRED", "")
+		packagesUpdatePackageApikeyTokenFlag      = packagesUpdatePackageFlags.String("apikey-token", "", "")
 		packagesUpdatePackageSessionTokenFlag     = packagesUpdatePackageFlags.String("session-token", "", "")
 		packagesUpdatePackageProjectSlugInputFlag = packagesUpdatePackageFlags.String("project-slug-input", "", "")
 
 		packagesListVersionsFlags                = flag.NewFlagSet("list-versions", flag.ExitOnError)
 		packagesListVersionsNameFlag             = packagesListVersionsFlags.String("name", "REQUIRED", "")
+		packagesListVersionsApikeyTokenFlag      = packagesListVersionsFlags.String("apikey-token", "", "")
 		packagesListVersionsSessionTokenFlag     = packagesListVersionsFlags.String("session-token", "", "")
 		packagesListVersionsProjectSlugInputFlag = packagesListVersionsFlags.String("project-slug-input", "", "")
 
 		packagesPublishFlags                = flag.NewFlagSet("publish", flag.ExitOnError)
 		packagesPublishBodyFlag             = packagesPublishFlags.String("body", "REQUIRED", "")
+		packagesPublishApikeyTokenFlag      = packagesPublishFlags.String("apikey-token", "", "")
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
 
@@ -223,11 +230,13 @@ func ParseEndpoint(
 
 		projectsCreateProjectFlags            = flag.NewFlagSet("create-project", flag.ExitOnError)
 		projectsCreateProjectBodyFlag         = projectsCreateProjectFlags.String("body", "REQUIRED", "")
+		projectsCreateProjectApikeyTokenFlag  = projectsCreateProjectFlags.String("apikey-token", "", "")
 		projectsCreateProjectSessionTokenFlag = projectsCreateProjectFlags.String("session-token", "", "")
 
 		projectsListProjectsFlags              = flag.NewFlagSet("list-projects", flag.ExitOnError)
 		projectsListProjectsOrganizationIDFlag = projectsListProjectsFlags.String("organization-id", "REQUIRED", "")
 		projectsListProjectsSessionTokenFlag   = projectsListProjectsFlags.String("session-token", "", "")
+		projectsListProjectsApikeyTokenFlag    = projectsListProjectsFlags.String("apikey-token", "", "")
 
 		toolsFlags = flag.NewFlagSet("tools", flag.ContinueOnError)
 
@@ -559,13 +568,13 @@ func ParseEndpoint(
 				data, err = assetsc.BuildServeImagePayload(*assetsServeImageIDFlag, *assetsServeImageSessionTokenFlag)
 			case "upload-image":
 				endpoint = c.UploadImage()
-				data, err = assetsc.BuildUploadImagePayload(*assetsUploadImageContentTypeFlag, *assetsUploadImageContentLengthFlag, *assetsUploadImageProjectSlugInputFlag, *assetsUploadImageSessionTokenFlag)
+				data, err = assetsc.BuildUploadImagePayload(*assetsUploadImageContentTypeFlag, *assetsUploadImageContentLengthFlag, *assetsUploadImageApikeyTokenFlag, *assetsUploadImageProjectSlugInputFlag, *assetsUploadImageSessionTokenFlag)
 				if err == nil {
 					data, err = assetsc.BuildUploadImageStreamPayload(data, *assetsUploadImageStreamFlag)
 				}
 			case "upload-open-ap-iv3":
 				endpoint = c.UploadOpenAPIv3()
-				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ProjectSlugInputFlag, *assetsUploadOpenAPIv3SessionTokenFlag)
+				data, err = assetsc.BuildUploadOpenAPIv3Payload(*assetsUploadOpenAPIv3ContentTypeFlag, *assetsUploadOpenAPIv3ContentLengthFlag, *assetsUploadOpenAPIv3ApikeyTokenFlag, *assetsUploadOpenAPIv3ProjectSlugInputFlag, *assetsUploadOpenAPIv3SessionTokenFlag)
 				if err == nil {
 					data, err = assetsc.BuildUploadOpenAPIv3StreamPayload(data, *assetsUploadOpenAPIv3StreamFlag)
 				}
@@ -593,19 +602,19 @@ func ParseEndpoint(
 			switch epn {
 			case "get-deployment":
 				endpoint = c.GetDeployment()
-				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentSessionTokenFlag, *deploymentsGetDeploymentProjectSlugInputFlag)
+				data, err = deploymentsc.BuildGetDeploymentPayload(*deploymentsGetDeploymentIDFlag, *deploymentsGetDeploymentApikeyTokenFlag, *deploymentsGetDeploymentSessionTokenFlag, *deploymentsGetDeploymentProjectSlugInputFlag)
 			case "get-latest-deployment":
 				endpoint = c.GetLatestDeployment()
-				data, err = deploymentsc.BuildGetLatestDeploymentPayload(*deploymentsGetLatestDeploymentSessionTokenFlag, *deploymentsGetLatestDeploymentProjectSlugInputFlag)
+				data, err = deploymentsc.BuildGetLatestDeploymentPayload(*deploymentsGetLatestDeploymentApikeyTokenFlag, *deploymentsGetLatestDeploymentSessionTokenFlag, *deploymentsGetLatestDeploymentProjectSlugInputFlag)
 			case "create-deployment":
 				endpoint = c.CreateDeployment()
-				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentSessionTokenFlag, *deploymentsCreateDeploymentProjectSlugInputFlag, *deploymentsCreateDeploymentIdempotencyKeyFlag)
+				data, err = deploymentsc.BuildCreateDeploymentPayload(*deploymentsCreateDeploymentBodyFlag, *deploymentsCreateDeploymentApikeyTokenFlag, *deploymentsCreateDeploymentSessionTokenFlag, *deploymentsCreateDeploymentProjectSlugInputFlag, *deploymentsCreateDeploymentIdempotencyKeyFlag)
 			case "evolve":
 				endpoint = c.Evolve()
-				data, err = deploymentsc.BuildEvolvePayload(*deploymentsEvolveBodyFlag, *deploymentsEvolveSessionTokenFlag, *deploymentsEvolveProjectSlugInputFlag)
+				data, err = deploymentsc.BuildEvolvePayload(*deploymentsEvolveBodyFlag, *deploymentsEvolveApikeyTokenFlag, *deploymentsEvolveSessionTokenFlag, *deploymentsEvolveProjectSlugInputFlag)
 			case "list-deployments":
 				endpoint = c.ListDeployments()
-				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsSessionTokenFlag, *deploymentsListDeploymentsProjectSlugInputFlag)
+				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsApikeyTokenFlag, *deploymentsListDeploymentsSessionTokenFlag, *deploymentsListDeploymentsProjectSlugInputFlag)
 			}
 		case "environments":
 			c := environmentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -651,26 +660,26 @@ func ParseEndpoint(
 			switch epn {
 			case "create-package":
 				endpoint = c.CreatePackage()
-				data, err = packagesc.BuildCreatePackagePayload(*packagesCreatePackageBodyFlag, *packagesCreatePackageSessionTokenFlag, *packagesCreatePackageProjectSlugInputFlag)
+				data, err = packagesc.BuildCreatePackagePayload(*packagesCreatePackageBodyFlag, *packagesCreatePackageApikeyTokenFlag, *packagesCreatePackageSessionTokenFlag, *packagesCreatePackageProjectSlugInputFlag)
 			case "update-package":
 				endpoint = c.UpdatePackage()
-				data, err = packagesc.BuildUpdatePackagePayload(*packagesUpdatePackageBodyFlag, *packagesUpdatePackageSessionTokenFlag, *packagesUpdatePackageProjectSlugInputFlag)
+				data, err = packagesc.BuildUpdatePackagePayload(*packagesUpdatePackageBodyFlag, *packagesUpdatePackageApikeyTokenFlag, *packagesUpdatePackageSessionTokenFlag, *packagesUpdatePackageProjectSlugInputFlag)
 			case "list-versions":
 				endpoint = c.ListVersions()
-				data, err = packagesc.BuildListVersionsPayload(*packagesListVersionsNameFlag, *packagesListVersionsSessionTokenFlag, *packagesListVersionsProjectSlugInputFlag)
+				data, err = packagesc.BuildListVersionsPayload(*packagesListVersionsNameFlag, *packagesListVersionsApikeyTokenFlag, *packagesListVersionsSessionTokenFlag, *packagesListVersionsProjectSlugInputFlag)
 			case "publish":
 				endpoint = c.Publish()
-				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
+				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
 			}
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "create-project":
 				endpoint = c.CreateProject()
-				data, err = projectsc.BuildCreateProjectPayload(*projectsCreateProjectBodyFlag, *projectsCreateProjectSessionTokenFlag)
+				data, err = projectsc.BuildCreateProjectPayload(*projectsCreateProjectBodyFlag, *projectsCreateProjectApikeyTokenFlag, *projectsCreateProjectSessionTokenFlag)
 			case "list-projects":
 				endpoint = c.ListProjects()
-				data, err = projectsc.BuildListProjectsPayload(*projectsListProjectsOrganizationIDFlag, *projectsListProjectsSessionTokenFlag)
+				data, err = projectsc.BuildListProjectsPayload(*projectsListProjectsOrganizationIDFlag, *projectsListProjectsSessionTokenFlag, *projectsListProjectsApikeyTokenFlag)
 			}
 		case "tools":
 			c := toolsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -737,37 +746,39 @@ Serve an image from Gram.
     -session-token STRING: 
 
 Example:
-    %[1]s assets serve-image --id "Ut velit ab sit nostrum iste eum." --session-token "A accusamus qui quidem corrupti."
+    %[1]s assets serve-image --id "Beatae quibusdam tempora." --session-token "Vero nostrum hic dolores qui."
 `, os.Args[0])
 }
 
 func assetsUploadImageUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-image -content-type STRING -content-length INT64 -project-slug-input STRING -session-token STRING -stream STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-image -content-type STRING -content-length INT64 -apikey-token STRING -project-slug-input STRING -session-token STRING -stream STRING
 
 Upload an image to Gram.
     -content-type STRING: 
     -content-length INT64: 
+    -apikey-token STRING: 
     -project-slug-input STRING: 
     -session-token STRING: 
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-image --content-type "Ipsum nulla." --content-length 8123667371436207584 --project-slug-input "Adipisci voluptas et labore excepturi." --session-token "Voluptas et quos vitae sunt mollitia et." --stream "goa.png"
+    %[1]s assets upload-image --content-type "Nobis maiores aut similique." --content-length 7803730336808007818 --apikey-token "Est numquam dolorem quia quia voluptatum." --project-slug-input "In et aliquid iusto ut in qui." --session-token "Optio ea." --stream "goa.png"
 `, os.Args[0])
 }
 
 func assetsUploadOpenAPIv3Usage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -project-slug-input STRING -session-token STRING -stream STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] assets upload-open-ap-iv3 -content-type STRING -content-length INT64 -apikey-token STRING -project-slug-input STRING -session-token STRING -stream STRING
 
 Upload an OpenAPI v3 document to Gram.
     -content-type STRING: 
     -content-length INT64: 
+    -apikey-token STRING: 
     -project-slug-input STRING: 
     -session-token STRING: 
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Quo numquam illum quia voluptate mollitia." --content-length 3912195851943922055 --project-slug-input "Et corporis reiciendis molestias dolorem." --session-token "Quia odio doloremque est nihil." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Id esse ad." --content-length 7616157585850355426 --apikey-token "Corrupti ratione quasi cum commodi sed." --project-slug-input "Asperiores aliquam beatae pariatur." --session-token "Nulla reiciendis." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -795,7 +806,7 @@ Handles the authentication callback.
     -id-token STRING: 
 
 Example:
-    %[1]s auth callback --id-token "Atque provident quos."
+    %[1]s auth callback --id-token "Sint ut distinctio atque non eum eveniet."
 `, os.Args[0])
 }
 
@@ -818,7 +829,7 @@ Switches the authentication scope to a different organization.
     -session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Ipsa dolores vero." --project-id "Architecto est." --session-token "Est qui labore ut."
+    %[1]s auth switch-scopes --organization-id "Veniam dolorem vel at dolorum reprehenderit aliquid." --project-id "Sit porro et temporibus." --session-token "Et itaque dolores enim id repellat excepturi."
 `, os.Args[0])
 }
 
@@ -829,7 +840,7 @@ Logs out the current user by clearing their session.
     -session-token STRING: 
 
 Example:
-    %[1]s auth logout --session-token "Saepe voluptas quo."
+    %[1]s auth logout --session-token "Accusantium soluta incidunt veniam sunt veniam."
 `, os.Args[0])
 }
 
@@ -840,7 +851,7 @@ Provides information about the current authentication status.
     -session-token STRING: 
 
 Example:
-    %[1]s auth info --session-token "Mollitia blanditiis."
+    %[1]s auth info --session-token "Soluta voluptas ullam perspiciatis eos sit."
 `, os.Args[0])
 }
 
@@ -863,35 +874,38 @@ Additional help:
 `, os.Args[0])
 }
 func deploymentsGetDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-deployment -id STRING -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 Get a deployment by its ID.
     -id STRING: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Quisquam officia ut exercitationem aut inventore." --session-token "Vero enim incidunt qui est." --project-slug-input "Consectetur velit."
+    %[1]s deployments get-deployment --id "Maiores eius." --apikey-token "Tempora aut quis culpa deserunt ea minima." --session-token "Eveniet vero." --project-slug-input "Cumque blanditiis ipsa officiis sapiente."
 `, os.Args[0])
 }
 
 func deploymentsGetLatestDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-latest-deployment -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments get-latest-deployment -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 Get the latest deployment for a project.
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-latest-deployment --session-token "Saepe quia voluptatem ducimus." --project-slug-input "Ut voluptas ut explicabo molestiae ullam."
+    %[1]s deployments get-latest-deployment --apikey-token "Qui consequatur assumenda aut quia nobis." --session-token "Facilis esse." --project-slug-input "Consequatur eum saepe delectus vel suscipit mollitia."
 `, os.Args[0])
 }
 
 func deploymentsCreateDeploymentUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -session-token STRING -project-slug-input STRING -idempotency-key STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments create-deployment -body JSON -apikey-token STRING -session-token STRING -project-slug-input STRING -idempotency-key STRING
 
 Create a deployment to load tool definitions.
     -body JSON: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
     -idempotency-key STRING: 
@@ -899,102 +913,117 @@ Create a deployment to load tool definitions.
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Est sed error.",
+      "external_url": "Alias soluta nobis quaerat voluptates dignissimos.",
       "github_pr": "1234",
       "github_repo": "speakeasyapi/gram",
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "openapiv3_assets": [
          {
-            "asset_id": "Qui consequatur assumenda aut quia nobis.",
-            "name": "Facilis esse.",
-            "slug": "h6r"
+            "asset_id": "Distinctio veritatis dignissimos voluptatem.",
+            "name": "Distinctio consectetur commodi eos soluta pariatur excepturi.",
+            "slug": "j7z"
          },
          {
-            "asset_id": "Qui consequatur assumenda aut quia nobis.",
-            "name": "Facilis esse.",
-            "slug": "h6r"
+            "asset_id": "Distinctio veritatis dignissimos voluptatem.",
+            "name": "Distinctio consectetur commodi eos soluta pariatur excepturi.",
+            "slug": "j7z"
          }
       ],
       "packages": [
          {
-            "name": "Suscipit mollitia voluptatem dolorem perspiciatis deleniti.",
-            "version": "Aliquid commodi dolorem asperiores aut."
+            "name": "Animi esse unde molestiae iure modi.",
+            "version": "Corrupti voluptas."
          },
          {
-            "name": "Suscipit mollitia voluptatem dolorem perspiciatis deleniti.",
-            "version": "Aliquid commodi dolorem asperiores aut."
+            "name": "Animi esse unde molestiae iure modi.",
+            "version": "Corrupti voluptas."
+         },
+         {
+            "name": "Animi esse unde molestiae iure modi.",
+            "version": "Corrupti voluptas."
          }
       ]
-   }' --session-token "Porro quia rerum." --project-slug-input "Voluptatum harum qui non." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
+   }' --apikey-token "Optio et delectus consectetur." --session-token "Illo enim." --project-slug-input "Facere quibusdam tenetur aut." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
 `, os.Args[0])
 }
 
 func deploymentsEvolveUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments evolve -body JSON -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments evolve -body JSON -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 Create a new deployment with additional or updated tool sources.
     -body JSON: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
     %[1]s deployments evolve --body '{
-      "deployment_id": "Dolorem quasi quibusdam dolorem enim rem natus.",
+      "deployment_id": "Quae voluptatum fugiat labore aut.",
       "exclude_openapiv3_assets": [
-         "Nam odio veniam nisi.",
-         "Harum id.",
-         "Sunt non et dolores qui facere necessitatibus."
+         "Quibusdam labore sapiente neque deleniti.",
+         "Rerum iusto quia tempora.",
+         "Minus sed iusto ea provident voluptatem."
       ],
       "exclude_packages": [
-         "Ut quidem.",
-         "Quod eligendi omnis voluptate laboriosam.",
-         "Voluptatem saepe soluta.",
-         "Earum blanditiis voluptatibus nostrum."
+         "Vero ipsa rem quaerat consectetur optio explicabo.",
+         "Ea ut.",
+         "Odit ut molestiae accusamus aut dignissimos."
       ],
       "upsert_openapiv3_assets": [
          {
-            "asset_id": "Qui consequatur assumenda aut quia nobis.",
-            "name": "Facilis esse.",
-            "slug": "h6r"
+            "asset_id": "Distinctio veritatis dignissimos voluptatem.",
+            "name": "Distinctio consectetur commodi eos soluta pariatur excepturi.",
+            "slug": "j7z"
          },
          {
-            "asset_id": "Qui consequatur assumenda aut quia nobis.",
-            "name": "Facilis esse.",
-            "slug": "h6r"
+            "asset_id": "Distinctio veritatis dignissimos voluptatem.",
+            "name": "Distinctio consectetur commodi eos soluta pariatur excepturi.",
+            "slug": "j7z"
+         },
+         {
+            "asset_id": "Distinctio veritatis dignissimos voluptatem.",
+            "name": "Distinctio consectetur commodi eos soluta pariatur excepturi.",
+            "slug": "j7z"
+         },
+         {
+            "asset_id": "Distinctio veritatis dignissimos voluptatem.",
+            "name": "Distinctio consectetur commodi eos soluta pariatur excepturi.",
+            "slug": "j7z"
          }
       ],
       "upsert_packages": [
          {
-            "name": "Repellat enim possimus quis inventore.",
-            "version": "Cupiditate enim."
+            "name": "Ipsa voluptatum consequatur atque dolor odit.",
+            "version": "Facilis voluptatum rerum."
          },
          {
-            "name": "Repellat enim possimus quis inventore.",
-            "version": "Cupiditate enim."
+            "name": "Ipsa voluptatum consequatur atque dolor odit.",
+            "version": "Facilis voluptatum rerum."
          },
          {
-            "name": "Repellat enim possimus quis inventore.",
-            "version": "Cupiditate enim."
+            "name": "Ipsa voluptatum consequatur atque dolor odit.",
+            "version": "Facilis voluptatum rerum."
          },
          {
-            "name": "Repellat enim possimus quis inventore.",
-            "version": "Cupiditate enim."
+            "name": "Ipsa voluptatum consequatur atque dolor odit.",
+            "version": "Facilis voluptatum rerum."
          }
       ]
-   }' --session-token "Et autem." --project-slug-input "Corrupti corporis beatae officiis dicta."
+   }' --apikey-token "Enim totam." --session-token "Sed quae qui tempore itaque." --project-slug-input "Qui molestiae reprehenderit et voluptates."
 `, os.Args[0])
 }
 
 func deploymentsListDeploymentsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] deployments list-deployments -cursor STRING -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 List all deployments in descending order of creation.
     -cursor STRING: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Ea est harum animi esse unde." --session-token "Iure modi nulla corrupti voluptas sed optio." --project-slug-input "Delectus consectetur minima illo enim."
+    %[1]s deployments list-deployments --cursor "Occaecati sed nostrum adipisci doloremque non." --apikey-token "Corporis aut sit dolorum perspiciatis." --session-token "Odio porro dignissimos non dignissimos dicta at." --project-slug-input "Voluptas et et molestias et."
 `, os.Args[0])
 }
 
@@ -1025,24 +1054,20 @@ Create a new environment
 
 Example:
     %[1]s environments create-environment --body '{
-      "description": "Quas magni vitae corporis.",
+      "description": "Quis dignissimos molestias quo quia dolorem.",
       "entries": [
          {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
+            "name": "Consequatur ratione autem.",
+            "value": "Pariatur rerum."
          },
          {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
-         },
-         {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
+            "name": "Consequatur ratione autem.",
+            "value": "Pariatur rerum."
          }
       ],
-      "name": "Voluptates voluptas nihil id doloribus aut aspernatur.",
-      "organization_id": "Qui tempore itaque corporis qui molestiae reprehenderit."
-   }' --session-token "Quo et deleniti." --project-slug-input "Architecto a occaecati."
+      "name": "Nulla omnis est.",
+      "organization_id": "Non enim."
+   }' --session-token "Non cum." --project-slug-input "Facere eum temporibus veniam eos fugit."
 `, os.Args[0])
 }
 
@@ -1054,7 +1079,7 @@ List all environments for an organization
     -project-slug-input STRING: 
 
 Example:
-    %[1]s environments list-environments --session-token "Sit aut sapiente ipsam." --project-slug-input "Corrupti voluptatem consectetur et autem non."
+    %[1]s environments list-environments --session-token "Facilis quis nulla et molestias." --project-slug-input "Expedita quidem non tempora."
 `, os.Args[0])
 }
 
@@ -1069,25 +1094,23 @@ Update an environment
 
 Example:
     %[1]s environments update-environment --body '{
-      "description": "Corporis ratione quibusdam facere assumenda.",
+      "description": "Dolor officiis.",
       "entries_to_remove": [
-         "Debitis hic recusandae officiis voluptatem.",
-         "Reiciendis quis veniam officiis distinctio qui.",
-         "Laborum sed sit distinctio quam.",
-         "Molestiae eveniet recusandae sapiente non."
+         "In praesentium.",
+         "Reprehenderit vel sed soluta nam sed."
       ],
       "entries_to_update": [
          {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
+            "name": "Consequatur ratione autem.",
+            "value": "Pariatur rerum."
          },
          {
-            "name": "Eum similique voluptas praesentium.",
-            "value": "Modi corrupti voluptatem."
+            "name": "Consequatur ratione autem.",
+            "value": "Pariatur rerum."
          }
       ],
-      "name": "Soluta distinctio ut maiores nihil ut."
-   }' --slug "tww" --session-token "Eius harum libero quo quo quibusdam et." --project-slug-input "Incidunt possimus voluptatum qui iusto et."
+      "name": "Earum non."
+   }' --slug "y68" --session-token "Necessitatibus aut dignissimos sit ullam." --project-slug-input "Error unde tempora itaque nemo qui."
 `, os.Args[0])
 }
 
@@ -1100,7 +1123,7 @@ Delete an environment
     -project-slug-input STRING: 
 
 Example:
-    %[1]s environments delete-environment --slug "run" --session-token "Corrupti ut." --project-slug-input "Dolor provident."
+    %[1]s environments delete-environment --slug "5y7" --session-token "Aut sit nemo quas iusto modi officiis." --project-slug-input "Eius in facilis saepe non."
 `, os.Args[0])
 }
 
@@ -1129,7 +1152,7 @@ Get a third-party integration by ID or name.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s integrations get --id "Autem dolorum." --name "Dolorem sit eius quia rem." --session-token "Aspernatur beatae." --project-slug-input "Repellat qui aut quia officiis officiis."
+    %[1]s integrations get --id "Ad aut nemo perspiciatis pariatur aut eos." --name "Et natus quia aliquid architecto." --session-token "Ut doloribus mollitia saepe iure." --project-slug-input "Quis tempora voluptas."
 `, os.Args[0])
 }
 
@@ -1143,10 +1166,10 @@ List available third-party integrations.
 
 Example:
     %[1]s integrations list --keywords '[
-      "gk1",
-      "i46",
-      "mzg"
-   ]' --session-token "Totam dolor vel amet est." --project-slug-input "Ea voluptatem veniam accusantium consectetur eaque."
+      "ke6",
+      "s0k",
+      "grm"
+   ]' --session-token "Aut sunt adipisci et voluptatum." --project-slug-input "Id consequatur illum culpa beatae quos eos."
 `, os.Args[0])
 }
 
@@ -1174,8 +1197,8 @@ Create a new api key
 
 Example:
     %[1]s keys create-key --body '{
-      "name": "Velit fugit quibusdam et quae quidem odio."
-   }' --session-token "Tempore voluptatum sunt quo."
+      "name": "Ex eos."
+   }' --session-token "Reiciendis et hic consequatur neque assumenda odit."
 `, os.Args[0])
 }
 
@@ -1186,7 +1209,7 @@ List all api keys for an organization
     -session-token STRING: 
 
 Example:
-    %[1]s keys list-keys --session-token "Totam fuga aperiam deleniti nobis dicta."
+    %[1]s keys list-keys --session-token "Libero nulla similique."
 `, os.Args[0])
 }
 
@@ -1198,7 +1221,7 @@ Revoke a api key
     -session-token STRING: 
 
 Example:
-    %[1]s keys revoke-key --id "Temporibus aliquam." --session-token "Saepe veritatis eveniet repudiandae voluptate ab."
+    %[1]s keys revoke-key --id "Voluptatibus laborum est quo modi." --session-token "At et dolores."
 `, os.Args[0])
 }
 
@@ -1219,83 +1242,87 @@ Additional help:
 `, os.Args[0])
 }
 func packagesCreatePackageUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages create-package -body JSON -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages create-package -body JSON -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 Create a new package for a project.
     -body JSON: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
     %[1]s packages create-package --body '{
-      "description": "odf",
-      "image_asset_id": "cki",
+      "description": "edf",
+      "image_asset_id": "o1y",
       "keywords": [
-         "Tempora dolorum enim molestiae impedit voluptas veritatis.",
-         "Dicta quasi.",
-         "Voluptas mollitia hic repellendus in enim."
+         "Architecto aspernatur et aut amet dolorum necessitatibus.",
+         "Officiis laudantium placeat.",
+         "Sit earum dignissimos dolor."
       ],
-      "name": "b10",
-      "summary": "4vy",
-      "title": "1lb",
-      "url": "wey"
-   }' --session-token "Hic quas aperiam aspernatur exercitationem." --project-slug-input "Harum asperiores."
+      "name": "4qf",
+      "summary": "9h5",
+      "title": "adz",
+      "url": "d8b"
+   }' --apikey-token "Ipsum exercitationem quia quas ex saepe aperiam." --session-token "Quos repudiandae fugit incidunt." --project-slug-input "Ut velit ut quisquam fuga."
 `, os.Args[0])
 }
 
 func packagesUpdatePackageUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages update-package -body JSON -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages update-package -body JSON -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 Update package details.
     -body JSON: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
     %[1]s packages update-package --body '{
-      "description": "2pn",
-      "id": "dsy",
-      "image_asset_id": "clj",
+      "description": "kys",
+      "id": "ofi",
+      "image_asset_id": "a2s",
       "keywords": [
-         "Voluptas est possimus qui est voluptates eligendi.",
-         "Vero quisquam officiis.",
-         "Non autem ratione animi et quia."
+         "Rem quia veniam.",
+         "Eos recusandae.",
+         "Eum est praesentium voluptate."
       ],
-      "summary": "z21",
-      "title": "84b",
-      "url": "0ha"
-   }' --session-token "Iste consequatur velit non." --project-slug-input "Pariatur nisi et officiis sapiente."
+      "summary": "qch",
+      "title": "cfe",
+      "url": "yd4"
+   }' --apikey-token "Magni et neque vel doloribus." --session-token "Rem velit aspernatur et sint nobis incidunt." --project-slug-input "Et occaecati distinctio nostrum eius voluptatem nostrum."
 `, os.Args[0])
 }
 
 func packagesListVersionsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages list-versions -name STRING -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages list-versions -name STRING -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 List published versions of a package.
     -name STRING: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-versions --name "Dolorem nam est aut ut fuga." --session-token "Sunt autem illum explicabo officia soluta." --project-slug-input "Iure quo doloremque."
+    %[1]s packages list-versions --name "Molestias qui eos quo non vel." --apikey-token "Corporis minima et quod voluptatem." --session-token "Voluptatem eius ipsam eos consequuntur." --project-slug-input "Atque sit debitis et soluta illum quod."
 `, os.Args[0])
 }
 
 func packagesPublishUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages publish -body JSON -session-token STRING -project-slug-input STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] packages publish -body JSON -apikey-token STRING -session-token STRING -project-slug-input STRING
 
 Publish a new version of a package.
     -body JSON: 
+    -apikey-token STRING: 
     -session-token STRING: 
     -project-slug-input STRING: 
 
 Example:
     %[1]s packages publish --body '{
-      "deployment_id": "Est sit ut autem.",
-      "name": "Debitis et soluta illum quod qui.",
-      "version": "Eaque aliquid veritatis nihil illo repellendus.",
+      "deployment_id": "Et dolor nisi aut doloremque animi assumenda.",
+      "name": "Est nihil vel est ea.",
+      "version": "Ex atque iure aut commodi ullam iusto.",
       "visibility": "public"
-   }' --session-token "Aut repudiandae eligendi accusantium provident amet." --project-slug-input "Recusandae sit et voluptates."
+   }' --apikey-token "Aliquid omnis saepe et." --session-token "Sunt debitis harum et nihil rerum reprehenderit." --project-slug-input "Omnis alias repellat dolores."
 `, os.Args[0])
 }
 
@@ -1314,29 +1341,31 @@ Additional help:
 `, os.Args[0])
 }
 func projectsCreateProjectUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] projects create-project -body JSON -session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] projects create-project -body JSON -apikey-token STRING -session-token STRING
 
 Create a new project.
     -body JSON: 
+    -apikey-token STRING: 
     -session-token STRING: 
 
 Example:
     %[1]s projects create-project --body '{
-      "name": "9hs",
-      "organization_id": "Provident rerum id nisi."
-   }' --session-token "Ut quisquam non tempore mollitia ut."
+      "name": "och",
+      "organization_id": "Omnis at et."
+   }' --apikey-token "Laboriosam sapiente." --session-token "Quis qui."
 `, os.Args[0])
 }
 
 func projectsListProjectsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] projects list-projects -organization-id STRING -session-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] projects list-projects -organization-id STRING -session-token STRING -apikey-token STRING
 
 List all projects for an organization.
     -organization-id STRING: 
     -session-token STRING: 
+    -apikey-token STRING: 
 
 Example:
-    %[1]s projects list-projects --organization-id "Autem debitis dolorum exercitationem harum quis ducimus." --session-token "Recusandae maxime explicabo corporis."
+    %[1]s projects list-projects --organization-id "Consequatur aut debitis illo." --session-token "Exercitationem eaque et ut eius." --apikey-token "Nostrum cumque qui repudiandae culpa eos ea."
 `, os.Args[0])
 }
 
@@ -1363,7 +1392,7 @@ List all tools for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s tools list-tools --cursor "Non occaecati suscipit." --deployment-id "Reprehenderit eligendi cupiditate id doloremque." --session-token "Minima error." --project-slug-input "Eos aliquam rerum consequatur."
+    %[1]s tools list-tools --cursor "Nihil aut ratione officia ipsum." --deployment-id "Perspiciatis quo." --session-token "Occaecati fugit ut." --project-slug-input "Velit aut voluptatibus dolor."
 `, os.Args[0])
 }
 
@@ -1392,7 +1421,7 @@ Load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances get-instance --toolset-slug "gns" --environment-slug "v0o" --session-token "Alias ut optio sit quam ut." --project-slug-input "Eveniet placeat autem doloribus delectus autem placeat." --apikey-token "Nihil repellendus quasi quia et."
+    %[1]s instances get-instance --toolset-slug "b2r" --environment-slug "nfe" --session-token "Corrupti quae necessitatibus voluptas et impedit in." --project-slug-input "Nobis dolore facilis atque nesciunt." --apikey-token "Qui voluptatibus exercitationem nihil voluptatum eligendi."
 `, os.Args[0])
 }
 
@@ -1423,14 +1452,16 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_slug": "ton",
-      "description": "Reiciendis nostrum eos.",
+      "default_environment_slug": "jnf",
+      "description": "Quia adipisci sit explicabo error eveniet magnam.",
       "http_tool_names": [
-         "Excepturi omnis aut.",
-         "Aut natus rerum earum et ea culpa."
+         "Sed rerum repellat dolorem voluptatem quasi.",
+         "Pariatur maiores dolorum.",
+         "Mollitia ratione dolore odio.",
+         "Aliquid quis quo eaque sint."
       ],
-      "name": "Est qui nihil laudantium."
-   }' --session-token "Est iusto alias et." --project-slug-input "Quisquam nostrum itaque perferendis."
+      "name": "Mollitia voluptas dolore aut."
+   }' --session-token "Aut nihil distinctio quia nesciunt." --project-slug-input "Ea provident reiciendis."
 `, os.Args[0])
 }
 
@@ -1442,7 +1473,7 @@ List all toolsets for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Voluptas perspiciatis." --project-slug-input "Nihil sit."
+    %[1]s toolsets list-toolsets --session-token "Nihil eaque quam praesentium eligendi." --project-slug-input "Aliquam sunt non voluptas maxime similique."
 `, os.Args[0])
 }
 
@@ -1457,14 +1488,16 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "default_environment_slug": "loi",
-      "description": "Autem debitis repudiandae ipsa velit atque.",
+      "default_environment_slug": "c15",
+      "description": "Ea est.",
       "http_tool_names": [
-         "Vel autem voluptas officiis.",
-         "Autem id minima sit numquam."
+         "Pariatur qui.",
+         "Aut illo totam.",
+         "Id ratione ut ex in.",
+         "Et sunt tempora qui."
       ],
-      "name": "Optio aliquam harum."
-   }' --slug "9k0" --session-token "Aut corrupti eligendi quibusdam qui." --project-slug-input "Illum nisi voluptatum molestiae architecto qui aut."
+      "name": "Corporis laboriosam."
+   }' --slug "fdj" --session-token "Minima impedit inventore voluptatem laboriosam neque." --project-slug-input "Et asperiores."
 `, os.Args[0])
 }
 
@@ -1477,7 +1510,7 @@ Delete a toolset by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "b7f" --session-token "Voluptatem aliquid reiciendis labore." --project-slug-input "Soluta ipsam provident."
+    %[1]s toolsets delete-toolset --slug "1tm" --session-token "Accusantium explicabo tenetur debitis quos ut." --project-slug-input "Et neque."
 `, os.Args[0])
 }
 
@@ -1490,6 +1523,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset --slug "omm" --session-token "Placeat quis." --project-slug-input "Autem illum."
+    %[1]s toolsets get-toolset --slug "rn1" --session-token "Dolores ex dolores ducimus cumque amet a." --project-slug-input "In placeat quasi ut rem."
 `, os.Args[0])
 }

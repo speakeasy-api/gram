@@ -10,6 +10,9 @@ import (
 var _ = Service("deployments", func() {
 	Description("Manages deployments of tools from upstream sources.")
 
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
@@ -18,6 +21,7 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(GetDeploymentForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -26,6 +30,7 @@ var _ = Service("deployments", func() {
 
 		HTTP(func() {
 			GET("/rpc/deployments.get")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("id")
@@ -41,6 +46,7 @@ var _ = Service("deployments", func() {
 		Description("Get the latest deployment for a project.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -49,6 +55,7 @@ var _ = Service("deployments", func() {
 
 		HTTP(func() {
 			GET("/rpc/deployments.latest")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -64,6 +71,7 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(CreateDeploymentForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -72,6 +80,7 @@ var _ = Service("deployments", func() {
 
 		HTTP(func() {
 			POST("/rpc/deployments.create")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Header("idempotency_key:Idempotency-Key")
@@ -88,6 +97,7 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(EvolveForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -96,6 +106,7 @@ var _ = Service("deployments", func() {
 
 		HTTP(func() {
 			POST("/rpc/deployments.evolve")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -111,6 +122,7 @@ var _ = Service("deployments", func() {
 
 		Payload(func() {
 			Extend(ListDeploymentForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -119,6 +131,7 @@ var _ = Service("deployments", func() {
 
 		HTTP(func() {
 			GET("/rpc/deployments.list")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("cursor")

@@ -47,6 +47,7 @@ var MethodNames = [2]string{"createProject", "listProjects"}
 // CreateProjectPayload is the payload type of the projects service
 // createProject method.
 type CreateProjectPayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 	// The ID of the organization to create the project in
 	OrganizationID string
@@ -64,6 +65,7 @@ type CreateProjectResult struct {
 // ListProjectsPayload is the payload type of the projects service listProjects
 // method.
 type ListProjectsPayload struct {
+	ApikeyToken  *string
 	SessionToken *string
 	// The ID of the organization to list projects for
 	OrganizationID string

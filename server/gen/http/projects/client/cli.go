@@ -18,19 +18,25 @@ import (
 
 // BuildCreateProjectPayload builds the payload for the projects createProject
 // endpoint from CLI flags.
-func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateProjectSessionToken string) (*projects.CreateProjectPayload, error) {
+func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateProjectApikeyToken string, projectsCreateProjectSessionToken string) (*projects.CreateProjectPayload, error) {
 	var err error
 	var body CreateProjectRequestBody
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"9hs\",\n      \"organization_id\": \"Provident rerum id nisi.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"och\",\n      \"organization_id\": \"Omnis at et.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if projectsCreateProjectApikeyToken != "" {
+			apikeyToken = &projectsCreateProjectApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -43,6 +49,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 		OrganizationID: body.OrganizationID,
 		Name:           body.Name,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -50,7 +57,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 
 // BuildListProjectsPayload builds the payload for the projects listProjects
 // endpoint from CLI flags.
-func BuildListProjectsPayload(projectsListProjectsOrganizationID string, projectsListProjectsSessionToken string) (*projects.ListProjectsPayload, error) {
+func BuildListProjectsPayload(projectsListProjectsOrganizationID string, projectsListProjectsSessionToken string, projectsListProjectsApikeyToken string) (*projects.ListProjectsPayload, error) {
 	var organizationID string
 	{
 		organizationID = projectsListProjectsOrganizationID
@@ -61,9 +68,16 @@ func BuildListProjectsPayload(projectsListProjectsOrganizationID string, project
 			sessionToken = &projectsListProjectsSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if projectsListProjectsApikeyToken != "" {
+			apikeyToken = &projectsListProjectsApikeyToken
+		}
+	}
 	v := &projects.ListProjectsPayload{}
 	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }

@@ -9,6 +9,9 @@ import (
 var _ = Service("assets", func() {
 	Description("Manages assets used by Gram projects.")
 
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
@@ -49,6 +52,7 @@ var _ = Service("assets", func() {
 			POST("/rpc/assets.uploadImage")
 			Header("content_type:Content-Type")
 			Header("content_length:Content-Length")
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			security.SessionHeader()
 			SkipRequestBodyEncodeDecode()
@@ -70,6 +74,7 @@ var _ = Service("assets", func() {
 			POST("/rpc/assets.uploadOpenAPIv3")
 			Header("content_type:Content-Type")
 			Header("content_length:Content-Length")
+			security.ByKeyHeader()
 			security.ProjectHeader()
 			security.SessionHeader()
 			SkipRequestBodyEncodeDecode()
@@ -98,6 +103,7 @@ var ServeImageResult = Type("ServeImageResult", func() {
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
 	Required("content_type", "content_length")
+	security.ByKeyPayload()
 	security.SessionPayload()
 	security.ProjectPayload()
 
@@ -113,6 +119,7 @@ var UploadOpenAPIv3Result = Type("UploadOpenAPIv3Result", func() {
 
 var UploadImageForm = Type("UploadImageForm", func() {
 	Required("content_type", "content_length")
+	security.ByKeyPayload()
 	security.SessionPayload()
 	security.ProjectPayload()
 

@@ -41,6 +41,10 @@ func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if !ok {
 			return goahttp.ErrInvalidType("deployments", "getDeployment", "*deployments.GetDeploymentPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -264,6 +268,10 @@ func EncodeGetLatestDeploymentRequest(encoder func(*http.Request) goahttp.Encode
 		if !ok {
 			return goahttp.ErrInvalidType("deployments", "getLatestDeployment", "*deployments.GetLatestDeploymentPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -482,6 +490,10 @@ func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) 
 		p, ok := v.(*deployments.CreateDeploymentPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("deployments", "createDeployment", "*deployments.CreateDeploymentPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -710,6 +722,10 @@ func EncodeEvolveRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if !ok {
 			return goahttp.ErrInvalidType("deployments", "evolve", "*deployments.EvolvePayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -932,6 +948,10 @@ func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		p, ok := v.(*deployments.ListDeploymentsPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("deployments", "listDeployments", "*deployments.ListDeploymentsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

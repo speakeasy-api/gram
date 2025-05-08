@@ -41,6 +41,10 @@ func EncodeCreatePackageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if !ok {
 			return goahttp.ErrInvalidType("packages", "createPackage", "*packages.CreatePackagePayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -263,6 +267,10 @@ func EncodeUpdatePackageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		p, ok := v.(*packages.UpdatePackagePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("packages", "updatePackage", "*packages.UpdatePackagePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -502,6 +510,10 @@ func EncodeListVersionsRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if !ok {
 			return goahttp.ErrInvalidType("packages", "listVersions", "*packages.ListVersionsPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -723,6 +735,10 @@ func EncodePublishRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 		p, ok := v.(*packages.PublishPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("packages", "publish", "*packages.PublishPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

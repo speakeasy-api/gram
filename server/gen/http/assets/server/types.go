@@ -941,10 +941,11 @@ func NewServeImageForm(id string, sessionToken *string) *assets.ServeImageForm {
 }
 
 // NewUploadImageForm builds a assets service uploadImage endpoint payload.
-func NewUploadImageForm(contentType string, contentLength int64, projectSlugInput *string, sessionToken *string) *assets.UploadImageForm {
+func NewUploadImageForm(contentType string, contentLength int64, apikeyToken *string, projectSlugInput *string, sessionToken *string) *assets.UploadImageForm {
 	v := &assets.UploadImageForm{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken
 
@@ -953,10 +954,11 @@ func NewUploadImageForm(contentType string, contentLength int64, projectSlugInpu
 
 // NewUploadOpenAPIv3Form builds a assets service uploadOpenAPIv3 endpoint
 // payload.
-func NewUploadOpenAPIv3Form(contentType string, contentLength int64, projectSlugInput *string, sessionToken *string) *assets.UploadOpenAPIv3Form {
+func NewUploadOpenAPIv3Form(contentType string, contentLength int64, apikeyToken *string, projectSlugInput *string, sessionToken *string) *assets.UploadOpenAPIv3Form {
 	v := &assets.UploadOpenAPIv3Form{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
+	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken
 

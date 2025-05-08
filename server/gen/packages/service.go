@@ -51,6 +51,7 @@ var MethodNames = [4]string{"createPackage", "updatePackage", "listVersions", "p
 // CreatePackagePayload is the payload type of the packages service
 // createPackage method.
 type CreatePackagePayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The name of the package
@@ -79,6 +80,7 @@ type CreatePackageResult struct {
 // ListVersionsPayload is the payload type of the packages service listVersions
 // method.
 type ListVersionsPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The name of the package
@@ -152,6 +154,7 @@ type PublishPackageResult struct {
 
 // PublishPayload is the payload type of the packages service publish method.
 type PublishPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The name of the package
@@ -167,6 +170,7 @@ type PublishPayload struct {
 // UpdatePackagePayload is the payload type of the packages service
 // updatePackage method.
 type UpdatePackagePayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The id of the package to update
