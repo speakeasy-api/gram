@@ -138,7 +138,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	}
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
-		maxLength:     8 * 1024 * 1024,
+		maxLength:     4 * 1024 * 1024,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
 	})
@@ -223,7 +223,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	}
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
-		maxLength:     8 * 1024 * 1024,
+		maxLength:     10 * 1024 * 1024,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
 	})
