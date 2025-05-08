@@ -360,9 +360,18 @@ type IntegrationResponseBody struct {
 	PackageURL            *string  `form:"package_url,omitempty" json:"package_url,omitempty" xml:"package_url,omitempty"`
 	PackageKeywords       []string `form:"package_keywords,omitempty" json:"package_keywords,omitempty" xml:"package_keywords,omitempty"`
 	PackageImageAssetID   *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
-	Version               string   `form:"version" json:"version" xml:"version"`
-	VersionCreatedAt      string   `form:"version_created_at" json:"version_created_at" xml:"version_created_at"`
-	ToolNames             []string `form:"tool_names" json:"tool_names" xml:"tool_names"`
+	// The latest version of the integration
+	Version          string                            `form:"version" json:"version" xml:"version"`
+	VersionCreatedAt string                            `form:"version_created_at" json:"version_created_at" xml:"version_created_at"`
+	ToolNames        []string                          `form:"tool_names" json:"tool_names" xml:"tool_names"`
+	Versions         []*IntegrationVersionResponseBody `form:"versions,omitempty" json:"versions,omitempty" xml:"versions,omitempty"`
+}
+
+// IntegrationVersionResponseBody is used to define fields on response body
+// types.
+type IntegrationVersionResponseBody struct {
+	Version   string `form:"version" json:"version" xml:"version"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // IntegrationEntryResponseBody is used to define fields on response body types.

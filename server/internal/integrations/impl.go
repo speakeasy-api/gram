@@ -104,6 +104,29 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 		Build:      conv.PtrValOr(conv.FromPGText[string](row.VersionBuild), ""),
 	}
 
+	versionRows, err := s.repo.ListIntegrationVersions(ctx, repo.ListIntegrationVersionsParams{
+		PackageID:   pid,
+		PackageName: pname,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing integration versions").Log(ctx, s.logger)
+	}
+
+	versions := make([]*gen.IntegrationVersion, 0, len(versionRows))
+	for _, row := range versionRows {
+		versions = append(versions, &gen.IntegrationVersion{
+			Version: packages.Semver{
+				Valid:      true,
+				Major:      row.Major,
+				Minor:      row.Minor,
+				Patch:      row.Patch,
+				Prerelease: conv.PtrValOr(conv.FromPGText[string](row.Prerelease), ""),
+				Build:      conv.PtrValOr(conv.FromPGText[string](row.Build), ""),
+			}.String(),
+			CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
 	return &gen.GetIntegrationResult{
 		Integration: &gen.Integration{
 			PackageID:             row.Package.ID.String(),
@@ -118,6 +141,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 			Version:               v.String(),
 			VersionCreatedAt:      row.VersionCreatedAt.Time.Format(time.RFC3339),
 			ToolNames:             row.ToolNames,
+			Versions:              versions,
 		},
 	}, nil
 }

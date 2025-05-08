@@ -453,6 +453,27 @@ func marshalIntegrationsIntegrationToIntegrationResponseBody(v *integrations.Int
 	} else {
 		res.ToolNames = []string{}
 	}
+	if v.Versions != nil {
+		res.Versions = make([]*IntegrationVersionResponseBody, len(v.Versions))
+		for i, val := range v.Versions {
+			res.Versions[i] = marshalIntegrationsIntegrationVersionToIntegrationVersionResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalIntegrationsIntegrationVersionToIntegrationVersionResponseBody builds
+// a value of type *IntegrationVersionResponseBody from a value of type
+// *integrations.IntegrationVersion.
+func marshalIntegrationsIntegrationVersionToIntegrationVersionResponseBody(v *integrations.IntegrationVersion) *IntegrationVersionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IntegrationVersionResponseBody{
+		Version:   v.Version,
+		CreatedAt: v.CreatedAt,
+	}
 
 	return res
 }

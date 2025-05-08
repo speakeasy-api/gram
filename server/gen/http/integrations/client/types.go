@@ -360,9 +360,18 @@ type IntegrationResponseBody struct {
 	PackageURL            *string  `form:"package_url,omitempty" json:"package_url,omitempty" xml:"package_url,omitempty"`
 	PackageKeywords       []string `form:"package_keywords,omitempty" json:"package_keywords,omitempty" xml:"package_keywords,omitempty"`
 	PackageImageAssetID   *string  `form:"package_image_asset_id,omitempty" json:"package_image_asset_id,omitempty" xml:"package_image_asset_id,omitempty"`
-	Version               *string  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	VersionCreatedAt      *string  `form:"version_created_at,omitempty" json:"version_created_at,omitempty" xml:"version_created_at,omitempty"`
-	ToolNames             []string `form:"tool_names,omitempty" json:"tool_names,omitempty" xml:"tool_names,omitempty"`
+	// The latest version of the integration
+	Version          *string                           `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	VersionCreatedAt *string                           `form:"version_created_at,omitempty" json:"version_created_at,omitempty" xml:"version_created_at,omitempty"`
+	ToolNames        []string                          `form:"tool_names,omitempty" json:"tool_names,omitempty" xml:"tool_names,omitempty"`
+	Versions         []*IntegrationVersionResponseBody `form:"versions,omitempty" json:"versions,omitempty" xml:"versions,omitempty"`
+}
+
+// IntegrationVersionResponseBody is used to define fields on response body
+// types.
+type IntegrationVersionResponseBody struct {
+	Version   *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // IntegrationEntryResponseBody is used to define fields on response body types.
@@ -1145,6 +1154,28 @@ func ValidateIntegrationResponseBody(body *IntegrationResponseBody) (err error) 
 	}
 	if body.VersionCreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.version_created_at", *body.VersionCreatedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Versions {
+		if e != nil {
+			if err2 := ValidateIntegrationVersionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateIntegrationVersionResponseBody runs the validations defined on
+// IntegrationVersionResponseBody
+func ValidateIntegrationVersionResponseBody(body *IntegrationVersionResponseBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }

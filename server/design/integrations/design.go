@@ -107,9 +107,18 @@ var Integration = Type("Integration", func() {
 	Attribute("package_url", String)
 	Attribute("package_keywords", ArrayOf(String))
 	Attribute("package_image_asset_id", String)
-	Attribute("version", String)
+	Attribute("version", String, "The latest version of the integration")
 	Attribute("version_created_at", String, func() {
 		Format(FormatDateTime)
 	})
 	Attribute("tool_names", ArrayOf(String))
+	Attribute("versions", ArrayOf(IntegrationVersion))
+})
+
+var IntegrationVersion = Type("IntegrationVersion", func() {
+	Required("version", "created_at")
+	Attribute("version", String)
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
 })

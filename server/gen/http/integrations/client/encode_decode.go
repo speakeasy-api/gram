@@ -497,6 +497,27 @@ func unmarshalIntegrationResponseBodyToIntegrationsIntegration(v *IntegrationRes
 	for i, val := range v.ToolNames {
 		res.ToolNames[i] = val
 	}
+	if v.Versions != nil {
+		res.Versions = make([]*integrations.IntegrationVersion, len(v.Versions))
+		for i, val := range v.Versions {
+			res.Versions[i] = unmarshalIntegrationVersionResponseBodyToIntegrationsIntegrationVersion(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalIntegrationVersionResponseBodyToIntegrationsIntegrationVersion
+// builds a value of type *integrations.IntegrationVersion from a value of type
+// *IntegrationVersionResponseBody.
+func unmarshalIntegrationVersionResponseBodyToIntegrationsIntegrationVersion(v *IntegrationVersionResponseBody) *integrations.IntegrationVersion {
+	if v == nil {
+		return nil
+	}
+	res := &integrations.IntegrationVersion{
+		Version:   *v.Version,
+		CreatedAt: *v.CreatedAt,
+	}
 
 	return res
 }

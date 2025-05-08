@@ -100,6 +100,77 @@ func (q *Queries) GetIntegration(ctx context.Context, arg GetIntegrationParams) 
 	return i, err
 }
 
+const listIntegrationVersions = `-- name: ListIntegrationVersions :many
+WITH package_id_lookup as (
+  SELECT id
+  FROM packages
+  WHERE (
+      ($1::UUID IS NOT NULL AND packages.id = $1::UUID)
+      OR ($2::TEXT IS NOT NULL AND packages.name = $2::TEXT)
+    )
+    AND packages.deleted IS FALSE
+  LIMIT 1
+)
+SELECT
+    id
+  , major
+  , minor
+  , patch
+  , prerelease
+  , build
+  , created_at
+FROM package_versions pv
+WHERE pv.package_id = (SELECT id FROM package_id_lookup)
+  AND pv.visibility = 'public'
+  AND pv.prerelease IS NULL -- Exclude prerelease versions
+  AND pv.deleted IS FALSE  -- Exclude soft-deleted versions
+ORDER BY pv.major DESC, pv.minor DESC, pv.patch DESC
+LIMIT 500
+`
+
+type ListIntegrationVersionsParams struct {
+	PackageID   uuid.NullUUID
+	PackageName pgtype.Text
+}
+
+type ListIntegrationVersionsRow struct {
+	ID         uuid.UUID
+	Major      int64
+	Minor      int64
+	Patch      int64
+	Prerelease pgtype.Text
+	Build      pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) ListIntegrationVersions(ctx context.Context, arg ListIntegrationVersionsParams) ([]ListIntegrationVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listIntegrationVersions, arg.PackageID, arg.PackageName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIntegrationVersionsRow
+	for rows.Next() {
+		var i ListIntegrationVersionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Major,
+			&i.Minor,
+			&i.Patch,
+			&i.Prerelease,
+			&i.Build,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIntegrations = `-- name: ListIntegrations :many
 SELECT 
   p.id AS package_id,

@@ -39,6 +39,34 @@ SELECT
 FROM packages
 INNER JOIN latest_public_version lv ON packages.id = lv.package_id;
 
+-- name: ListIntegrationVersions :many
+WITH package_id_lookup as (
+  SELECT id
+  FROM packages
+  WHERE (
+      (sqlc.narg(package_id)::UUID IS NOT NULL AND packages.id = sqlc.narg(package_id)::UUID)
+      OR (sqlc.narg(package_name)::TEXT IS NOT NULL AND packages.name = sqlc.narg(package_name)::TEXT)
+    )
+    AND packages.deleted IS FALSE
+  LIMIT 1
+)
+SELECT
+    id
+  , major
+  , minor
+  , patch
+  , prerelease
+  , build
+  , created_at
+FROM package_versions pv
+WHERE pv.package_id = (SELECT id FROM package_id_lookup)
+  AND pv.visibility = 'public'
+  AND pv.prerelease IS NULL -- Exclude prerelease versions
+  AND pv.deleted IS FALSE  -- Exclude soft-deleted versions
+ORDER BY pv.major DESC, pv.minor DESC, pv.patch DESC
+LIMIT 500;
+
+
 -- name: ListIntegrations :many
 SELECT 
   p.id AS package_id,

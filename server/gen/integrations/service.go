@@ -70,9 +70,11 @@ type Integration struct {
 	PackageURL            *string
 	PackageKeywords       []string
 	PackageImageAssetID   *string
-	Version               string
-	VersionCreatedAt      string
-	ToolNames             []string
+	// The latest version of the integration
+	Version          string
+	VersionCreatedAt string
+	ToolNames        []string
+	Versions         []*IntegrationVersion
 }
 
 type IntegrationEntry struct {
@@ -86,6 +88,11 @@ type IntegrationEntry struct {
 	Version             string
 	VersionCreatedAt    string
 	ToolNames           []string
+}
+
+type IntegrationVersion struct {
+	Version   string
+	CreatedAt string
 }
 
 // ListIntegrationsResult is the result type of the integrations service list

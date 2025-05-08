@@ -3961,9 +3961,14 @@ components:
                         type: string
                 version:
                     type: string
+                    description: The latest version of the integration
                 version_created_at:
                     type: string
                     format: date-time
+                versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IntegrationVersion'
             required:
                 - package_id
                 - package_name
@@ -4006,6 +4011,17 @@ components:
                 - version
                 - version_created_at
                 - tool_names
+        IntegrationVersion:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                version:
+                    type: string
+            required:
+                - version
+                - created_at
         Key:
             type: object
             properties:
