@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,6 +26,16 @@ import (
 	"github.com/speakeasy-api/gram/internal/serialization"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
+
+var proxiedHeaders = []string{
+	"Cache-Control",
+	"Content-Language",
+	"Content-Length",
+	"Content-Type",
+	"Expires",
+	"Last-Modified",
+	"Pragma",
+}
 
 type ToolCallBody struct {
 	PathParameters  map[string]any  `json:"pathParameters"`
@@ -97,19 +108,48 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	}
 
 	// Create a new request
-	req, err := http.NewRequestWithContext(
-		r.Context(),
-		toolExecutionInfo.Tool.HttpMethod,
-		strings.TrimRight(serverURL, "/")+"/"+strings.TrimLeft(requestPath, "/"),
-		bytes.NewReader(toolCallBody.Body),
-	)
-	if err != nil {
-		http.Error(w, "Failed to create request", http.StatusInternalServerError)
-		return
+	fullURL := strings.TrimRight(serverURL, "/") + "/" + strings.TrimLeft(requestPath, "/")
+	var req *http.Request
+	var err error
+	if strings.HasPrefix(toolExecutionInfo.Tool.RequestContentType.String, "application/x-www-form-urlencoded") {
+		// Assume toolCallBody.Body is a JSON object (map[string]interface{})
+		var formMap map[string]interface{}
+		if err := json.Unmarshal(toolCallBody.Body, &formMap); err != nil {
+			logger.ErrorContext(ctx, "failed to unmarshal form body", slog.String("error", err.Error()))
+			http.Error(w, "Invalid form body", http.StatusBadRequest)
+			return
+		}
+		values := url.Values{}
+		for k, v := range formMap {
+			values.Set(k, fmt.Sprintf("%v", v))
+		}
+		encoded := values.Encode()
+		req, err = http.NewRequestWithContext(
+			r.Context(),
+			toolExecutionInfo.Tool.HttpMethod,
+			fullURL,
+			strings.NewReader(encoded),
+		)
+		if err != nil {
+			http.Error(w, "Failed to create request", http.StatusInternalServerError)
+			return
+		}
+		req.Header.Set("Content-Type", toolExecutionInfo.Tool.RequestContentType.String)
+	} else {
+		req, err = http.NewRequestWithContext(
+			r.Context(),
+			toolExecutionInfo.Tool.HttpMethod,
+			fullURL,
+			bytes.NewReader(toolCallBody.Body),
+		)
+		if err != nil {
+			http.Error(w, "Failed to create request", http.StatusInternalServerError)
+			return
+		}
+		if toolExecutionInfo.Tool.RequestContentType.String != "" {
+			req.Header.Set("Content-Type", toolExecutionInfo.Tool.RequestContentType.String)
+		}
 	}
-
-	// TODO: Eventually we need to get this from tool definition
-	req.Header.Set("Content-Type", "application/json")
 
 	if toolCallBody.QueryParameters != nil {
 		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.QuerySettings)
@@ -225,10 +265,12 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 		w.Header().Set("Trailer", strings.Join(trailerKeys, ", "))
 	}
 
-	// Copy response headers
+	// We proxy over approved headers
 	for key, values := range resp.Header {
 		for _, value := range values {
-			w.Header().Add(key, value)
+			if slices.Contains(proxiedHeaders, key) {
+				w.Header().Add(key, value)
+			}
 		}
 	}
 
@@ -236,11 +278,6 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 	for _, cookie := range resp.Cookies() {
 		http.SetCookie(w, cookie)
 	}
-
-	// Remove CORS headers
-	resp.Header.Del("Access-Control-Allow-Origin")
-	resp.Header.Del("Access-Control-Allow-Methods")
-	resp.Header.Del("Access-Control-Allow-Headers")
 
 	// Copy status code
 	w.WriteHeader(resp.StatusCode)
