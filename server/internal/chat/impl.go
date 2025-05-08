@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
@@ -16,18 +17,20 @@ import (
 )
 
 type Service struct {
-	openaiAPIKey string
-	auth         *auth.Auth
-	openRouter   *openrouter.OpenRouter
-	logger       *slog.Logger
+	openaiAPIKey   string
+	auth           *auth.Auth
+	openRouter     openrouter.Provisioner
+	logger         *slog.Logger
+	proxyTransport http.RoundTripper
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openaiAPIKey string, openRouter *openrouter.OpenRouter) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openaiAPIKey string, openRouter openrouter.Provisioner) *Service {
 	return &Service{
-		openaiAPIKey: openaiAPIKey,
-		auth:         auth.New(logger, db, sessions),
-		openRouter:   openRouter,
-		logger:       logger,
+		openaiAPIKey:   openaiAPIKey,
+		auth:           auth.New(logger, db, sessions),
+		openRouter:     openRouter,
+		logger:         logger,
+		proxyTransport: cleanhttp.DefaultPooledTransport(),
 	}
 }
 
@@ -73,15 +76,16 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	target, _ := url.Parse(openrouter.OpenRouterBaseURL)
-	apiKey, err := s.openRouter.GetAPIKey(ctx, authCtx.ActiveOrganizationID)
+	apiKey, err := s.openRouter.ProvisionAPIKey(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error getting openrouter api key falling back to openai", slog.String("error", err.Error()))
 		// Fallback to OpenAI API key until fully implemented
 		target, _ = url.Parse("https://api.openai.com")
 		apiKey = s.openaiAPIKey
 	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
 
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = s.proxyTransport
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)

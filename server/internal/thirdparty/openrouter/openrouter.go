@@ -10,71 +10,69 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/internal/inv"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+type Provisioner interface {
+	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
+}
+
 type OpenRouter struct {
 	provisioningKey string
-	apiKey          string
 	env             string
 	logger          *slog.Logger
 	repo            *repo.Queries
+	orClient        *http.Client
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, apiKey, provisioningKey, env string) (*OpenRouter, error) {
-	// We only support direct key usage in local development
-	if env == "local" {
-		if apiKey == "" {
-			return nil, errors.New("an OpenRouter API key is required in local development")
-		}
-
-		return &OpenRouter{
-			apiKey:          apiKey,
-			env:             env,
-			logger:          logger,
-			provisioningKey: "",
-			repo:            repo.New(db),
-		}, nil
-	}
-	// Keys are provisioned per org in non prod environments
+func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string) *OpenRouter {
 	return &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
 		logger:          logger,
-		apiKey:          "",
 		repo:            repo.New(db),
-	}, nil
+		orClient:        cleanhttp.DefaultPooledClient(),
+	}
 }
 
-func (o *OpenRouter) GetAPIKey(ctx context.Context, orgID string) (string, error) {
-	if o.env == "local" {
-		return o.apiKey, nil
-	}
+func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
 	var openrouterKey string
-	if key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID); err != nil || key.Key == "" {
-		switch {
-		case errors.Is(err, sql.ErrNoRows), key.Key == "": // we need to create a new key
-			keyResponse, err := o.CreateOpenRouterAPIKey(ctx, orgID)
-			if err != nil {
-				return "", err
-			}
-			_, err = o.repo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
-				OrganizationID: orgID,
-				Key:            keyResponse.Key,
-				KeyHash:        keyResponse.Data.Hash,
-			})
-			if err != nil {
-				return "", err
-			}
-			openrouterKey = keyResponse.Key
-		case err != nil:
+
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows), key.Key == "":
+		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID)
+		if err != nil {
 			return "", err
 		}
-	} else {
+
+		_, err = o.repo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+			OrganizationID: orgID,
+			Key:            keyResponse.Key,
+			KeyHash:        keyResponse.Data.Hash,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		openrouterKey = keyResponse.Key
+
+	case err != nil:
+		return "", err
+
+	default:
 		openrouterKey = key.Key
+	}
+
+	if err := inv.Check("openrouter provisioning", "key is set", openrouterKey != ""); err != nil {
+		return "", err
 	}
 
 	return openrouterKey, nil
@@ -94,7 +92,7 @@ type createKeyResponse struct {
 	Key string `json:"key"`
 }
 
-func (o *OpenRouter) CreateOpenRouterAPIKey(ctx context.Context, orgID string) (*createKeyResponse, error) {
+func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string) (*createKeyResponse, error) {
 	requestBody := createKeyRequest{Name: fmt.Sprintf("gram-%s-%s", o.env, orgID), Label: fmt.Sprintf("%s (%s environment)", orgID, o.env), Limit: nil}
 
 	bodyBytes, err := json.Marshal(requestBody)
@@ -112,14 +110,15 @@ func (o *OpenRouter) CreateOpenRouterAPIKey(ctx context.Context, orgID string) (
 	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := o.orClient.Do(req)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	//nolint:errcheck // unnecessary error check
-	defer resp.Body.Close()
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, errors.New("failed to create OpenRouter API key: " + resp.Status)

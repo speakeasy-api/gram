@@ -277,9 +277,11 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			openRouter, err := openrouter.New(logger, db, c.String("openrouter-dev-key"), c.String("openrouter-provisioning-key"), c.String("environment"))
-			if err != nil {
-				return err
+			var openRouter openrouter.Provisioner
+			if c.String("environment") == "local" {
+				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+			} else {
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"))
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")
