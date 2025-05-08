@@ -99,6 +99,17 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, err
 	}
 
+	_, err = s.envRepo.CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
+		OrganizationID: payload.OrganizationID,
+		ProjectID:      prj.ID,
+		Name:           "Default",
+		Slug:           "default",
+		Description:    conv.ToPGText("Default project for organization"),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").Log(ctx, s.logger)
+	}
+
 	project := &gen.CreateProjectResult{
 		Project: &gen.Project{
 			ID:             prj.ID.String(),
