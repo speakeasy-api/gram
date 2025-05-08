@@ -112,7 +112,7 @@ func (o *OpenRouter) CreateOpenRouterAPIKey(ctx context.Context, orgID string) (
 	//nolint:errcheck // unnecessary error check
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, errors.New("failed to create OpenRouter API key: " + resp.Status)
 	}
 

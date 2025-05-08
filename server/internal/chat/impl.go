@@ -89,7 +89,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		req.URL.Host = target.Host
 		req.URL.Scheme = target.Scheme
 		// Safely join /api (openrouter base path) + /v1/chat/completions
-		req.URL.Path = path.Join(target.Path, "v1/chat/completions")
+		req.URL.Path = path.Join("/", target.Path, "v1/chat/completions")
 
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
