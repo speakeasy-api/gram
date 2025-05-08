@@ -94,8 +94,26 @@ WHERE
 ORDER BY http_tool_definitions.id DESC;
 
 -- name: GetHTTPToolDefinitionByID :one
+WITH first_party AS (
+  SELECT id
+  FROM http_tool_definitions
+  WHERE http_tool_definitions.id = @id
+    AND http_tool_definitions.project_id = @project_id
+    AND http_tool_definitions.deleted IS FALSE
+  LIMIT 1
+),
+-- This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
+third_party AS (
+  SELECT htd.id
+  FROM deployments d
+  INNER JOIN deployments_packages dp ON d.id =  dp.deployment_id
+  INNER JOIN package_versions pv ON dp.version_id = pv.id
+  INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
+  WHERE d.project_id = @project_id
+    AND htd.id = @id
+    AND NOT EXISTS(SELECT 1 FROM first_party)
+  LIMIT 1
+)
 SELECT *
 FROM http_tool_definitions
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
+WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party));

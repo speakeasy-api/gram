@@ -107,11 +107,28 @@ func (q *Queries) FindToolsByName(ctx context.Context, arg FindToolsByNameParams
 }
 
 const getHTTPToolDefinitionByID = `-- name: GetHTTPToolDefinitionByID :one
+WITH first_party AS (
+  SELECT id
+  FROM http_tool_definitions
+  WHERE http_tool_definitions.id = $1
+    AND http_tool_definitions.project_id = $2
+    AND http_tool_definitions.deleted IS FALSE
+  LIMIT 1
+),
+third_party AS (
+  SELECT htd.id
+  FROM deployments d
+  INNER JOIN deployments_packages dp ON d.id =  dp.deployment_id
+  INNER JOIN package_versions pv ON dp.version_id = pv.id
+  INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
+  WHERE d.project_id = $2
+    AND htd.id = $1
+    AND NOT EXISTS(SELECT 1 FROM first_party)
+  LIMIT 1
+)
 SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
+WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party))
 `
 
 type GetHTTPToolDefinitionByIDParams struct {
@@ -119,6 +136,7 @@ type GetHTTPToolDefinitionByIDParams struct {
 	ProjectID uuid.UUID
 }
 
+// This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
 func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPToolDefinitionByIDParams) (HttpToolDefinition, error) {
 	row := q.db.QueryRow(ctx, getHTTPToolDefinitionByID, arg.ID, arg.ProjectID)
 	var i HttpToolDefinition
