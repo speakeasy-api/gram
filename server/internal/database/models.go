@@ -154,6 +154,16 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type OpenrouterApiKey struct {
+	OrganizationID string
+	Key            string
+	KeyHash        string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type Package struct {
 	ID              uuid.UUID
 	Name            string

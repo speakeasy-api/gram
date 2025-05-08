@@ -5,22 +5,29 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"goa.design/goa/v3/security"
 )
 
 type Service struct {
 	openaiAPIKey string
 	auth         *auth.Auth
+	openRouter   *openrouter.OpenRouter
+	logger       *slog.Logger
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openaiAPIKey string) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openaiAPIKey string, openRouter *openrouter.OpenRouter) *Service {
 	return &Service{
 		openaiAPIKey: openaiAPIKey,
 		auth:         auth.New(logger, db, sessions),
+		openRouter:   openRouter,
+		logger:       logger,
 	}
 }
 
@@ -59,7 +66,20 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = ctx
 
-	target, _ := url.Parse("https://api.openai.com")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	target, _ := url.Parse(openrouter.OpenRouterBaseURL)
+	apiKey, err := s.openRouter.GetAPIKey(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "error getting openrouter api key falling back to openai", slog.String("error", err.Error()))
+		// Fallback to OpenAI API key until fully implemented
+		target, _ = url.Parse("https://api.openai.com")
+		apiKey = s.openaiAPIKey
+	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	originalDirector := proxy.Director
@@ -68,8 +88,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		req.Host = target.Host
 		req.URL.Host = target.Host
 		req.URL.Scheme = target.Scheme
-		req.URL.Path = "/v1/chat/completions"
-		req.Header.Set("Authorization", "Bearer "+s.openaiAPIKey)
+		// Safely join /api (openrouter base path) + /v1/chat/completions
+		req.URL.Path = path.Join(target.Path, "v1/chat/completions")
+
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
 	// Handle CORS headers in the response

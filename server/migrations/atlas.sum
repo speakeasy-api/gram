@@ -1,4 +1,4 @@
-h1:/c1iFUnlzaUySzAMX0lEcUocRdPCNtbb5T4x+TvxhpI=
+h1:RBz3bX5jyv7CeLEjWrIzywT9UmztdpxwxGHnwSCGBS4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -6,3 +6,4 @@ h1:/c1iFUnlzaUySzAMX0lEcUocRdPCNtbb5T4x+TvxhpI=
 20250506120944_packages-add-image.sql h1:6g7+QonXpw7fzK7d0vDc/Q9G/Ak5U40NBPSIMXkqcEQ=
 20250506141139_packages-url-column.sql h1:lR2EDs/c/yE3KcNXbeSy/7x9KiZkLlZUlePnNN1M6eA=
 20250506142853_packages-description-column.sql h1:j9DZFKZsd1iZzBFjQWlT5ZioTr7OF4uDggxnOuN/kuI=
+20250507214842_openrouter-table.sql h1:m4U6lidlwiXAjlYQSyUoEIWFZ3xdrqj3GYuAHwYEGOE=

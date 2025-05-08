@@ -8,7 +8,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import { useProject, useSession } from "@/contexts/Auth";
 import { smoothStream, streamText } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   useInstance,
   useListToolsets,
@@ -25,6 +25,20 @@ import { OnboardingContent } from "../onboarding/Onboarding";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Deployment } from "@gram/client/models/components";
 import { getServerURL } from "@/lib/utils";
+
+const availableModels = [
+  { label: "GPT-4o", value: "openai/gpt-4o" },
+  { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
+  { label: "GPT-4.1", value: "openai/gpt-4.1" },
+  { label: "GPT-4.1 Mini", value: "openai/gpt-4.1-mini" },
+  { label: "o3 Mini", value: "openai/o3-mini" },
+  { label: "Claude 3.7 Sonnet", value: "anthropic/claude-3.7-sonnet" },
+  { label: "Claude 3.5 Sonnet", value: "anthropic/claude-3.5-sonnet" },
+  { label: "Claude 3.5 Haiku", value: "anthropic/claude-3.5-haiku" },
+  { label: "Gemini 2.5 Pro Preview", value: "google/gemini-2.5-pro-preview" },
+  { label: "Mistral Medium 3", value: "mistralai/mistral-medium-3" },
+  { label: "Mistral Codestral 2501", value: "mistralai/codestral-2501" },
+];
 
 type ChatConfig = React.RefObject<{
   toolsetSlug: string | null;
@@ -236,6 +250,29 @@ export function ToolsetPanel({
 }
 
 export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
+  const [model, setModel] = useState(availableModels[0]?.value ?? "");
+  const chatKey = `chat-${model}`;
+
+  // We do this because we want the chat to reset when the model changes
+  return (
+    <ChatInner
+      key={chatKey}
+      model={model}
+      setModel={setModel}
+      configRef={configRef}
+    />
+  );
+}
+
+function ChatInner({
+  model,
+  setModel,
+  configRef,
+}: {
+  model: string;
+  setModel: (model: string) => void;
+  configRef: ChatConfig;
+}) {
   const session = useSession();
   const project = useProject();
 
@@ -264,7 +301,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
     }) ?? []
   );
 
-  const openai = createOpenAI({
+  const openrouter = createOpenRouter({
     apiKey: "this is required",
     baseURL: getServerURL(),
     headers: {
@@ -275,7 +312,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
 
   const openaiFetch: typeof globalThis.fetch = async (_, init) => {
     const result = streamText({
-      model: openai("gpt-4o"),
+      model: openrouter.chat(model),
       messages: JSON.parse(init?.body as string).messages,
       tools,
       temperature: 0.5,
@@ -283,7 +320,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
         "You are a helpful assistant that can answer questions and help with tasks. The current date is " +
         new Date().toISOString(),
       experimental_transform: smoothStream({
-        delayInMs: 20, // Looks a little smoother
+        delayInMs: 20,
       }),
     });
 
@@ -354,12 +391,18 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
   // TODO: fix this
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const m = messages as any;
+
   return (
     <AIChatContainer
       messages={m}
       isLoading={status === "streaming"}
       onSendMessage={handleSend}
       className="pb-4"
+      modelSelector={{
+        model,
+        onModelChange: setModel,
+        availableModels,
+      }}
     />
   );
 }

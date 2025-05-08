@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/packages"
 	"github.com/speakeasy-api/gram/internal/projects"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
@@ -153,6 +154,16 @@ func newStartCommand() *cli.Command {
 					}
 					return nil
 				},
+			},
+			&cli.StringFlag{
+				Name:    "openrouter-dev-key",
+				Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
+				EnvVars: []string{"OPENROUTER_DEV_KEY"},
+			},
+			&cli.StringFlag{
+				Name:    "openrouter-provisioning-key",
+				Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
+				EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -266,6 +277,11 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			openRouter, err := openrouter.New(logger, db, c.String("openrouter-dev-key"), c.String("openrouter-provisioning-key"), c.String("environment"))
+			if err != nil {
+				return err
+			}
+
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
@@ -300,7 +316,7 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"))
+			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter)
 
 			mux := goahttp.NewMuxer()
 

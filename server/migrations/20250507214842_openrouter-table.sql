@@ -1,0 +1,2 @@
+-- Create "openrouter_api_keys" table
+CREATE TABLE "openrouter_api_keys" ("organization_id" text NOT NULL, "key" text NOT NULL, "key_hash" text NOT NULL, "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(), "deleted_at" timestamptz NULL, "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED, PRIMARY KEY ("organization_id"));
