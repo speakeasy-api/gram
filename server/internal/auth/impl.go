@@ -103,7 +103,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	if !userInfo.Admin && !userInfo.UserWhitelisted {
 		// TODO: This will be replaced with a redirect to the gram marketing waitlist page
-		return redirectWithError(errors.New("user is not whitelisted"))
+		return redirectWithError(errors.New("user is not approved for gram, please reach out to sagar@speakeasy.com to learn about our waitlist"))
 	}
 
 	if len(userInfo.Organizations) == 0 {
