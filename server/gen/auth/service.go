@@ -75,6 +75,7 @@ type InfoPayload struct {
 type InfoResult struct {
 	UserID               string
 	UserEmail            string
+	IsAdmin              bool
 	ActiveOrganizationID string
 	Organizations        []*OrganizationEntry
 	// The authentication session

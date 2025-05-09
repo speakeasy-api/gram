@@ -280,6 +280,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,
+		IsAdmin:              userInfo.Admin,
 		Organizations:        organizations,
 	}, nil
 }

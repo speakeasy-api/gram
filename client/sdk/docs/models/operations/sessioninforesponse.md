@@ -13,6 +13,7 @@ let value: SessionInfoResponse = {
   },
   result: {
     activeOrganizationId: "<id>",
+    isAdmin: false,
     organizations: [
       {
         accountType: "<value>",

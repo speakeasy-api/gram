@@ -16,6 +16,7 @@ import {
 
 export type InfoResponseBody = {
   activeOrganizationId: string;
+  isAdmin: boolean;
   organizations: Array<OrganizationEntry>;
   userEmail: string;
   userId: string;
@@ -28,12 +29,14 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   active_organization_id: z.string(),
+  is_admin: z.boolean(),
   organizations: z.array(OrganizationEntry$inboundSchema),
   user_email: z.string(),
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "active_organization_id": "activeOrganizationId",
+    "is_admin": "isAdmin",
     "user_email": "userEmail",
     "user_id": "userId",
   });
@@ -42,6 +45,7 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
 /** @internal */
 export type InfoResponseBody$Outbound = {
   active_organization_id: string;
+  is_admin: boolean;
   organizations: Array<OrganizationEntry$Outbound>;
   user_email: string;
   user_id: string;
@@ -54,12 +58,14 @@ export const InfoResponseBody$outboundSchema: z.ZodType<
   InfoResponseBody
 > = z.object({
   activeOrganizationId: z.string(),
+  isAdmin: z.boolean(),
   organizations: z.array(OrganizationEntry$outboundSchema),
   userEmail: z.string(),
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
     activeOrganizationId: "active_organization_id",
+    isAdmin: "is_admin",
     userEmail: "user_email",
     userId: "user_id",
   });

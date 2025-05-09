@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 4b579762a1a72d96e05d472d65691d0e
+  docChecksum: 6a01d5de4fd7ab141c8ccfaf43c1c604
   docVersion: 0.0.1
-  speakeasyVersion: 1.533.0
-  generationVersion: 2.578.0
-  releaseVersion: 0.10.4
-  configChecksum: 90fd5420b1293f553e28d9bc7e3345f3
+  speakeasyVersion: 1.543.1
+  generationVersion: 2.598.21
+  releaseVersion: 0.10.7
+  configChecksum: 69ceb1dbb4c84f70c410b419b5b17af5
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.6
+    core: 3.21.7
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -41,6 +41,9 @@ generatedFiles:
   - docs/models/components/addopenapiv3deploymentassetform.md
   - docs/models/components/addpackageform.md
   - docs/models/components/asset.md
+  - docs/models/components/chat.md
+  - docs/models/components/chatmessage.md
+  - docs/models/components/chatoverview.md
   - docs/models/components/createdeploymentrequestbody.md
   - docs/models/components/createdeploymentresult.md
   - docs/models/components/createenvironmentform.md
@@ -68,6 +71,7 @@ generatedFiles:
   - docs/models/components/integrationentry.md
   - docs/models/components/key.md
   - docs/models/components/kind.md
+  - docs/models/components/listchatsresult.md
   - docs/models/components/listdeploymentresult.md
   - docs/models/components/listenvironmentsresult.md
   - docs/models/components/listintegrationsresult.md
@@ -120,6 +124,7 @@ generatedFiles:
   - docs/models/operations/integrationsnumbergetrequest.md
   - docs/models/operations/listapikeysrequest.md
   - docs/models/operations/listapikeyssecurity.md
+  - docs/models/operations/listchatsrequest.md
   - docs/models/operations/listdeploymentsrequest.md
   - docs/models/operations/listenvironmentsrequest.md
   - docs/models/operations/listintegrationsrequest.md
@@ -128,6 +133,7 @@ generatedFiles:
   - docs/models/operations/listtoolsetsrequest.md
   - docs/models/operations/listtoolsrequest.md
   - docs/models/operations/listversionsrequest.md
+  - docs/models/operations/loadchatrequest.md
   - docs/models/operations/logoutrequest.md
   - docs/models/operations/logoutresponse.md
   - docs/models/operations/logoutsecurity.md
@@ -151,6 +157,7 @@ generatedFiles:
   - docs/models/operations/uploadopenapiv3assetrequest.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
+  - docs/sdks/chat/README.md
   - docs/sdks/deployments/README.md
   - docs/sdks/environments/README.md
   - docs/sdks/gram/README.md
@@ -173,6 +180,8 @@ generatedFiles:
   - src/funcs/authLogin.ts
   - src/funcs/authLogout.ts
   - src/funcs/authSwitchScopes.ts
+  - src/funcs/chatList.ts
+  - src/funcs/chatLoad.ts
   - src/funcs/deploymentsCreate.ts
   - src/funcs/deploymentsEvolveDeployment.ts
   - src/funcs/deploymentsGetById.ts
@@ -224,6 +233,9 @@ generatedFiles:
   - src/models/components/addopenapiv3deploymentassetform.ts
   - src/models/components/addpackageform.ts
   - src/models/components/asset.ts
+  - src/models/components/chat.ts
+  - src/models/components/chatmessage.ts
+  - src/models/components/chatoverview.ts
   - src/models/components/createdeploymentrequestbody.ts
   - src/models/components/createdeploymentresult.ts
   - src/models/components/createenvironmentform.ts
@@ -251,6 +263,7 @@ generatedFiles:
   - src/models/components/integration.ts
   - src/models/components/integrationentry.ts
   - src/models/components/key.ts
+  - src/models/components/listchatsresult.ts
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
   - src/models/components/listintegrationsresult.ts
@@ -300,6 +313,7 @@ generatedFiles:
   - src/models/operations/index.ts
   - src/models/operations/integrationsnumberget.ts
   - src/models/operations/listapikeys.ts
+  - src/models/operations/listchats.ts
   - src/models/operations/listdeployments.ts
   - src/models/operations/listenvironments.ts
   - src/models/operations/listintegrations.ts
@@ -307,6 +321,7 @@ generatedFiles:
   - src/models/operations/listtools.ts
   - src/models/operations/listtoolsets.ts
   - src/models/operations/listversions.ts
+  - src/models/operations/loadchat.ts
   - src/models/operations/logout.ts
   - src/models/operations/publish.ts
   - src/models/operations/revokeapikey.ts
@@ -335,6 +350,7 @@ generatedFiles:
   - src/react-query/integrationsIntegrationsNumberGet.ts
   - src/react-query/latestDeployment.ts
   - src/react-query/listAPIKeys.ts
+  - src/react-query/listChats.ts
   - src/react-query/listDeployments.ts
   - src/react-query/listEnvironments.ts
   - src/react-query/listIntegrations.ts
@@ -342,6 +358,7 @@ generatedFiles:
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
   - src/react-query/listVersions.ts
+  - src/react-query/loadChat.ts
   - src/react-query/logout.ts
   - src/react-query/publishPackage.ts
   - src/react-query/revokeAPIKey.ts
@@ -356,6 +373,7 @@ generatedFiles:
   - src/react-query/uploadOpenAPIv3.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
+  - src/sdk/chat.ts
   - src/sdk/deployments.ts
   - src/sdk/environments.ts
   - src/sdk/index.ts
@@ -557,7 +575,7 @@ examples:
     speakeasy-default-session-info:
       responses:
         "200":
-          application/json: {"active_organization_id": "<id>", "organizations": [], "user_email": "<value>", "user_id": "<id>"}
+          application/json: {"active_organization_id": "<id>", "is_admin": true, "organizations": [], "user_email": "<value>", "user_id": "<id>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -947,5 +965,27 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listChats:
+    speakeasy-default-list-chats:
+      responses:
+        "200":
+          application/json: {"chats": [{"created_at": "2024-08-22T19:26:20.850Z", "id": "<id>", "num_messages": 678317, "title": "<value>", "updated_at": "2023-07-14T18:23:27.528Z", "user_id": "<id>"}, {"created_at": "2023-09-09T18:28:08.953Z", "id": "<id>", "num_messages": 152837, "title": "<value>", "updated_at": "2024-11-27T13:02:27.296Z", "user_id": "<id>"}, {"created_at": "2024-12-01T18:25:37.169Z", "id": "<id>", "num_messages": 17577, "title": "<value>", "updated_at": "2025-02-26T06:14:46.641Z", "user_id": "<id>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  loadChat:
+    speakeasy-default-load-chat:
+      parameters:
+        query:
+          id: "<id>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-04-30T10:11:49.833Z", "id": "<id>", "messages": [], "num_messages": 184649, "title": "<value>", "updated_at": "2024-08-27T23:25:16.656Z", "user_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.1
 generatedTests: {}

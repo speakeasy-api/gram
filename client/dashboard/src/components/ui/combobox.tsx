@@ -1,5 +1,3 @@
-import { Check } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -14,8 +12,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useState } from "react";
-import { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { ReactNode, useState } from "react";
 
 export type DropdownItem = {
   value: string;
@@ -29,41 +28,53 @@ export function Combobox({
   children,
   selected,
   onSelectionChange,
+  onOpenChange,
+  variant = "outline",
   className,
 }: {
   items: DropdownItem[];
-  selected: DropdownItem | undefined;
+  selected: DropdownItem | string | undefined;
   onSelectionChange: (value: DropdownItem) => void;
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
   className?: string;
+  variant?: Parameters<typeof Button>[0]["variant"];
 }) {
   const [open, setOpen] = useState(false);
 
+  const handleOpenChange = (open: boolean) => {
+    setOpen(open);
+    onOpenChange?.(open);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
+          variant={variant}
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between", className)}
+          className={cn("w-full px-2", className)}
         >
-          {children}
+          <div className="flex items-center justify-between w-full gap-2">
+            <div className="truncate">{children}</div>
+            <ChevronsUpDown className="opacity-50" />
+          </div>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[200px] p-0">
         <Command>
-          {items.length > 3 && (
+          {items.length > 4 && (
             <CommandInput placeholder="Search..." className="h-9" />
           )}
           <CommandList>
-            <CommandEmpty>No framework found.</CommandEmpty>
+            <CommandEmpty>No items found.</CommandEmpty>
             <CommandGroup>
               {items.map((item) => (
                 <CommandItem
                   key={item.value}
                   value={item.value}
-                  className="cursor-pointer"
+                  className="cursor-pointer truncate"
                   onSelect={(v) => {
                     onSelectionChange(items.find((item) => item.value === v)!);
                     setOpen(false);
@@ -74,7 +85,11 @@ export function Combobox({
                   <Check
                     className={cn(
                       "ml-auto",
-                      selected?.value === item.value
+                      (
+                        typeof selected === "string"
+                          ? selected === item.value
+                          : selected?.value === item.value
+                      )
                         ? "opacity-100"
                         : "opacity-0"
                     )}

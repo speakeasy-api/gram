@@ -1,22 +1,22 @@
+import { AddButton } from "@/components/add-button";
+import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import { useRoutes } from "@/routes";
+import { Environment } from "@gram/client/models/components/environment.js";
 import {
   useCreateEnvironmentMutation,
   useListEnvironmentsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Outlet } from "react-router";
-import { useProject } from "@/contexts/Auth";
 import { useState } from "react";
-import { Environment } from "@gram/client/models/components/environment.js";
+import { Outlet } from "react-router";
 import { CreateThingCard } from "../toolsets/Toolsets";
-import { InputDialog } from "@/components/input-dialog";
-import { useRoutes } from "@/routes";
-import { AddButton } from "@/components/add-button";
 
 export function EnvironmentsRoot() {
   return <Outlet />;
@@ -24,7 +24,9 @@ export function EnvironmentsRoot() {
 
 export function useEnvironments() {
   const { data: environments, refetch: refetchEnvironments } =
-    useListEnvironmentsSuspense();
+    useListEnvironmentsSuspense(undefined, {
+      refetchOnWindowFocus: false,
+    });
   return Object.assign(environments.environments, {
     refetch: refetchEnvironments,
   });
@@ -105,9 +107,7 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <routes.environments.environment.Link
-            params={[environment.slug]}
-          >
+          <routes.environments.environment.Link params={[environment.slug]}>
             <Card.Title className="hover:underline">
               {environment.name}
             </Card.Title>
@@ -123,9 +123,7 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
         </Stack>
       </Card.Header>
       <Card.Content>
-        <routes.environments.environment.Link
-          params={[environment.slug]}
-        >
+        <routes.environments.environment.Link params={[environment.slug]}>
           <Button variant="outline">Edit</Button>
         </routes.environments.environment.Link>
       </Card.Content>

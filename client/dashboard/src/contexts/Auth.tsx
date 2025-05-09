@@ -1,20 +1,20 @@
-import { createContext, useState } from "react";
+import { GramLogo } from "@/components/gram-logo";
+import { MinimumSuspense } from "@/components/ui/minimum-suspense";
+import { getServerURL } from "@/lib/utils";
 import {
   InfoResponseBody,
   OrganizationEntry,
   ProjectEntry,
 } from "@gram/client/models/components";
-import { useContext } from "react";
 import {
   useListEnvironmentsSuspense,
   useListToolsetsSuspense,
   useSessionInfo,
 } from "@gram/client/react-query";
+import { createContext, useContext, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { GramLogo } from "@/components/gram-logo";
-import { useSlugs } from "./Sdk";
 import { useNavigate } from "react-router";
-import { MinimumSuspense } from "@/components/ui/minimum-suspense";
+import { useSlugs } from "./Sdk";
 
 type Session = InfoResponseBody & {
   session: string;
@@ -28,6 +28,7 @@ const emptySession: Session = {
   organizations: [],
   activeOrganizationId: "",
   session: "",
+  isAdmin: false,
   organization: {
     id: "",
     name: "",
@@ -184,12 +185,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// TODO: Make this better
 export const useIsAdmin = () => {
-  const session = useSession();
-
-  return (
-    session.organization.slug === "organization-123" ||
-    session.organization.slug === "speakeasy-self"
-  );
+  const { isAdmin } = useSession();
+  const isLocal = getServerURL().includes("localhost");
+  return isAdmin || isLocal;
 };

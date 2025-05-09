@@ -207,6 +207,11 @@ run();
 * [logout](docs/sdks/auth/README.md#logout) - logout auth
 * [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
+### [chat](docs/sdks/chat/README.md)
+
+* [list](docs/sdks/chat/README.md#list) - listChats chat
+* [load](docs/sdks/chat/README.md#load) - loadChat chat
+
 ### [deployments](docs/sdks/deployments/README.md)
 
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
@@ -288,6 +293,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authLogin`](docs/sdks/auth/README.md#login) - login auth
 - [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
+- [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -355,6 +362,7 @@ To learn about this feature and how to get started, check
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
+- [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
@@ -362,6 +370,7 @@ To learn about this feature and how to get started, check
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
+- [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys

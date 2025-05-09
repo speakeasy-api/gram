@@ -345,6 +345,7 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient))
+			chat.Attach(mux, chatService)
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

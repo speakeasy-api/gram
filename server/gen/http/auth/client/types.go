@@ -19,6 +19,7 @@ import (
 type InfoResponseBody struct {
 	UserID               *string                          `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	UserEmail            *string                          `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	IsAdmin              *bool                            `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
 	ActiveOrganizationID *string                          `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
 	Organizations        []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
@@ -1422,6 +1423,7 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 	v := &auth.InfoResult{
 		UserID:               *body.UserID,
 		UserEmail:            *body.UserEmail,
+		IsAdmin:              *body.IsAdmin,
 		ActiveOrganizationID: *body.ActiveOrganizationID,
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
@@ -1569,6 +1571,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.UserEmail == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
+	if body.IsAdmin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_admin", "body"))
 	}
 	if body.ActiveOrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_organization_id", "body"))

@@ -1,30 +1,33 @@
 import { Page } from "@/components/page-layout";
+import { Combobox, DropdownItem } from "@/components/ui/combobox";
+import { Heading } from "@/components/ui/heading";
+import { Type } from "@/components/ui/type";
+import { useProject, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { dateTimeFormatters } from "@/lib/dates";
+import { capitalize, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
-import { useCallback, useState, useRef, useEffect } from "react";
+import { Deployment } from "@gram/client/models/components";
+import {
+  useInstance,
+  useListChats,
+  useListEnvironments,
+  useListToolsets,
+  useLoadChat,
+} from "@gram/client/react-query/index.js";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   AIChatContainer,
+  Icon,
   ResizablePanel,
   Stack,
 } from "@speakeasy-api/moonshine";
-import { useProject, useSession } from "@/contexts/Auth";
-import { smoothStream, streamText } from "ai";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import {
-  useInstance,
-  useListToolsets,
-  useListEnvironments,
-} from "@gram/client/react-query/index.js";
-import { jsonSchema } from "ai";
+import { jsonSchema, smoothStream, streamText, ToolInvocation } from "ai";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Type } from "@/components/ui/type";
-import { Heading } from "@/components/ui/heading";
-import { Combobox } from "@/components/ui/combobox";
-import { ChevronDownIcon } from "lucide-react";
-import { ToolsetView } from "../toolsets/Toolset";
+import { v7 as uuidv7 } from "uuid";
 import { OnboardingContent } from "../onboarding/Onboarding";
-import { useSdkClient } from "@/contexts/Sdk";
-import { Deployment } from "@gram/client/models/components";
-import { getServerURL } from "@/lib/utils";
+import { ToolsetView } from "../toolsets/Toolset";
 
 const availableModels = [
   { label: "GPT-4o", value: "openai/gpt-4o" },
@@ -48,6 +51,7 @@ type ChatConfig = React.RefObject<{
 
 export default function Playground() {
   const [searchParams] = useSearchParams();
+  const { data: chatsData, refetch: refetchChats } = useListChats();
 
   const [selectedToolset, setSelectedToolset] = useState<string | null>(
     searchParams.get("toolset") ?? null
@@ -55,6 +59,7 @@ export default function Playground() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
     searchParams.get("environment") ?? null
   );
+  const [chatId, setChatId] = useState<string>(uuidv7());
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -69,15 +74,55 @@ export default function Playground() {
     isOnboarding: false,
   };
 
+  const chatHistoryItems: DropdownItem[] =
+    chatsData?.chats
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .map((chat) => ({
+        label: capitalize(dateTimeFormatters.humanize(chat.updatedAt)),
+        value: chat.id,
+      })) ?? [];
+
+  chatHistoryItems.push({
+    icon: <Icon name="plus" />,
+    label: "New chat",
+    value: uuidv7(),
+  });
+
+  const chatHistoryButton = (
+    <Combobox
+      items={chatHistoryItems}
+      onSelectionChange={(item) => {
+        setChatId(item.value);
+      }}
+      selected={chatId}
+      variant="ghost"
+      onOpenChange={(open) => {
+        if (open) {
+          refetchChats();
+        }
+      }}
+    >
+      <Stack
+        direction="horizontal"
+        gap={2}
+        align="center"
+      >
+        <Icon name="history" className="opacity-50" />
+        <Type variant="small">Chat History</Type>
+      </Stack>
+    </Combobox>
+  );
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
+        <Page.Header.Actions>{chatHistoryButton}</Page.Header.Actions>
       </Page.Header>
       <Page.Body className="max-w-full">
         <ResizablePanel direction="horizontal" className="h-full">
           <ResizablePanel.Pane minSize={35}>
-            <ChatWindow configRef={chatConfigRef} />
+            <ChatWindow configRef={chatConfigRef} chatId={chatId} />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
             <ToolsetPanel
@@ -185,10 +230,7 @@ export function ToolsetPanel({
       onSelectionChange={(value) => setSelectedToolset(value.value)}
       className="max-w-fit"
     >
-      <Stack direction="horizontal" gap={2} align="center">
-        <Type variant="small">{toolset?.name}</Type>
-        <ChevronDownIcon className="h-4 w-4" />
-      </Stack>
+      <Type variant="small">{toolset?.name}</Type>
     </Combobox>
   );
 
@@ -208,10 +250,7 @@ export function ToolsetPanel({
       onSelectionChange={(value) => setSelectedEnvironment(value.value)}
       className="max-w-fit"
     >
-      <Stack direction="horizontal" gap={2} align="center">
-        <Type variant="small">{selectedEnvironment}</Type>
-        <ChevronDownIcon className="h-4 w-4" />
-      </Stack>
+      <Type variant="small">{selectedEnvironment}</Type>
     </Combobox>
   );
 
@@ -249,7 +288,13 @@ export function ToolsetPanel({
   );
 }
 
-export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
+export function ChatWindow({
+  configRef,
+  chatId,
+}: {
+  configRef: ChatConfig;
+  chatId: string;
+}) {
   const [model, setModel] = useState(availableModels[0]?.value ?? "");
   const chatKey = `chat-${model}`;
 
@@ -260,6 +305,7 @@ export function ChatWindow({ configRef }: { configRef: ChatConfig }) {
       model={model}
       setModel={setModel}
       configRef={configRef}
+      chatId={chatId}
     />
   );
 }
@@ -268,13 +314,17 @@ function ChatInner({
   model,
   setModel,
   configRef,
+  chatId,
 }: {
   model: string;
   setModel: (model: string) => void;
   configRef: ChatConfig;
+  chatId: string;
 }) {
   const session = useSession();
   const project = useProject();
+  const { chatHistory, isLoading: isChatHistoryLoading } =
+    useChatHistory(chatId);
 
   const instance = useInstance(
     {},
@@ -307,6 +357,7 @@ function ChatInner({
     headers: {
       "Gram-Session": session.session,
       "Gram-Project": project.slug,
+      "Gram-Chat-ID": chatId,
     },
   });
 
@@ -320,7 +371,7 @@ function ChatInner({
         "You are a helpful assistant that can answer questions and help with tasks. The current date is " +
         new Date().toISOString(),
       experimental_transform: smoothStream({
-        delayInMs: 20,
+        delayInMs: 15, // Looks a little smoother
       }),
     });
 
@@ -336,13 +387,15 @@ function ChatInner({
             "Welcome to Gram! Upload an OpenAPI document to get started.",
         },
       ]
-    : [];
+    : chatHistory ?? [];
 
-  const { messages, status, append } = useChat({
+  const {
+    messages: chatMessages,
+    status,
+    append,
+  } = useChat({
+    id: chatId,
     fetch: openaiFetch,
-    onFinish: (message) => {
-      console.log("Chat finished with message:", message);
-    },
     onError: (error) => {
       console.error("Chat error:", error.message, error.stack);
     },
@@ -353,8 +406,6 @@ function ChatInner({
       if (!tool) {
         throw new Error(`Tool ${toolCall.toolName} not found`);
       }
-
-      console.log("Received new tool call:", toolCall);
 
       const response = await fetch(
         `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
@@ -372,8 +423,6 @@ function ChatInner({
 
       const result = await response.json();
 
-      console.log("tool result", result);
-
       return result || "";
     },
   });
@@ -390,12 +439,12 @@ function ChatInner({
 
   // TODO: fix this
   /* eslint-disable  @typescript-eslint/no-explicit-any */
-  const m = messages as any;
+  const m = chatMessages as any;
 
   return (
     <AIChatContainer
       messages={m}
-      isLoading={status === "streaming"}
+      isLoading={status === "streaming" || isChatHistoryLoading}
       onSendMessage={handleSend}
       className="pb-4"
       modelSelector={{
@@ -406,3 +455,58 @@ function ChatInner({
     />
   );
 }
+
+const useChatHistory = (chatId: string) => {
+  const { data: loadedChat, isLoading } = useLoadChat(
+    {
+      id: chatId,
+    },
+    { retry: false } // Expected to fail (404) if it's a new chat
+  );
+
+  type ToolInvocationPart = {
+    type: "tool-invocation";
+    toolInvocation: ToolInvocation;
+  };
+
+  const chatHistory: Message[] = [];
+  const messages = loadedChat?.messages ?? [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (!message) continue;
+    if (message.role === "system") continue;
+
+    const base = {
+      id: message.id,
+      role: message.role as Message["role"],
+      content: message.content ?? "",
+    };
+
+    if (message.toolCalls) {
+      // The next message is the tool call result
+      const nextMessage = messages[i + 1];
+      chatHistory.push({
+        ...base,
+        parts: JSON.parse(message.toolCalls).map(
+          (toolCall: any): ToolInvocationPart => ({
+            type: "tool-invocation",
+            toolInvocation: {
+              state: "result",
+              args: toolCall.function.arguments,
+              toolCallId: toolCall.id,
+              toolName: toolCall.function.name,
+              result: nextMessage?.content ?? "",
+            },
+          })
+        ),
+      });
+      // Skip the next message since we used it as the tool result
+      i++;
+    } else {
+      chatHistory.push(base);
+    }
+  }
+
+  return { chatHistory, isLoading };
+};

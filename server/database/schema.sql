@@ -369,3 +369,42 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   
   CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
 );
+
+
+-- Create the chats table to track individual chat conversations
+CREATE TABLE IF NOT EXISTS chats (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  user_id TEXT,
+  title TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  
+  CONSTRAINT chats_pkey PRIMARY KEY (id),
+  CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Create the chat_messages table to store individual messages in each chat
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  
+  chat_id uuid NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
+  content TEXT NOT NULL,
+  model TEXT,
+  message_id TEXT,
+  tool_call_id TEXT,
+  user_id TEXT,
+  finish_reason TEXT,
+  tool_calls JSONB,
+  
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  
+  CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);

@@ -724,6 +724,180 @@ paths:
             x-speakeasy-name-override: switchScopes
             x-speakeasy-react-hook:
                 name: SwitchScopes
+    /rpc/chat.list:
+        get:
+            description: List all chats for a project
+            operationId: listChats
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListChatsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listChats chat
+            tags:
+                - chat
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListChats
+    /rpc/chat.load:
+        get:
+            description: Load a chat by its ID
+            operationId: loadChat
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the chat
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the chat
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Chat'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: loadChat chat
+            tags:
+                - chat
+            x-speakeasy-name-override: load
+            x-speakeasy-react-hook:
+                name: LoadChat
     /rpc/deployments.create:
         post:
             description: Create a deployment to load tool definitions.
@@ -3340,6 +3514,110 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        Chat:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the chat was created.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the chat
+                messages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatMessage'
+                    description: The list of messages in the chat
+                num_messages:
+                    type: integer
+                    description: The number of messages in the chat
+                    format: int64
+                title:
+                    type: string
+                    description: The title of the chat
+                updated_at:
+                    type: string
+                    description: When the chat was last updated.
+                    format: date-time
+                user_id:
+                    type: string
+                    description: The ID of the user who created the chat
+            required:
+                - messages
+                - id
+                - title
+                - user_id
+                - num_messages
+                - created_at
+                - updated_at
+        ChatMessage:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: The content of the message
+                created_at:
+                    type: string
+                    description: When the message was created.
+                    format: date-time
+                finish_reason:
+                    type: string
+                    description: The finish reason of the message
+                id:
+                    type: string
+                    description: The ID of the message
+                model:
+                    type: string
+                    description: The model that generated the message
+                role:
+                    type: string
+                    description: The role of the message
+                tool_call_id:
+                    type: string
+                    description: The tool call ID of the message
+                tool_calls:
+                    type: string
+                    description: The tool calls in the message as a JSON blob
+                user_id:
+                    type: string
+                    description: The ID of the user who created the message
+            required:
+                - id
+                - role
+                - model
+                - created_at
+        ChatOverview:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the chat was created.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the chat
+                num_messages:
+                    type: integer
+                    description: The number of messages in the chat
+                    format: int64
+                title:
+                    type: string
+                    description: The title of the chat
+                updated_at:
+                    type: string
+                    description: When the chat was last updated.
+                    format: date-time
+                user_id:
+                    type: string
+                    description: The ID of the user who created the chat
+            required:
+                - id
+                - title
+                - user_id
+                - num_messages
+                - created_at
+                - updated_at
         CreateDeploymentForm:
             type: object
             properties:
@@ -4029,6 +4307,8 @@ components:
             properties:
                 active_organization_id:
                     type: string
+                is_admin:
+                    type: boolean
                 organizations:
                     type: array
                     items:
@@ -4040,6 +4320,7 @@ components:
             required:
                 - user_id
                 - user_email
+                - is_admin
                 - active_organization_id
                 - organizations
         Integration:
@@ -4175,6 +4456,16 @@ components:
                 - scopes
                 - created_at
                 - updated_at
+        ListChatsResult:
+            type: object
+            properties:
+                chats:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatOverview'
+                    description: The list of chats
+            required:
+                - chats
         ListDeploymentForm:
             type: object
             properties:
@@ -4855,6 +5146,8 @@ tags:
       description: Manages assets used by Gram projects.
     - name: auth
       description: Managed auth for gram producers and dashboard.
+    - name: chat
+      description: Managed chats for gram AI consumers.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: environments

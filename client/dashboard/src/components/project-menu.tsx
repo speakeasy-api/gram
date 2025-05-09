@@ -1,20 +1,20 @@
+import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
+import { useSdkClient } from "@/contexts/Sdk.tsx";
+import { cn } from "@/lib/utils.ts";
+import { ProjectEntry } from "@gram/client/models/components";
+import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { ChevronsUpDown, PlusIcon } from "lucide-react";
 import React from "react";
+import { InputDialog } from "./input-dialog.tsx";
+import { NavButton } from "./nav-menu.tsx";
+import { Button } from "./ui/button.tsx";
 import { Combobox } from "./ui/combobox.tsx";
 import { Heading } from "./ui/heading.tsx";
-import { ChevronsUpDown, PlusIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
-import { Button } from "./ui/button.tsx";
-import { Type } from "./ui/type.tsx";
-import { NavButton } from "./nav-menu.tsx";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { cn } from "@/lib/utils.ts";
-import { ThemeToggle } from "./ui/theme-toggle.tsx";
-import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
 import { Separator } from "./ui/separator.tsx";
-import { ProjectEntry } from "@gram/client/models/components";
-import { useSdkClient } from "@/contexts/Sdk.tsx";
-import { InputDialog } from "./input-dialog.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
+import { ThemeToggle } from "./ui/theme-toggle.tsx";
+import { Type } from "./ui/type.tsx";
 
 // Generate colors from project label
 function getProjectColors(label: string): {
@@ -92,10 +92,10 @@ export function ProjectMenu() {
             <ProjectAvatar project={project} className="h-8 w-8 rounded-md" />
             <Stack align="start">
               <Heading variant="h5" className="mb-[-2px] normal-case">
-                {organization?.slug}
+                {project?.slug ?? "Select Project"}
               </Heading>
               <Type variant="small" muted className="truncate max-w-[120px]">
-                {project?.slug ?? "Select Project"}
+                {organization?.slug}
               </Type>
             </Stack>
           </Stack>
@@ -155,7 +155,9 @@ function ProjectSelector() {
     ...project,
     value: project.slug,
     label: project.slug,
-    icon: <ProjectAvatar project={project} className="h-4 w-4" />,
+    icon: (
+      <ProjectAvatar project={project} className="h-4 w-4 min-w-4 min-h-4" />
+    ),
   }));
 
   projectWithIcons.push({
@@ -205,11 +207,15 @@ function ProjectSelector() {
         onSelectionChange={(value) => changeProject(value.value)}
         items={projectWithIcons ?? []}
       >
-        <Stack direction={"horizontal"} gap={2} align="center">
-          <ProjectAvatar project={selected} className="h-4 w-4" />
-          <span className="truncate">{selected?.label}</span>
-        </Stack>
-        <ChevronsUpDown className="opacity-50" />
+        <div className="flex items-center gap-2 w-full">
+          <ProjectAvatar
+            project={selected}
+            className="h-4 w-4 min-w-4 min-h-4"
+          />
+          <Type className="truncate" variant="small">
+            {selected?.label}
+          </Type>
+        </div>
       </Combobox>
       {createDialogOpen && (
         <InputDialog

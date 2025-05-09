@@ -128,7 +128,9 @@ function DeploymentTools({
           + New OpenAPI Source
         </CreateThingCard>
       </Cards>
-      <Heading variant="h3">Third Party Integrations</Heading>
+      <Heading variant="h3" className="mt-4">
+        Third Party Integrations
+      </Heading>
       <Cards>
         {deployment.packages.map((pkg) => (
           <PackageCard key={pkg.id} packageId={pkg.id} />
@@ -307,8 +309,8 @@ function PackageCard({ packageId }: { packageId: string }) {
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
           <Card.Title>{pkg.packageTitle}</Card.Title>
           <div className="flex gap-2 items-center">
-            <Badge className="h-6 flex items-center">Third Party</Badge>
-            <ToolsBadge tools={pkg.toolNames} />
+            <Badge size="md">Third Party</Badge>
+            <ToolsBadge tools={pkg.toolNames} size="md" />
           </div>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>

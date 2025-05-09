@@ -17,6 +17,7 @@ import (
 type InfoResponseBody struct {
 	UserID               string                           `form:"user_id" json:"user_id" xml:"user_id"`
 	UserEmail            string                           `form:"user_email" json:"user_email" xml:"user_email"`
+	IsAdmin              bool                             `form:"is_admin" json:"is_admin" xml:"is_admin"`
 	ActiveOrganizationID string                           `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
 	Organizations        []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
@@ -858,6 +859,7 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 	body := &InfoResponseBody{
 		UserID:               res.UserID,
 		UserEmail:            res.UserEmail,
+		IsAdmin:              res.IsAdmin,
 		ActiveOrganizationID: res.ActiveOrganizationID,
 	}
 	if res.Organizations != nil {

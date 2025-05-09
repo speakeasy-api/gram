@@ -5,6 +5,7 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Assets } from "./assets.js";
 import { Auth } from "./auth.js";
+import { Chat } from "./chat.js";
 import { Deployments } from "./deployments.js";
 import { Environments } from "./environments.js";
 import { Instances } from "./instances.js";
@@ -24,6 +25,11 @@ export class Gram extends ClientSDK {
   private _auth?: Auth;
   get auth(): Auth {
     return (this._auth ??= new Auth(this._options));
+  }
+
+  private _chat?: Chat;
+  get chat(): Chat {
+    return (this._chat ??= new Chat(this._options));
   }
 
   private _deployments?: Deployments;

@@ -108,7 +108,6 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-
   - schema: schema.sql
     queries: ../internal/tools/queries.sql
     engine: postgresql
@@ -135,5 +134,14 @@ sql:
       go:
         package: "repo"
         out: "../internal/thirdparty/openrouter/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+  - schema: schema.sql
+    queries: ../internal/chat/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/chat/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

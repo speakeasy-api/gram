@@ -13,3 +13,11 @@ export function getServerURL(): string {
   }
   return origin;
 }
+
+export function titleCase(str: string) {
+  return str.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export function capitalize(str: string) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
