@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	packages "github.com/speakeasy-api/gram/internal/packages"
@@ -85,7 +86,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment id").Log(ctx, s.logger)
 	}
 
-	dep, err := DescribeDeployment(ctx, s.logger, s.repo, ProjectID(*authCtx.ProjectID), DeploymentID(id))
+	dep, err := mv.DescribeDeployment(ctx, s.logger, s.repo, mv.ProjectID(*authCtx.ProjectID), mv.DeploymentID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +145,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 		}, nil
 	}
 
-	dep, err := DescribeDeployment(ctx, s.logger, tx, ProjectID(*authCtx.ProjectID), DeploymentID(id))
+	dep, err := mv.DescribeDeployment(ctx, s.logger, tx, mv.ProjectID(*authCtx.ProjectID), mv.DeploymentID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +290,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	logger = logger.With(slog.String("deployment_id", newID.String()))
 	span.SetAttributes(attribute.String("deployment_id", newID.String()))
 
-	dep, err := DescribeDeployment(ctx, logger, tx, ProjectID(projectID), DeploymentID(newID))
+	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +462,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		cloneID = newID
 	}
 
-	dep, err := DescribeDeployment(ctx, logger, tx, ProjectID(projectID), DeploymentID(cloneID))
+	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(cloneID))
 	if err != nil {
 		return nil, err
 	}
