@@ -4,28 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/multitracer"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/tracelog"
-	"github.com/pgx-contrib/pgxotel"
-	"github.com/redis/go-redis/extra/redisotel/v9"
-	"github.com/redis/go-redis/v9"
+	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
-	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/internal/assets"
@@ -41,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/integrations"
 	"github.com/speakeasy-api/gram/internal/keys"
 	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/packages"
 	"github.com/speakeasy-api/gram/internal/projects"
@@ -165,116 +154,51 @@ func newStartCommand() *cli.Command {
 				Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 				EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 			},
+			&cli.BoolFlag{
+				Name:    "dev-single-process",
+				Usage:   "Run the server and worker in a single process for local development",
+				EnvVars: []string{"GRAM_SINGLE_PROCESS"},
+				Value:   false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 			logger := PullLogger(ctx)
 
-			sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-			defer sigcancel()
-
-			poolcfg := must.Value(pgxpool.ParseConfig(c.String("database-url")))
 			if c.Bool("observe") {
 				shutdown, err := o11y.SetupOTelSDK(ctx)
 				if err != nil {
 					return err
 				}
 				shutdownFuncs = append(shutdownFuncs, shutdown)
-
-				consoleLogLevel := tracelog.LogLevelNone
-				if c.Bool("unsafe-db-log") {
-					consoleLogLevel = tracelog.LogLevelDebug
-				}
-
-				poolcfg.ConnConfig.Tracer = multitracer.New(
-					&pgxotel.QueryTracer{
-						Name:    "pgx",
-						Options: []trace.TracerOption{},
-					},
-					o11y.NewPGXLogger(logger, consoleLogLevel),
-				)
 			}
 
-			db, err := pgxpool.NewWithConfig(ctx, poolcfg)
+			db, err := newDBClient(ctx, logger, c.String("database-url"), dbClientOptions{
+				enableTracing:       c.Bool("observe"),
+				enableUnsafeLogging: c.Bool("unsafe-db-log"),
+			})
 			if err != nil {
 				return err
 			}
 			defer db.Close()
 
-			var serverURL string
-			switch c.String("environment") {
-			case "minikube":
-				fallthrough
-			case "local":
-				serverURL = fmt.Sprintf("http://localhost%s", c.String("address"))
-			case "dev":
-				serverURL = "https://dev.getgram.ai"
-			case "prod":
-				serverURL = "https://app.getgram.ai"
-			default:
-				return fmt.Errorf("invalid environment: %s", c.String("environment"))
+			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
+				assetsBackend: c.String("assets-backend"),
+				assetsURI:     c.String("assets-uri"),
+			})
+			if err != nil {
+				return err
 			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			var assetStorage assets.BlobStore
-			{
-				assetsBackend := c.String("assets-backend")
-				assetsURI := c.String("assets-uri")
-				switch assetsBackend {
-				case "fs":
-					assetsURI = filepath.Clean(assetsURI)
-					if err := os.MkdirAll(assetsURI, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
-						return err
-					}
-
-					root, err := os.OpenRoot(assetsURI)
-					if err != nil {
-						return err
-					}
-					defer o11y.LogDefer(ctx, logger, func() error {
-						return root.Close()
-					})
-
-					fstore := &assets.FSBlobStore{Root: root}
-					assetStorage = fstore
-				case "gcs":
-					gcsStore, err := assets.NewGCSBlobStore(ctx, assetsURI)
-					if err != nil {
-						return err
-					}
-					assetStorage = gcsStore
-				default:
-					return fmt.Errorf("invalid assets backend: %s", assetsBackend)
-				}
-			}
-
-			var redisClient *redis.Client
-			{
-				redisAddr := c.String("redis-cache-addr")
-				redisPassword := c.String("redis-cache-password")
-
-				db := 0 // we always use default DB
-				redisClient = redis.NewClient(&redis.Options{
-					Addr:         redisAddr,
-					Password:     redisPassword,
-					DB:           db,
-					DialTimeout:  1 * time.Second,
-					ReadTimeout:  300 * time.Millisecond,
-					WriteTimeout: 1 * time.Second,
-				})
-
-				if err := redisClient.Ping(context.Background()).Err(); err != nil {
-					logger.ErrorContext(ctx, "redis connection failed", slog.String("error", err.Error()))
-					panic(err)
-				}
-
-				attrs := redisotel.WithAttributes(
-					semconv.DBSystemRedis,
-					semconv.DBRedisDBIndex(db),
-				)
-				if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
-					panic(err)
-				}
+			redisClient, err := newRedisClient(ctx, redisClientOptions{
+				redisAddr:     c.String("redis-cache-addr"),
+				redisPassword: c.String("redis-cache-password"),
+				enableTracing: c.Bool("observe"),
+			})
+			if err != nil {
+				return err
 			}
 
 			var openRouter openrouter.Provisioner
@@ -318,6 +242,18 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
+			var serverURL string
+			switch c.String("environment") {
+			case "local", "minikube":
+				serverURL = fmt.Sprintf("http://localhost%s", c.String("address"))
+			case "dev":
+				serverURL = "https://dev.getgram.ai"
+			case "prod":
+				serverURL = "https://app.getgram.ai"
+			default:
+				return fmt.Errorf("invalid environment: %s", c.String("environment"))
+			}
+
 			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter)
 
 			mux := goahttp.NewMuxer()
@@ -345,7 +281,6 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient))
-			chat.Attach(mux, chatService)
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -356,7 +291,12 @@ func newStartCommand() *cli.Command {
 				},
 			}
 
-			go func() {
+			sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+			defer sigcancel()
+
+			group := pool.New()
+
+			group.Go(func() {
 				<-sigctx.Done()
 
 				logger.InfoContext(ctx, "shutting down server")
@@ -367,49 +307,20 @@ func newStartCommand() *cli.Command {
 				if err := srv.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "failed to shutdown development server", slog.String("error", err.Error()))
 				}
-			}()
+			})
 
 			logger.InfoContext(ctx, "server started", slog.String("address", c.String("address")))
 			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))
 			}
 
+			cancel()
+			group.Wait()
+
 			return nil
 		},
 		After: func(c *cli.Context) error {
-			ctx := context.Background()
-			logger := PullLogger(c.Context)
-
-			var wg sync.WaitGroup
-			wg.Add(len(shutdownFuncs))
-
-			done := make(chan struct{})
-
-			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
-
-			for _, shutdown := range shutdownFuncs {
-				go func(shutdown func(context.Context) error) {
-					defer wg.Done()
-					if err := shutdown(ctx); err != nil {
-						logger.ErrorContext(ctx, "failed to shutdown component", slog.String("error", err.Error()))
-					}
-				}(shutdown)
-			}
-
-			go func() {
-				wg.Wait()
-				close(done)
-			}()
-
-			select {
-			case <-done:
-			case <-ctx.Done():
-				return errors.New("failed to shutdown all components")
-			}
-
-			logger.InfoContext(c.Context, "all components shutdown")
-			return nil
+			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
 }
