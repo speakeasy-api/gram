@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -234,7 +236,11 @@ func newStartCommand() *cli.Command {
 					DisableProfiling: false,
 				}
 
-				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(db, redisClient))
+				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
+					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
+					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
+					nil,
+				))
 				if err != nil {
 					return err
 				}

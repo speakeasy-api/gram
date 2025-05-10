@@ -2,11 +2,13 @@ package o11y
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.temporal.io/sdk/client"
 	"goa.design/clue/health"
 )
 
@@ -30,10 +32,35 @@ func (p ping) Name() string {
 	return p.name
 }
 
-func NewHealthCheckHandler(db *pgxpool.Pool, cache *redis.Client) http.Handler {
-	pingers := []health.Pinger{
-		ping{name: "database", timeout: 10 * time.Second, checkFunc: db.Ping},
-		ping{name: "cache", timeout: 10 * time.Second, checkFunc: func(ctx context.Context) error { return cache.Ping(ctx).Err() }},
+type NamedResource[T any] struct {
+	Name     string
+	Resource T
+}
+
+func NewHealthCheckHandler(
+	databaseClients []*NamedResource[*pgxpool.Pool],
+	redisClients []*NamedResource[*redis.Client],
+	temporalClients []*NamedResource[client.Client],
+) http.Handler {
+	pingers := make([]health.Pinger, 0, len(databaseClients)+len(redisClients)+len(temporalClients))
+	for _, db := range databaseClients {
+		n := fmt.Sprintf("postgres:%s", db.Name)
+		pingers = append(pingers, ping{name: n, timeout: 10 * time.Second, checkFunc: db.Resource.Ping})
+	}
+
+	for _, rc := range redisClients {
+		n := fmt.Sprintf("redis:%s", rc.Name)
+		pingers = append(pingers, ping{name: n, timeout: 10 * time.Second, checkFunc: func(ctx context.Context) error {
+			return rc.Resource.Ping(ctx).Err()
+		}})
+	}
+
+	for _, tc := range temporalClients {
+		n := fmt.Sprintf("temporal:%s", tc.Name)
+		pingers = append(pingers, ping{name: n, timeout: 10 * time.Second, checkFunc: func(ctx context.Context) error {
+			_, err := tc.Resource.CheckHealth(ctx, &client.CheckHealthRequest{})
+			return err
+		}})
 	}
 
 	h := health.NewChecker(pingers...)
