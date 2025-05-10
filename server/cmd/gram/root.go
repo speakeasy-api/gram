@@ -48,7 +48,17 @@ func newApp() *cli.App {
 				GitSHA: GitSHA,
 			})
 
+			shortGitSHA := GitSHA
+			if len(GitSHA) > 8 {
+				shortGitSHA = GitSHA[:8]
+			}
+
 			logger := slog.New(o11y.NewLogHandler(c.String("log-level"), c.Bool("log-pretty")))
+			logger = logger.With(
+				slog.String("app", "gram"),
+				slog.String("app_name", "gram"),
+				slog.String("app_git_sha", shortGitSHA),
+			)
 
 			// Sets GOMAXPROCS to match the Linux container CPU quota.
 			_, err := maxprocs.Set(maxprocs.Logger(nil))
@@ -62,7 +72,7 @@ func newApp() *cli.App {
 				logger.ErrorContext(c.Context, "automemlimit", slog.String("error", err.Error()))
 			}
 
-			c.Context = PushLogger(c.Context, logger.With(slog.String("app", "gram")))
+			c.Context = PushLogger(c.Context, logger)
 
 			return nil
 		},

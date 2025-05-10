@@ -48,15 +48,11 @@ func (h *ContextHandler) WithGroup(name string) slog.Handler {
 }
 
 func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
-	appInfo := PullAppInfo(ctx)
-	record.Add("app.name", appInfo.Name)
-	record.Add("app.git_sha", appInfo.GitSHA)
-
 	if service, ok := ctx.Value(goa.ServiceKey).(string); ok {
-		record.Add("goa.service", service)
+		record.Add("goa_service", service)
 	}
 	if method, ok := ctx.Value(goa.MethodKey).(string); ok {
-		record.Add("goa.method", method)
+		record.Add("goa_method", method)
 	}
 
 	return h.Handler.Handle(ctx, record)
