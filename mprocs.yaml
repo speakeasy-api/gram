@@ -4,4 +4,5 @@ procs:
     stop: SIGTERM
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]
-    stop: SIGINT
+    stop:
+      send-keys: ["<C-c>"]
