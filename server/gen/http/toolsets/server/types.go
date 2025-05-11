@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -1765,7 +1766,7 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *strin
 		Description: body.Description,
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.HTTPToolNames != nil {
@@ -1798,7 +1799,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		Description: body.Description,
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.HTTPToolNames != nil {
@@ -1807,7 +1808,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 			v.HTTPToolNames[i] = val
 		}
 	}
-	v.Slug = toolsets.Slug(slug)
+	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1818,7 +1819,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 // payload.
 func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.DeleteToolsetPayload {
 	v := &toolsets.DeleteToolsetPayload{}
-	v.Slug = toolsets.Slug(slug)
+	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1828,7 +1829,7 @@ func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput
 // NewGetToolsetPayload builds a toolsets service getToolset endpoint payload.
 func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
 	v := &toolsets.GetToolsetPayload{}
-	v.Slug = toolsets.Slug(slug)
+	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

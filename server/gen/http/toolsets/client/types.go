@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -1058,13 +1059,13 @@ func NewCreateToolsetToolsetDetailsOK(body *CreateToolsetResponseBody) *toolsets
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
-		Slug:           toolsets.Slug(*body.Slug),
+		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.RelevantEnvironmentVariables != nil {
@@ -1371,13 +1372,13 @@ func NewUpdateToolsetToolsetDetailsOK(body *UpdateToolsetResponseBody) *toolsets
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
-		Slug:           toolsets.Slug(*body.Slug),
+		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.RelevantEnvironmentVariables != nil {
@@ -1672,13 +1673,13 @@ func NewGetToolsetToolsetDetailsOK(body *GetToolsetResponseBody) *toolsets.Tools
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
 		Name:           *body.Name,
-		Slug:           toolsets.Slug(*body.Slug),
+		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := toolsets.Slug(*body.DefaultEnvironmentSlug)
+		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if body.RelevantEnvironmentVariables != nil {

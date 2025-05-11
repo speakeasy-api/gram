@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	environments "github.com/speakeasy-api/gram/gen/environments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -872,7 +873,7 @@ func NewCreateEnvironmentEnvironmentOK(body *CreateEnvironmentResponseBody) *env
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
 		Name:           *body.Name,
-		Slug:           environments.Slug(*body.Slug),
+		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
@@ -1175,7 +1176,7 @@ func NewUpdateEnvironmentEnvironmentOK(body *UpdateEnvironmentResponseBody) *env
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
 		Name:           *body.Name,
-		Slug:           environments.Slug(*body.Slug),
+		Slug:           types.Slug(*body.Slug),
 		Description:    body.Description,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,

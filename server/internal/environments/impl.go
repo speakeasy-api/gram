@@ -14,6 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/gen/environments"
 	srv "github.com/speakeasy-api/gram/gen/http/environments/server"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
@@ -109,7 +110,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		OrganizationID: environment.OrganizationID,
 		ProjectID:      environment.ProjectID.String(),
 		Name:           environment.Name,
-		Slug:           gen.Slug(environment.Slug),
+		Slug:           types.Slug(environment.Slug),
 		Description:    conv.FromPGText[string](environment.Description),
 		Entries:        entries,
 		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
@@ -150,7 +151,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 			OrganizationID: environment.OrganizationID,
 			ProjectID:      environment.ProjectID.String(),
 			Name:           environment.Name,
-			Slug:           gen.Slug(environment.Slug),
+			Slug:           types.Slug(environment.Slug),
 			Description:    conv.FromPGText[string](environment.Description),
 			Entries:        genEntries,
 			CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
@@ -238,7 +239,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		OrganizationID: environment.OrganizationID,
 		ProjectID:      environment.ProjectID.String(),
 		Name:           environment.Name,
-		Slug:           gen.Slug(environment.Slug),
+		Slug:           types.Slug(environment.Slug),
 		Description:    conv.FromPGText[string](environment.Description),
 		Entries:        genEntries,
 		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),

@@ -18,6 +18,7 @@ import (
 	genAuth "github.com/speakeasy-api/gram/gen/auth"
 	srv "github.com/speakeasy-api/gram/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/gen/projects"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
@@ -114,7 +115,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		Project: &gen.Project{
 			ID:             prj.ID.String(),
 			Name:           prj.Name,
-			Slug:           gen.Slug(prj.Slug),
+			Slug:           types.Slug(prj.Slug),
 			OrganizationID: prj.OrganizationID,
 			CreatedAt:      prj.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:      prj.UpdatedAt.Time.Format(time.RFC3339),
@@ -155,7 +156,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		entries = append(entries, &gen.ProjectEntry{
 			ID:   project.ID.String(),
 			Name: project.Name,
-			Slug: gen.Slug(project.Slug),
+			Slug: types.Slug(project.Slug),
 		})
 	}
 

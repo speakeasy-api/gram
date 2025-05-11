@@ -19,6 +19,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/gen/deployments"
 	srv "github.com/speakeasy-api/gram/gen/http/deployments/server"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/internal/assets/repo"
 	"github.com/speakeasy-api/gram/internal/auth"
@@ -561,7 +562,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 	return res, nil
 }
 
-func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *gen.Deployment) (string, error) {
+func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
 	span := trace.SpanFromContext(ctx)
 
 	status := ""
@@ -596,7 +597,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 	return status, nil
 }
 
-func (s *Service) processDeployment(ctx context.Context, deployment *gen.Deployment) error {
+func (s *Service) processDeployment(ctx context.Context, deployment *types.Deployment) error {
 	logger := s.logger.With(
 		slog.String("deployment_id", deployment.ID),
 		slog.String("project_id", deployment.ProjectID),

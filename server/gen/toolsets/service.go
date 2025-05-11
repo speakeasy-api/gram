@@ -10,6 +10,7 @@ package toolsets
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -61,7 +62,7 @@ type CreateToolsetPayload struct {
 	// List of HTTP tool names to include
 	HTTPToolNames []string
 	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *Slug
+	DefaultEnvironmentSlug *types.Slug
 	ProjectSlugInput       *string
 }
 
@@ -69,7 +70,7 @@ type CreateToolsetPayload struct {
 // deleteToolset method.
 type DeleteToolsetPayload struct {
 	// The slug of the toolset
-	Slug             Slug
+	Slug             types.Slug
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -78,7 +79,7 @@ type DeleteToolsetPayload struct {
 // method.
 type GetToolsetPayload struct {
 	// The slug of the toolset
-	Slug             Slug
+	Slug             types.Slug
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -132,9 +133,6 @@ type ListToolsetsResult struct {
 	Toolsets []*ToolsetDetails
 }
 
-// A short url-friendly label that uniquely identifies a resource.
-type Slug string
-
 // ToolsetDetails is the result type of the toolsets service createToolset
 // method.
 type ToolsetDetails struct {
@@ -147,11 +145,11 @@ type ToolsetDetails struct {
 	// The name of the toolset
 	Name string
 	// The slug of the toolset
-	Slug Slug
+	Slug types.Slug
 	// Description of the toolset
 	Description *string
 	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *Slug
+	DefaultEnvironmentSlug *types.Slug
 	// The environment variables that are relevant to the toolset
 	RelevantEnvironmentVariables []string
 	// The HTTP tools in this toolset
@@ -167,13 +165,13 @@ type ToolsetDetails struct {
 type UpdateToolsetPayload struct {
 	SessionToken *string
 	// The slug of the toolset to update
-	Slug Slug
+	Slug types.Slug
 	// The new name of the toolset
 	Name *string
 	// The new description of the toolset
 	Description *string
 	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *Slug
+	DefaultEnvironmentSlug *types.Slug
 	// List of HTTP tool names to include
 	HTTPToolNames    []string
 	ProjectSlugInput *string

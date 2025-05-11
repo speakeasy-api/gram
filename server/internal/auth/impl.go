@@ -18,6 +18,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/gen/auth"
 	srv "github.com/speakeasy-api/gram/gen/http/auth/server"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
@@ -261,7 +262,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			orgProjects = append(orgProjects, &gen.ProjectEntry{
 				ID:   project.ID.String(),
 				Name: project.Name,
-				Slug: gen.Slug(project.Slug),
+				Slug: types.Slug(project.Slug),
 			})
 		}
 

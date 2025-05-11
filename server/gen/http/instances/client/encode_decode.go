@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	instances "github.com/speakeasy-api/gram/gen/instances"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -284,7 +285,7 @@ func unmarshalEnvironmentResponseBodyToInstancesEnvironment(v *EnvironmentRespon
 		OrganizationID: *v.OrganizationID,
 		ProjectID:      *v.ProjectID,
 		Name:           *v.Name,
-		Slug:           instances.Slug(*v.Slug),
+		Slug:           types.Slug(*v.Slug),
 		Description:    v.Description,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,

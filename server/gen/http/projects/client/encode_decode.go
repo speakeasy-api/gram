@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	projects "github.com/speakeasy-api/gram/gen/projects"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -469,7 +470,7 @@ func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *proj
 	res := &projects.Project{
 		ID:             *v.ID,
 		Name:           *v.Name,
-		Slug:           projects.Slug(*v.Slug),
+		Slug:           types.Slug(*v.Slug),
 		OrganizationID: *v.OrganizationID,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
@@ -484,7 +485,7 @@ func unmarshalProjectEntryResponseBodyToProjectsProjectEntry(v *ProjectEntryResp
 	res := &projects.ProjectEntry{
 		ID:   *v.ID,
 		Name: *v.Name,
-		Slug: projects.Slug(*v.Slug),
+		Slug: types.Slug(*v.Slug),
 	}
 
 	return res

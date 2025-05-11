@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -1154,25 +1155,25 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
-// unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset
-// builds a value of type *deployments.OpenAPIv3DeploymentAsset from a value of
-// type *OpenAPIv3DeploymentAssetResponseBody.
-func unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(v *OpenAPIv3DeploymentAssetResponseBody) *deployments.OpenAPIv3DeploymentAsset {
-	res := &deployments.OpenAPIv3DeploymentAsset{
+// unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsset
+// builds a value of type *types.OpenAPIv3DeploymentAsset from a value of type
+// *OpenAPIv3DeploymentAssetResponseBody.
+func unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsset(v *OpenAPIv3DeploymentAssetResponseBody) *types.OpenAPIv3DeploymentAsset {
+	res := &types.OpenAPIv3DeploymentAsset{
 		ID:      *v.ID,
 		AssetID: *v.AssetID,
 		Name:    *v.Name,
-		Slug:    deployments.Slug(*v.Slug),
+		Slug:    types.Slug(*v.Slug),
 	}
 
 	return res
 }
 
-// unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage builds
-// a value of type *deployments.DeploymentPackage from a value of type
+// unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage builds a
+// value of type *types.DeploymentPackage from a value of type
 // *DeploymentPackageResponseBody.
-func unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(v *DeploymentPackageResponseBody) *deployments.DeploymentPackage {
-	res := &deployments.DeploymentPackage{
+func unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage(v *DeploymentPackageResponseBody) *types.DeploymentPackage {
+	res := &types.DeploymentPackage{
 		ID:      *v.ID,
 		Name:    *v.Name,
 		Version: *v.Version,
@@ -1181,13 +1182,13 @@ func unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(v *Dep
 	return res
 }
 
-// unmarshalDeploymentResponseBodyToDeploymentsDeployment builds a value of
-// type *deployments.Deployment from a value of type *DeploymentResponseBody.
-func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentResponseBody) *deployments.Deployment {
+// unmarshalDeploymentResponseBodyToTypesDeployment builds a value of type
+// *types.Deployment from a value of type *DeploymentResponseBody.
+func unmarshalDeploymentResponseBodyToTypesDeployment(v *DeploymentResponseBody) *types.Deployment {
 	if v == nil {
 		return nil
 	}
-	res := &deployments.Deployment{
+	res := &types.Deployment{
 		ID:             *v.ID,
 		OrganizationID: *v.OrganizationID,
 		ProjectID:      *v.ProjectID,
@@ -1201,13 +1202,13 @@ func unmarshalDeploymentResponseBodyToDeploymentsDeployment(v *DeploymentRespons
 		ExternalID:     v.ExternalID,
 		ExternalURL:    v.ExternalURL,
 	}
-	res.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
+	res.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
 	for i, val := range v.Openapiv3Assets {
-		res.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(val)
+		res.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsset(val)
 	}
-	res.Packages = make([]*deployments.DeploymentPackage, len(v.Packages))
+	res.Packages = make([]*types.DeploymentPackage, len(v.Packages))
 	for i, val := range v.Packages {
-		res.Packages[i] = unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(val)
+		res.Packages[i] = unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage(val)
 	}
 
 	return res
@@ -1254,7 +1255,7 @@ func marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3D
 	res := &deployments.AddOpenAPIv3DeploymentAssetForm{
 		AssetID: v.AssetID,
 		Name:    v.Name,
-		Slug:    deployments.Slug(v.Slug),
+		Slug:    types.Slug(v.Slug),
 	}
 
 	return res

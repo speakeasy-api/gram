@@ -9,6 +9,7 @@ package server
 
 import (
 	environments "github.com/speakeasy-api/gram/gen/environments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -1445,7 +1446,7 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string
 	for i, val := range body.EntriesToRemove {
 		v.EntriesToRemove[i] = val
 	}
-	v.Slug = environments.Slug(slug)
+	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1456,7 +1457,7 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string
 // endpoint payload.
 func NewDeleteEnvironmentPayload(slug string, sessionToken *string, projectSlugInput *string) *environments.DeleteEnvironmentPayload {
 	v := &environments.DeleteEnvironmentPayload{}
-	v.Slug = environments.Slug(slug)
+	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

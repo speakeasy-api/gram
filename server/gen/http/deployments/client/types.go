@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -1130,13 +1131,13 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 		ExternalID:     body.ExternalID,
 		ExternalURL:    body.ExternalURL,
 	}
-	v.Openapiv3Assets = make([]*deployments.OpenAPIv3DeploymentAsset, len(body.Openapiv3Assets))
+	v.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(body.Openapiv3Assets))
 	for i, val := range body.Openapiv3Assets {
-		v.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToDeploymentsOpenAPIv3DeploymentAsset(val)
+		v.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsset(val)
 	}
-	v.Packages = make([]*deployments.DeploymentPackage, len(body.Packages))
+	v.Packages = make([]*types.DeploymentPackage, len(body.Packages))
 	for i, val := range body.Packages {
-		v.Packages[i] = unmarshalDeploymentPackageResponseBodyToDeploymentsDeploymentPackage(val)
+		v.Packages[i] = unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage(val)
 	}
 
 	return v
@@ -1282,7 +1283,7 @@ func NewGetDeploymentUnexpected(body *GetDeploymentUnexpectedResponseBody) *goa.
 func NewGetLatestDeploymentResultOK(body *GetLatestDeploymentResponseBody) *deployments.GetLatestDeploymentResult {
 	v := &deployments.GetLatestDeploymentResult{}
 	if body.Deployment != nil {
-		v.Deployment = unmarshalDeploymentResponseBodyToDeploymentsDeployment(body.Deployment)
+		v.Deployment = unmarshalDeploymentResponseBodyToTypesDeployment(body.Deployment)
 	}
 
 	return v
@@ -1428,7 +1429,7 @@ func NewGetLatestDeploymentUnexpected(body *GetLatestDeploymentUnexpectedRespons
 func NewCreateDeploymentResultOK(body *CreateDeploymentResponseBody) *deployments.CreateDeploymentResult {
 	v := &deployments.CreateDeploymentResult{}
 	if body.Deployment != nil {
-		v.Deployment = unmarshalDeploymentResponseBodyToDeploymentsDeployment(body.Deployment)
+		v.Deployment = unmarshalDeploymentResponseBodyToTypesDeployment(body.Deployment)
 	}
 
 	return v
@@ -1574,7 +1575,7 @@ func NewCreateDeploymentUnexpected(body *CreateDeploymentUnexpectedResponseBody)
 func NewEvolveResultOK(body *EvolveResponseBody) *deployments.EvolveResult {
 	v := &deployments.EvolveResult{}
 	if body.Deployment != nil {
-		v.Deployment = unmarshalDeploymentResponseBodyToDeploymentsDeployment(body.Deployment)
+		v.Deployment = unmarshalDeploymentResponseBodyToTypesDeployment(body.Deployment)
 	}
 
 	return v

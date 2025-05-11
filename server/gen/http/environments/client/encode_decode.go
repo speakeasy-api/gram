@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	environments "github.com/speakeasy-api/gram/gen/environments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -941,7 +942,7 @@ func unmarshalEnvironmentResponseBodyToEnvironmentsEnvironment(v *EnvironmentRes
 		OrganizationID: *v.OrganizationID,
 		ProjectID:      *v.ProjectID,
 		Name:           *v.Name,
-		Slug:           environments.Slug(*v.Slug),
+		Slug:           types.Slug(*v.Slug),
 		Description:    v.Description,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,

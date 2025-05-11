@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/conv"
 	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/tools/security"
@@ -88,8 +89,8 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 		OrganizationID:               toolset.OrganizationID,
 		ProjectID:                    toolset.ProjectID.String(),
 		Name:                         toolset.Name,
-		Slug:                         gen.Slug(toolset.Slug),
-		DefaultEnvironmentSlug:       conv.FromPGText[gen.Slug](toolset.DefaultEnvironmentSlug),
+		Slug:                         types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		RelevantEnvironmentVariables: relevantEnvVars,
 		Description:                  conv.FromPGText[string](toolset.Description),
 		HTTPTools:                    httpTools,

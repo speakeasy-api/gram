@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	auth "github.com/speakeasy-api/gram/gen/auth"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -1182,7 +1183,7 @@ func unmarshalProjectEntryResponseBodyToAuthProjectEntry(v *ProjectEntryResponse
 	res := &auth.ProjectEntry{
 		ID:   *v.ID,
 		Name: *v.Name,
-		Slug: auth.Slug(*v.Slug),
+		Slug: types.Slug(*v.Slug),
 	}
 
 	return res

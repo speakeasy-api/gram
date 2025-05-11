@@ -10,6 +10,7 @@ package projects
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -84,7 +85,7 @@ type Project struct {
 	// The name of the project
 	Name string
 	// The slug of the project
-	Slug Slug
+	Slug types.Slug
 	// The ID of the organization that owns the project
 	OrganizationID string
 	// The creation date of the project.
@@ -99,11 +100,8 @@ type ProjectEntry struct {
 	// The name of the project
 	Name string
 	// The slug of the project
-	Slug Slug
+	Slug types.Slug
 }
-
-// A short url-friendly label that uniquely identifies a resource.
-type Slug string
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
 func MakeUnauthorized(err error) *goa.ServiceError {

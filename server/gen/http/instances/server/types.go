@@ -9,6 +9,7 @@ package server
 
 import (
 	instances "github.com/speakeasy-api/gram/gen/instances"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -418,9 +419,9 @@ func NewGetInstanceUnexpectedResponseBody(res *goa.ServiceError) *GetInstanceUne
 // NewGetInstanceForm builds a instances service getInstance endpoint payload.
 func NewGetInstanceForm(toolsetSlug string, environmentSlug *string, sessionToken *string, projectSlugInput *string, apikeyToken *string) *instances.GetInstanceForm {
 	v := &instances.GetInstanceForm{}
-	v.ToolsetSlug = instances.Slug(toolsetSlug)
+	v.ToolsetSlug = types.Slug(toolsetSlug)
 	if environmentSlug != nil {
-		tmpenvironmentSlug := instances.Slug(*environmentSlug)
+		tmpenvironmentSlug := types.Slug(*environmentSlug)
 		v.EnvironmentSlug = &tmpenvironmentSlug
 	}
 	v.SessionToken = sessionToken

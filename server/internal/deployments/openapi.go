@@ -20,7 +20,7 @@ import (
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"gopkg.in/yaml.v3"
 
-	gen "github.com/speakeasy-api/gram/gen/deployments"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/inv"
@@ -43,7 +43,7 @@ type openapiV3Task struct {
 	projectID    uuid.UUID
 	deploymentID uuid.UUID
 	openapiDocID uuid.UUID
-	docInfo      *gen.OpenAPIv3DeploymentAsset
+	docInfo      *types.OpenAPIv3DeploymentAsset
 	docURL       *url.URL
 }
 
@@ -198,7 +198,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 	return nil
 }
 
-func (s *Service) extractDefaultServer(ctx context.Context, logger *slog.Logger, tx *repo.Queries, projectID, deploymentID uuid.UUID, docInfo *gen.OpenAPIv3DeploymentAsset, servers []*v3.Server) *string {
+func (s *Service) extractDefaultServer(ctx context.Context, logger *slog.Logger, tx *repo.Queries, projectID, deploymentID uuid.UUID, docInfo *types.OpenAPIv3DeploymentAsset, servers []*v3.Server) *string {
 	for _, server := range servers {
 		low := server.GoLow()
 		line, col := low.KeyNode.Line, low.KeyNode.Column

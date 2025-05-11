@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -1155,13 +1156,13 @@ func unmarshalToolsetDetailsResponseBodyToToolsetsToolsetDetails(v *ToolsetDetai
 		ProjectID:      *v.ProjectID,
 		OrganizationID: *v.OrganizationID,
 		Name:           *v.Name,
-		Slug:           toolsets.Slug(*v.Slug),
+		Slug:           types.Slug(*v.Slug),
 		Description:    v.Description,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
 	if v.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := toolsets.Slug(*v.DefaultEnvironmentSlug)
+		defaultEnvironmentSlug := types.Slug(*v.DefaultEnvironmentSlug)
 		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
 	if v.RelevantEnvironmentVariables != nil {

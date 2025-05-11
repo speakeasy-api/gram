@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	environments "github.com/speakeasy-api/gram/gen/environments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -149,7 +150,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	} else {
 		v.EntriesToRemove = []string{}
 	}
-	v.Slug = environments.Slug(slug)
+	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -184,7 +185,7 @@ func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, env
 		}
 	}
 	v := &environments.DeleteEnvironmentPayload{}
-	v.Slug = environments.Slug(slug)
+	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

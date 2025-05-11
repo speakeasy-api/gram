@@ -16,6 +16,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/gen/http/instances/server"
 	gen "github.com/speakeasy-api/gram/gen/instances"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
@@ -119,7 +120,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		OrganizationID: envModel.OrganizationID,
 		ProjectID:      envModel.ProjectID.String(),
 		Name:           envModel.Name,
-		Slug:           gen.Slug(envModel.Slug),
+		Slug:           types.Slug(envModel.Slug),
 		Description:    conv.FromPGText[string](envModel.Description),
 		Entries:        genEntries,
 		CreatedAt:      envModel.CreatedAt.Time.Format(time.RFC3339),

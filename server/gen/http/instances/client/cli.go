@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	instances "github.com/speakeasy-api/gram/gen/instances"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -61,9 +62,9 @@ func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGe
 		}
 	}
 	v := &instances.GetInstanceForm{}
-	v.ToolsetSlug = instances.Slug(toolsetSlug)
+	v.ToolsetSlug = types.Slug(toolsetSlug)
 	if environmentSlug != nil {
-		tmpenvironmentSlug := instances.Slug(*environmentSlug)
+		tmpenvironmentSlug := types.Slug(*environmentSlug)
 		v.EnvironmentSlug = &tmpenvironmentSlug
 	}
 	v.SessionToken = sessionToken

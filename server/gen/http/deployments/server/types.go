@@ -1075,7 +1075,7 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 	if res.Openapiv3Assets != nil {
 		body.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(res.Openapiv3Assets))
 		for i, val := range res.Openapiv3Assets {
-			body.Openapiv3Assets[i] = marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(val)
+			body.Openapiv3Assets[i] = marshalTypesOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(val)
 		}
 	} else {
 		body.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
@@ -1083,7 +1083,7 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 	if res.Packages != nil {
 		body.Packages = make([]*DeploymentPackageResponseBody, len(res.Packages))
 		for i, val := range res.Packages {
-			body.Packages[i] = marshalDeploymentsDeploymentPackageToDeploymentPackageResponseBody(val)
+			body.Packages[i] = marshalTypesDeploymentPackageToDeploymentPackageResponseBody(val)
 		}
 	} else {
 		body.Packages = []*DeploymentPackageResponseBody{}
@@ -1096,7 +1096,7 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 func NewGetLatestDeploymentResponseBody(res *deployments.GetLatestDeploymentResult) *GetLatestDeploymentResponseBody {
 	body := &GetLatestDeploymentResponseBody{}
 	if res.Deployment != nil {
-		body.Deployment = marshalDeploymentsDeploymentToDeploymentResponseBody(res.Deployment)
+		body.Deployment = marshalTypesDeploymentToDeploymentResponseBody(res.Deployment)
 	}
 	return body
 }
@@ -1106,7 +1106,7 @@ func NewGetLatestDeploymentResponseBody(res *deployments.GetLatestDeploymentResu
 func NewCreateDeploymentResponseBody(res *deployments.CreateDeploymentResult) *CreateDeploymentResponseBody {
 	body := &CreateDeploymentResponseBody{}
 	if res.Deployment != nil {
-		body.Deployment = marshalDeploymentsDeploymentToDeploymentResponseBody(res.Deployment)
+		body.Deployment = marshalTypesDeploymentToDeploymentResponseBody(res.Deployment)
 	}
 	return body
 }
@@ -1116,7 +1116,7 @@ func NewCreateDeploymentResponseBody(res *deployments.CreateDeploymentResult) *C
 func NewEvolveResponseBody(res *deployments.EvolveResult) *EvolveResponseBody {
 	body := &EvolveResponseBody{}
 	if res.Deployment != nil {
-		body.Deployment = marshalDeploymentsDeploymentToDeploymentResponseBody(res.Deployment)
+		body.Deployment = marshalTypesDeploymentToDeploymentResponseBody(res.Deployment)
 	}
 	return body
 }

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	deployments "github.com/speakeasy-api/gram/gen/deployments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -1091,10 +1092,10 @@ func EncodeListDeploymentsError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
-// marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody
+// marshalTypesOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody
 // builds a value of type *OpenAPIv3DeploymentAssetResponseBody from a value of
-// type *deployments.OpenAPIv3DeploymentAsset.
-func marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(v *deployments.OpenAPIv3DeploymentAsset) *OpenAPIv3DeploymentAssetResponseBody {
+// type *types.OpenAPIv3DeploymentAsset.
+func marshalTypesOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(v *types.OpenAPIv3DeploymentAsset) *OpenAPIv3DeploymentAssetResponseBody {
 	res := &OpenAPIv3DeploymentAssetResponseBody{
 		ID:      v.ID,
 		AssetID: v.AssetID,
@@ -1105,10 +1106,10 @@ func marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetRespons
 	return res
 }
 
-// marshalDeploymentsDeploymentPackageToDeploymentPackageResponseBody builds a
-// value of type *DeploymentPackageResponseBody from a value of type
-// *deployments.DeploymentPackage.
-func marshalDeploymentsDeploymentPackageToDeploymentPackageResponseBody(v *deployments.DeploymentPackage) *DeploymentPackageResponseBody {
+// marshalTypesDeploymentPackageToDeploymentPackageResponseBody builds a value
+// of type *DeploymentPackageResponseBody from a value of type
+// *types.DeploymentPackage.
+func marshalTypesDeploymentPackageToDeploymentPackageResponseBody(v *types.DeploymentPackage) *DeploymentPackageResponseBody {
 	res := &DeploymentPackageResponseBody{
 		ID:      v.ID,
 		Name:    v.Name,
@@ -1118,9 +1119,9 @@ func marshalDeploymentsDeploymentPackageToDeploymentPackageResponseBody(v *deplo
 	return res
 }
 
-// marshalDeploymentsDeploymentToDeploymentResponseBody builds a value of type
-// *DeploymentResponseBody from a value of type *deployments.Deployment.
-func marshalDeploymentsDeploymentToDeploymentResponseBody(v *deployments.Deployment) *DeploymentResponseBody {
+// marshalTypesDeploymentToDeploymentResponseBody builds a value of type
+// *DeploymentResponseBody from a value of type *types.Deployment.
+func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *DeploymentResponseBody {
 	if v == nil {
 		return nil
 	}
@@ -1141,7 +1142,7 @@ func marshalDeploymentsDeploymentToDeploymentResponseBody(v *deployments.Deploym
 	if v.Openapiv3Assets != nil {
 		res.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(v.Openapiv3Assets))
 		for i, val := range v.Openapiv3Assets {
-			res.Openapiv3Assets[i] = marshalDeploymentsOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(val)
+			res.Openapiv3Assets[i] = marshalTypesOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(val)
 		}
 	} else {
 		res.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
@@ -1149,7 +1150,7 @@ func marshalDeploymentsDeploymentToDeploymentResponseBody(v *deployments.Deploym
 	if v.Packages != nil {
 		res.Packages = make([]*DeploymentPackageResponseBody, len(v.Packages))
 		for i, val := range v.Packages {
-			res.Packages[i] = marshalDeploymentsDeploymentPackageToDeploymentPackageResponseBody(val)
+			res.Packages[i] = marshalTypesDeploymentPackageToDeploymentPackageResponseBody(val)
 		}
 	} else {
 		res.Packages = []*DeploymentPackageResponseBody{}
@@ -1168,7 +1169,7 @@ func unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv
 	res := &deployments.AddOpenAPIv3DeploymentAssetForm{
 		AssetID: *v.AssetID,
 		Name:    *v.Name,
-		Slug:    deployments.Slug(*v.Slug),
+		Slug:    types.Slug(*v.Slug),
 	}
 
 	return res

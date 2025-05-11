@@ -10,6 +10,7 @@ package deployments
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -63,7 +64,7 @@ type AddOpenAPIv3DeploymentAssetForm struct {
 	// The name to give the document as it will be displayed in UIs.
 	Name string
 	// The slug to give the document as it will be displayed in URLs.
-	Slug Slug
+	Slug types.Slug
 }
 
 type AddPackageForm struct {
@@ -102,50 +103,7 @@ type CreateDeploymentPayload struct {
 // createDeployment method.
 type CreateDeploymentResult struct {
 	// A deployment that was successfully created.
-	Deployment *Deployment
-}
-
-type Deployment struct {
-	// The ID to of the deployment.
-	ID string
-	// The ID of the organization that the deployment belongs to.
-	OrganizationID string
-	// The ID of the project that the deployment belongs to.
-	ProjectID string
-	// The ID of the user that created the deployment.
-	UserID string
-	// The creation date of the deployment.
-	CreatedAt string
-	// The status of the deployment.
-	Status string
-	// A unique identifier that will mitigate against duplicate deployments.
-	IdempotencyKey *string
-	// The github repository in the form of "owner/repo".
-	GithubRepo *string
-	// The github pull request that resulted in the deployment.
-	GithubPr *string
-	// The commit hash that triggered the deployment.
-	GithubSha *string
-	// The external ID to refer to the deployment. This can be a git commit hash
-	// for example.
-	ExternalID *string
-	// The upstream URL a deployment can refer to. This can be a github url to a
-	// commit hash or pull request.
-	ExternalURL *string
-	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
-	// documents whose operations will become tool definitions.
-	Openapiv3Assets []*OpenAPIv3DeploymentAsset
-	// The packages that were deployed.
-	Packages []*DeploymentPackage
-}
-
-type DeploymentPackage struct {
-	// The ID of the deployment package.
-	ID string
-	// The name of the package.
-	Name string
-	// The version of the package.
-	Version string
+	Deployment *types.Deployment
 }
 
 type DeploymentSummary struct {
@@ -182,7 +140,7 @@ type EvolvePayload struct {
 // EvolveResult is the result type of the deployments service evolve method.
 type EvolveResult struct {
 	// A deployment that was successfully created.
-	Deployment *Deployment
+	Deployment *types.Deployment
 }
 
 // GetDeploymentPayload is the payload type of the deployments service
@@ -226,9 +184,9 @@ type GetDeploymentResult struct {
 	ExternalURL *string
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	Openapiv3Assets []*OpenAPIv3DeploymentAsset
+	Openapiv3Assets []*types.OpenAPIv3DeploymentAsset
 	// The packages that were deployed.
-	Packages []*DeploymentPackage
+	Packages []*types.DeploymentPackage
 }
 
 // GetLatestDeploymentPayload is the payload type of the deployments service
@@ -243,7 +201,7 @@ type GetLatestDeploymentPayload struct {
 // getLatestDeployment method.
 type GetLatestDeploymentResult struct {
 	// The latest deployment for a project if available.
-	Deployment *Deployment
+	Deployment *types.Deployment
 }
 
 // ListDeploymentResult is the result type of the deployments service
@@ -264,20 +222,6 @@ type ListDeploymentsPayload struct {
 	// The cursor to fetch results from
 	Cursor *string
 }
-
-type OpenAPIv3DeploymentAsset struct {
-	// The ID of the deployment asset.
-	ID string
-	// The ID of the uploaded asset.
-	AssetID string
-	// The name to give the document as it will be displayed in UIs.
-	Name string
-	// The slug to give the document as it will be displayed in URLs.
-	Slug Slug
-}
-
-// A short url-friendly label that uniquely identifies a resource.
-type Slug string
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
 func MakeUnauthorized(err error) *goa.ServiceError {

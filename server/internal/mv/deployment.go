@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	gen "github.com/speakeasy-api/gram/gen/deployments"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/inv"
@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/packages"
 )
 
-func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.Queries, projectID ProjectID, depID DeploymentID) (*gen.Deployment, error) {
+func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.Queries, projectID ProjectID, depID DeploymentID) (*types.Deployment, error) {
 	rows, err := depRepo.GetDeploymentWithAssets(ctx, repo.GetDeploymentWithAssetsParams{
 		ID:        uuid.UUID(depID),
 		ProjectID: uuid.UUID(projectID),
@@ -30,8 +30,8 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 
 	deployment := rows[0].Deployment
 	stat := rows[0].Status
-	attachedAssets := make([]*gen.OpenAPIv3DeploymentAsset, 0, len(rows))
-	attachedPackages := make([]*gen.DeploymentPackage, 0, len(rows))
+	attachedAssets := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
+	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
 	var seenAssets = make(map[uuid.UUID]bool)
 	var seenPackages = make(map[uuid.UUID]bool)
 
@@ -47,11 +47,11 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment openapiv3 asset").Log(ctx, logger)
 			}
 
-			attachedAssets = append(attachedAssets, &gen.OpenAPIv3DeploymentAsset{
+			attachedAssets = append(attachedAssets, &types.OpenAPIv3DeploymentAsset{
 				ID:      depAssetID.String(),
 				AssetID: r.DeploymentsOpenapiv3AssetStoreID.UUID.String(),
 				Name:    r.DeploymentsOpenapiv3AssetName.String,
-				Slug:    gen.Slug(r.DeploymentsOpenapiv3AssetSlug.String),
+				Slug:    types.Slug(r.DeploymentsOpenapiv3AssetSlug.String),
 			})
 			seenAssets[depAssetID] = true
 		}
@@ -59,7 +59,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		pkgID := r.DeploymentPackageID.UUID
 		if pkgID != uuid.Nil && !seenPackages[pkgID] && r.PackageName.Valid {
 			pkgName := r.PackageName.String
-			attachedPackages = append(attachedPackages, &gen.DeploymentPackage{
+			attachedPackages = append(attachedPackages, &types.DeploymentPackage{
 				ID:   pkgID.String(),
 				Name: pkgName,
 				Version: packages.Semver{
@@ -75,7 +75,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		}
 	}
 
-	return &gen.Deployment{
+	return &types.Deployment{
 		ID:              deployment.ID.String(),
 		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
 		OrganizationID:  deployment.OrganizationID,

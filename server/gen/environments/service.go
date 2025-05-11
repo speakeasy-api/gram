@@ -10,6 +10,7 @@ package environments
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -67,7 +68,7 @@ type CreateEnvironmentPayload struct {
 // deleteEnvironment method.
 type DeleteEnvironmentPayload struct {
 	// The slug of the environment to delete
-	Slug             Slug
+	Slug             types.Slug
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -84,7 +85,7 @@ type Environment struct {
 	// The name of the environment
 	Name string
 	// The slug identifier for the environment
-	Slug Slug
+	Slug types.Slug
 	// The description of the environment
 	Description *string
 	// List of environment entries
@@ -128,16 +129,13 @@ type ListEnvironmentsResult struct {
 	Environments []*Environment
 }
 
-// A short url-friendly label that uniquely identifies a resource.
-type Slug string
-
 // UpdateEnvironmentPayload is the payload type of the environments service
 // updateEnvironment method.
 type UpdateEnvironmentPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The slug of the environment to update
-	Slug Slug
+	Slug types.Slug
 	// The description of the environment
 	Description *string
 	// The name of the environment
