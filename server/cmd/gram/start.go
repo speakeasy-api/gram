@@ -18,6 +18,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/internal/assets"
@@ -156,6 +157,16 @@ func newStartCommand() *cli.Command {
 				Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 				EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 			},
+			&cli.StringFlag{
+				Name:    "temporal-address",
+				Usage:   "Address of the Temporal server",
+				EnvVars: []string{"TEMPORAL_ADDRESS"},
+			},
+			&cli.StringFlag{
+				Name:    "temporal-namespace",
+				Usage:   "Namespace of the Temporal server",
+				EnvVars: []string{"TEMPORAL_NAMESPACE"},
+			},
 			&cli.BoolFlag{
 				Name:    "dev-single-process",
 				Usage:   "Run the server and worker in a single process for local development",
@@ -229,6 +240,27 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
+			var temporalClient client.Client
+			temporalAddress := c.String("temporal-address")
+			temporalNamespace := c.String("temporal-namespace")
+			temporalEnabled := temporalAddress != "" && temporalNamespace != ""
+
+			if temporalEnabled {
+				temporalClient, err = client.Dial(client.Options{
+					HostPort:  temporalAddress,
+					Namespace: temporalNamespace,
+					Logger:    logger.With(slog.String("component", "temporal")),
+				})
+				if err != nil {
+					return fmt.Errorf("failed to create temporal client: %w", err)
+				}
+
+				shutdownFuncs = append(shutdownFuncs, func(context.Context) error {
+					temporalClient.Close()
+					return nil
+				})
+			}
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -236,10 +268,15 @@ func newStartCommand() *cli.Command {
 					DisableProfiling: false,
 				}
 
+				temporals := []*o11y.NamedResource[client.Client]{}
+				if temporalClient != nil {
+					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalClient})
+				}
+
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					nil,
+					temporals,
 				))
 				if err != nil {
 					return err
@@ -281,7 +318,7 @@ func newStartCommand() *cli.Command {
 			packages.Attach(mux, packages.NewService(logger.With(slog.String("component", "packages")), db, sessionManager))
 			integrations.Attach(mux, integrations.NewService(logger.With(slog.String("component", "integrations")), db, sessionManager))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, sessionManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, temporalClient, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
 			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
@@ -301,6 +338,20 @@ func newStartCommand() *cli.Command {
 			defer sigcancel()
 
 			group := pool.New()
+
+			if temporalClient != nil && c.Bool("dev-single-process") {
+				workerInterruptCh := make(chan any)
+				group.Go(func() {
+					<-sigctx.Done()
+					close(workerInterruptCh)
+				})
+				group.Go(func() {
+					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage)
+					if err := temporalWorker.Run(workerInterruptCh); err != nil {
+						logger.ErrorContext(ctx, "temporal worker failed", slog.String("error", err.Error()))
+					}
+				})
+			}
 
 			group.Go(func() {
 				<-sigctx.Done()

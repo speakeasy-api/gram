@@ -18,8 +18,13 @@ import (
 	"github.com/redis/go-redis/v9"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
+	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/internal/assets"
+	"github.com/speakeasy-api/gram/internal/background"
+	"github.com/speakeasy-api/gram/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
 )
@@ -117,4 +122,22 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 	}
 
 	return redisClient, nil
+}
+
+func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) worker.Worker {
+	temporalWorker := worker.New(client, string(background.TaskQueueMain), worker.Options{
+		Interceptors: []interceptor.WorkerInterceptor{
+			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+			&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+			&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		},
+	})
+
+	activities := background.NewActivities(logger, db, assetStorage)
+	temporalWorker.RegisterActivity(activities.ProcessDeployment)
+	temporalWorker.RegisterActivity(activities.TransitionDeployment)
+
+	temporalWorker.RegisterWorkflow(background.ProcessDeploymentWorkflow)
+
+	return temporalWorker
 }

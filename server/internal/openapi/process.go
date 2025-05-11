@@ -1,4 +1,4 @@
-package deployments
+package openapi
 
 import (
 	"context"
@@ -14,18 +14,21 @@ import (
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	slogmulti "github.com/samber/slog-multi"
 	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/gen/types"
+	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/openapi"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/orderedmap"
 	"github.com/speakeasy-api/gram/internal/tools"
 )
@@ -39,20 +42,37 @@ var (
 	}
 )
 
-type openapiV3Task struct {
-	projectID    uuid.UUID
-	deploymentID uuid.UUID
-	openapiDocID uuid.UUID
-	docInfo      *types.OpenAPIv3DeploymentAsset
-	docURL       *url.URL
+type ToolExtractorTask struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	DocumentID   uuid.UUID
+	DocInfo      *types.OpenAPIv3DeploymentAsset
+	DocURL       *url.URL
 }
 
-func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Logger, tx *repo.Queries, task openapiV3Task) error {
-	docURL := task.docURL
-	projectID := task.projectID
-	deploymentID := task.deploymentID
-	openapiDocID := task.openapiDocID
-	docInfo := task.docInfo
+type ToolExtractor struct {
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	assetStorage assets.BlobStore
+}
+
+func NewToolExtractor(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) *ToolExtractor {
+	return &ToolExtractor{
+		logger:       logger,
+		db:           db,
+		assetStorage: assetStorage,
+	}
+}
+
+func (p *ToolExtractor) Do(
+	ctx context.Context,
+	task ToolExtractorTask,
+) error {
+	docURL := task.DocURL
+	projectID := task.ProjectID
+	deploymentID := task.DeploymentID
+	openapiDocID := task.DocumentID
+	docInfo := task.DocInfo
 	if err := inv.Check("processOpenAPIv3Document",
 		"doc url set", docURL != nil,
 		"project id set", projectID != uuid.Nil,
@@ -63,10 +83,42 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		return err
 	}
 
-	rc, err := s.assetStorage.Read(ctx, docURL)
+	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to fetch openapi document", slog.String("error", err.Error()))
-		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error fetching openapi document")
+		return oops.E(oops.CodeUnexpected, err, "error opening database transaction").Log(ctx, p.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	tx := repo.New(dbtx)
+
+	eventsHandler := NewLogHandler()
+	logger := slog.New(slogmulti.Fanout(
+		p.logger.Handler(),
+		eventsHandler,
+	)).With(
+		slog.String("project_id", projectID.String()),
+		slog.String("deployment_id", deploymentID.String()),
+		slog.String("openapi_doc_id", openapiDocID.String()),
+	)
+
+	defer func() {
+		if _, err := eventsHandler.Flush(ctx, p.db); err != nil {
+			p.logger.ErrorContext(
+				ctx,
+				"failed to flush deployment events",
+				slog.String("error", err.Error()),
+				slog.String("project_id", projectID.String()),
+				slog.String("deployment_id", deploymentID.String()),
+				slog.String("openapi_doc_id", openapiDocID.String()),
+			)
+		}
+	}()
+
+	rc, err := p.assetStorage.Read(ctx, docURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return rc.Close()
@@ -74,8 +126,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 
 	doc, err := io.ReadAll(rc)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to read openapi document", slog.String("error", err.Error()))
-		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error reading openapi document")
+		return oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
 	}
 
 	document, err := libopenapi.NewDocumentWithConfiguration(doc, &datamodel.DocumentConfiguration{
@@ -85,8 +136,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		ExcludeExtensionRefs:  true,
 	})
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to open openapi document", slog.String("error", err.Error()))
-		return s.logDeploymentError(ctx, logger, tx, projectID, deploymentID, "error opening openapi document")
+		return oops.E(oops.CodeUnexpected, err, "error opening openapi document").Log(ctx, logger)
 	}
 
 	v3Model, errs := document.BuildV3Model()
@@ -99,19 +149,10 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		return fmt.Errorf("error serializing global security: %w", err)
 	}
 
-	securitySchemesParams, errs := securitySchemesFromOpenAPIv3(v3Model.Model, task)
+	securitySchemesParams, errs := extractSecuritySchemes(v3Model.Model, task)
 	if len(errs) > 0 {
 		for _, err := range errs {
-			if logErr := s.logDeploymentError(
-				ctx,
-				logger,
-				tx,
-				projectID,
-				deploymentID,
-				fmt.Sprintf("%s: error parsing security schemes: %s", docInfo.Name, err.Error()),
-			); logErr != nil {
-				logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
-			}
+			_ = oops.E(oops.CodeUnexpected, err, "%s: error parsing security schemes: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 	}
 
@@ -121,28 +162,17 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			if logErr := s.logDeploymentError(
-				ctx,
-				logger,
-				tx,
-				projectID,
-				deploymentID,
-				fmt.Sprintf("%s: error parsing security scheme: %s", docInfo.Name, err.Error()),
-			); logErr != nil {
-				logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
-			}
-
-			return fmt.Errorf("%s: error saving security scheme: %w", docInfo.Name, err)
+			return oops.E(oops.CodeUnexpected, err, "%s: error parsing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
 	}
 
 	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
-	globalDefaultServer := s.extractDefaultServer(ctx, logger, tx, projectID, deploymentID, docInfo, v3Model.Model.Servers)
+	globalDefaultServer := p.extractDefaultServer(ctx, logger, docInfo, v3Model.Model.Servers)
 
 	for path, pathItem := range v3Model.Model.Paths.PathItems.FromOldest() {
-		ops := []openapiV3Operation{
+		ops := []operation{
 			{method: "GET", operation: pathItem.Get, path: path},
 			{method: "POST", operation: pathItem.Post, path: path},
 			{method: "PUT", operation: pathItem.Put, path: path},
@@ -161,8 +191,8 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 			// TODO: Currently ignoring servers at path item level until we
 			// figure out how to name env variable
 
-			def, err := s.toolDefFromOpenAPIv3(ctx, logger, tx, openapiV3OperationTask{
-				openapiV3Task:    task,
+			def, err := p.extractToolDef(ctx, logger, tx, operationTask{
+				extractTask:      task,
 				method:           op.method,
 				path:             path,
 				operation:        op.operation,
@@ -172,15 +202,7 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 				defaultServer:    globalDefaultServer,
 			})
 			if err != nil {
-				if logErr := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
-					DeploymentID: deploymentID,
-					ProjectID:    projectID,
-					Event:        "deployment:error",
-					Message:      fmt.Sprintf("%s: %s: skipped operation due to error: %s", docInfo.Name, op.operation.OperationId, err.Error()),
-				}); logErr != nil {
-					logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", err.Error()), slog.String("log_error", logErr.Error()))
-				}
-
+				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, op.operation.OperationId, err.Error()).Log(ctx, logger)
 				continue
 			}
 
@@ -195,10 +217,14 @@ func (s *Service) processOpenAPIv3Document(ctx context.Context, logger *slog.Log
 		return fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr)
 	}
 
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error saving processed deployment").Log(ctx, logger)
+	}
+
 	return nil
 }
 
-func (s *Service) extractDefaultServer(ctx context.Context, logger *slog.Logger, tx *repo.Queries, projectID, deploymentID uuid.UUID, docInfo *types.OpenAPIv3DeploymentAsset, servers []*v3.Server) *string {
+func (s *ToolExtractor) extractDefaultServer(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, servers []*v3.Server) *string {
 	for _, server := range servers {
 		low := server.GoLow()
 		line, col := low.KeyNode.Line, low.KeyNode.Column
@@ -206,30 +232,12 @@ func (s *Service) extractDefaultServer(ctx context.Context, logger *slog.Logger,
 		if server.Variables == nil || server.Variables.Len() == 0 {
 			u, err := url.Parse(server.URL)
 			if err != nil {
-				if logErr := s.logDeploymentError(
-					ctx,
-					logger,
-					tx,
-					projectID,
-					deploymentID,
-					fmt.Sprintf("%s: %s: skipping server due to malformed url [%d:%d]: %s", docInfo.Name, server.URL, line, col, err.Error()),
-				); logErr != nil {
-					logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
-				}
+				_ = oops.E(oops.CodeUnauthorized, err, "%s: %s: skipping server due to malformed url [%d:%d]: %s", docInfo.Name, server.URL, line, col, err.Error()).Log(ctx, logger)
 				continue
 			}
 
 			if u.Scheme != "https" {
-				if logErr := s.logDeploymentError(
-					ctx,
-					logger,
-					tx,
-					projectID,
-					deploymentID,
-					fmt.Sprintf("%s: %s: skipping non-https server url [%d:%d]", docInfo.Name, server.URL, line, col),
-				); logErr != nil {
-					logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", logErr.Error()))
-				}
+				_ = oops.E(oops.CodeUnauthorized, err, "%s: %s: skipping non-https server url [%d:%d]", docInfo.Name, server.URL, line, col).Log(ctx, logger)
 				continue
 			}
 
@@ -240,8 +248,8 @@ func (s *Service) extractDefaultServer(ctx context.Context, logger *slog.Logger,
 	return nil
 }
 
-type openapiV3OperationTask struct {
-	openapiV3Task    openapiV3Task
+type operationTask struct {
+	extractTask      ToolExtractorTask
 	method           string
 	path             string
 	operation        *v3.Operation
@@ -251,17 +259,17 @@ type openapiV3OperationTask struct {
 	defaultServer    *string
 }
 
-type openapiV3Operation struct {
+type operation struct {
 	method    string
 	path      string
 	operation *v3.Operation
 }
 
-func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger, tx *repo.Queries, task openapiV3OperationTask) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
-	projectID := task.openapiV3Task.projectID
-	deploymentID := task.openapiV3Task.deploymentID
-	openapiDocID := task.openapiV3Task.openapiDocID
-	docInfo := task.openapiV3Task.docInfo
+func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger, tx *repo.Queries, task operationTask) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+	projectID := task.extractTask.ProjectID
+	deploymentID := task.extractTask.DeploymentID
+	openapiDocID := task.extractTask.DocumentID
+	docInfo := task.extractTask.DocInfo
 	method := task.method
 	path := task.path
 	op := task.operation
@@ -376,7 +384,7 @@ func (s *Service) toolDefFromOpenAPIv3(ctx context.Context, logger *slog.Logger,
 
 	if len(op.Servers) > 0 {
 		serverEnvVar = strcase.ToSNAKE(fmt.Sprintf("%s_%s_SERVER_URL", docInfo.Slug, op.OperationId))
-		defaultServer = s.extractDefaultServer(ctx, logger, tx, projectID, deploymentID, docInfo, op.Servers)
+		defaultServer = s.extractDefaultServer(ctx, logger, docInfo, op.Servers)
 	}
 
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
@@ -533,7 +541,7 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 		AdditionalProperties: conv.Ptr(false),
 	}
 
-	specs := make(map[string]*openapi.OpenapiV3ParameterProxy, len(params))
+	specs := make(map[string]*OpenapiV3ParameterProxy, len(params))
 
 	for _, param := range params {
 		var schemaBytes []byte
@@ -554,7 +562,7 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 			schemaBytes = sb
 		}
 
-		proxy := &openapi.OpenapiV3ParameterProxy{
+		proxy := &OpenapiV3ParameterProxy{
 			Schema:          json.RawMessage(schemaBytes),
 			In:              param.In,
 			Name:            param.Name,
@@ -610,8 +618,8 @@ func serializeSecurity(security []*base.SecurityRequirement) ([]byte, error) {
 	return json.Marshal(acc)
 }
 
-func securitySchemesFromOpenAPIv3(doc v3.Document, task openapiV3Task) (map[string]*repo.CreateHTTPSecurityParams, []error) {
-	slug := string(task.docInfo.Slug)
+func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string]*repo.CreateHTTPSecurityParams, []error) {
+	slug := string(task.DocInfo.Slug)
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil || doc.Components.SecuritySchemes.Len() == 0 {
 		return nil, nil
 	}
@@ -645,7 +653,7 @@ func securitySchemesFromOpenAPIv3(doc v3.Document, task openapiV3Task) (map[stri
 
 		res[key] = &repo.CreateHTTPSecurityParams{
 			Key:          key,
-			DeploymentID: task.deploymentID,
+			DeploymentID: task.DeploymentID,
 			Type:         conv.ToPGText(sec.Type),
 			Name:         conv.ToPGTextEmpty(sec.Name),
 			InPlacement:  conv.ToPGTextEmpty(sec.In),

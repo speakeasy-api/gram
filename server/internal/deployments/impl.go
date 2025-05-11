@@ -5,12 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
-	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -24,6 +22,8 @@ import (
 	assetsRepo "github.com/speakeasy-api/gram/internal/assets/repo"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/background"
+	"github.com/speakeasy-api/gram/internal/background/activities"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/oops"
 	packages "github.com/speakeasy-api/gram/internal/packages"
 	packagesRepo "github.com/speakeasy-api/gram/internal/packages/repo"
+	"go.temporal.io/sdk/client"
 )
 
 type Service struct {
@@ -45,11 +46,12 @@ type Service struct {
 	assets       *assetsRepo.Queries
 	packages     *packagesRepo.Queries
 	assetStorage assets.BlobStore
+	temporal     client.Client
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, temporal client.Client, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/deployments"),
 		logger:       logger,
@@ -59,6 +61,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		assets:       assetsRepo.New(db),
 		packages:     packagesRepo.New(db),
 		assetStorage: assetStorage,
+		temporal:     temporal,
 	}
 }
 
@@ -563,57 +566,21 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 }
 
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
+	if s.temporal == nil {
+		logger.WarnContext(ctx, "starting deployment in-process")
+		return s.startDeploymentInProcess(ctx, logger, projectID, deploymentID, dep)
+	}
+
+	return s.startDeploymentTemporal(ctx, logger, projectID, deploymentID, dep)
+}
+
+func (s *Service) startDeploymentInProcess(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
 	span := trace.SpanFromContext(ctx)
 
 	status := ""
-	if err := s.processDeployment(ctx, dep); err != nil {
-		if _, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
-			DeploymentID: deploymentID,
-			ProjectID:    projectID,
-			Status:       "failed",
-			Event:        "deployment:failed",
-			Message:      err.Error(),
-		}); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to error").Log(ctx, logger)
-		}
+	var err error
 
-		span.AddEvent("deployment_failed")
-		status = "failed"
-	} else {
-		if _, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
-			DeploymentID: deploymentID,
-			ProjectID:    projectID,
-			Status:       "completed",
-			Event:        "deployment:completed",
-			Message:      "Deployment completed",
-		}); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to completed").Log(ctx, logger)
-		}
-
-		span.AddEvent("deployment_completed")
-		status = "completed"
-	}
-
-	return status, nil
-}
-
-func (s *Service) processDeployment(ctx context.Context, deployment *types.Deployment) error {
-	logger := s.logger.With(
-		slog.String("deployment_id", deployment.ID),
-		slog.String("project_id", deployment.ProjectID),
-	)
-
-	deploymentID, err := uuid.Parse(deployment.ID)
-	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "error parsing deployment id").Log(ctx, logger)
-	}
-
-	projectID, err := uuid.Parse(deployment.ProjectID)
-	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "error parsing project id").Log(ctx, logger)
-	}
-
-	_, err = s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+	pendingTransition, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
 		DeploymentID: deploymentID,
 		ProjectID:    projectID,
 		Status:       "pending",
@@ -621,75 +588,83 @@ func (s *Service) processDeployment(ctx context.Context, deployment *types.Deplo
 		Message:      "Deployment pending",
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error transitioning deployment to pending").Log(ctx, logger)
+		return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to pending").Log(ctx, logger)
+	}
+	if !pendingTransition.Moved {
+		return "", oops.E(
+			oops.CodeInvariantViolation,
+			nil,
+			"deployment did not move to pending status because of unexpected current state (want: pending, current: %s)",
+			pendingTransition.Status,
+		).Log(ctx, logger)
 	}
 
-	workers := pool.New().WithErrors().WithMaxGoroutines(2)
-	for _, docInfo := range deployment.Openapiv3Assets {
-		logger = s.logger.With(
-			slog.String("openapi_id", docInfo.ID),
-			slog.String("asset_id", docInfo.AssetID),
-		)
-
-		openapiDocID, err := uuid.Parse(docInfo.ID)
-		if err != nil {
-			return oops.E(oops.CodeInvariantViolation, err, "error parsing openapi document id").Log(ctx, logger)
-		}
-
-		assetID, err := uuid.Parse(docInfo.AssetID)
-		if err != nil {
-			return oops.E(oops.CodeInvariantViolation, err, "error parsing asset id").Log(ctx, logger)
-		}
-
-		asset, err := s.assets.GetProjectAsset(ctx, assetsRepo.GetProjectAssetParams{
-			ID:        assetID,
-			ProjectID: projectID,
+	if err := activities.NewProcessDeployment(logger, s.db, s.assetStorage).Do(ctx, projectID, deploymentID); err != nil {
+		transition, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+			DeploymentID: deploymentID,
+			ProjectID:    projectID,
+			Status:       "failed",
+			Event:        "deployment:failed",
+			Message:      err.Error(),
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error getting asset").Log(ctx, logger)
+			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to error").Log(ctx, logger)
+		}
+		if !transition.Moved {
+			return "", oops.E(
+				oops.CodeInvariantViolation,
+				nil,
+				"deployment did not move to failed status because of unexpected current state (want: failed, current: %s)",
+				transition.Status,
+			).Log(ctx, logger)
 		}
 
-		u, err := url.Parse(asset.Url)
-		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "error parsing asset URL").Log(ctx, logger)
-		}
-
-		workers.Go(func() error {
-			dbtx, err := s.db.Begin(ctx)
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "error processing deployment").Log(ctx, logger)
-			}
-			defer o11y.NoLogDefer(func() error {
-				return dbtx.Rollback(ctx)
-			})
-
-			tx := s.repo.WithTx(dbtx)
-
-			processErr := s.processOpenAPIv3Document(ctx, logger, tx, openapiV3Task{
-				projectID:    projectID,
-				deploymentID: deploymentID,
-				openapiDocID: openapiDocID,
-				docInfo:      docInfo,
-				docURL:       u,
-			})
-
-			if err := dbtx.Commit(ctx); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "error saving processed deployment").Log(ctx, logger)
-			}
-
-			if processErr == nil {
-				trace.SpanFromContext(ctx).AddEvent("openapiv3_processed")
-			}
-
-			if processErr != nil {
-				return oops.E(oops.CodeUnexpected, processErr, "openapiv3 document was not processed successfully").Log(ctx, logger)
-			}
-
-			return nil
+		span.AddEvent("deployment_failed")
+		status = "failed"
+	} else {
+		transition, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
+			DeploymentID: deploymentID,
+			ProjectID:    projectID,
+			Status:       "completed",
+			Event:        "deployment:completed",
+			Message:      "Deployment completed",
 		})
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to completed").Log(ctx, logger)
+		}
+		if !transition.Moved {
+			return "", oops.E(
+				oops.CodeInvariantViolation,
+				nil,
+				"deployment did not move to completed status because of unexpected current state (want: completed, current: %s)",
+				transition.Status,
+			).Log(ctx, logger)
+		}
+
+		span.AddEvent("deployment_completed")
+		status = "completed"
 	}
 
-	return workers.Wait()
+	return status, nil
+
+}
+
+func (s *Service) startDeploymentTemporal(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
+	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporal, background.ProcessDeploymentWorkflowParams{
+		ProjectID:      projectID,
+		DeploymentID:   deploymentID,
+		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),
+	})
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error starting deployment").Log(ctx, logger)
+	}
+
+	var res background.ProcessDeploymentWorkflowResult
+	if err := wr.Get(ctx, &res); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error getting deployment status").Log(ctx, logger)
+	}
+
+	return res.Status, nil
 }
 
 // validatePackageInclusion validates that a package can be added to a project

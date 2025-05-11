@@ -25,6 +25,7 @@ require (
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.7.3
 	github.com/redis/go-redis/v9 v9.8.0
+	github.com/samber/slog-multi v1.4.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
@@ -34,6 +35,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.35.0
 	go.opentelemetry.io/otel/sdk v1.35.0
 	go.opentelemetry.io/otel/trace v1.35.0
+	go.temporal.io/api v1.46.0
 	go.temporal.io/sdk v1.34.0
 	go.uber.org/automaxprocs v1.6.0
 	goa.design/clue v1.1.1
@@ -115,6 +117,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.7.3 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
+	github.com/samber/lo v1.49.1 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.3 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/speakeasy-api/jsonpath v0.6.1 // indirect
@@ -135,7 +138,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.35.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
-	go.temporal.io/api v1.46.0 // indirect
 	golang.org/x/oauth2 v0.29.0 // indirect
 	golang.org/x/term v0.31.0 // indirect
 	golang.org/x/time v0.11.0 // indirect

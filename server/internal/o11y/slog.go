@@ -10,6 +10,18 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+var temporalKeys = map[string]string{
+	"Namespace":    "namespace",
+	"TaskQueue":    "task_queue",
+	"WorkerID":     "worker_id",
+	"ActivityID":   "activity_id",
+	"ActivityType": "activity_type",
+	"Attempt":      "attempt",
+	"WorkflowType": "workflow_type",
+	"WorkflowID":   "workflow_id",
+	"RunID":        "run_id",
+}
+
 func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
 	if pretty {
 		return &ContextHandler{
@@ -21,9 +33,22 @@ func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
 	} else {
 		return &ContextHandler{
 			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-				AddSource:   true,
-				Level:       LogLevels[rawLevel].Slog,
-				ReplaceAttr: nil,
+				AddSource: true,
+				Level:     LogLevels[rawLevel].Slog,
+				ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+					if len(groups) != 0 {
+						return a
+					}
+
+					replace, ok := temporalKeys[a.Key]
+					if !ok {
+						return a
+					}
+
+					a.Key = replace
+
+					return a
+				},
 			}),
 		}
 	}

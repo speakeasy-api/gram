@@ -13,6 +13,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BatchLogEventsParams struct {
+	DeploymentID uuid.UUID
+	ProjectID    uuid.UUID
+	Event        string
+	Message      string
+}
+
 const cloneDeployment = `-- name: CloneDeployment :one
 INSERT INTO deployments (
   cloned_from
@@ -748,18 +755,49 @@ func (q *Queries) LogDeploymentEvent(ctx context.Context, arg LogDeploymentEvent
 }
 
 const transitionDeployment = `-- name: TransitionDeployment :one
-WITH status AS (
-  INSERT INTO deployment_statuses (deployment_id , status)
-  VALUES ($1, $2)
-  RETURNING id, status
-), 
-log AS (
+WITH current_status AS (
+  SELECT 0 as state, id, deployment_id, status
+  FROM deployment_statuses as d
+  WHERE d.deployment_id = $1
+  ORDER BY d.seq DESC
+  LIMIT 1
+),
+status_update AS (
+  INSERT INTO deployment_statuses (deployment_id, status)
+  SELECT $1, $2
+  WHERE (
+    CASE
+      WHEN $2 = 'created' THEN NOT EXISTS (SELECT 1 FROM current_status)
+      WHEN $2 = 'pending' THEN EXISTS (SELECT 1 FROM current_status WHERE status = 'created')
+      WHEN $2 = 'failed' THEN EXISTS (SELECT 1 FROM current_status WHERE status = 'pending')
+      WHEN $2 = 'completed' THEN EXISTS (SELECT 1 FROM current_status WHERE status = 'pending')
+      ELSE FALSE
+    END
+  )
+  LIMIT 1
+  RETURNING 1 as state, id, deployment_id, status
+),
+new_log AS (
   INSERT INTO deployment_logs (deployment_id, project_id, event, message)
-  VALUES ($1, $3, $4, $5)
+  SELECT $1, $3, $4, $5
+  WHERE EXISTS (SELECT 1 FROM status_update)
   RETURNING id
+),
+all_statuses AS (
+  SELECT state, id, deployment_id, status FROM status_update
+  UNION ALL
+  SELECT state, id, deployment_id, status FROM current_status
 )
-SELECT status.id as status_id, status.status as status, log.id as log_id
-FROM status, log
+SELECT 
+    all_statuses.id as status_id
+  , all_statuses.status as status
+  , (CASE 
+      WHEN all_statuses.state = 1 THEN TRUE
+      ELSE FALSE
+    END) as moved
+FROM all_statuses
+ORDER BY all_statuses.state DESC
+LIMIT 1
 `
 
 type TransitionDeploymentParams struct {
@@ -773,7 +811,7 @@ type TransitionDeploymentParams struct {
 type TransitionDeploymentRow struct {
 	StatusID uuid.UUID
 	Status   string
-	LogID    uuid.UUID
+	Moved    bool
 }
 
 func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploymentParams) (TransitionDeploymentRow, error) {
@@ -785,7 +823,7 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 		arg.Message,
 	)
 	var i TransitionDeploymentRow
-	err := row.Scan(&i.StatusID, &i.Status, &i.LogID)
+	err := row.Scan(&i.StatusID, &i.Status, &i.Moved)
 	return i, err
 }
 

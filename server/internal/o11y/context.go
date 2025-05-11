@@ -1,11 +1,17 @@
 package o11y
 
-import "context"
+import (
+	"context"
+
+	"go.temporal.io/sdk/workflow"
+)
 
 type ctxKey string
 
 const (
-	appInfoKey ctxKey = "app"
+	appInfoKey               ctxKey = "app"
+	workflowExecutionInfoKey ctxKey = "workflow"
+	activityExecutionInfoKey ctxKey = "activity"
 )
 
 type AppInfo struct {
@@ -26,4 +32,43 @@ func PullAppInfo(ctx context.Context) *AppInfo {
 		Name:   "unset",
 		GitSHA: "unset",
 	}
+}
+
+type WorkflowExecutionInfo struct {
+	Namespace    string
+	TaskQueue    string
+	WorkflowName string
+	WorkflowID   string
+	RunID        string
+	Attempt      int64
+}
+
+type ActivityExecutionInfo struct {
+	Workflow     WorkflowExecutionInfo
+	ActivityID   string
+	ActivityName string
+}
+
+func PushWorkflowExecutionInfo(ctx workflow.Context, info *WorkflowExecutionInfo) workflow.Context {
+	return workflow.WithValue(ctx, workflowExecutionInfoKey, info)
+}
+
+func PullWorkflowExecutionInfo(ctx workflow.Context) *WorkflowExecutionInfo {
+	if val, ok := ctx.Value(workflowExecutionInfoKey).(*WorkflowExecutionInfo); ok {
+		return val
+	}
+
+	return nil
+}
+
+func PushActivityExecutionInfo(ctx context.Context, info *ActivityExecutionInfo) context.Context {
+	return context.WithValue(ctx, activityExecutionInfoKey, info)
+}
+
+func PullActivityExecutionInfo(ctx context.Context) *ActivityExecutionInfo {
+	if val, ok := ctx.Value(activityExecutionInfoKey).(*ActivityExecutionInfo); ok {
+		return val
+	}
+
+	return nil
 }

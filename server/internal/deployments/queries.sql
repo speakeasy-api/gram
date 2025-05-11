@@ -167,20 +167,55 @@ WHERE current.deployment_id = @original_deployment_id
 RETURNING id;
 
 -- name: TransitionDeployment :one
-WITH status AS (
-  INSERT INTO deployment_statuses (deployment_id , status)
-  VALUES (@deployment_id, @status)
-  RETURNING id, status
-), 
-log AS (
+WITH current_status AS (
+  SELECT 0 as state, id, deployment_id, status
+  FROM deployment_statuses as d
+  WHERE d.deployment_id = @deployment_id
+  ORDER BY d.seq DESC
+  LIMIT 1
+),
+status_update AS (
+  INSERT INTO deployment_statuses (deployment_id, status)
+  SELECT @deployment_id, @status
+  WHERE (
+    CASE
+      WHEN @status = 'created' THEN NOT EXISTS (SELECT 1 FROM current_status)
+      WHEN @status = 'pending' THEN EXISTS (SELECT 1 FROM current_status WHERE status = 'created')
+      WHEN @status = 'failed' THEN EXISTS (SELECT 1 FROM current_status WHERE status = 'pending')
+      WHEN @status = 'completed' THEN EXISTS (SELECT 1 FROM current_status WHERE status = 'pending')
+      ELSE FALSE
+    END
+  )
+  LIMIT 1
+  RETURNING 1 as state, id, deployment_id, status
+),
+new_log AS (
   INSERT INTO deployment_logs (deployment_id, project_id, event, message)
-  VALUES (@deployment_id, @project_id, @event, @message)
+  SELECT @deployment_id, @project_id, @event, @message
+  WHERE EXISTS (SELECT 1 FROM status_update)
   RETURNING id
+),
+all_statuses AS (
+  SELECT * FROM status_update
+  UNION ALL
+  SELECT * FROM current_status
 )
-SELECT status.id as status_id, status.status as status, log.id as log_id
-FROM status, log;
+SELECT 
+    all_statuses.id as status_id
+  , all_statuses.status as status
+  , (CASE 
+      WHEN all_statuses.state = 1 THEN TRUE
+      ELSE FALSE
+    END) as moved
+FROM all_statuses
+ORDER BY all_statuses.state DESC
+LIMIT 1;
 
 -- name: LogDeploymentEvent :exec
+INSERT INTO deployment_logs (deployment_id, project_id, event, message)
+VALUES (@deployment_id, @project_id, @event, @message);
+
+-- name: BatchLogEvents :copyfrom
 INSERT INTO deployment_logs (deployment_id, project_id, event, message)
 VALUES (@deployment_id, @project_id, @event, @message);
 
