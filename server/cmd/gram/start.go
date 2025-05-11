@@ -259,6 +259,8 @@ func newStartCommand() *cli.Command {
 					temporalClient.Close()
 					return nil
 				})
+			} else {
+				logger.WarnContext(ctx, "temporal disabled")
 			}
 
 			{

@@ -24,11 +24,13 @@ func newWorkerCommand() *cli.Command {
 				Name:    "temporal-address",
 				Usage:   "The address of the temporal server",
 				EnvVars: []string{"TEMPORAL_ADDRESS"},
+				Value:   "localhost:7233",
 			},
 			&cli.StringFlag{
 				Name:    "temporal-namespace",
 				Usage:   "The temporal namespace to use",
 				EnvVars: []string{"TEMPORAL_NAMESPACE"},
+				Value:   "default",
 			},
 			&cli.StringFlag{
 				Name:    "control-address",
