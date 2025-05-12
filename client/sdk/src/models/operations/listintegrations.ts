@@ -8,6 +8,11 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type ListIntegrationsSecurity = {
+  projectSlugHeaderGramProject?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
+};
+
 export type ListIntegrationsRequest = {
   /**
    * Keywords to filter integrations by
@@ -22,6 +27,73 @@ export type ListIntegrationsRequest = {
    */
   gramProject?: string | undefined;
 };
+
+/** @internal */
+export const ListIntegrationsSecurity$inboundSchema: z.ZodType<
+  ListIntegrationsSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type ListIntegrationsSecurity$Outbound = {
+  "project_slug_header_Gram-Project"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
+};
+
+/** @internal */
+export const ListIntegrationsSecurity$outboundSchema: z.ZodType<
+  ListIntegrationsSecurity$Outbound,
+  z.ZodTypeDef,
+  ListIntegrationsSecurity
+> = z.object({
+  projectSlugHeaderGramProject: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListIntegrationsSecurity$ {
+  /** @deprecated use `ListIntegrationsSecurity$inboundSchema` instead. */
+  export const inboundSchema = ListIntegrationsSecurity$inboundSchema;
+  /** @deprecated use `ListIntegrationsSecurity$outboundSchema` instead. */
+  export const outboundSchema = ListIntegrationsSecurity$outboundSchema;
+  /** @deprecated use `ListIntegrationsSecurity$Outbound` instead. */
+  export type Outbound = ListIntegrationsSecurity$Outbound;
+}
+
+export function listIntegrationsSecurityToJSON(
+  listIntegrationsSecurity: ListIntegrationsSecurity,
+): string {
+  return JSON.stringify(
+    ListIntegrationsSecurity$outboundSchema.parse(listIntegrationsSecurity),
+  );
+}
+
+export function listIntegrationsSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<ListIntegrationsSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListIntegrationsSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListIntegrationsSecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const ListIntegrationsRequest$inboundSchema: z.ZodType<

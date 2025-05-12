@@ -8,6 +8,11 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type ListToolsSecurity = {
+  projectSlugHeaderGramProject?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
+};
+
 export type ListToolsRequest = {
   /**
    * The cursor to fetch results from
@@ -26,6 +31,73 @@ export type ListToolsRequest = {
    */
   gramProject?: string | undefined;
 };
+
+/** @internal */
+export const ListToolsSecurity$inboundSchema: z.ZodType<
+  ListToolsSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type ListToolsSecurity$Outbound = {
+  "project_slug_header_Gram-Project"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
+};
+
+/** @internal */
+export const ListToolsSecurity$outboundSchema: z.ZodType<
+  ListToolsSecurity$Outbound,
+  z.ZodTypeDef,
+  ListToolsSecurity
+> = z.object({
+  projectSlugHeaderGramProject: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListToolsSecurity$ {
+  /** @deprecated use `ListToolsSecurity$inboundSchema` instead. */
+  export const inboundSchema = ListToolsSecurity$inboundSchema;
+  /** @deprecated use `ListToolsSecurity$outboundSchema` instead. */
+  export const outboundSchema = ListToolsSecurity$outboundSchema;
+  /** @deprecated use `ListToolsSecurity$Outbound` instead. */
+  export type Outbound = ListToolsSecurity$Outbound;
+}
+
+export function listToolsSecurityToJSON(
+  listToolsSecurity: ListToolsSecurity,
+): string {
+  return JSON.stringify(
+    ListToolsSecurity$outboundSchema.parse(listToolsSecurity),
+  );
+}
+
+export function listToolsSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<ListToolsSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListToolsSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolsSecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const ListToolsRequest$inboundSchema: z.ZodType<

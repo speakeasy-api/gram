@@ -18,8 +18,8 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateProjectMutationVariables = {
-  security: operations.CreateProjectSecurity;
   request: operations.CreateProjectRequest;
+  security?: operations.CreateProjectSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,8 +65,8 @@ export function buildCreateProjectMutation(
   return {
     mutationKey: mutationKeyCreateProject(),
     mutationFn: function createProjectMutationFn({
-      security,
       request,
+      security,
       options,
     }): Promise<CreateProjectMutationData> {
       const mergedOptions = {
@@ -83,8 +83,8 @@ export function buildCreateProjectMutation(
       };
       return unwrapAsync(projectsCreate(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

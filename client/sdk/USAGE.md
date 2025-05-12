@@ -6,9 +6,6 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.serveImage({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  }, {
     id: "<id>",
   });
 

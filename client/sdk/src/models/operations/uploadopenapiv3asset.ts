@@ -8,8 +8,27 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type UploadOpenAPIv3AssetSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type UploadOpenAPIv3AssetSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type UploadOpenAPIv3AssetSecurity = {
+  option1?: UploadOpenAPIv3AssetSecurityOption1 | undefined;
+  option2?: UploadOpenAPIv3AssetSecurityOption2 | undefined;
+};
+
 export type UploadOpenAPIv3AssetRequest = {
   contentLength: number;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * project header
    */
@@ -21,17 +40,236 @@ export type UploadOpenAPIv3AssetRequest = {
 };
 
 /** @internal */
+export const UploadOpenAPIv3AssetSecurityOption1$inboundSchema: z.ZodType<
+  UploadOpenAPIv3AssetSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type UploadOpenAPIv3AssetSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const UploadOpenAPIv3AssetSecurityOption1$outboundSchema: z.ZodType<
+  UploadOpenAPIv3AssetSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  UploadOpenAPIv3AssetSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UploadOpenAPIv3AssetSecurityOption1$ {
+  /** @deprecated use `UploadOpenAPIv3AssetSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema =
+    UploadOpenAPIv3AssetSecurityOption1$inboundSchema;
+  /** @deprecated use `UploadOpenAPIv3AssetSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema =
+    UploadOpenAPIv3AssetSecurityOption1$outboundSchema;
+  /** @deprecated use `UploadOpenAPIv3AssetSecurityOption1$Outbound` instead. */
+  export type Outbound = UploadOpenAPIv3AssetSecurityOption1$Outbound;
+}
+
+export function uploadOpenAPIv3AssetSecurityOption1ToJSON(
+  uploadOpenAPIv3AssetSecurityOption1: UploadOpenAPIv3AssetSecurityOption1,
+): string {
+  return JSON.stringify(
+    UploadOpenAPIv3AssetSecurityOption1$outboundSchema.parse(
+      uploadOpenAPIv3AssetSecurityOption1,
+    ),
+  );
+}
+
+export function uploadOpenAPIv3AssetSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<UploadOpenAPIv3AssetSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      UploadOpenAPIv3AssetSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadOpenAPIv3AssetSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const UploadOpenAPIv3AssetSecurityOption2$inboundSchema: z.ZodType<
+  UploadOpenAPIv3AssetSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type UploadOpenAPIv3AssetSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const UploadOpenAPIv3AssetSecurityOption2$outboundSchema: z.ZodType<
+  UploadOpenAPIv3AssetSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  UploadOpenAPIv3AssetSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UploadOpenAPIv3AssetSecurityOption2$ {
+  /** @deprecated use `UploadOpenAPIv3AssetSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema =
+    UploadOpenAPIv3AssetSecurityOption2$inboundSchema;
+  /** @deprecated use `UploadOpenAPIv3AssetSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema =
+    UploadOpenAPIv3AssetSecurityOption2$outboundSchema;
+  /** @deprecated use `UploadOpenAPIv3AssetSecurityOption2$Outbound` instead. */
+  export type Outbound = UploadOpenAPIv3AssetSecurityOption2$Outbound;
+}
+
+export function uploadOpenAPIv3AssetSecurityOption2ToJSON(
+  uploadOpenAPIv3AssetSecurityOption2: UploadOpenAPIv3AssetSecurityOption2,
+): string {
+  return JSON.stringify(
+    UploadOpenAPIv3AssetSecurityOption2$outboundSchema.parse(
+      uploadOpenAPIv3AssetSecurityOption2,
+    ),
+  );
+}
+
+export function uploadOpenAPIv3AssetSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<UploadOpenAPIv3AssetSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      UploadOpenAPIv3AssetSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadOpenAPIv3AssetSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const UploadOpenAPIv3AssetSecurity$inboundSchema: z.ZodType<
+  UploadOpenAPIv3AssetSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => UploadOpenAPIv3AssetSecurityOption1$inboundSchema)
+    .optional(),
+  Option2: z.lazy(() => UploadOpenAPIv3AssetSecurityOption2$inboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
+export type UploadOpenAPIv3AssetSecurity$Outbound = {
+  Option1?: UploadOpenAPIv3AssetSecurityOption1$Outbound | undefined;
+  Option2?: UploadOpenAPIv3AssetSecurityOption2$Outbound | undefined;
+};
+
+/** @internal */
+export const UploadOpenAPIv3AssetSecurity$outboundSchema: z.ZodType<
+  UploadOpenAPIv3AssetSecurity$Outbound,
+  z.ZodTypeDef,
+  UploadOpenAPIv3AssetSecurity
+> = z.object({
+  option1: z.lazy(() => UploadOpenAPIv3AssetSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => UploadOpenAPIv3AssetSecurityOption2$outboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    option1: "Option1",
+    option2: "Option2",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UploadOpenAPIv3AssetSecurity$ {
+  /** @deprecated use `UploadOpenAPIv3AssetSecurity$inboundSchema` instead. */
+  export const inboundSchema = UploadOpenAPIv3AssetSecurity$inboundSchema;
+  /** @deprecated use `UploadOpenAPIv3AssetSecurity$outboundSchema` instead. */
+  export const outboundSchema = UploadOpenAPIv3AssetSecurity$outboundSchema;
+  /** @deprecated use `UploadOpenAPIv3AssetSecurity$Outbound` instead. */
+  export type Outbound = UploadOpenAPIv3AssetSecurity$Outbound;
+}
+
+export function uploadOpenAPIv3AssetSecurityToJSON(
+  uploadOpenAPIv3AssetSecurity: UploadOpenAPIv3AssetSecurity,
+): string {
+  return JSON.stringify(
+    UploadOpenAPIv3AssetSecurity$outboundSchema.parse(
+      uploadOpenAPIv3AssetSecurity,
+    ),
+  );
+}
+
+export function uploadOpenAPIv3AssetSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<UploadOpenAPIv3AssetSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UploadOpenAPIv3AssetSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadOpenAPIv3AssetSecurity' from JSON`,
+  );
+}
+
+/** @internal */
 export const UploadOpenAPIv3AssetRequest$inboundSchema: z.ZodType<
   UploadOpenAPIv3AssetRequest,
   z.ZodTypeDef,
   unknown
 > = z.object({
   "Content-Length": z.number().int(),
+  "Gram-Key": z.string().optional(),
   "Gram-Project": z.string().optional(),
   "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "Content-Length": "contentLength",
+    "Gram-Key": "gramKey",
     "Gram-Project": "gramProject",
     "Gram-Session": "gramSession",
   });
@@ -40,6 +278,7 @@ export const UploadOpenAPIv3AssetRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type UploadOpenAPIv3AssetRequest$Outbound = {
   "Content-Length": number;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -51,11 +290,13 @@ export const UploadOpenAPIv3AssetRequest$outboundSchema: z.ZodType<
   UploadOpenAPIv3AssetRequest
 > = z.object({
   contentLength: z.number().int(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
   gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     contentLength: "Content-Length",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
     gramSession: "Gram-Session",
   });

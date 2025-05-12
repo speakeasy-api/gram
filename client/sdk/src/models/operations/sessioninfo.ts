@@ -10,7 +10,7 @@ import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type SessionInfoSecurity = {
-  sessionHeaderGramSession: string;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type SessionInfoRequest = {
@@ -31,7 +31,7 @@ export const SessionInfoSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "session_header_Gram-Session": z.string(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "session_header_Gram-Session": "sessionHeaderGramSession",
@@ -40,7 +40,7 @@ export const SessionInfoSecurity$inboundSchema: z.ZodType<
 
 /** @internal */
 export type SessionInfoSecurity$Outbound = {
-  "session_header_Gram-Session": string;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -49,7 +49,7 @@ export const SessionInfoSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SessionInfoSecurity
 > = z.object({
-  sessionHeaderGramSession: z.string(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     sessionHeaderGramSession: "session_header_Gram-Session",

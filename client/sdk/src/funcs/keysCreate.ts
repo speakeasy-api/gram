@@ -33,8 +33,8 @@ import { Result } from "../types/fp.js";
  */
 export function keysCreate(
   client: GramCore,
-  security: operations.CreateAPIKeySecurity,
   request: operations.CreateAPIKeyRequest,
+  security?: operations.CreateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -52,16 +52,16 @@ export function keysCreate(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.CreateAPIKeySecurity,
   request: operations.CreateAPIKeyRequest,
+  security?: operations.CreateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

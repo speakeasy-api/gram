@@ -16,3 +16,6 @@ actions:
             schema:
               type: string
               format: binary
+  - target: $.paths..security
+    update:
+      - {}

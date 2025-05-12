@@ -27,7 +27,6 @@ Gram API Description: Gram is the tools platform for AI agents
   * [SDK Installation](#sdk-installation)
   * [Requirements](#requirements)
   * [SDK Example Usage](#sdk-example-usage)
-  * [Authentication](#authentication)
   * [Available Resources and Operations](#available-resources-and-operations)
   * [Standalone functions](#standalone-functions)
   * [React hooks with TanStack Query](#react-hooks-with-tanstack-query)
@@ -109,9 +108,6 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.serveImage({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  }, {
     id: "<id>",
   });
 
@@ -123,69 +119,6 @@ run();
 
 ```
 <!-- End SDK Example Usage [usage] -->
-
-<!-- Start Authentication [security] -->
-## Authentication
-
-### Per-Client Security Schemes
-
-This SDK supports the following security schemes globally:
-
-| Name                           | Type   | Scheme  | Environment Variable                    |
-| ------------------------------ | ------ | ------- | --------------------------------------- |
-| `projectSlugHeaderGramProject` | apiKey | API key | `GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT` |
-| `sessionHeaderGramSession`     | apiKey | API key | `GRAM_SESSION_HEADER_GRAM_SESSION`      |
-
-You can set the security parameters through the `security` optional parameter when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
-```typescript
-import { Gram } from "@gram/client";
-
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject:
-      process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  },
-});
-
-async function run() {
-  const result = await gram.assets.uploadImage({
-    contentLength: 461855,
-  });
-
-  // Handle the result
-  console.log(result);
-}
-
-run();
-
-```
-
-### Per-Operation Security Schemes
-
-Some operations in this SDK require the security scheme to be specified at the request level. For example:
-```typescript
-import { Gram } from "@gram/client";
-
-const gram = new Gram();
-
-async function run() {
-  const result = await gram.assets.serveImage({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  }, {
-    id: "<id>",
-  });
-
-  // Handle the result
-  console.log(result);
-}
-
-run();
-
-```
-<!-- End Authentication [security] -->
 
 <!-- Start Available Resources and Operations [operations] -->
 ## Available Resources and Operations
@@ -246,6 +179,7 @@ run();
 ### [packages](docs/sdks/packages/README.md)
 
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
+* [list](docs/sdks/packages/README.md#list) - listPackages packages
 * [listVersions](docs/sdks/packages/README.md#listversions) - listVersions packages
 * [publish](docs/sdks/packages/README.md#publish) - publish packages
 * [update](docs/sdks/packages/README.md#update) - updatePackage packages
@@ -311,6 +245,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
+- [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`packagesPublish`](docs/sdks/packages/README.md#publish) - publish packages
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
@@ -366,6 +301,7 @@ To learn about this feature and how to get started, check
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
+- [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
@@ -400,9 +336,6 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.serveImage({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  }, {
     id: "<id>",
   }, {
     retries: {
@@ -444,9 +377,6 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.serveImage({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  }, {
     id: "<id>",
   });
 
@@ -482,9 +412,6 @@ async function run() {
   let result;
   try {
     result = await gram.assets.serveImage({
-      sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-        ?? "",
-    }, {
       id: "<id>",
     });
 
@@ -550,9 +477,6 @@ const gram = new Gram({
 
 async function run() {
   const result = await gram.assets.serveImage({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"]
-      ?? "",
-  }, {
     id: "<id>",
   });
 

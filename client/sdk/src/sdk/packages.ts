@@ -3,6 +3,7 @@
  */
 
 import { packagesCreate } from "../funcs/packagesCreate.js";
+import { packagesList } from "../funcs/packagesList.js";
 import { packagesListVersions } from "../funcs/packagesListVersions.js";
 import { packagesPublish } from "../funcs/packagesPublish.js";
 import { packagesUpdate } from "../funcs/packagesUpdate.js";
@@ -20,11 +21,32 @@ export class Packages extends ClientSDK {
    */
   async create(
     request: operations.CreatePackageRequest,
+    security?: operations.CreatePackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreatePackageResult> {
     return unwrapAsync(packagesCreate(
       this,
       request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listPackages packages
+   *
+   * @remarks
+   * List all packages for a project.
+   */
+  async list(
+    request?: operations.ListPackagesRequest | undefined,
+    security?: operations.ListPackagesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListPackagesResult> {
+    return unwrapAsync(packagesList(
+      this,
+      request,
+      security,
       options,
     ));
   }
@@ -37,11 +59,13 @@ export class Packages extends ClientSDK {
    */
   async listVersions(
     request: operations.ListVersionsRequest,
+    security?: operations.ListVersionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListVersionsResult> {
     return unwrapAsync(packagesListVersions(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -54,11 +78,13 @@ export class Packages extends ClientSDK {
    */
   async publish(
     request: operations.PublishRequest,
+    security?: operations.PublishSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.PublishPackageResult> {
     return unwrapAsync(packagesPublish(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -71,11 +97,13 @@ export class Packages extends ClientSDK {
    */
   async update(
     request: operations.UpdatePackageRequest,
+    security?: operations.UpdatePackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<operations.UpdatePackageResponse> {
     return unwrapAsync(packagesUpdate(
       this,
       request,
+      security,
       options,
     ));
   }

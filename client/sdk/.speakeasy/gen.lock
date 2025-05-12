@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 6a01d5de4fd7ab141c8ccfaf43c1c604
+  docChecksum: 15a58e65e110c204ecd896069ecf3dea
   docVersion: 0.0.1
   speakeasyVersion: 1.543.1
   generationVersion: 2.598.21
-  releaseVersion: 0.10.7
-  configChecksum: 69ceb1dbb4c84f70c410b419b5b17af5
+  releaseVersion: 0.11.2
+  configChecksum: 67141ee8a077ad4359183e61257b5d24
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -16,7 +16,6 @@ features:
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
-    globalSecurity: 2.82.13
     globalSecurityCallbacks: 0.1.0
     globalServerURLs: 2.82.4
     methodArguments: 0.1.2
@@ -69,6 +68,7 @@ generatedFiles:
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
   - docs/models/components/integrationentry.md
+  - docs/models/components/integrationversion.md
   - docs/models/components/key.md
   - docs/models/components/kind.md
   - docs/models/components/listchatsresult.md
@@ -76,6 +76,7 @@ generatedFiles:
   - docs/models/components/listenvironmentsresult.md
   - docs/models/components/listintegrationsresult.md
   - docs/models/components/listkeysresult.md
+  - docs/models/components/listpackagesresult.md
   - docs/models/components/listprojectsresult.md
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
@@ -89,7 +90,6 @@ generatedFiles:
   - docs/models/components/projectentry.md
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
-  - docs/models/components/security.md
   - docs/models/components/toolentry.md
   - docs/models/components/toolsetdetails.md
   - docs/models/components/updateenvironmentrequestbody.md
@@ -106,38 +106,78 @@ generatedFiles:
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createdeploymentrequest.md
+  - docs/models/operations/createdeploymentsecurity.md
+  - docs/models/operations/createdeploymentsecurityoption1.md
+  - docs/models/operations/createdeploymentsecurityoption2.md
   - docs/models/operations/createenvironmentrequest.md
+  - docs/models/operations/createenvironmentsecurity.md
   - docs/models/operations/createpackagerequest.md
+  - docs/models/operations/createpackagesecurity.md
+  - docs/models/operations/createpackagesecurityoption1.md
+  - docs/models/operations/createpackagesecurityoption2.md
   - docs/models/operations/createprojectrequest.md
   - docs/models/operations/createprojectsecurity.md
   - docs/models/operations/createtoolsetrequest.md
+  - docs/models/operations/createtoolsetsecurity.md
   - docs/models/operations/deleteenvironmentrequest.md
+  - docs/models/operations/deleteenvironmentsecurity.md
   - docs/models/operations/deletetoolsetrequest.md
+  - docs/models/operations/deletetoolsetsecurity.md
   - docs/models/operations/evolvedeploymentrequest.md
+  - docs/models/operations/evolvedeploymentsecurity.md
+  - docs/models/operations/evolvedeploymentsecurityoption1.md
+  - docs/models/operations/evolvedeploymentsecurityoption2.md
   - docs/models/operations/getdeploymentrequest.md
+  - docs/models/operations/getdeploymentsecurity.md
+  - docs/models/operations/getdeploymentsecurityoption1.md
+  - docs/models/operations/getdeploymentsecurityoption2.md
   - docs/models/operations/getinstancerequest.md
   - docs/models/operations/getinstancesecurity.md
   - docs/models/operations/getinstancesecurityoption1.md
   - docs/models/operations/getinstancesecurityoption2.md
   - docs/models/operations/getlatestdeploymentrequest.md
+  - docs/models/operations/getlatestdeploymentsecurity.md
+  - docs/models/operations/getlatestdeploymentsecurityoption1.md
+  - docs/models/operations/getlatestdeploymentsecurityoption2.md
   - docs/models/operations/gettoolsetrequest.md
+  - docs/models/operations/gettoolsetsecurity.md
   - docs/models/operations/integrationsnumbergetrequest.md
+  - docs/models/operations/integrationsnumbergetsecurity.md
   - docs/models/operations/listapikeysrequest.md
   - docs/models/operations/listapikeyssecurity.md
   - docs/models/operations/listchatsrequest.md
+  - docs/models/operations/listchatssecurity.md
   - docs/models/operations/listdeploymentsrequest.md
+  - docs/models/operations/listdeploymentssecurity.md
+  - docs/models/operations/listdeploymentssecurityoption1.md
+  - docs/models/operations/listdeploymentssecurityoption2.md
   - docs/models/operations/listenvironmentsrequest.md
+  - docs/models/operations/listenvironmentssecurity.md
   - docs/models/operations/listintegrationsrequest.md
+  - docs/models/operations/listintegrationssecurity.md
+  - docs/models/operations/listpackagesrequest.md
+  - docs/models/operations/listpackagessecurity.md
+  - docs/models/operations/listpackagessecurityoption1.md
+  - docs/models/operations/listpackagessecurityoption2.md
   - docs/models/operations/listprojectsrequest.md
   - docs/models/operations/listprojectssecurity.md
   - docs/models/operations/listtoolsetsrequest.md
+  - docs/models/operations/listtoolsetssecurity.md
   - docs/models/operations/listtoolsrequest.md
+  - docs/models/operations/listtoolssecurity.md
   - docs/models/operations/listversionsrequest.md
+  - docs/models/operations/listversionssecurity.md
+  - docs/models/operations/listversionssecurityoption1.md
+  - docs/models/operations/listversionssecurityoption2.md
   - docs/models/operations/loadchatrequest.md
+  - docs/models/operations/loadchatsecurity.md
   - docs/models/operations/logoutrequest.md
   - docs/models/operations/logoutresponse.md
   - docs/models/operations/logoutsecurity.md
   - docs/models/operations/publishrequest.md
+  - docs/models/operations/publishsecurity.md
+  - docs/models/operations/publishsecurityoption1.md
+  - docs/models/operations/publishsecurityoption2.md
   - docs/models/operations/revokeapikeyrequest.md
   - docs/models/operations/revokeapikeysecurity.md
   - docs/models/operations/serveimagerequest.md
@@ -150,11 +190,22 @@ generatedFiles:
   - docs/models/operations/switchauthscopesresponse.md
   - docs/models/operations/switchauthscopessecurity.md
   - docs/models/operations/updateenvironmentrequest.md
+  - docs/models/operations/updateenvironmentsecurity.md
   - docs/models/operations/updatepackagerequest.md
   - docs/models/operations/updatepackageresponse.md
+  - docs/models/operations/updatepackagesecurity.md
+  - docs/models/operations/updatepackagesecurityoption1.md
+  - docs/models/operations/updatepackagesecurityoption2.md
   - docs/models/operations/updatetoolsetrequest.md
+  - docs/models/operations/updatetoolsetsecurity.md
   - docs/models/operations/uploadimagerequest.md
+  - docs/models/operations/uploadimagesecurity.md
+  - docs/models/operations/uploadimagesecurityoption1.md
+  - docs/models/operations/uploadimagesecurityoption2.md
   - docs/models/operations/uploadopenapiv3assetrequest.md
+  - docs/models/operations/uploadopenapiv3assetsecurity.md
+  - docs/models/operations/uploadopenapiv3assetsecurityoption1.md
+  - docs/models/operations/uploadopenapiv3assetsecurityoption2.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
   - docs/sdks/chat/README.md
@@ -198,6 +249,7 @@ generatedFiles:
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
   - src/funcs/packagesCreate.ts
+  - src/funcs/packagesList.ts
   - src/funcs/packagesListVersions.ts
   - src/funcs/packagesPublish.ts
   - src/funcs/packagesUpdate.ts
@@ -262,12 +314,14 @@ generatedFiles:
   - src/models/components/inforesponsebody.ts
   - src/models/components/integration.ts
   - src/models/components/integrationentry.ts
+  - src/models/components/integrationversion.ts
   - src/models/components/key.ts
   - src/models/components/listchatsresult.ts
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
   - src/models/components/listintegrationsresult.ts
   - src/models/components/listkeysresult.ts
+  - src/models/components/listpackagesresult.ts
   - src/models/components/listprojectsresult.ts
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
@@ -281,7 +335,6 @@ generatedFiles:
   - src/models/components/projectentry.ts
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
-  - src/models/components/security.ts
   - src/models/components/toolentry.ts
   - src/models/components/toolsetdetails.ts
   - src/models/components/updateenvironmentrequestbody.ts
@@ -317,6 +370,7 @@ generatedFiles:
   - src/models/operations/listdeployments.ts
   - src/models/operations/listenvironments.ts
   - src/models/operations/listintegrations.ts
+  - src/models/operations/listpackages.ts
   - src/models/operations/listprojects.ts
   - src/models/operations/listtools.ts
   - src/models/operations/listtoolsets.ts
@@ -354,6 +408,7 @@ generatedFiles:
   - src/react-query/listDeployments.ts
   - src/react-query/listEnvironments.ts
   - src/react-query/listIntegrations.ts
+  - src/react-query/listPackages.ts
   - src/react-query/listProjects.ts
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
@@ -985,6 +1040,15 @@ examples:
           application/json: {"created_at": "2025-04-30T10:11:49.833Z", "id": "<id>", "messages": [], "num_messages": 184649, "title": "<value>", "updated_at": "2024-08-27T23:25:16.656Z", "user_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listPackages:
+    speakeasy-default-list-packages:
+      responses:
+        "200":
+          application/json: {"packages": [{"created_at": "2024-08-22T19:26:20.850Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2025-01-13T10:26:00.433Z"}, {"created_at": "2023-07-14T18:23:27.528Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2023-09-09T18:28:08.953Z"}, {"created_at": "2023-06-17T12:14:27.999Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-11-27T13:02:27.296Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.1

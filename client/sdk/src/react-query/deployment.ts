@@ -36,6 +36,7 @@ export type DeploymentQueryData = components.GetDeploymentResult;
  */
 export function useDeployment(
   request: operations.GetDeploymentRequest,
+  security?: operations.GetDeploymentSecurity | undefined,
   options?: QueryHookOptions<DeploymentQueryData>,
 ): UseQueryResult<DeploymentQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useDeployment(
     ...buildDeploymentQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useDeployment(
  */
 export function useDeploymentSuspense(
   request: operations.GetDeploymentRequest,
+  security?: operations.GetDeploymentSecurity | undefined,
   options?: SuspenseQueryHookOptions<DeploymentQueryData>,
 ): UseSuspenseQueryResult<DeploymentQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useDeploymentSuspense(
     ...buildDeploymentQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchDeployment(
   queryClient: QueryClient,
   client$: GramCore,
   request: operations.GetDeploymentRequest,
+  security?: operations.GetDeploymentSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildDeploymentQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -88,6 +94,7 @@ export function setDeploymentData(
   queryKeyBase: [
     parameters: {
       id: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -104,6 +111,7 @@ export function invalidateDeployment(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       id: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -129,6 +137,7 @@ export function invalidateAllDeployment(
 export function buildDeploymentQuery(
   client$: GramCore,
   request: operations.GetDeploymentRequest,
+  security?: operations.GetDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -137,6 +146,7 @@ export function buildDeploymentQuery(
   return {
     queryKey: queryKeyDeployment({
       id: request.id,
+      gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
@@ -152,6 +162,7 @@ export function buildDeploymentQuery(
       return unwrapAsync(deploymentsGetById(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },
@@ -161,6 +172,7 @@ export function buildDeploymentQuery(
 export function queryKeyDeployment(
   parameters: {
     id: string;
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

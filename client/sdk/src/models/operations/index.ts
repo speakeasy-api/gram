@@ -23,6 +23,7 @@ export * from "./listchats.js";
 export * from "./listdeployments.js";
 export * from "./listenvironments.js";
 export * from "./listintegrations.js";
+export * from "./listpackages.js";
 export * from "./listprojects.js";
 export * from "./listtools.js";
 export * from "./listtoolsets.js";

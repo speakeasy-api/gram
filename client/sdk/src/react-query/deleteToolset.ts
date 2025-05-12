@@ -18,6 +18,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type DeleteToolsetMutationVariables = {
   request: operations.DeleteToolsetRequest;
+  security?: operations.DeleteToolsetSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -64,6 +65,7 @@ export function buildDeleteToolsetMutation(
     mutationKey: mutationKeyDeleteToolset(),
     mutationFn: function deleteToolsetMutationFn({
       request,
+      security,
       options,
     }): Promise<DeleteToolsetMutationData> {
       const mergedOptions = {
@@ -81,6 +83,7 @@ export function buildDeleteToolsetMutation(
       return unwrapAsync(toolsetsDeleteBySlug(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

@@ -8,11 +8,30 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type ListDeploymentsSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type ListDeploymentsSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type ListDeploymentsSecurity = {
+  option1?: ListDeploymentsSecurityOption1 | undefined;
+  option2?: ListDeploymentsSecurityOption2 | undefined;
+};
+
 export type ListDeploymentsRequest = {
   /**
    * The cursor to fetch results from
    */
   cursor?: string | undefined;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -24,16 +43,227 @@ export type ListDeploymentsRequest = {
 };
 
 /** @internal */
+export const ListDeploymentsSecurityOption1$inboundSchema: z.ZodType<
+  ListDeploymentsSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type ListDeploymentsSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const ListDeploymentsSecurityOption1$outboundSchema: z.ZodType<
+  ListDeploymentsSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  ListDeploymentsSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListDeploymentsSecurityOption1$ {
+  /** @deprecated use `ListDeploymentsSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = ListDeploymentsSecurityOption1$inboundSchema;
+  /** @deprecated use `ListDeploymentsSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = ListDeploymentsSecurityOption1$outboundSchema;
+  /** @deprecated use `ListDeploymentsSecurityOption1$Outbound` instead. */
+  export type Outbound = ListDeploymentsSecurityOption1$Outbound;
+}
+
+export function listDeploymentsSecurityOption1ToJSON(
+  listDeploymentsSecurityOption1: ListDeploymentsSecurityOption1,
+): string {
+  return JSON.stringify(
+    ListDeploymentsSecurityOption1$outboundSchema.parse(
+      listDeploymentsSecurityOption1,
+    ),
+  );
+}
+
+export function listDeploymentsSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<ListDeploymentsSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListDeploymentsSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListDeploymentsSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const ListDeploymentsSecurityOption2$inboundSchema: z.ZodType<
+  ListDeploymentsSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type ListDeploymentsSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const ListDeploymentsSecurityOption2$outboundSchema: z.ZodType<
+  ListDeploymentsSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  ListDeploymentsSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListDeploymentsSecurityOption2$ {
+  /** @deprecated use `ListDeploymentsSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = ListDeploymentsSecurityOption2$inboundSchema;
+  /** @deprecated use `ListDeploymentsSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = ListDeploymentsSecurityOption2$outboundSchema;
+  /** @deprecated use `ListDeploymentsSecurityOption2$Outbound` instead. */
+  export type Outbound = ListDeploymentsSecurityOption2$Outbound;
+}
+
+export function listDeploymentsSecurityOption2ToJSON(
+  listDeploymentsSecurityOption2: ListDeploymentsSecurityOption2,
+): string {
+  return JSON.stringify(
+    ListDeploymentsSecurityOption2$outboundSchema.parse(
+      listDeploymentsSecurityOption2,
+    ),
+  );
+}
+
+export function listDeploymentsSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<ListDeploymentsSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListDeploymentsSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListDeploymentsSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const ListDeploymentsSecurity$inboundSchema: z.ZodType<
+  ListDeploymentsSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => ListDeploymentsSecurityOption1$inboundSchema)
+    .optional(),
+  Option2: z.lazy(() => ListDeploymentsSecurityOption2$inboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
+export type ListDeploymentsSecurity$Outbound = {
+  Option1?: ListDeploymentsSecurityOption1$Outbound | undefined;
+  Option2?: ListDeploymentsSecurityOption2$Outbound | undefined;
+};
+
+/** @internal */
+export const ListDeploymentsSecurity$outboundSchema: z.ZodType<
+  ListDeploymentsSecurity$Outbound,
+  z.ZodTypeDef,
+  ListDeploymentsSecurity
+> = z.object({
+  option1: z.lazy(() => ListDeploymentsSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => ListDeploymentsSecurityOption2$outboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    option1: "Option1",
+    option2: "Option2",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ListDeploymentsSecurity$ {
+  /** @deprecated use `ListDeploymentsSecurity$inboundSchema` instead. */
+  export const inboundSchema = ListDeploymentsSecurity$inboundSchema;
+  /** @deprecated use `ListDeploymentsSecurity$outboundSchema` instead. */
+  export const outboundSchema = ListDeploymentsSecurity$outboundSchema;
+  /** @deprecated use `ListDeploymentsSecurity$Outbound` instead. */
+  export type Outbound = ListDeploymentsSecurity$Outbound;
+}
+
+export function listDeploymentsSecurityToJSON(
+  listDeploymentsSecurity: ListDeploymentsSecurity,
+): string {
+  return JSON.stringify(
+    ListDeploymentsSecurity$outboundSchema.parse(listDeploymentsSecurity),
+  );
+}
+
+export function listDeploymentsSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<ListDeploymentsSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListDeploymentsSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListDeploymentsSecurity' from JSON`,
+  );
+}
+
+/** @internal */
 export const ListDeploymentsRequest$inboundSchema: z.ZodType<
   ListDeploymentsRequest,
   z.ZodTypeDef,
   unknown
 > = z.object({
   cursor: z.string().optional(),
+  "Gram-Key": z.string().optional(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
     "Gram-Project": "gramProject",
   });
@@ -42,6 +272,7 @@ export const ListDeploymentsRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type ListDeploymentsRequest$Outbound = {
   cursor?: string | undefined;
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -53,10 +284,12 @@ export const ListDeploymentsRequest$outboundSchema: z.ZodType<
   ListDeploymentsRequest
 > = z.object({
   cursor: z.string().optional(),
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
   });

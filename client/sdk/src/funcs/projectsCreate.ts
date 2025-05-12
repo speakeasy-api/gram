@@ -33,8 +33,8 @@ import { Result } from "../types/fp.js";
  */
 export function projectsCreate(
   client: GramCore,
-  security: operations.CreateProjectSecurity,
   request: operations.CreateProjectRequest,
+  security?: operations.CreateProjectSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -52,16 +52,16 @@ export function projectsCreate(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.CreateProjectSecurity,
   request: operations.CreateProjectRequest,
+  security?: operations.CreateProjectSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -98,6 +98,10 @@ async function $do(
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -105,6 +109,13 @@ async function $do(
   }));
 
   const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.apikeyHeaderGramKey,
+      },
+    ],
     [
       {
         fieldName: "Gram-Session",

@@ -18,11 +18,13 @@ export class Integrations extends ClientSDK {
    */
   async integrationsNumberGet(
     request?: operations.IntegrationsNumberGetRequest | undefined,
+    security?: operations.IntegrationsNumberGetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetIntegrationResult> {
     return unwrapAsync(integrationsIntegrationsNumberGet(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -35,11 +37,13 @@ export class Integrations extends ClientSDK {
    */
   async list(
     request?: operations.ListIntegrationsRequest | undefined,
+    security?: operations.ListIntegrationsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListIntegrationsResult> {
     return unwrapAsync(integrationsList(
       this,
       request,
+      security,
       options,
     ));
   }

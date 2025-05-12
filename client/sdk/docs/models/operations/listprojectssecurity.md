@@ -5,13 +5,12 @@
 ```typescript
 import { ListProjectsSecurity } from "@gram/client/models/operations";
 
-let value: ListProjectsSecurity = {
-  sessionHeaderGramSession: "<value>",
-};
+let value: ListProjectsSecurity = {};
 ```
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `sessionHeaderGramSession` | *string*                   | :heavy_check_mark:         | N/A                        |
+| Field                       | Type                        | Required                    | Description                 |
+| --------------------------- | --------------------------- | --------------------------- | --------------------------- |
+| `apikeyHeaderAuthorization` | *string*                    | :heavy_minus_sign:          | N/A                         |
+| `sessionHeaderGramSession`  | *string*                    | :heavy_minus_sign:          | N/A                         |

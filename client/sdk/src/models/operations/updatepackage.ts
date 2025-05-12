@@ -9,7 +9,26 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type UpdatePackageSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type UpdatePackageSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type UpdatePackageSecurity = {
+  option1?: UpdatePackageSecurityOption1 | undefined;
+  option2?: UpdatePackageSecurityOption2 | undefined;
+};
+
 export type UpdatePackageRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -26,16 +45,223 @@ export type UpdatePackageResponse =
   | components.NotModified;
 
 /** @internal */
+export const UpdatePackageSecurityOption1$inboundSchema: z.ZodType<
+  UpdatePackageSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type UpdatePackageSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const UpdatePackageSecurityOption1$outboundSchema: z.ZodType<
+  UpdatePackageSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  UpdatePackageSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UpdatePackageSecurityOption1$ {
+  /** @deprecated use `UpdatePackageSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = UpdatePackageSecurityOption1$inboundSchema;
+  /** @deprecated use `UpdatePackageSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = UpdatePackageSecurityOption1$outboundSchema;
+  /** @deprecated use `UpdatePackageSecurityOption1$Outbound` instead. */
+  export type Outbound = UpdatePackageSecurityOption1$Outbound;
+}
+
+export function updatePackageSecurityOption1ToJSON(
+  updatePackageSecurityOption1: UpdatePackageSecurityOption1,
+): string {
+  return JSON.stringify(
+    UpdatePackageSecurityOption1$outboundSchema.parse(
+      updatePackageSecurityOption1,
+    ),
+  );
+}
+
+export function updatePackageSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<UpdatePackageSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UpdatePackageSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UpdatePackageSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const UpdatePackageSecurityOption2$inboundSchema: z.ZodType<
+  UpdatePackageSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type UpdatePackageSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const UpdatePackageSecurityOption2$outboundSchema: z.ZodType<
+  UpdatePackageSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  UpdatePackageSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UpdatePackageSecurityOption2$ {
+  /** @deprecated use `UpdatePackageSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = UpdatePackageSecurityOption2$inboundSchema;
+  /** @deprecated use `UpdatePackageSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = UpdatePackageSecurityOption2$outboundSchema;
+  /** @deprecated use `UpdatePackageSecurityOption2$Outbound` instead. */
+  export type Outbound = UpdatePackageSecurityOption2$Outbound;
+}
+
+export function updatePackageSecurityOption2ToJSON(
+  updatePackageSecurityOption2: UpdatePackageSecurityOption2,
+): string {
+  return JSON.stringify(
+    UpdatePackageSecurityOption2$outboundSchema.parse(
+      updatePackageSecurityOption2,
+    ),
+  );
+}
+
+export function updatePackageSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<UpdatePackageSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UpdatePackageSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UpdatePackageSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const UpdatePackageSecurity$inboundSchema: z.ZodType<
+  UpdatePackageSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => UpdatePackageSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => UpdatePackageSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
+export type UpdatePackageSecurity$Outbound = {
+  Option1?: UpdatePackageSecurityOption1$Outbound | undefined;
+  Option2?: UpdatePackageSecurityOption2$Outbound | undefined;
+};
+
+/** @internal */
+export const UpdatePackageSecurity$outboundSchema: z.ZodType<
+  UpdatePackageSecurity$Outbound,
+  z.ZodTypeDef,
+  UpdatePackageSecurity
+> = z.object({
+  option1: z.lazy(() => UpdatePackageSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => UpdatePackageSecurityOption2$outboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    option1: "Option1",
+    option2: "Option2",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UpdatePackageSecurity$ {
+  /** @deprecated use `UpdatePackageSecurity$inboundSchema` instead. */
+  export const inboundSchema = UpdatePackageSecurity$inboundSchema;
+  /** @deprecated use `UpdatePackageSecurity$outboundSchema` instead. */
+  export const outboundSchema = UpdatePackageSecurity$outboundSchema;
+  /** @deprecated use `UpdatePackageSecurity$Outbound` instead. */
+  export type Outbound = UpdatePackageSecurity$Outbound;
+}
+
+export function updatePackageSecurityToJSON(
+  updatePackageSecurity: UpdatePackageSecurity,
+): string {
+  return JSON.stringify(
+    UpdatePackageSecurity$outboundSchema.parse(updatePackageSecurity),
+  );
+}
+
+export function updatePackageSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<UpdatePackageSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UpdatePackageSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UpdatePackageSecurity' from JSON`,
+  );
+}
+
+/** @internal */
 export const UpdatePackageRequest$inboundSchema: z.ZodType<
   UpdatePackageRequest,
   z.ZodTypeDef,
   unknown
 > = z.object({
+  "Gram-Key": z.string().optional(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
   UpdatePackageForm: components.UpdatePackageForm$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
     "Gram-Project": "gramProject",
     "UpdatePackageForm": "updatePackageForm",
@@ -44,6 +270,7 @@ export const UpdatePackageRequest$inboundSchema: z.ZodType<
 
 /** @internal */
 export type UpdatePackageRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   UpdatePackageForm: components.UpdatePackageForm$Outbound;
@@ -55,11 +282,13 @@ export const UpdatePackageRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   UpdatePackageRequest
 > = z.object({
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
   updatePackageForm: components.UpdatePackageForm$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
     updatePackageForm: "UpdatePackageForm",

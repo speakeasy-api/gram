@@ -5,13 +5,11 @@
 ```typescript
 import { SessionInfoSecurity } from "@gram/client/models/operations";
 
-let value: SessionInfoSecurity = {
-  sessionHeaderGramSession: "<value>",
-};
+let value: SessionInfoSecurity = {};
 ```
 
 ## Fields
 
 | Field                      | Type                       | Required                   | Description                |
 | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `sessionHeaderGramSession` | *string*                   | :heavy_check_mark:         | N/A                        |
+| `sessionHeaderGramSession` | *string*                   | :heavy_minus_sign:         | N/A                        |

@@ -37,6 +37,7 @@ export type IntegrationsIntegrationsNumberGetQueryData =
  */
 export function useIntegrationsIntegrationsNumberGet(
   request?: operations.IntegrationsNumberGetRequest | undefined,
+  security?: operations.IntegrationsNumberGetSecurity | undefined,
   options?: QueryHookOptions<IntegrationsIntegrationsNumberGetQueryData>,
 ): UseQueryResult<IntegrationsIntegrationsNumberGetQueryData, Error> {
   const client = useGramContext();
@@ -44,6 +45,7 @@ export function useIntegrationsIntegrationsNumberGet(
     ...buildIntegrationsIntegrationsNumberGetQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -58,6 +60,7 @@ export function useIntegrationsIntegrationsNumberGet(
  */
 export function useIntegrationsIntegrationsNumberGetSuspense(
   request?: operations.IntegrationsNumberGetRequest | undefined,
+  security?: operations.IntegrationsNumberGetSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     IntegrationsIntegrationsNumberGetQueryData
   >,
@@ -67,6 +70,7 @@ export function useIntegrationsIntegrationsNumberGetSuspense(
     ...buildIntegrationsIntegrationsNumberGetQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -77,11 +81,13 @@ export function prefetchIntegrationsIntegrationsNumberGet(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.IntegrationsNumberGetRequest | undefined,
+  security?: operations.IntegrationsNumberGetSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildIntegrationsIntegrationsNumberGetQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -142,6 +148,7 @@ export function invalidateAllIntegrationsIntegrationsNumberGet(
 export function buildIntegrationsIntegrationsNumberGetQuery(
   client$: GramCore,
   request?: operations.IntegrationsNumberGetRequest | undefined,
+  security?: operations.IntegrationsNumberGetSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -168,6 +175,7 @@ export function buildIntegrationsIntegrationsNumberGetQuery(
       return unwrapAsync(integrationsIntegrationsNumberGet(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

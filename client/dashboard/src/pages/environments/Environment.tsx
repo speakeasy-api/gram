@@ -238,6 +238,7 @@ export default function EnvironmentPage() {
     {
       slug: selectedToolsetSlug,
     },
+    undefined,
     {
       enabled: !!selectedToolsetSlug,
     }

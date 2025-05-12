@@ -35,16 +35,16 @@ export type ListProjectsQueryData = components.ListProjectsResult;
  * List all projects for an organization.
  */
 export function useListProjects(
-  security: operations.ListProjectsSecurity,
   request: operations.ListProjectsRequest,
+  security?: operations.ListProjectsSecurity | undefined,
   options?: QueryHookOptions<ListProjectsQueryData>,
 ): UseQueryResult<ListProjectsQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildListProjectsQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -58,16 +58,16 @@ export function useListProjects(
  * List all projects for an organization.
  */
 export function useListProjectsSuspense(
-  security: operations.ListProjectsSecurity,
   request: operations.ListProjectsRequest,
+  security?: operations.ListProjectsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListProjectsQueryData>,
 ): UseSuspenseQueryResult<ListProjectsQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListProjectsQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -77,14 +77,14 @@ export function useListProjectsSuspense(
 export function prefetchListProjects(
   queryClient: QueryClient,
   client$: GramCore,
-  security: operations.ListProjectsSecurity,
   request: operations.ListProjectsRequest,
+  security?: operations.ListProjectsSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListProjectsQuery(
       client$,
-      security,
       request,
+      security,
     ),
   });
 }
@@ -126,8 +126,8 @@ export function invalidateAllListProjects(
 
 export function buildListProjectsQuery(
   client$: GramCore,
-  security: operations.ListProjectsSecurity,
   request: operations.ListProjectsRequest,
+  security?: operations.ListProjectsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -149,8 +149,8 @@ export function buildListProjectsQuery(
 
       return unwrapAsync(projectsList(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

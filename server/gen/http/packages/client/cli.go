@@ -181,6 +181,35 @@ func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdateP
 	return v, nil
 }
 
+// BuildListPackagesPayload builds the payload for the packages listPackages
+// endpoint from CLI flags.
+func BuildListPackagesPayload(packagesListPackagesApikeyToken string, packagesListPackagesSessionToken string, packagesListPackagesProjectSlugInput string) (*packages.ListPackagesPayload, error) {
+	var apikeyToken *string
+	{
+		if packagesListPackagesApikeyToken != "" {
+			apikeyToken = &packagesListPackagesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if packagesListPackagesSessionToken != "" {
+			sessionToken = &packagesListPackagesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if packagesListPackagesProjectSlugInput != "" {
+			projectSlugInput = &packagesListPackagesProjectSlugInput
+		}
+	}
+	v := &packages.ListPackagesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListVersionsPayload builds the payload for the packages listVersions
 // endpoint from CLI flags.
 func BuildListVersionsPayload(packagesListVersionsName string, packagesListVersionsApikeyToken string, packagesListVersionsSessionToken string, packagesListVersionsProjectSlugInput string) (*packages.ListVersionsPayload, error) {
@@ -223,7 +252,7 @@ func BuildPublishPayload(packagesPublishBody string, packagesPublishApikeyToken 
 	{
 		err = json.Unmarshal([]byte(packagesPublishBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Quasi voluptatem.\",\n      \"name\": \"Eum voluptatem dignissimos ut vel similique qui.\",\n      \"version\": \"Non illo quod distinctio.\",\n      \"visibility\": \"public\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Qui est repudiandae sint placeat sed explicabo.\",\n      \"name\": \"Est non architecto.\",\n      \"version\": \"Velit iure et corrupti quia quis.\",\n      \"visibility\": \"public\"\n   }'")
 		}
 		if !(body.Visibility == "public" || body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"public", "private"}))

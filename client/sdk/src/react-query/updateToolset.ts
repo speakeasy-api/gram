@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type UpdateToolsetMutationVariables = {
   request: operations.UpdateToolsetRequest;
+  security?: operations.UpdateToolsetSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildUpdateToolsetMutation(
     mutationKey: mutationKeyUpdateToolset(),
     mutationFn: function updateToolsetMutationFn({
       request,
+      security,
       options,
     }): Promise<UpdateToolsetMutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildUpdateToolsetMutation(
       return unwrapAsync(toolsetsUpdateBySlug(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

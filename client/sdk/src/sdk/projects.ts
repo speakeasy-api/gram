@@ -17,14 +17,14 @@ export class Projects extends ClientSDK {
    * Create a new project.
    */
   async create(
-    security: operations.CreateProjectSecurity,
     request: operations.CreateProjectRequest,
+    security?: operations.CreateProjectSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreateProjectResult> {
     return unwrapAsync(projectsCreate(
       this,
-      security,
       request,
+      security,
       options,
     ));
   }
@@ -36,14 +36,14 @@ export class Projects extends ClientSDK {
    * List all projects for an organization.
    */
   async list(
-    security: operations.ListProjectsSecurity,
     request: operations.ListProjectsRequest,
+    security?: operations.ListProjectsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListProjectsResult> {
     return unwrapAsync(projectsList(
       this,
-      security,
       request,
+      security,
       options,
     ));
   }

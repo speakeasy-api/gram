@@ -23,8 +23,6 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.projects.create({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     createProjectRequestBody: {
       name: "<value>",
       organizationId: "<id>",
@@ -52,8 +50,6 @@ const gram = new GramCore();
 
 async function run() {
   const res = await projectsCreate(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     createProjectRequestBody: {
       name: "<value>",
       organizationId: "<id>",
@@ -125,8 +121,6 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.projects.list({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     organizationId: "<id>",
   });
 
@@ -151,8 +145,6 @@ const gram = new GramCore();
 
 async function run() {
   const res = await projectsList(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     organizationId: "<id>",
   });
 

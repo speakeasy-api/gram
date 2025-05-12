@@ -22,12 +22,7 @@ Handles the authentication callback.
 ```typescript
 import { Gram } from "@gram/client";
 
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  },
-});
+const gram = new Gram();
 
 async function run() {
   const result = await gram.auth.callback({
@@ -51,12 +46,7 @@ import { authCallback } from "@gram/client/funcs/authCallback.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const gram = new GramCore({
-  security: {
-    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  },
-});
+const gram = new GramCore();
 
 async function run() {
   const res = await authCallback(gram, {
@@ -109,9 +99,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.info({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const result = await gram.auth.info();
 
   // Handle the result
   console.log(result);
@@ -133,9 +121,7 @@ import { authInfo } from "@gram/client/funcs/authInfo.js";
 const gram = new GramCore();
 
 async function run() {
-  const res = await authInfo(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const res = await authInfo(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -209,12 +195,7 @@ Proxies to auth login through speakeasy oidc.
 ```typescript
 import { Gram } from "@gram/client";
 
-const gram = new Gram({
-  security: {
-    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  },
-});
+const gram = new Gram();
 
 async function run() {
   const result = await gram.auth.login();
@@ -236,12 +217,7 @@ import { authLogin } from "@gram/client/funcs/authLogin.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
-const gram = new GramCore({
-  security: {
-    projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  },
-});
+const gram = new GramCore();
 
 async function run() {
   const res = await authLogin(gram);
@@ -291,9 +267,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.logout({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const result = await gram.auth.logout();
 
   // Handle the result
   console.log(result);
@@ -315,9 +289,7 @@ import { authLogout } from "@gram/client/funcs/authLogout.js";
 const gram = new GramCore();
 
 async function run() {
-  const res = await authLogout(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const res = await authLogout(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -383,9 +355,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auth.switchScopes({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const result = await gram.auth.switchScopes();
 
   // Handle the result
   console.log(result);
@@ -407,9 +377,7 @@ import { authSwitchScopes } from "@gram/client/funcs/authSwitchScopes.js";
 const gram = new GramCore();
 
 async function run() {
-  const res = await authSwitchScopes(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const res = await authSwitchScopes(gram);
 
   if (!res.ok) {
     throw res.error;

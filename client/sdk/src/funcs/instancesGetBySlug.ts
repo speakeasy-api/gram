@@ -33,8 +33,8 @@ import { Result } from "../types/fp.js";
  */
 export function instancesGetBySlug(
   client: GramCore,
-  security: operations.GetInstanceSecurity,
   request: operations.GetInstanceRequest,
+  security?: operations.GetInstanceSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -52,16 +52,16 @@ export function instancesGetBySlug(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.GetInstanceSecurity,
   request: operations.GetInstanceRequest,
+  security?: operations.GetInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

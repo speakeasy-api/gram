@@ -9,7 +9,8 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListProjectsSecurity = {
-  sessionHeaderGramSession: string;
+  apikeyHeaderAuthorization?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type ListProjectsRequest = {
@@ -29,16 +30,19 @@ export const ListProjectsSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "session_header_Gram-Session": z.string(),
+  apikey_header_Authorization: z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "apikey_header_Authorization": "apikeyHeaderAuthorization",
     "session_header_Gram-Session": "sessionHeaderGramSession",
   });
 });
 
 /** @internal */
 export type ListProjectsSecurity$Outbound = {
-  "session_header_Gram-Session": string;
+  apikey_header_Authorization?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -47,9 +51,11 @@ export const ListProjectsSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListProjectsSecurity
 > = z.object({
-  sessionHeaderGramSession: z.string(),
+  apikeyHeaderAuthorization: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    apikeyHeaderAuthorization: "apikey_header_Authorization",
     sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });

@@ -25,6 +25,10 @@ type Client struct {
 	// updatePackage endpoint.
 	UpdatePackageDoer goahttp.Doer
 
+	// ListPackages Doer is the HTTP client used to make requests to the
+	// listPackages endpoint.
+	ListPackagesDoer goahttp.Doer
+
 	// ListVersions Doer is the HTTP client used to make requests to the
 	// listVersions endpoint.
 	ListVersionsDoer goahttp.Doer
@@ -55,6 +59,7 @@ func NewClient(
 	return &Client{
 		CreatePackageDoer:   doer,
 		UpdatePackageDoer:   doer,
+		ListPackagesDoer:    doer,
 		ListVersionsDoer:    doer,
 		PublishDoer:         doer,
 		RestoreResponseBody: restoreBody,
@@ -108,6 +113,30 @@ func (c *Client) UpdatePackage() goa.Endpoint {
 		resp, err := c.UpdatePackageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("packages", "updatePackage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPackages returns an endpoint that makes HTTP requests to the packages
+// service listPackages server.
+func (c *Client) ListPackages() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPackagesRequest(c.encoder)
+		decodeResponse = DecodeListPackagesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPackagesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPackagesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("packages", "listPackages", err)
 		}
 		return decodeResponse(resp)
 	}

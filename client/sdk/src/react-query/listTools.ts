@@ -36,6 +36,7 @@ export type ListToolsQueryData = components.ListToolsResult;
  */
 export function useListTools(
   request?: operations.ListToolsRequest | undefined,
+  security?: operations.ListToolsSecurity | undefined,
   options?: QueryHookOptions<ListToolsQueryData>,
 ): UseQueryResult<ListToolsQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useListTools(
     ...buildListToolsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useListTools(
  */
 export function useListToolsSuspense(
   request?: operations.ListToolsRequest | undefined,
+  security?: operations.ListToolsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListToolsQueryData>,
 ): UseSuspenseQueryResult<ListToolsQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useListToolsSuspense(
     ...buildListToolsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchListTools(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.ListToolsRequest | undefined,
+  security?: operations.ListToolsSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListToolsQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -131,6 +137,7 @@ export function invalidateAllListTools(
 export function buildListToolsQuery(
   client$: GramCore,
   request?: operations.ListToolsRequest | undefined,
+  security?: operations.ListToolsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -153,6 +160,7 @@ export function buildListToolsQuery(
       return unwrapAsync(toolsList(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

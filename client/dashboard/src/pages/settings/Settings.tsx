@@ -1,18 +1,21 @@
 import { Page } from "@/components/page-layout";
-import { Heading } from "@/components/ui/heading";
-import { Column, Table } from "@speakeasy-api/moonshine";
-import { Key } from "@gram/client/models/components";
-import { HumanizeDateTime } from "@/lib/dates";
-import { Type } from "@/components/ui/type";
-import { useListAPIKeysSuspense, invalidateListAPIKeys } from "@gram/client/react-query/listAPIKeys";
-import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, CheckCircle2 } from "lucide-react";
+import { Type } from "@/components/ui/type";
+import { HumanizeDateTime } from "@/lib/dates";
+import { Key } from "@gram/client/models/components";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import {
+  invalidateListAPIKeys,
+  useListAPIKeysSuspense,
+} from "@gram/client/react-query/listAPIKeys";
+import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
+import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, Copy, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 export default function Settings() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -22,17 +25,16 @@ export default function Settings() {
   const [isCopied, setIsCopied] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: keysData } = useListAPIKeysSuspense(
-    { sessionHeaderGramSession: "" },
-    undefined
-  );
+  const { data: keysData } = useListAPIKeysSuspense();
 
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
       setNewKeyName("");
       setNewlyCreatedKey(data);
       await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
-      await queryClient.refetchQueries({ queryKey: ["@gram/client", "keys", "list"] });
+      await queryClient.refetchQueries({
+        queryKey: ["@gram/client", "keys", "list"],
+      });
     },
   });
 
@@ -40,7 +42,9 @@ export default function Settings() {
     onSuccess: async () => {
       setKeyToRevoke(null);
       await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
-      await queryClient.refetchQueries({ queryKey: ["@gram/client", "keys", "list"] });
+      await queryClient.refetchQueries({
+        queryKey: ["@gram/client", "keys", "list"],
+      });
     },
   });
 
@@ -130,7 +134,9 @@ export default function Settings() {
       <Page.Body>
         <div className="flex justify-between items-center mb-4">
           <Heading variant="h4">API Keys</Heading>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>Create API Key</Button>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            Create API Key
+          </Button>
         </div>
         <Table
           columns={apiKeyColumns}
@@ -138,7 +144,10 @@ export default function Settings() {
           rowKey={(row) => row.id}
         />
 
-        <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={handleCloseCreateDialog}
+        >
           <Dialog.Content>
             <Dialog.Header>
               <Dialog.Title>
@@ -148,10 +157,13 @@ export default function Settings() {
             {newlyCreatedKey ? (
               <div className="space-y-4 py-4">
                 <div className="rounded-lg border-yellow-500/50 bg-yellow-50/50 text-yellow-600 p-4 text-sm">
-                  You won't be able to see this token value again once you close this dialog.
+                  You won't be able to see this token value again once you close
+                  this dialog.
                 </div>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md">
-                  <code className="flex-1 break-all">{newlyCreatedKey.token}</code>
+                  <code className="flex-1 break-all">
+                    {newlyCreatedKey.token}
+                  </code>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -179,10 +191,7 @@ export default function Settings() {
                   />
                 </div>
                 <div className="flex justify-end space-x-2">
-                  <Button
-                    variant="secondary"
-                    onClick={handleCloseCreateDialog}
-                  >
+                  <Button variant="secondary" onClick={handleCloseCreateDialog}>
                     Cancel
                   </Button>
                   <Button
@@ -197,14 +206,19 @@ export default function Settings() {
           </Dialog.Content>
         </Dialog>
 
-        <Dialog open={!!keyToRevoke} onOpenChange={(open) => !open && setKeyToRevoke(null)}>
+        <Dialog
+          open={!!keyToRevoke}
+          onOpenChange={(open) => !open && setKeyToRevoke(null)}
+        >
           <Dialog.Content>
             <Dialog.Header>
               <Dialog.Title>Revoke API Key</Dialog.Title>
             </Dialog.Header>
             <div className="space-y-4 py-4">
               <Type variant="body">
-                Are you sure you want to revoke the API key <span className="italic font-bold">{keyToRevoke?.name}</span>? This action cannot be undone.
+                Are you sure you want to revoke the API key{" "}
+                <span className="italic font-bold">{keyToRevoke?.name}</span>?
+                This action cannot be undone.
               </Type>
               <div className="flex justify-end space-x-2">
                 <Button

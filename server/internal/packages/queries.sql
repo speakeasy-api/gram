@@ -1,3 +1,34 @@
+-- name: ListPackages :many
+WITH latest_versions as (
+  SELECT DISTINCT ON (package_versions.package_id)
+    package_versions.id,
+    package_versions.package_id,
+    package_versions.deployment_id,
+    package_versions.major,
+    package_versions.minor,
+    package_versions.patch,
+    package_versions.prerelease,
+    package_versions.build,
+    package_versions.created_at
+  FROM package_versions
+  WHERE package_versions.visibility = 'public'
+    AND package_versions.prerelease IS NULL
+  ORDER BY package_versions.package_id, major DESC, minor DESC, patch DESC
+)
+SELECT
+    sqlc.embed(packages)
+  , latest_versions.id as version_id
+  , latest_versions.deployment_id as version_deployment_id
+  , latest_versions.major as version_major
+  , latest_versions.minor as version_minor
+  , latest_versions.patch as version_patch
+  , latest_versions.prerelease as version_prerelease
+  , latest_versions.build as version_build
+  , latest_versions.created_at as version_created_at
+FROM packages
+LEFT JOIN latest_versions ON packages.id = latest_versions.package_id
+WHERE packages.project_id = @project_id;
+
 -- name: PeekLatestPackageVersionByName :one
 SELECT packages.id as package_id, packages.project_id as project_id, package_versions.id as package_version_id
 FROM packages

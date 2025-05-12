@@ -18,11 +18,13 @@ export class Chat extends ClientSDK {
    */
   async list(
     request?: operations.ListChatsRequest | undefined,
+    security?: operations.ListChatsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListChatsResult> {
     return unwrapAsync(chatList(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -35,11 +37,13 @@ export class Chat extends ClientSDK {
    */
   async load(
     request: operations.LoadChatRequest,
+    security?: operations.LoadChatSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Chat> {
     return unwrapAsync(chatLoad(
       this,
       request,
+      security,
       options,
     ));
   }

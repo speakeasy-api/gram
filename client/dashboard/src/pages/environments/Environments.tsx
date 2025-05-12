@@ -24,7 +24,7 @@ export function EnvironmentsRoot() {
 
 export function useEnvironments() {
   const { data: environments, refetch: refetchEnvironments } =
-    useListEnvironmentsSuspense(undefined, {
+    useListEnvironmentsSuspense(undefined, undefined, {
       refetchOnWindowFocus: false,
     });
   return Object.assign(environments.environments, {

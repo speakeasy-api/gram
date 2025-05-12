@@ -5,13 +5,11 @@
 ```typescript
 import { RevokeAPIKeySecurity } from "@gram/client/models/operations";
 
-let value: RevokeAPIKeySecurity = {
-  sessionHeaderGramSession: "<value>",
-};
+let value: RevokeAPIKeySecurity = {};
 ```
 
 ## Fields
 
 | Field                      | Type                       | Required                   | Description                |
 | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `sessionHeaderGramSession` | *string*                   | :heavy_check_mark:         | N/A                        |
+| `sessionHeaderGramSession` | *string*                   | :heavy_minus_sign:         | N/A                        |

@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type UploadImageMutationVariables = {
   request: operations.UploadImageRequest;
+  security?: operations.UploadImageSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildUploadImageMutation(
     mutationKey: mutationKeyUploadImage(),
     mutationFn: function uploadImageMutationFn({
       request,
+      security,
       options,
     }): Promise<UploadImageMutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildUploadImageMutation(
       return unwrapAsync(assetsUploadImage(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

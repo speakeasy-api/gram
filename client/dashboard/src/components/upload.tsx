@@ -1,19 +1,23 @@
-import { useState } from "react";
-import { UploadIcon } from "lucide-react";
+import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
 import { Asset, UploadImageResult } from "@gram/client/models/components";
-import { useFetcher } from "@/contexts/Fetcher";
+import { UploadIcon } from "lucide-react";
+import { useState } from "react";
 import { AssetImage } from "./asset-image";
 
 export function ImageUpload({
   onUpload,
+  existingAssetId,
   className,
 }: {
   onUpload: (asset: Asset) => void;
+  existingAssetId?: string;
   className?: string;
 }) {
   const { fetch } = useFetcher();
-  const [asset, setAsset] = useState<Asset | null>(null);
+  const [assetId, setAssetId] = useState<string | null>(
+    existingAssetId ?? null
+  );
 
   const onImageUpload = async (file: File) => {
     const res = await fetch("/rpc/assets.uploadImage", {
@@ -31,12 +35,25 @@ export function ImageUpload({
 
     const assetResult: UploadImageResult = await res.json();
 
-    setAsset(assetResult.asset);
+    setAssetId(assetResult.asset.id);
     onUpload(assetResult.asset);
   };
 
-  if (asset) {
-    return <AssetImage assetId={asset.id} className={className} />;
+  if (assetId) {
+    return (
+      <div
+        className="group relative cursor-pointer w-fit"
+        onClick={() => {
+          setAssetId(null);
+          onUpload({ id: "" } as Asset);
+        }}
+      >
+        <AssetImage assetId={assetId} className={className} />
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="text-white font-medium">Change</span>
+        </div>
+      </div>
+    );
   }
 
   return (

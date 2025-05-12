@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type UpdateEnvironmentMutationVariables = {
   request: operations.UpdateEnvironmentRequest;
+  security?: operations.UpdateEnvironmentSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildUpdateEnvironmentMutation(
     mutationKey: mutationKeyUpdateEnvironment(),
     mutationFn: function updateEnvironmentMutationFn({
       request,
+      security,
       options,
     }): Promise<UpdateEnvironmentMutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildUpdateEnvironmentMutation(
       return unwrapAsync(environmentsUpdateBySlug(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

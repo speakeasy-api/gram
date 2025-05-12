@@ -36,6 +36,7 @@ export type ListVersionsQueryData = components.ListVersionsResult;
  */
 export function useListVersions(
   request: operations.ListVersionsRequest,
+  security?: operations.ListVersionsSecurity | undefined,
   options?: QueryHookOptions<ListVersionsQueryData>,
 ): UseQueryResult<ListVersionsQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useListVersions(
     ...buildListVersionsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useListVersions(
  */
 export function useListVersionsSuspense(
   request: operations.ListVersionsRequest,
+  security?: operations.ListVersionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListVersionsQueryData>,
 ): UseSuspenseQueryResult<ListVersionsQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useListVersionsSuspense(
     ...buildListVersionsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchListVersions(
   queryClient: QueryClient,
   client$: GramCore,
   request: operations.ListVersionsRequest,
+  security?: operations.ListVersionsSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListVersionsQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -88,6 +94,7 @@ export function setListVersionsData(
   queryKeyBase: [
     parameters: {
       name: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -104,6 +111,7 @@ export function invalidateListVersions(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       name: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -129,6 +137,7 @@ export function invalidateAllListVersions(
 export function buildListVersionsQuery(
   client$: GramCore,
   request: operations.ListVersionsRequest,
+  security?: operations.ListVersionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -137,6 +146,7 @@ export function buildListVersionsQuery(
   return {
     queryKey: queryKeyListVersions({
       name: request.name,
+      gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
@@ -152,6 +162,7 @@ export function buildListVersionsQuery(
       return unwrapAsync(packagesListVersions(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },
@@ -161,6 +172,7 @@ export function buildListVersionsQuery(
 export function queryKeyListVersions(
   parameters: {
     name: string;
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

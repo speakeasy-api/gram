@@ -8,7 +8,7 @@ import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { extractSecurity, resolveGlobalSecurity } from "../lib/security.js";
+import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import * as components from "../models/components/index.js";
 import { APIError } from "../models/errors/apierror.js";
@@ -34,6 +34,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsList(
   client: GramCore,
   request?: operations.ListToolsetsRequest | undefined,
+  security?: operations.ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -52,6 +53,7 @@ export function toolsetsList(
   return new APIPromise($do(
     client,
     request,
+    security,
     options,
   ));
 }
@@ -59,6 +61,7 @@ export function toolsetsList(
 async function $do(
   client: GramCore,
   request?: operations.ListToolsetsRequest | undefined,
+  security?: operations.ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -103,17 +106,29 @@ async function $do(
     }),
   }));
 
-  const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.sessionHeaderGramSession,
+      },
+    ],
+  );
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
     operationID: "listToolsets",
-    oAuth2Scopes: [],
+    oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
 
-    securitySource: client._options.security,
+    securitySource: security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },

@@ -32,8 +32,8 @@ import { Result } from "../types/fp.js";
  */
 export function authSwitchScopes(
   client: GramCore,
-  security: operations.SwitchAuthScopesSecurity,
   request?: operations.SwitchAuthScopesRequest | undefined,
+  security?: operations.SwitchAuthScopesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -51,16 +51,16 @@ export function authSwitchScopes(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.SwitchAuthScopesSecurity,
   request?: operations.SwitchAuthScopesRequest | undefined,
+  security?: operations.SwitchAuthScopesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -5,13 +5,11 @@
 ```typescript
 import { ListAPIKeysSecurity } from "@gram/client/models/operations";
 
-let value: ListAPIKeysSecurity = {
-  sessionHeaderGramSession: "<value>",
-};
+let value: ListAPIKeysSecurity = {};
 ```
 
 ## Fields
 
 | Field                      | Type                       | Required                   | Description                |
 | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `sessionHeaderGramSession` | *string*                   | :heavy_check_mark:         | N/A                        |
+| `sessionHeaderGramSession` | *string*                   | :heavy_minus_sign:         | N/A                        |

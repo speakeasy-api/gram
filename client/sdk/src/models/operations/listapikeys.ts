@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListAPIKeysSecurity = {
-  sessionHeaderGramSession: string;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type ListAPIKeysRequest = {
@@ -25,7 +25,7 @@ export const ListAPIKeysSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "session_header_Gram-Session": z.string(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "session_header_Gram-Session": "sessionHeaderGramSession",
@@ -34,7 +34,7 @@ export const ListAPIKeysSecurity$inboundSchema: z.ZodType<
 
 /** @internal */
 export type ListAPIKeysSecurity$Outbound = {
-  "session_header_Gram-Session": string;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -43,7 +43,7 @@ export const ListAPIKeysSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListAPIKeysSecurity
 > = z.object({
-  sessionHeaderGramSession: z.string(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     sessionHeaderGramSession: "session_header_Gram-Session",

@@ -36,6 +36,7 @@ export type ListIntegrationsQueryData = components.ListIntegrationsResult;
  */
 export function useListIntegrations(
   request?: operations.ListIntegrationsRequest | undefined,
+  security?: operations.ListIntegrationsSecurity | undefined,
   options?: QueryHookOptions<ListIntegrationsQueryData>,
 ): UseQueryResult<ListIntegrationsQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useListIntegrations(
     ...buildListIntegrationsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useListIntegrations(
  */
 export function useListIntegrationsSuspense(
   request?: operations.ListIntegrationsRequest | undefined,
+  security?: operations.ListIntegrationsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListIntegrationsQueryData>,
 ): UseSuspenseQueryResult<ListIntegrationsQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useListIntegrationsSuspense(
     ...buildListIntegrationsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchListIntegrations(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.ListIntegrationsRequest | undefined,
+  security?: operations.ListIntegrationsSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListIntegrationsQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -129,6 +135,7 @@ export function invalidateAllListIntegrations(
 export function buildListIntegrationsQuery(
   client$: GramCore,
   request?: operations.ListIntegrationsRequest | undefined,
+  security?: operations.ListIntegrationsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -154,6 +161,7 @@ export function buildListIntegrationsQuery(
       return unwrapAsync(integrationsList(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

@@ -21,11 +21,13 @@ export class Toolsets extends ClientSDK {
    */
   async create(
     request: operations.CreateToolsetRequest,
+    security?: operations.CreateToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ToolsetDetails> {
     return unwrapAsync(toolsetsCreate(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -38,11 +40,13 @@ export class Toolsets extends ClientSDK {
    */
   async deleteBySlug(
     request: operations.DeleteToolsetRequest,
+    security?: operations.DeleteToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(toolsetsDeleteBySlug(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -55,11 +59,13 @@ export class Toolsets extends ClientSDK {
    */
   async getBySlug(
     request: operations.GetToolsetRequest,
+    security?: operations.GetToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ToolsetDetails> {
     return unwrapAsync(toolsetsGetBySlug(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -72,11 +78,13 @@ export class Toolsets extends ClientSDK {
    */
   async list(
     request?: operations.ListToolsetsRequest | undefined,
+    security?: operations.ListToolsetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListToolsetsResult> {
     return unwrapAsync(toolsetsList(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -89,11 +97,13 @@ export class Toolsets extends ClientSDK {
    */
   async updateBySlug(
     request: operations.UpdateToolsetRequest,
+    security?: operations.UpdateToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ToolsetDetails> {
     return unwrapAsync(toolsetsUpdateBySlug(
       this,
       request,
+      security,
       options,
     ));
   }

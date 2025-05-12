@@ -32,8 +32,8 @@ import { Result } from "../types/fp.js";
  */
 export function assetsServeImage(
   client: GramCore,
-  security: operations.ServeImageSecurity,
   request: operations.ServeImageRequest,
+  security?: operations.ServeImageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -51,16 +51,16 @@ export function assetsServeImage(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.ServeImageSecurity,
   request: operations.ServeImageRequest,
+  security?: operations.ServeImageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -34,16 +34,16 @@ export type ServeImageQueryData = operations.ServeImageResponse;
  * Serve an image from Gram.
  */
 export function useServeImage(
-  security: operations.ServeImageSecurity,
   request: operations.ServeImageRequest,
+  security?: operations.ServeImageSecurity | undefined,
   options?: QueryHookOptions<ServeImageQueryData>,
 ): UseQueryResult<ServeImageQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildServeImageQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,16 +57,16 @@ export function useServeImage(
  * Serve an image from Gram.
  */
 export function useServeImageSuspense(
-  security: operations.ServeImageSecurity,
   request: operations.ServeImageRequest,
+  security?: operations.ServeImageSecurity | undefined,
   options?: SuspenseQueryHookOptions<ServeImageQueryData>,
 ): UseSuspenseQueryResult<ServeImageQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeImageQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -76,14 +76,14 @@ export function useServeImageSuspense(
 export function prefetchServeImage(
   queryClient: QueryClient,
   client$: GramCore,
-  security: operations.ServeImageSecurity,
   request: operations.ServeImageRequest,
+  security?: operations.ServeImageSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildServeImageQuery(
       client$,
-      security,
       request,
+      security,
     ),
   });
 }
@@ -123,8 +123,8 @@ export function invalidateAllServeImage(
 
 export function buildServeImageQuery(
   client$: GramCore,
-  security: operations.ServeImageSecurity,
   request: operations.ServeImageRequest,
+  security?: operations.ServeImageSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -146,8 +146,8 @@ export function buildServeImageQuery(
 
       return unwrapAsync(assetsServeImage(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

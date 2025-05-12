@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type SwitchAuthScopesSecurity = {
-  sessionHeaderGramSession: string;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type SwitchAuthScopesRequest = {
@@ -37,7 +37,7 @@ export const SwitchAuthScopesSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "session_header_Gram-Session": z.string(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "session_header_Gram-Session": "sessionHeaderGramSession",
@@ -46,7 +46,7 @@ export const SwitchAuthScopesSecurity$inboundSchema: z.ZodType<
 
 /** @internal */
 export type SwitchAuthScopesSecurity$Outbound = {
-  "session_header_Gram-Session": string;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -55,7 +55,7 @@ export const SwitchAuthScopesSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SwitchAuthScopesSecurity
 > = z.object({
-  sessionHeaderGramSession: z.string(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     sessionHeaderGramSession: "session_header_Gram-Session",

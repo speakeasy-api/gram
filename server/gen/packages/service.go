@@ -20,6 +20,8 @@ type Service interface {
 	CreatePackage(context.Context, *CreatePackagePayload) (res *CreatePackageResult, err error)
 	// Update package details.
 	UpdatePackage(context.Context, *UpdatePackagePayload) (res *UpdatePackageResult, err error)
+	// List all packages for a project.
+	ListPackages(context.Context, *ListPackagesPayload) (res *ListPackagesResult, err error)
 	// List published versions of a package.
 	ListVersions(context.Context, *ListVersionsPayload) (res *ListVersionsResult, err error)
 	// Publish a new version of a package.
@@ -46,7 +48,7 @@ const ServiceName = "packages"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"createPackage", "updatePackage", "listVersions", "publish"}
+var MethodNames = [5]string{"createPackage", "updatePackage", "listPackages", "listVersions", "publish"}
 
 // CreatePackagePayload is the payload type of the packages service
 // createPackage method.
@@ -75,6 +77,21 @@ type CreatePackagePayload struct {
 type CreatePackageResult struct {
 	// The newly created package
 	Package *Package
+}
+
+// ListPackagesPayload is the payload type of the packages service listPackages
+// method.
+type ListPackagesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListPackagesResult is the result type of the packages service listPackages
+// method.
+type ListPackagesResult struct {
+	// The list of packages
+	Packages []*Package
 }
 
 // ListVersionsPayload is the payload type of the packages service listVersions

@@ -21,11 +21,13 @@ export class Deployments extends ClientSDK {
    */
   async create(
     request: operations.CreateDeploymentRequest,
+    security?: operations.CreateDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreateDeploymentResult> {
     return unwrapAsync(deploymentsCreate(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -38,11 +40,13 @@ export class Deployments extends ClientSDK {
    */
   async evolveDeployment(
     request: operations.EvolveDeploymentRequest,
+    security?: operations.EvolveDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.EvolveResult> {
     return unwrapAsync(deploymentsEvolveDeployment(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -55,11 +59,13 @@ export class Deployments extends ClientSDK {
    */
   async getById(
     request: operations.GetDeploymentRequest,
+    security?: operations.GetDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetDeploymentResult> {
     return unwrapAsync(deploymentsGetById(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -72,11 +78,13 @@ export class Deployments extends ClientSDK {
    */
   async latest(
     request?: operations.GetLatestDeploymentRequest | undefined,
+    security?: operations.GetLatestDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetLatestDeploymentResult> {
     return unwrapAsync(deploymentsLatest(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -89,11 +97,13 @@ export class Deployments extends ClientSDK {
    */
   async list(
     request?: operations.ListDeploymentsRequest | undefined,
+    security?: operations.ListDeploymentsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListDeploymentResult> {
     return unwrapAsync(deploymentsList(
       this,
       request,
+      security,
       options,
     ));
   }

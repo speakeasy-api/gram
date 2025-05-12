@@ -52,8 +52,6 @@ import { useServeImage } from "@gram/client/react-query/assetsServeImage.js";
 
 export function Example() {
   const { data, error, status } = useServeImage({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     id: "<id>",
   });
 
@@ -74,8 +72,6 @@ export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
   const { data, error, status } = useServeImage(
     {
-      sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-    }, {
       id: "<id>",
     },
     {
@@ -261,8 +257,6 @@ export function App() {
 
 function Example() {
   const { data } = useServeImageSuspense({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     id: "<id>",
   });
 
@@ -291,8 +285,6 @@ export default async function Page() {
   const gram = new GramCore();
 
   await prefetchServeImage(queryClient, gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     id: "<id>",
   });
 

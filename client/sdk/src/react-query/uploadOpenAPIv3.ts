@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type UploadOpenAPIv3MutationVariables = {
   request: operations.UploadOpenAPIv3AssetRequest;
+  security?: operations.UploadOpenAPIv3AssetSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildUploadOpenAPIv3Mutation(
     mutationKey: mutationKeyUploadOpenAPIv3(),
     mutationFn: function uploadOpenAPIv3MutationFn({
       request,
+      security,
       options,
     }): Promise<UploadOpenAPIv3MutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildUploadOpenAPIv3Mutation(
       return unwrapAsync(assetsUploadOpenAPIv3(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type CreatePackageMutationVariables = {
   request: operations.CreatePackageRequest;
+  security?: operations.CreatePackageSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildCreatePackageMutation(
     mutationKey: mutationKeyCreatePackage(),
     mutationFn: function createPackageMutationFn({
       request,
+      security,
       options,
     }): Promise<CreatePackageMutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildCreatePackageMutation(
       return unwrapAsync(packagesCreate(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

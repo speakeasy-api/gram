@@ -1290,6 +1290,7 @@ paths:
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - {}
             summary: getLatestDeployment deployments
             tags:
                 - deployments
@@ -2386,6 +2387,98 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreatePackage
+    /rpc/packages.list:
+        get:
+            description: List all packages for a project.
+            operationId: listPackages
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPackagesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listPackages packages
+            tags:
+                - packages
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListPackages
     /rpc/packages.listVersions:
         get:
             description: List published versions of a package.
@@ -4522,6 +4615,16 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListPackagesResult:
+            type: object
+            properties:
+                packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Package'
+                    description: The list of packages
+            required:
+                - packages
         ListProjectsPayload:
             type: object
             properties:

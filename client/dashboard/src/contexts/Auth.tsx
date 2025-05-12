@@ -136,7 +136,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     error,
     refetch,
     isLoading,
-  } = useSessionInfo({ sessionHeaderGramSession: "" }, undefined, {
+  } = useSessionInfo(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
   });

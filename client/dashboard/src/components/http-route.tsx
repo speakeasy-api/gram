@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { Type } from "./ui/type";
 import { Badge } from "./ui/badge";
 import {
   Tooltip,
@@ -7,6 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
+import { Type } from "./ui/type";
 
 export const HttpRoute = ({
   method,
@@ -16,11 +16,9 @@ export const HttpRoute = ({
   path: string;
 }) => {
   return (
-    <div className="flex items-center gap-2 overflow-hidden font-mono">
+    <div className="flex gap-2 font-mono items-start">
       <HttpMethod method={method} variant="type" />
-      <Type className="overflow-hidden text-ellipsis text-xs text-muted-foreground">
-        {path}
-      </Type>
+      <Type className="text-xs text-muted-foreground">{path}</Type>
     </div>
   );
 };
@@ -44,7 +42,9 @@ export const HttpMethod = ({
     }[method];
 
     return (
-      <Type className={cn("text-xs font-semibold", typeStyle)}>{method}</Type>
+      <Type className={cn("text-xs font-semibold text-nowrap", typeStyle)}>
+        {method}
+      </Type>
     );
   }
 

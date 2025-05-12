@@ -36,6 +36,7 @@ export type ToolsetQueryData = components.ToolsetDetails;
  */
 export function useToolset(
   request: operations.GetToolsetRequest,
+  security?: operations.GetToolsetSecurity | undefined,
   options?: QueryHookOptions<ToolsetQueryData>,
 ): UseQueryResult<ToolsetQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useToolset(
     ...buildToolsetQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useToolset(
  */
 export function useToolsetSuspense(
   request: operations.GetToolsetRequest,
+  security?: operations.GetToolsetSecurity | undefined,
   options?: SuspenseQueryHookOptions<ToolsetQueryData>,
 ): UseSuspenseQueryResult<ToolsetQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useToolsetSuspense(
     ...buildToolsetQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchToolset(
   queryClient: QueryClient,
   client$: GramCore,
   request: operations.GetToolsetRequest,
+  security?: operations.GetToolsetSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildToolsetQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -129,6 +135,7 @@ export function invalidateAllToolset(
 export function buildToolsetQuery(
   client$: GramCore,
   request: operations.GetToolsetRequest,
+  security?: operations.GetToolsetSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -150,6 +157,7 @@ export function buildToolsetQuery(
       return unwrapAsync(toolsetsGetBySlug(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

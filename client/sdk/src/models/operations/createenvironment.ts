@@ -9,6 +9,11 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type CreateEnvironmentSecurity = {
+  projectSlugHeaderGramProject?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
+};
+
 export type CreateEnvironmentRequest = {
   /**
    * Session header
@@ -20,6 +25,73 @@ export type CreateEnvironmentRequest = {
   gramProject?: string | undefined;
   createEnvironmentForm: components.CreateEnvironmentForm;
 };
+
+/** @internal */
+export const CreateEnvironmentSecurity$inboundSchema: z.ZodType<
+  CreateEnvironmentSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type CreateEnvironmentSecurity$Outbound = {
+  "project_slug_header_Gram-Project"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
+};
+
+/** @internal */
+export const CreateEnvironmentSecurity$outboundSchema: z.ZodType<
+  CreateEnvironmentSecurity$Outbound,
+  z.ZodTypeDef,
+  CreateEnvironmentSecurity
+> = z.object({
+  projectSlugHeaderGramProject: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CreateEnvironmentSecurity$ {
+  /** @deprecated use `CreateEnvironmentSecurity$inboundSchema` instead. */
+  export const inboundSchema = CreateEnvironmentSecurity$inboundSchema;
+  /** @deprecated use `CreateEnvironmentSecurity$outboundSchema` instead. */
+  export const outboundSchema = CreateEnvironmentSecurity$outboundSchema;
+  /** @deprecated use `CreateEnvironmentSecurity$Outbound` instead. */
+  export type Outbound = CreateEnvironmentSecurity$Outbound;
+}
+
+export function createEnvironmentSecurityToJSON(
+  createEnvironmentSecurity: CreateEnvironmentSecurity,
+): string {
+  return JSON.stringify(
+    CreateEnvironmentSecurity$outboundSchema.parse(createEnvironmentSecurity),
+  );
+}
+
+export function createEnvironmentSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<CreateEnvironmentSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CreateEnvironmentSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreateEnvironmentSecurity' from JSON`,
+  );
+}
 
 /** @internal */
 export const CreateEnvironmentRequest$inboundSchema: z.ZodType<

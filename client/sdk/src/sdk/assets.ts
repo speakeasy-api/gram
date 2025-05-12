@@ -18,14 +18,14 @@ export class Assets extends ClientSDK {
    * Serve an image from Gram.
    */
   async serveImage(
-    security: operations.ServeImageSecurity,
     request: operations.ServeImageRequest,
+    security?: operations.ServeImageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<operations.ServeImageResponse> {
     return unwrapAsync(assetsServeImage(
       this,
-      security,
       request,
+      security,
       options,
     ));
   }
@@ -38,11 +38,13 @@ export class Assets extends ClientSDK {
    */
   async uploadImage(
     request: operations.UploadImageRequest,
+    security?: operations.UploadImageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.UploadImageResult> {
     return unwrapAsync(assetsUploadImage(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -55,11 +57,13 @@ export class Assets extends ClientSDK {
    */
   async uploadOpenAPIv3(
     request: operations.UploadOpenAPIv3AssetRequest,
+    security?: operations.UploadOpenAPIv3AssetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.UploadOpenAPIv3Result> {
     return unwrapAsync(assetsUploadOpenAPIv3(
       this,
       request,
+      security,
       options,
     ));
   }

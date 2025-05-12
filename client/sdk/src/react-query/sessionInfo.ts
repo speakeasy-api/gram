@@ -34,16 +34,16 @@ export type SessionInfoQueryData = operations.SessionInfoResponse;
  * Provides information about the current authentication status.
  */
 export function useSessionInfo(
-  security: operations.SessionInfoSecurity,
   request?: operations.SessionInfoRequest | undefined,
+  security?: operations.SessionInfoSecurity | undefined,
   options?: QueryHookOptions<SessionInfoQueryData>,
 ): UseQueryResult<SessionInfoQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildSessionInfoQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,16 +57,16 @@ export function useSessionInfo(
  * Provides information about the current authentication status.
  */
 export function useSessionInfoSuspense(
-  security: operations.SessionInfoSecurity,
   request?: operations.SessionInfoRequest | undefined,
+  security?: operations.SessionInfoSecurity | undefined,
   options?: SuspenseQueryHookOptions<SessionInfoQueryData>,
 ): UseSuspenseQueryResult<SessionInfoQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildSessionInfoQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -76,14 +76,14 @@ export function useSessionInfoSuspense(
 export function prefetchSessionInfo(
   queryClient: QueryClient,
   client$: GramCore,
-  security: operations.SessionInfoSecurity,
   request?: operations.SessionInfoRequest | undefined,
+  security?: operations.SessionInfoSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildSessionInfoQuery(
       client$,
-      security,
       request,
+      security,
     ),
   });
 }
@@ -123,8 +123,8 @@ export function invalidateAllSessionInfo(
 
 export function buildSessionInfoQuery(
   client$: GramCore,
-  security: operations.SessionInfoSecurity,
   request?: operations.SessionInfoRequest | undefined,
+  security?: operations.SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -143,8 +143,8 @@ export function buildSessionInfoQuery(
 
       return unwrapAsync(authInfo(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

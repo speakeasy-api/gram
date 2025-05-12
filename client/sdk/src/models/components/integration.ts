@@ -7,6 +7,12 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  IntegrationVersion,
+  IntegrationVersion$inboundSchema,
+  IntegrationVersion$Outbound,
+  IntegrationVersion$outboundSchema,
+} from "./integrationversion.js";
 
 export type Integration = {
   packageDescription?: string | undefined;
@@ -19,8 +25,12 @@ export type Integration = {
   packageTitle: string;
   packageUrl?: string | undefined;
   toolNames: Array<string>;
+  /**
+   * The latest version of the integration
+   */
   version: string;
   versionCreatedAt: Date;
+  versions?: Array<IntegrationVersion> | undefined;
 };
 
 /** @internal */
@@ -43,6 +53,7 @@ export const Integration$inboundSchema: z.ZodType<
   version_created_at: z.string().datetime({ offset: true }).transform(v =>
     new Date(v)
   ),
+  versions: z.array(IntegrationVersion$inboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     "package_description": "packageDescription",
@@ -73,6 +84,7 @@ export type Integration$Outbound = {
   tool_names: Array<string>;
   version: string;
   version_created_at: string;
+  versions?: Array<IntegrationVersion$Outbound> | undefined;
 };
 
 /** @internal */
@@ -93,6 +105,7 @@ export const Integration$outboundSchema: z.ZodType<
   toolNames: z.array(z.string()),
   version: z.string(),
   versionCreatedAt: z.date().transform(v => v.toISOString()),
+  versions: z.array(IntegrationVersion$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     packageDescription: "package_description",

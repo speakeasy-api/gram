@@ -17,8 +17,8 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SwitchScopesMutationVariables = {
-  security: operations.SwitchAuthScopesSecurity;
   request?: operations.SwitchAuthScopesRequest | undefined;
+  security?: operations.SwitchAuthScopesSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -66,8 +66,8 @@ export function buildSwitchScopesMutation(
   return {
     mutationKey: mutationKeySwitchScopes(),
     mutationFn: function switchScopesMutationFn({
-      security,
       request,
+      security,
       options,
     }): Promise<SwitchScopesMutationData> {
       const mergedOptions = {
@@ -84,8 +84,8 @@ export function buildSwitchScopesMutation(
       };
       return unwrapAsync(authSwitchScopes(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

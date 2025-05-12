@@ -32,8 +32,8 @@ import { Result } from "../types/fp.js";
  */
 export function authInfo(
   client: GramCore,
-  security: operations.SessionInfoSecurity,
   request?: operations.SessionInfoRequest | undefined,
+  security?: operations.SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -51,16 +51,16 @@ export function authInfo(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.SessionInfoSecurity,
   request?: operations.SessionInfoRequest | undefined,
+  security?: operations.SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

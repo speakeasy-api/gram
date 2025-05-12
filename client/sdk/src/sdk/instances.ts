@@ -16,14 +16,14 @@ export class Instances extends ClientSDK {
    * Load all relevant data for an instance of a toolset and environment
    */
   async getBySlug(
-    security: operations.GetInstanceSecurity,
     request: operations.GetInstanceRequest,
+    security?: operations.GetInstanceSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetInstanceResult> {
     return unwrapAsync(instancesGetBySlug(
       this,
-      security,
       request,
+      security,
       options,
     ));
   }

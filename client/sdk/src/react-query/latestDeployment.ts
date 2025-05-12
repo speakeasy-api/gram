@@ -36,6 +36,7 @@ export type LatestDeploymentQueryData = components.GetLatestDeploymentResult;
  */
 export function useLatestDeployment(
   request?: operations.GetLatestDeploymentRequest | undefined,
+  security?: operations.GetLatestDeploymentSecurity | undefined,
   options?: QueryHookOptions<LatestDeploymentQueryData>,
 ): UseQueryResult<LatestDeploymentQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useLatestDeployment(
     ...buildLatestDeploymentQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useLatestDeployment(
  */
 export function useLatestDeploymentSuspense(
   request?: operations.GetLatestDeploymentRequest | undefined,
+  security?: operations.GetLatestDeploymentSecurity | undefined,
   options?: SuspenseQueryHookOptions<LatestDeploymentQueryData>,
 ): UseSuspenseQueryResult<LatestDeploymentQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useLatestDeploymentSuspense(
     ...buildLatestDeploymentQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchLatestDeployment(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.GetLatestDeploymentRequest | undefined,
+  security?: operations.GetLatestDeploymentSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildLatestDeploymentQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -87,6 +93,7 @@ export function setLatestDeploymentData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -102,6 +109,7 @@ export function invalidateLatestDeployment(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -127,6 +135,7 @@ export function invalidateAllLatestDeployment(
 export function buildLatestDeploymentQuery(
   client$: GramCore,
   request?: operations.GetLatestDeploymentRequest | undefined,
+  security?: operations.GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -136,6 +145,7 @@ export function buildLatestDeploymentQuery(
 } {
   return {
     queryKey: queryKeyLatestDeployment({
+      gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
@@ -151,6 +161,7 @@ export function buildLatestDeploymentQuery(
       return unwrapAsync(deploymentsLatest(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },
@@ -159,6 +170,7 @@ export function buildLatestDeploymentQuery(
 
 export function queryKeyLatestDeployment(
   parameters: {
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

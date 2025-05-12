@@ -18,6 +18,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type DeleteEnvironmentMutationVariables = {
   request: operations.DeleteEnvironmentRequest;
+  security?: operations.DeleteEnvironmentSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -64,6 +65,7 @@ export function buildDeleteEnvironmentMutation(
     mutationKey: mutationKeyDeleteEnvironment(),
     mutationFn: function deleteEnvironmentMutationFn({
       request,
+      security,
       options,
     }): Promise<DeleteEnvironmentMutationData> {
       const mergedOptions = {
@@ -81,6 +83,7 @@ export function buildDeleteEnvironmentMutation(
       return unwrapAsync(environmentsDeleteBySlug(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

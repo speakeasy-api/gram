@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type LogoutSecurity = {
-  sessionHeaderGramSession: string;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type LogoutRequest = {
@@ -29,7 +29,7 @@ export const LogoutSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "session_header_Gram-Session": z.string(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "session_header_Gram-Session": "sessionHeaderGramSession",
@@ -38,7 +38,7 @@ export const LogoutSecurity$inboundSchema: z.ZodType<
 
 /** @internal */
 export type LogoutSecurity$Outbound = {
-  "session_header_Gram-Session": string;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -47,7 +47,7 @@ export const LogoutSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   LogoutSecurity
 > = z.object({
-  sessionHeaderGramSession: z.string(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     sessionHeaderGramSession: "session_header_Gram-Session",

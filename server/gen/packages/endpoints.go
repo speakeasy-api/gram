@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	CreatePackage goa.Endpoint
 	UpdatePackage goa.Endpoint
+	ListPackages  goa.Endpoint
 	ListVersions  goa.Endpoint
 	Publish       goa.Endpoint
 }
@@ -29,6 +30,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreatePackage: NewCreatePackageEndpoint(s, a.APIKeyAuth),
 		UpdatePackage: NewUpdatePackageEndpoint(s, a.APIKeyAuth),
+		ListPackages:  NewListPackagesEndpoint(s, a.APIKeyAuth),
 		ListVersions:  NewListVersionsEndpoint(s, a.APIKeyAuth),
 		Publish:       NewPublishEndpoint(s, a.APIKeyAuth),
 	}
@@ -38,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreatePackage = m(e.CreatePackage)
 	e.UpdatePackage = m(e.UpdatePackage)
+	e.ListPackages = m(e.ListPackages)
 	e.ListVersions = m(e.ListVersions)
 	e.Publish = m(e.Publish)
 }
@@ -157,6 +160,65 @@ func NewUpdatePackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.UpdatePackage(ctx, p)
+	}
+}
+
+// NewListPackagesEndpoint returns an endpoint function that calls the method
+// "listPackages" of service "packages".
+func NewListPackagesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPackagesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPackages(ctx, p)
 	}
 }
 

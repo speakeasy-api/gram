@@ -79,6 +79,13 @@ type UpdatePackageResponseBody struct {
 	Package *PackageResponseBody `form:"package" json:"package" xml:"package"`
 }
 
+// ListPackagesResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body.
+type ListPackagesResponseBody struct {
+	// The list of packages
+	Packages []*PackageResponseBody `form:"packages" json:"packages" xml:"packages"`
+}
+
 // ListVersionsResponseBody is the type of the "packages" service
 // "listVersions" endpoint HTTP response body.
 type ListVersionsResponseBody struct {
@@ -427,6 +434,170 @@ type UpdatePackageUnexpectedResponseBody struct {
 // "updatePackage" endpoint HTTP response body for the "not_modified" error.
 type UpdatePackageNotModifiedResponseBody struct {
 	Location string `form:"location" json:"location" xml:"location"`
+}
+
+// ListPackagesUnauthorizedResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "unauthorized" error.
+type ListPackagesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesForbiddenResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "forbidden" error.
+type ListPackagesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesBadRequestResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "bad_request" error.
+type ListPackagesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesNotFoundResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "not_found" error.
+type ListPackagesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesConflictResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "conflict" error.
+type ListPackagesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesUnsupportedMediaResponseBody is the type of the "packages"
+// service "listPackages" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListPackagesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesInvalidResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "invalid" error.
+type ListPackagesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesInvariantViolationResponseBody is the type of the "packages"
+// service "listPackages" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListPackagesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPackagesUnexpectedResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "unexpected" error.
+type ListPackagesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // ListVersionsUnauthorizedResponseBody is the type of the "packages" service
@@ -826,6 +997,21 @@ func NewUpdatePackageResponseBody(res *packages.UpdatePackageResult) *UpdatePack
 	return body
 }
 
+// NewListPackagesResponseBody builds the HTTP response body from the result of
+// the "listPackages" endpoint of the "packages" service.
+func NewListPackagesResponseBody(res *packages.ListPackagesResult) *ListPackagesResponseBody {
+	body := &ListPackagesResponseBody{}
+	if res.Packages != nil {
+		body.Packages = make([]*PackageResponseBody, len(res.Packages))
+		for i, val := range res.Packages {
+			body.Packages[i] = marshalPackagesPackageToPackageResponseBody(val)
+		}
+	} else {
+		body.Packages = []*PackageResponseBody{}
+	}
+	return body
+}
+
 // NewListVersionsResponseBody builds the HTTP response body from the result of
 // the "listVersions" endpoint of the "packages" service.
 func NewListVersionsResponseBody(res *packages.ListVersionsResult) *ListVersionsResponseBody {
@@ -1114,6 +1300,132 @@ func NewUpdatePackageUnexpectedResponseBody(res *goa.ServiceError) *UpdatePackag
 func NewUpdatePackageNotModifiedResponseBody(res *packages.NotModified) *UpdatePackageNotModifiedResponseBody {
 	body := &UpdatePackageNotModifiedResponseBody{
 		Location: res.Location,
+	}
+	return body
+}
+
+// NewListPackagesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesUnauthorizedResponseBody(res *goa.ServiceError) *ListPackagesUnauthorizedResponseBody {
+	body := &ListPackagesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesForbiddenResponseBody builds the HTTP response body from the
+// result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesForbiddenResponseBody(res *goa.ServiceError) *ListPackagesForbiddenResponseBody {
+	body := &ListPackagesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesBadRequestResponseBody builds the HTTP response body from the
+// result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesBadRequestResponseBody(res *goa.ServiceError) *ListPackagesBadRequestResponseBody {
+	body := &ListPackagesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesNotFoundResponseBody(res *goa.ServiceError) *ListPackagesNotFoundResponseBody {
+	body := &ListPackagesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesConflictResponseBody builds the HTTP response body from the
+// result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesConflictResponseBody(res *goa.ServiceError) *ListPackagesConflictResponseBody {
+	body := &ListPackagesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPackagesUnsupportedMediaResponseBody {
+	body := &ListPackagesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesInvalidResponseBody builds the HTTP response body from the
+// result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesInvalidResponseBody(res *goa.ServiceError) *ListPackagesInvalidResponseBody {
+	body := &ListPackagesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesInvariantViolationResponseBody(res *goa.ServiceError) *ListPackagesInvariantViolationResponseBody {
+	body := &ListPackagesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPackagesUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesUnexpectedResponseBody(res *goa.ServiceError) *ListPackagesUnexpectedResponseBody {
+	body := &ListPackagesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -1411,6 +1723,17 @@ func NewUpdatePackagePayload(body *UpdatePackageRequestBody, apikeyToken *string
 			v.Keywords[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListPackagesPayload builds a packages service listPackages endpoint
+// payload.
+func NewListPackagesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *packages.ListPackagesPayload {
+	v := &packages.ListPackagesPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -17,8 +17,8 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeAPIKeyMutationVariables = {
-  security: operations.RevokeAPIKeySecurity;
   request: operations.RevokeAPIKeyRequest;
+  security?: operations.RevokeAPIKeySecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -64,8 +64,8 @@ export function buildRevokeAPIKeyMutation(
   return {
     mutationKey: mutationKeyRevokeAPIKey(),
     mutationFn: function revokeAPIKeyMutationFn({
-      security,
       request,
+      security,
       options,
     }): Promise<RevokeAPIKeyMutationData> {
       const mergedOptions = {
@@ -82,8 +82,8 @@ export function buildRevokeAPIKeyMutation(
       };
       return unwrapAsync(keysRevokeById(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

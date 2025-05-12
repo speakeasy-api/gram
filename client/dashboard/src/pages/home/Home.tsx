@@ -16,6 +16,7 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
+import { DeploymentPackage } from "@gram/client/models/components/deploymentpackage.js";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
 import { ToolEntry } from "@gram/client/models/components/toolentry.js";
 import {
@@ -26,18 +27,21 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
-import { CheckIcon } from "lucide-react";
 import { Suspense, useState } from "react";
 import { OnboardingContent } from "../onboarding/Onboarding";
 import { CreateThingCard } from "../toolsets/Toolsets";
 
 function DeploymentCards() {
-  const { data: deployment, refetch } = useLatestDeployment();
+  const { data: deployment, refetch, isLoading } = useLatestDeployment();
 
   const deploymentEmpty =
     !deployment?.deployment ||
     (deployment.deployment.openapiv3Assets.length === 0 &&
       deployment.deployment.packages.length === 0);
+
+  if (isLoading) {
+    return <Cards loading={true} />;
+  }
 
   if (deploymentEmpty) {
     return <OnboardingContent onOnboardingComplete={() => refetch()} />;
@@ -133,7 +137,11 @@ function DeploymentTools({
       </Heading>
       <Cards>
         {deployment.packages.map((pkg) => (
-          <PackageCard key={pkg.id} packageId={pkg.id} />
+          <PackageCard
+            key={pkg.id}
+            deploymentPackage={pkg}
+            onUpdate={onNewDeployment}
+          />
         ))}
         <CreateThingCard onClick={() => routes.integrations.goTo()}>
           + Add Integration
@@ -287,27 +295,62 @@ function DeploymentCard({
   );
 }
 
-function PackageCard({ packageId }: { packageId: string }) {
+function PackageCard({
+  deploymentPackage,
+  onUpdate,
+}: {
+  deploymentPackage: DeploymentPackage;
+  onUpdate: () => void;
+}) {
   const routes = useRoutes();
+  const client = useSdkClient();
   const { data: integrations } = useListIntegrations();
 
   const pkg = integrations?.integrations?.find(
-    (i) => i.packageId === packageId
+    (i) => i.packageId === deploymentPackage.id
   );
 
   if (!pkg) {
     return null;
   }
 
-  const handleDisable = async () => {
+  const handleDisable = () => {
     routes.integrations.goTo();
   };
 
+  const handleUpdate = async () => {
+    const confirmed = confirm(
+      "Update from " + deploymentPackage.version + " to " + pkg.version + "?"
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await client.deployments.evolveDeployment({
+      evolveForm: {
+        upsertPackages: [
+          {
+            name: pkg.packageName,
+            version: pkg.version,
+          },
+        ],
+      },
+    });
+
+    onUpdate();
+  };
+
+  // TODO: Potentially a little weird that we show the latest summary etc. even if you haven't updated to the latest version
   return (
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Card.Title>{pkg.packageTitle}</Card.Title>
+          <Card.Title>
+            {pkg.packageTitle}
+            <span className="text-sm text-muted-foreground ml-2">
+              v{deploymentPackage.version}
+            </span>
+          </Card.Title>
           <div className="flex gap-2 items-center">
             <Badge size="md">Third Party</Badge>
             <ToolsBadge tools={pkg.toolNames} size="md" />
@@ -324,8 +367,12 @@ function PackageCard({ packageId }: { packageId: string }) {
         </Stack>
       </Card.Header>
       <Card.Footer>
-        <Button variant="outline" onClick={handleDisable}>
-          <CheckIcon className="w-4 h-4" />
+        {pkg.version !== deploymentPackage.version && (
+          <Button onClick={handleUpdate} icon="circle-alert">
+            Update Available
+          </Button>
+        )}
+        <Button variant="outline" onClick={handleDisable} icon="check">
           Enabled
         </Button>
       </Card.Footer>

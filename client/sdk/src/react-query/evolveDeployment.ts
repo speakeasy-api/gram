@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type EvolveDeploymentMutationVariables = {
   request: operations.EvolveDeploymentRequest;
+  security?: operations.EvolveDeploymentSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildEvolveDeploymentMutation(
     mutationKey: mutationKeyEvolveDeployment(),
     mutationFn: function evolveDeploymentMutationFn({
       request,
+      security,
       options,
     }): Promise<EvolveDeploymentMutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildEvolveDeploymentMutation(
       return unwrapAsync(deploymentsEvolveDeployment(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

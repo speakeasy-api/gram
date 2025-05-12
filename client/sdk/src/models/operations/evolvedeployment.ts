@@ -9,7 +9,26 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type EvolveDeploymentSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type EvolveDeploymentSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type EvolveDeploymentSecurity = {
+  option1?: EvolveDeploymentSecurityOption1 | undefined;
+  option2?: EvolveDeploymentSecurityOption2 | undefined;
+};
+
 export type EvolveDeploymentRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -22,16 +41,227 @@ export type EvolveDeploymentRequest = {
 };
 
 /** @internal */
+export const EvolveDeploymentSecurityOption1$inboundSchema: z.ZodType<
+  EvolveDeploymentSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type EvolveDeploymentSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const EvolveDeploymentSecurityOption1$outboundSchema: z.ZodType<
+  EvolveDeploymentSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  EvolveDeploymentSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace EvolveDeploymentSecurityOption1$ {
+  /** @deprecated use `EvolveDeploymentSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = EvolveDeploymentSecurityOption1$inboundSchema;
+  /** @deprecated use `EvolveDeploymentSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = EvolveDeploymentSecurityOption1$outboundSchema;
+  /** @deprecated use `EvolveDeploymentSecurityOption1$Outbound` instead. */
+  export type Outbound = EvolveDeploymentSecurityOption1$Outbound;
+}
+
+export function evolveDeploymentSecurityOption1ToJSON(
+  evolveDeploymentSecurityOption1: EvolveDeploymentSecurityOption1,
+): string {
+  return JSON.stringify(
+    EvolveDeploymentSecurityOption1$outboundSchema.parse(
+      evolveDeploymentSecurityOption1,
+    ),
+  );
+}
+
+export function evolveDeploymentSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<EvolveDeploymentSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => EvolveDeploymentSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EvolveDeploymentSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const EvolveDeploymentSecurityOption2$inboundSchema: z.ZodType<
+  EvolveDeploymentSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type EvolveDeploymentSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const EvolveDeploymentSecurityOption2$outboundSchema: z.ZodType<
+  EvolveDeploymentSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  EvolveDeploymentSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace EvolveDeploymentSecurityOption2$ {
+  /** @deprecated use `EvolveDeploymentSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = EvolveDeploymentSecurityOption2$inboundSchema;
+  /** @deprecated use `EvolveDeploymentSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = EvolveDeploymentSecurityOption2$outboundSchema;
+  /** @deprecated use `EvolveDeploymentSecurityOption2$Outbound` instead. */
+  export type Outbound = EvolveDeploymentSecurityOption2$Outbound;
+}
+
+export function evolveDeploymentSecurityOption2ToJSON(
+  evolveDeploymentSecurityOption2: EvolveDeploymentSecurityOption2,
+): string {
+  return JSON.stringify(
+    EvolveDeploymentSecurityOption2$outboundSchema.parse(
+      evolveDeploymentSecurityOption2,
+    ),
+  );
+}
+
+export function evolveDeploymentSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<EvolveDeploymentSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => EvolveDeploymentSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EvolveDeploymentSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const EvolveDeploymentSecurity$inboundSchema: z.ZodType<
+  EvolveDeploymentSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => EvolveDeploymentSecurityOption1$inboundSchema)
+    .optional(),
+  Option2: z.lazy(() => EvolveDeploymentSecurityOption2$inboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
+export type EvolveDeploymentSecurity$Outbound = {
+  Option1?: EvolveDeploymentSecurityOption1$Outbound | undefined;
+  Option2?: EvolveDeploymentSecurityOption2$Outbound | undefined;
+};
+
+/** @internal */
+export const EvolveDeploymentSecurity$outboundSchema: z.ZodType<
+  EvolveDeploymentSecurity$Outbound,
+  z.ZodTypeDef,
+  EvolveDeploymentSecurity
+> = z.object({
+  option1: z.lazy(() => EvolveDeploymentSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => EvolveDeploymentSecurityOption2$outboundSchema)
+    .optional(),
+}).transform((v) => {
+  return remap$(v, {
+    option1: "Option1",
+    option2: "Option2",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace EvolveDeploymentSecurity$ {
+  /** @deprecated use `EvolveDeploymentSecurity$inboundSchema` instead. */
+  export const inboundSchema = EvolveDeploymentSecurity$inboundSchema;
+  /** @deprecated use `EvolveDeploymentSecurity$outboundSchema` instead. */
+  export const outboundSchema = EvolveDeploymentSecurity$outboundSchema;
+  /** @deprecated use `EvolveDeploymentSecurity$Outbound` instead. */
+  export type Outbound = EvolveDeploymentSecurity$Outbound;
+}
+
+export function evolveDeploymentSecurityToJSON(
+  evolveDeploymentSecurity: EvolveDeploymentSecurity,
+): string {
+  return JSON.stringify(
+    EvolveDeploymentSecurity$outboundSchema.parse(evolveDeploymentSecurity),
+  );
+}
+
+export function evolveDeploymentSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<EvolveDeploymentSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => EvolveDeploymentSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EvolveDeploymentSecurity' from JSON`,
+  );
+}
+
+/** @internal */
 export const EvolveDeploymentRequest$inboundSchema: z.ZodType<
   EvolveDeploymentRequest,
   z.ZodTypeDef,
   unknown
 > = z.object({
+  "Gram-Key": z.string().optional(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
   EvolveForm: components.EvolveForm$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
     "Gram-Project": "gramProject",
     "EvolveForm": "evolveForm",
@@ -40,6 +270,7 @@ export const EvolveDeploymentRequest$inboundSchema: z.ZodType<
 
 /** @internal */
 export type EvolveDeploymentRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   EvolveForm: components.EvolveForm$Outbound;
@@ -51,11 +282,13 @@ export const EvolveDeploymentRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   EvolveDeploymentRequest
 > = z.object({
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
   evolveForm: components.EvolveForm$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
     evolveForm: "EvolveForm",

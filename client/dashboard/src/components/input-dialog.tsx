@@ -1,7 +1,7 @@
 import { Stack } from "@speakeasy-api/moonshine";
+import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
-import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { ImageUpload } from "./upload";
 
@@ -12,9 +12,10 @@ type InputProps =
       placeholder: string;
       value: string;
       onChange: (value: string) => void;
-      validate?: (value: string) => boolean;
+      validate?: (value: string) => string | boolean;
       onSubmit?: (value: string) => void;
       optional?: boolean;
+      disabled?: boolean;
     }
   | {
       type: "image";
@@ -88,10 +89,15 @@ export function InputDialog({
                   value={input.value}
                   onChange={(e) => input.onChange(e.target.value)}
                   onEnter={submit}
+                  disabled={input.disabled}
+                  validate={input.validate}
                 />
               )}
               {input.type === "image" && (
-                <ImageUpload onUpload={(asset) => input.onChange(asset.id)} />
+                <ImageUpload
+                  onUpload={(asset) => input.onChange(asset.id)}
+                  existingAssetId={input.value}
+                />
               )}
             </Stack>
           ))}

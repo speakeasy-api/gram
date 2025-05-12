@@ -64,6 +64,56 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+func (s *Service) ListPackages(ctx context.Context, form *gen.ListPackagesPayload) (res *gen.ListPackagesResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
+
+	packages, err := s.repo.ListPackages(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing packages").Log(ctx, logger)
+	}
+
+	result := &gen.ListPackagesResult{
+		Packages: make([]*gen.Package, 0, len(packages)),
+	}
+
+	for _, pkg := range packages {
+		versionString := Semver{
+			Valid:      true,
+			Major:      pkg.VersionMajor.Int64,
+			Minor:      pkg.VersionMinor.Int64,
+			Patch:      pkg.VersionPatch.Int64,
+			Prerelease: conv.PtrValOr(conv.FromPGText[string](pkg.VersionPrerelease), ""),
+			Build:      conv.PtrValOr(conv.FromPGText[string](pkg.VersionBuild), ""),
+		}.String()
+
+		imageID := pkg.Package.ImageAssetID.UUID.String()
+		result.Packages = append(result.Packages, &gen.Package{
+			ID:             pkg.Package.ID.String(),
+			Name:           pkg.Package.Name,
+			Title:          &pkg.Package.Title.String,
+			Summary:        &pkg.Package.Summary.String,
+			URL:            &pkg.Package.Url.String,
+			Description:    &pkg.Package.DescriptionHtml.String,
+			DescriptionRaw: &pkg.Package.DescriptionRaw.String,
+			Keywords:       pkg.Package.Keywords,
+			OrganizationID: pkg.Package.OrganizationID,
+			ProjectID:      pkg.Package.ProjectID.String(),
+			LatestVersion:  &versionString,
+			ImageAssetID:   &imageID,
+			CreatedAt:      pkg.Package.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:      pkg.Package.UpdatedAt.Time.Format(time.RFC3339),
+			DeletedAt:      conv.Ptr(pkg.Package.DeletedAt.Time.Format(time.RFC3339)),
+		})
+	}
+
+	return result, nil
+}
+
 func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayload) (res *gen.CreatePackageResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

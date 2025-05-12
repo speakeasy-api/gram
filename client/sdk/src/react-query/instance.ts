@@ -35,16 +35,16 @@ export type InstanceQueryData = components.GetInstanceResult;
  * Load all relevant data for an instance of a toolset and environment
  */
 export function useInstance(
-  security: operations.GetInstanceSecurity,
   request: operations.GetInstanceRequest,
+  security?: operations.GetInstanceSecurity | undefined,
   options?: QueryHookOptions<InstanceQueryData>,
 ): UseQueryResult<InstanceQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildInstanceQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -58,16 +58,16 @@ export function useInstance(
  * Load all relevant data for an instance of a toolset and environment
  */
 export function useInstanceSuspense(
-  security: operations.GetInstanceSecurity,
   request: operations.GetInstanceRequest,
+  security?: operations.GetInstanceSecurity | undefined,
   options?: SuspenseQueryHookOptions<InstanceQueryData>,
 ): UseSuspenseQueryResult<InstanceQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildInstanceQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -77,14 +77,14 @@ export function useInstanceSuspense(
 export function prefetchInstance(
   queryClient: QueryClient,
   client$: GramCore,
-  security: operations.GetInstanceSecurity,
   request: operations.GetInstanceRequest,
+  security?: operations.GetInstanceSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildInstanceQuery(
       client$,
-      security,
       request,
+      security,
     ),
   });
 }
@@ -138,8 +138,8 @@ export function invalidateAllInstance(
 
 export function buildInstanceQuery(
   client$: GramCore,
-  security: operations.GetInstanceSecurity,
   request: operations.GetInstanceRequest,
+  security?: operations.GetInstanceSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -162,8 +162,8 @@ export function buildInstanceQuery(
 
       return unwrapAsync(instancesGetBySlug(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

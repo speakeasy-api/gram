@@ -35,16 +35,16 @@ export type ListAPIKeysQueryData = components.ListKeysResult;
  * List all api keys for an organization
  */
 export function useListAPIKeys(
-  security: operations.ListAPIKeysSecurity,
   request?: operations.ListAPIKeysRequest | undefined,
+  security?: operations.ListAPIKeysSecurity | undefined,
   options?: QueryHookOptions<ListAPIKeysQueryData>,
 ): UseQueryResult<ListAPIKeysQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildListAPIKeysQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -58,16 +58,16 @@ export function useListAPIKeys(
  * List all api keys for an organization
  */
 export function useListAPIKeysSuspense(
-  security: operations.ListAPIKeysSecurity,
   request?: operations.ListAPIKeysRequest | undefined,
+  security?: operations.ListAPIKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListAPIKeysQueryData>,
 ): UseSuspenseQueryResult<ListAPIKeysQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListAPIKeysQuery(
       client,
-      security,
       request,
+      security,
       options,
     ),
     ...options,
@@ -77,14 +77,14 @@ export function useListAPIKeysSuspense(
 export function prefetchListAPIKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  security: operations.ListAPIKeysSecurity,
   request?: operations.ListAPIKeysRequest | undefined,
+  security?: operations.ListAPIKeysSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListAPIKeysQuery(
       client$,
-      security,
       request,
+      security,
     ),
   });
 }
@@ -124,8 +124,8 @@ export function invalidateAllListAPIKeys(
 
 export function buildListAPIKeysQuery(
   client$: GramCore,
-  security: operations.ListAPIKeysSecurity,
   request?: operations.ListAPIKeysRequest | undefined,
+  security?: operations.ListAPIKeysSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -144,8 +144,8 @@ export function buildListAPIKeysQuery(
 
       return unwrapAsync(keysList(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

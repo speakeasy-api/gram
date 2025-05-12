@@ -1,19 +1,20 @@
-import { ToolsetHeader } from "./Toolset";
+import { HttpRoute } from "@/components/http-route";
 import { Page } from "@/components/page-layout";
-import { Column, Stack, Table } from "@speakeasy-api/moonshine";
-import { useListTools } from "@gram/client/react-query/listTools.js";
-import { Type } from "@/components/ui/type";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { ToolEntry } from "@gram/client/models/components";
 import { Badge } from "@/components/ui/badge";
-import { HttpMethod } from "@/components/http-route";
-import { useParams } from "react-router";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { groupTools } from "@/lib/toolNames";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dot } from "@/components/ui/dot";
+import { SkeletonTable } from "@/components/ui/skeleton";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Type } from "@/components/ui/type";
+import { groupTools } from "@/lib/toolNames";
+import { ToolEntry } from "@gram/client/models/components";
+import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
+import { useListTools } from "@gram/client/react-query/listTools.js";
+import { Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router";
+import { ToolsetHeader } from "./Toolset";
 
 type Tool = ToolEntry & {
   enabled: boolean;
@@ -93,27 +94,29 @@ const columns: Column<Tool>[] = [
     header: "Name",
     key: "name",
     render: (row) => (
-      <Type className="text-wrap break-all">{row.displayName || row.name}</Type>
+      <Stack gap={2} className="break-all min-w-[175px] mr-[-24px]">
+        <Type className="text-wrap break-all font-medium ">
+          {row.displayName || row.name}
+        </Type>
+        <HttpRoute method={row.httpMethod} path={row.path} />
+      </Stack>
     ),
-    width: "250px",
-  },
-  {
-    header: "Method",
-    key: "httpMethod",
-    render: (row) => (
-      <HttpMethod method={row.httpMethod} variant="badge" path={row.path} />
-    ),
-    width: "0.1fr",
+    width: "0.5fr",
   },
   {
     header: "Description",
     key: "description",
     render: (row) => (
-      <SimpleTooltip tooltip={row.description}>
-        <Type muted className="line-clamp-1">
-          {row.description}
-        </Type>
-      </SimpleTooltip>
+      <Type muted className="line-clamp-2 overflow-scroll self-start">
+        <span className="text-foreground">
+          {row.summary}
+          {row.summary && <Dot className="mx-2" />}
+        </span>
+        {row.description}
+        {!row.summary && !row.description && (
+          <span className="text-muted-foreground italic">No description.</span>
+        )}
+      </Type>
     ),
   },
 ];
@@ -201,7 +204,7 @@ export function ToolSelect() {
           columns={groupColumns}
           data={toolGroups}
           rowKey={(row) => row.key}
-          className="mb-6"
+          className="mb-6 overflow-y-auto"
           hideHeader
           renderExpandedContent={(group) => (
             <Table

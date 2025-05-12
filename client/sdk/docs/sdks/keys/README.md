@@ -24,8 +24,6 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.keys.create({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     createKeyForm: {
       name: "<value>",
     },
@@ -52,8 +50,6 @@ const gram = new GramCore();
 
 async function run() {
   const res = await keysCreate(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     createKeyForm: {
       name: "<value>",
     },
@@ -123,9 +119,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.keys.list({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const result = await gram.keys.list();
 
   // Handle the result
   console.log(result);
@@ -147,9 +141,7 @@ import { keysList } from "@gram/client/funcs/keysList.js";
 const gram = new GramCore();
 
 async function run() {
-  const res = await keysList(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  });
+  const res = await keysList(gram);
 
   if (!res.ok) {
     throw res.error;
@@ -227,8 +219,6 @@ const gram = new Gram();
 
 async function run() {
   await gram.keys.revokeById({
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     id: "<id>",
   });
 
@@ -252,8 +242,6 @@ const gram = new GramCore();
 
 async function run() {
   const res = await keysRevokeById(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     id: "<id>",
   });
 

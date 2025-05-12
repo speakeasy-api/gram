@@ -327,11 +327,11 @@ function ChatInner({
     useChatHistory(chatId);
 
   const instance = useInstance(
-    {},
     {
       toolsetSlug: configRef.current.toolsetSlug ?? "",
       environmentSlug: configRef.current.environmentSlug ?? undefined,
     },
+    undefined,
     {
       enabled:
         !!configRef.current.toolsetSlug && !!configRef.current.environmentSlug,
@@ -461,6 +461,7 @@ const useChatHistory = (chatId: string) => {
     {
       id: chatId,
     },
+    undefined,
     { retry: false } // Expected to fail (404) if it's a new chat
   );
 

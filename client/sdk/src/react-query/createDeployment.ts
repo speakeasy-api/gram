@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type CreateDeploymentMutationVariables = {
   request: operations.CreateDeploymentRequest;
+  security?: operations.CreateDeploymentSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildCreateDeploymentMutation(
     mutationKey: mutationKeyCreateDeployment(),
     mutationFn: function createDeploymentMutationFn({
       request,
+      security,
       options,
     }): Promise<CreateDeploymentMutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildCreateDeploymentMutation(
       return unwrapAsync(deploymentsCreate(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

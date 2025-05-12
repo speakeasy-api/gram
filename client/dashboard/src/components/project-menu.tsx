@@ -130,9 +130,7 @@ export function ProjectMenu() {
             title="Logout"
             Icon={() => <Icon name="log-out" />}
             onClick={async () => {
-              await client.auth.logout({
-                sessionHeaderGramSession: "",
-              });
+              await client.auth.logout();
               window.location.href = "/login";
               setOpen(false);
             }}
@@ -185,17 +183,12 @@ function ProjectSelector() {
   };
 
   const createProject = async (name: string) => {
-    const result = await client.projects.create(
-      {
-        sessionHeaderGramSession: "",
+    const result = await client.projects.create({
+      createProjectRequestBody: {
+        name,
+        organizationId: organization.id,
       },
-      {
-        createProjectRequestBody: {
-          name,
-          organizationId: organization.id,
-        },
-      }
-    );
+    });
     setCreateDialogOpen(false);
     project.switchProject(result.project.slug);
   };

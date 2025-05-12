@@ -36,6 +36,7 @@ export type ListChatsQueryData = components.ListChatsResult;
  */
 export function useListChats(
   request?: operations.ListChatsRequest | undefined,
+  security?: operations.ListChatsSecurity | undefined,
   options?: QueryHookOptions<ListChatsQueryData>,
 ): UseQueryResult<ListChatsQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useListChats(
     ...buildListChatsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useListChats(
  */
 export function useListChatsSuspense(
   request?: operations.ListChatsRequest | undefined,
+  security?: operations.ListChatsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListChatsQueryData>,
 ): UseSuspenseQueryResult<ListChatsQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useListChatsSuspense(
     ...buildListChatsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchListChats(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.ListChatsRequest | undefined,
+  security?: operations.ListChatsSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListChatsQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -127,6 +133,7 @@ export function invalidateAllListChats(
 export function buildListChatsQuery(
   client$: GramCore,
   request?: operations.ListChatsRequest | undefined,
+  security?: operations.ListChatsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -147,6 +154,7 @@ export function buildListChatsQuery(
       return unwrapAsync(chatList(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

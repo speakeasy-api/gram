@@ -17,11 +17,13 @@ export class Tools extends ClientSDK {
    */
   async list(
     request?: operations.ListToolsRequest | undefined,
+    security?: operations.ListToolsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListToolsResult> {
     return unwrapAsync(toolsList(
       this,
       request,
+      security,
       options,
     ));
   }

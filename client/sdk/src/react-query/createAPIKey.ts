@@ -18,8 +18,8 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateAPIKeyMutationVariables = {
-  security: operations.CreateAPIKeySecurity;
   request: operations.CreateAPIKeyRequest;
+  security?: operations.CreateAPIKeySecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,8 +65,8 @@ export function buildCreateAPIKeyMutation(
   return {
     mutationKey: mutationKeyCreateAPIKey(),
     mutationFn: function createAPIKeyMutationFn({
-      security,
       request,
+      security,
       options,
     }): Promise<CreateAPIKeyMutationData> {
       const mergedOptions = {
@@ -83,8 +83,8 @@ export function buildCreateAPIKeyMutation(
       };
       return unwrapAsync(keysCreate(
         client$,
-        security,
         request,
+        security,
         mergedOptions,
       ));
     },

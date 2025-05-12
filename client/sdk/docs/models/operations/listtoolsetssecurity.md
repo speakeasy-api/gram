@@ -1,11 +1,11 @@
-# Security
+# ListToolsetsSecurity
 
 ## Example Usage
 
 ```typescript
-import { Security } from "@gram/client/models/components";
+import { ListToolsetsSecurity } from "@gram/client/models/operations";
 
-let value: Security = {};
+let value: ListToolsetsSecurity = {};
 ```
 
 ## Fields

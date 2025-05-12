@@ -10,10 +10,15 @@ import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type CreateProjectSecurity = {
-  sessionHeaderGramSession: string;
+  apikeyHeaderGramKey?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type CreateProjectRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -27,16 +32,19 @@ export const CreateProjectSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "session_header_Gram-Session": z.string(),
+  "apikey_header_Gram-Key": z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
     "session_header_Gram-Session": "sessionHeaderGramSession",
   });
 });
 
 /** @internal */
 export type CreateProjectSecurity$Outbound = {
-  "session_header_Gram-Session": string;
+  "apikey_header_Gram-Key"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -45,9 +53,11 @@ export const CreateProjectSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreateProjectSecurity
 > = z.object({
-  sessionHeaderGramSession: z.string(),
+  apikeyHeaderGramKey: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
@@ -89,10 +99,12 @@ export const CreateProjectRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  "Gram-Key": z.string().optional(),
   "Gram-Session": z.string().optional(),
   CreateProjectRequestBody: components.CreateProjectRequestBody$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
     "CreateProjectRequestBody": "createProjectRequestBody",
   });
@@ -100,6 +112,7 @@ export const CreateProjectRequest$inboundSchema: z.ZodType<
 
 /** @internal */
 export type CreateProjectRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   CreateProjectRequestBody: components.CreateProjectRequestBody$Outbound;
 };
@@ -110,10 +123,12 @@ export const CreateProjectRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreateProjectRequest
 > = z.object({
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   createProjectRequestBody: components.CreateProjectRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     createProjectRequestBody: "CreateProjectRequestBody",
   });

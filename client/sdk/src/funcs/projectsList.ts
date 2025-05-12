@@ -33,8 +33,8 @@ import { Result } from "../types/fp.js";
  */
 export function projectsList(
   client: GramCore,
-  security: operations.ListProjectsSecurity,
   request: operations.ListProjectsRequest,
+  security?: operations.ListProjectsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -52,16 +52,16 @@ export function projectsList(
 > {
   return new APIPromise($do(
     client,
-    security,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  security: operations.ListProjectsSecurity,
   request: operations.ListProjectsRequest,
+  security?: operations.ListProjectsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -106,6 +106,13 @@ async function $do(
   }));
 
   const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Authorization",
+        type: "apiKey:header",
+        value: security?.apikeyHeaderAuthorization,
+      },
+    ],
     [
       {
         fieldName: "Gram-Session",

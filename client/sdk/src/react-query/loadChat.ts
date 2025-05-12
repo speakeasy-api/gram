@@ -36,6 +36,7 @@ export type LoadChatQueryData = components.Chat;
  */
 export function useLoadChat(
   request: operations.LoadChatRequest,
+  security?: operations.LoadChatSecurity | undefined,
   options?: QueryHookOptions<LoadChatQueryData>,
 ): UseQueryResult<LoadChatQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useLoadChat(
     ...buildLoadChatQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useLoadChat(
  */
 export function useLoadChatSuspense(
   request: operations.LoadChatRequest,
+  security?: operations.LoadChatSecurity | undefined,
   options?: SuspenseQueryHookOptions<LoadChatQueryData>,
 ): UseSuspenseQueryResult<LoadChatQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useLoadChatSuspense(
     ...buildLoadChatQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchLoadChat(
   queryClient: QueryClient,
   client$: GramCore,
   request: operations.LoadChatRequest,
+  security?: operations.LoadChatSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildLoadChatQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -129,6 +135,7 @@ export function invalidateAllLoadChat(
 export function buildLoadChatQuery(
   client$: GramCore,
   request: operations.LoadChatRequest,
+  security?: operations.LoadChatSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -150,6 +157,7 @@ export function buildLoadChatQuery(
       return unwrapAsync(chatLoad(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

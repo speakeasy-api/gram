@@ -20,11 +20,13 @@ export class Environments extends ClientSDK {
    */
   async create(
     request: operations.CreateEnvironmentRequest,
+    security?: operations.CreateEnvironmentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Environment> {
     return unwrapAsync(environmentsCreate(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -37,11 +39,13 @@ export class Environments extends ClientSDK {
    */
   async deleteBySlug(
     request: operations.DeleteEnvironmentRequest,
+    security?: operations.DeleteEnvironmentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteBySlug(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -54,11 +58,13 @@ export class Environments extends ClientSDK {
    */
   async list(
     request?: operations.ListEnvironmentsRequest | undefined,
+    security?: operations.ListEnvironmentsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListEnvironmentsResult> {
     return unwrapAsync(environmentsList(
       this,
       request,
+      security,
       options,
     ));
   }
@@ -71,11 +77,13 @@ export class Environments extends ClientSDK {
    */
   async updateBySlug(
     request: operations.UpdateEnvironmentRequest,
+    security?: operations.UpdateEnvironmentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Environment> {
     return unwrapAsync(environmentsUpdateBySlug(
       this,
       request,
+      security,
       options,
     ));
   }

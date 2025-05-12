@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ServeImageSecurity = {
-  sessionHeaderGramSession: string;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type ServeImageRequest = {
@@ -34,7 +34,7 @@ export const ServeImageSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  "session_header_Gram-Session": z.string(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "session_header_Gram-Session": "sessionHeaderGramSession",
@@ -43,7 +43,7 @@ export const ServeImageSecurity$inboundSchema: z.ZodType<
 
 /** @internal */
 export type ServeImageSecurity$Outbound = {
-  "session_header_Gram-Session": string;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -52,7 +52,7 @@ export const ServeImageSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ServeImageSecurity
 > = z.object({
-  sessionHeaderGramSession: z.string(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     sessionHeaderGramSession: "session_header_Gram-Session",

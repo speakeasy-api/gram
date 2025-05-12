@@ -19,6 +19,7 @@ import { MutationHookOptions } from "./_types.js";
 
 export type PublishPackageMutationVariables = {
   request: operations.PublishRequest;
+  security?: operations.PublishSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -65,6 +66,7 @@ export function buildPublishPackageMutation(
     mutationKey: mutationKeyPublishPackage(),
     mutationFn: function publishPackageMutationFn({
       request,
+      security,
       options,
     }): Promise<PublishPackageMutationData> {
       const mergedOptions = {
@@ -82,6 +84,7 @@ export function buildPublishPackageMutation(
       return unwrapAsync(packagesPublish(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },

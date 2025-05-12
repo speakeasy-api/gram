@@ -74,6 +74,29 @@ var _ = Service("packages", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdatePackage"}`)
 	})
 
+	Method("listPackages", func() {
+		Description("List all packages for a project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListPackagesResult)
+
+		HTTP(func() {
+			GET("/rpc/packages.list")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "listPackages")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListPackages"}`)
+	})
+
 	Method("listVersions", func() {
 		Description("List published versions of a package.")
 
@@ -189,6 +212,12 @@ var CreatePackageResult = Type("CreatePackageResult", func() {
 	Required("package")
 
 	Attribute("package", shared.ProjectPackage, "The newly created package")
+})
+
+var ListPackagesResult = Type("ListPackagesResult", func() {
+	Required("packages")
+
+	Attribute("packages", ArrayOf(shared.ProjectPackage), "The list of packages")
 })
 
 var ListVersionsForm = Type("ListVersionsForm", func() {

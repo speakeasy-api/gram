@@ -29,8 +29,6 @@ const gram = new GramCore();
 
 async function run() {
   const res = await assetsServeImage(gram, {
-    sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-  }, {
     id: "<id>",
   });
 

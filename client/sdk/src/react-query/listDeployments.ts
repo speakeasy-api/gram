@@ -36,6 +36,7 @@ export type ListDeploymentsQueryData = components.ListDeploymentResult;
  */
 export function useListDeployments(
   request?: operations.ListDeploymentsRequest | undefined,
+  security?: operations.ListDeploymentsSecurity | undefined,
   options?: QueryHookOptions<ListDeploymentsQueryData>,
 ): UseQueryResult<ListDeploymentsQueryData, Error> {
   const client = useGramContext();
@@ -43,6 +44,7 @@ export function useListDeployments(
     ...buildListDeploymentsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -57,6 +59,7 @@ export function useListDeployments(
  */
 export function useListDeploymentsSuspense(
   request?: operations.ListDeploymentsRequest | undefined,
+  security?: operations.ListDeploymentsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListDeploymentsQueryData>,
 ): UseSuspenseQueryResult<ListDeploymentsQueryData, Error> {
   const client = useGramContext();
@@ -64,6 +67,7 @@ export function useListDeploymentsSuspense(
     ...buildListDeploymentsQuery(
       client,
       request,
+      security,
       options,
     ),
     ...options,
@@ -74,11 +78,13 @@ export function prefetchListDeployments(
   queryClient: QueryClient,
   client$: GramCore,
   request?: operations.ListDeploymentsRequest | undefined,
+  security?: operations.ListDeploymentsSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListDeploymentsQuery(
       client$,
       request,
+      security,
     ),
   });
 }
@@ -88,6 +94,7 @@ export function setListDeploymentsData(
   queryKeyBase: [
     parameters: {
       cursor?: string | undefined;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -104,6 +111,7 @@ export function invalidateListDeployments(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       cursor?: string | undefined;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -129,6 +137,7 @@ export function invalidateAllListDeployments(
 export function buildListDeploymentsQuery(
   client$: GramCore,
   request?: operations.ListDeploymentsRequest | undefined,
+  security?: operations.ListDeploymentsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -137,6 +146,7 @@ export function buildListDeploymentsQuery(
   return {
     queryKey: queryKeyListDeployments({
       cursor: request?.cursor,
+      gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
@@ -152,6 +162,7 @@ export function buildListDeploymentsQuery(
       return unwrapAsync(deploymentsList(
         client$,
         request,
+        security,
         mergedOptions,
       ));
     },
@@ -161,6 +172,7 @@ export function buildListDeploymentsQuery(
 export function queryKeyListDeployments(
   parameters: {
     cursor?: string | undefined;
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

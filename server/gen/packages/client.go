@@ -17,15 +17,17 @@ import (
 type Client struct {
 	CreatePackageEndpoint goa.Endpoint
 	UpdatePackageEndpoint goa.Endpoint
+	ListPackagesEndpoint  goa.Endpoint
 	ListVersionsEndpoint  goa.Endpoint
 	PublishEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "packages" service client given the endpoints.
-func NewClient(createPackage, updatePackage, listVersions, publish goa.Endpoint) *Client {
+func NewClient(createPackage, updatePackage, listPackages, listVersions, publish goa.Endpoint) *Client {
 	return &Client{
 		CreatePackageEndpoint: createPackage,
 		UpdatePackageEndpoint: updatePackage,
+		ListPackagesEndpoint:  listPackages,
 		ListVersionsEndpoint:  listVersions,
 		PublishEndpoint:       publish,
 	}
@@ -72,6 +74,27 @@ func (c *Client) UpdatePackage(ctx context.Context, p *UpdatePackagePayload) (re
 		return
 	}
 	return ires.(*UpdatePackageResult), nil
+}
+
+// ListPackages calls the "listPackages" endpoint of the "packages" service.
+// ListPackages may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPackages(ctx context.Context, p *ListPackagesPayload) (res *ListPackagesResult, err error) {
+	var ires any
+	ires, err = c.ListPackagesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListPackagesResult), nil
 }
 
 // ListVersions calls the "listVersions" endpoint of the "packages" service.

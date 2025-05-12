@@ -9,7 +9,26 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type CreatePackageSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type CreatePackageSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type CreatePackageSecurity = {
+  option1?: CreatePackageSecurityOption1 | undefined;
+  option2?: CreatePackageSecurityOption2 | undefined;
+};
+
 export type CreatePackageRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -22,16 +41,223 @@ export type CreatePackageRequest = {
 };
 
 /** @internal */
+export const CreatePackageSecurityOption1$inboundSchema: z.ZodType<
+  CreatePackageSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type CreatePackageSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const CreatePackageSecurityOption1$outboundSchema: z.ZodType<
+  CreatePackageSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  CreatePackageSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CreatePackageSecurityOption1$ {
+  /** @deprecated use `CreatePackageSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = CreatePackageSecurityOption1$inboundSchema;
+  /** @deprecated use `CreatePackageSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = CreatePackageSecurityOption1$outboundSchema;
+  /** @deprecated use `CreatePackageSecurityOption1$Outbound` instead. */
+  export type Outbound = CreatePackageSecurityOption1$Outbound;
+}
+
+export function createPackageSecurityOption1ToJSON(
+  createPackageSecurityOption1: CreatePackageSecurityOption1,
+): string {
+  return JSON.stringify(
+    CreatePackageSecurityOption1$outboundSchema.parse(
+      createPackageSecurityOption1,
+    ),
+  );
+}
+
+export function createPackageSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<CreatePackageSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CreatePackageSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreatePackageSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const CreatePackageSecurityOption2$inboundSchema: z.ZodType<
+  CreatePackageSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type CreatePackageSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const CreatePackageSecurityOption2$outboundSchema: z.ZodType<
+  CreatePackageSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  CreatePackageSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CreatePackageSecurityOption2$ {
+  /** @deprecated use `CreatePackageSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = CreatePackageSecurityOption2$inboundSchema;
+  /** @deprecated use `CreatePackageSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = CreatePackageSecurityOption2$outboundSchema;
+  /** @deprecated use `CreatePackageSecurityOption2$Outbound` instead. */
+  export type Outbound = CreatePackageSecurityOption2$Outbound;
+}
+
+export function createPackageSecurityOption2ToJSON(
+  createPackageSecurityOption2: CreatePackageSecurityOption2,
+): string {
+  return JSON.stringify(
+    CreatePackageSecurityOption2$outboundSchema.parse(
+      createPackageSecurityOption2,
+    ),
+  );
+}
+
+export function createPackageSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<CreatePackageSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CreatePackageSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreatePackageSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const CreatePackageSecurity$inboundSchema: z.ZodType<
+  CreatePackageSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => CreatePackageSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => CreatePackageSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
+export type CreatePackageSecurity$Outbound = {
+  Option1?: CreatePackageSecurityOption1$Outbound | undefined;
+  Option2?: CreatePackageSecurityOption2$Outbound | undefined;
+};
+
+/** @internal */
+export const CreatePackageSecurity$outboundSchema: z.ZodType<
+  CreatePackageSecurity$Outbound,
+  z.ZodTypeDef,
+  CreatePackageSecurity
+> = z.object({
+  option1: z.lazy(() => CreatePackageSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => CreatePackageSecurityOption2$outboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    option1: "Option1",
+    option2: "Option2",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace CreatePackageSecurity$ {
+  /** @deprecated use `CreatePackageSecurity$inboundSchema` instead. */
+  export const inboundSchema = CreatePackageSecurity$inboundSchema;
+  /** @deprecated use `CreatePackageSecurity$outboundSchema` instead. */
+  export const outboundSchema = CreatePackageSecurity$outboundSchema;
+  /** @deprecated use `CreatePackageSecurity$Outbound` instead. */
+  export type Outbound = CreatePackageSecurity$Outbound;
+}
+
+export function createPackageSecurityToJSON(
+  createPackageSecurity: CreatePackageSecurity,
+): string {
+  return JSON.stringify(
+    CreatePackageSecurity$outboundSchema.parse(createPackageSecurity),
+  );
+}
+
+export function createPackageSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<CreatePackageSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => CreatePackageSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreatePackageSecurity' from JSON`,
+  );
+}
+
+/** @internal */
 export const CreatePackageRequest$inboundSchema: z.ZodType<
   CreatePackageRequest,
   z.ZodTypeDef,
   unknown
 > = z.object({
+  "Gram-Key": z.string().optional(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
   CreatePackageForm: components.CreatePackageForm$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
     "Gram-Project": "gramProject",
     "CreatePackageForm": "createPackageForm",
@@ -40,6 +266,7 @@ export const CreatePackageRequest$inboundSchema: z.ZodType<
 
 /** @internal */
 export type CreatePackageRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   CreatePackageForm: components.CreatePackageForm$Outbound;
@@ -51,11 +278,13 @@ export const CreatePackageRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CreatePackageRequest
 > = z.object({
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
   createPackageForm: components.CreatePackageForm$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
     createPackageForm: "CreatePackageForm",

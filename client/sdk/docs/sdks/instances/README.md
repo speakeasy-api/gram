@@ -22,11 +22,6 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.instances.getBySlug({
-    option1: {
-      projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-      sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-    },
-  }, {
     toolsetSlug: "<value>",
   });
 
@@ -51,11 +46,6 @@ const gram = new GramCore();
 
 async function run() {
   const res = await instancesGetBySlug(gram, {
-    option1: {
-      projectSlugHeaderGramProject: process.env["GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT"] ?? "",
-      sessionHeaderGramSession: process.env["GRAM_SESSION_HEADER_GRAM_SESSION"] ?? "",
-    },
-  }, {
     toolsetSlug: "<value>",
   });
 

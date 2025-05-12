@@ -8,8 +8,27 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type UploadImageSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type UploadImageSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
+export type UploadImageSecurity = {
+  option1?: UploadImageSecurityOption1 | undefined;
+  option2?: UploadImageSecurityOption2 | undefined;
+};
+
 export type UploadImageRequest = {
   contentLength: number;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * project header
    */
@@ -21,17 +40,220 @@ export type UploadImageRequest = {
 };
 
 /** @internal */
+export const UploadImageSecurityOption1$inboundSchema: z.ZodType<
+  UploadImageSecurityOption1,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type UploadImageSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const UploadImageSecurityOption1$outboundSchema: z.ZodType<
+  UploadImageSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  UploadImageSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UploadImageSecurityOption1$ {
+  /** @deprecated use `UploadImageSecurityOption1$inboundSchema` instead. */
+  export const inboundSchema = UploadImageSecurityOption1$inboundSchema;
+  /** @deprecated use `UploadImageSecurityOption1$outboundSchema` instead. */
+  export const outboundSchema = UploadImageSecurityOption1$outboundSchema;
+  /** @deprecated use `UploadImageSecurityOption1$Outbound` instead. */
+  export type Outbound = UploadImageSecurityOption1$Outbound;
+}
+
+export function uploadImageSecurityOption1ToJSON(
+  uploadImageSecurityOption1: UploadImageSecurityOption1,
+): string {
+  return JSON.stringify(
+    UploadImageSecurityOption1$outboundSchema.parse(uploadImageSecurityOption1),
+  );
+}
+
+export function uploadImageSecurityOption1FromJSON(
+  jsonString: string,
+): SafeParseResult<UploadImageSecurityOption1, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UploadImageSecurityOption1$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadImageSecurityOption1' from JSON`,
+  );
+}
+
+/** @internal */
+export const UploadImageSecurityOption2$inboundSchema: z.ZodType<
+  UploadImageSecurityOption2,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "project_slug_header_Gram-Project": z.string(),
+  "session_header_Gram-Session": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
+  });
+});
+
+/** @internal */
+export type UploadImageSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const UploadImageSecurityOption2$outboundSchema: z.ZodType<
+  UploadImageSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  UploadImageSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UploadImageSecurityOption2$ {
+  /** @deprecated use `UploadImageSecurityOption2$inboundSchema` instead. */
+  export const inboundSchema = UploadImageSecurityOption2$inboundSchema;
+  /** @deprecated use `UploadImageSecurityOption2$outboundSchema` instead. */
+  export const outboundSchema = UploadImageSecurityOption2$outboundSchema;
+  /** @deprecated use `UploadImageSecurityOption2$Outbound` instead. */
+  export type Outbound = UploadImageSecurityOption2$Outbound;
+}
+
+export function uploadImageSecurityOption2ToJSON(
+  uploadImageSecurityOption2: UploadImageSecurityOption2,
+): string {
+  return JSON.stringify(
+    UploadImageSecurityOption2$outboundSchema.parse(uploadImageSecurityOption2),
+  );
+}
+
+export function uploadImageSecurityOption2FromJSON(
+  jsonString: string,
+): SafeParseResult<UploadImageSecurityOption2, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UploadImageSecurityOption2$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadImageSecurityOption2' from JSON`,
+  );
+}
+
+/** @internal */
+export const UploadImageSecurity$inboundSchema: z.ZodType<
+  UploadImageSecurity,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  Option1: z.lazy(() => UploadImageSecurityOption1$inboundSchema).optional(),
+  Option2: z.lazy(() => UploadImageSecurityOption2$inboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    "Option1": "option1",
+    "Option2": "option2",
+  });
+});
+
+/** @internal */
+export type UploadImageSecurity$Outbound = {
+  Option1?: UploadImageSecurityOption1$Outbound | undefined;
+  Option2?: UploadImageSecurityOption2$Outbound | undefined;
+};
+
+/** @internal */
+export const UploadImageSecurity$outboundSchema: z.ZodType<
+  UploadImageSecurity$Outbound,
+  z.ZodTypeDef,
+  UploadImageSecurity
+> = z.object({
+  option1: z.lazy(() => UploadImageSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => UploadImageSecurityOption2$outboundSchema).optional(),
+}).transform((v) => {
+  return remap$(v, {
+    option1: "Option1",
+    option2: "Option2",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace UploadImageSecurity$ {
+  /** @deprecated use `UploadImageSecurity$inboundSchema` instead. */
+  export const inboundSchema = UploadImageSecurity$inboundSchema;
+  /** @deprecated use `UploadImageSecurity$outboundSchema` instead. */
+  export const outboundSchema = UploadImageSecurity$outboundSchema;
+  /** @deprecated use `UploadImageSecurity$Outbound` instead. */
+  export type Outbound = UploadImageSecurity$Outbound;
+}
+
+export function uploadImageSecurityToJSON(
+  uploadImageSecurity: UploadImageSecurity,
+): string {
+  return JSON.stringify(
+    UploadImageSecurity$outboundSchema.parse(uploadImageSecurity),
+  );
+}
+
+export function uploadImageSecurityFromJSON(
+  jsonString: string,
+): SafeParseResult<UploadImageSecurity, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => UploadImageSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadImageSecurity' from JSON`,
+  );
+}
+
+/** @internal */
 export const UploadImageRequest$inboundSchema: z.ZodType<
   UploadImageRequest,
   z.ZodTypeDef,
   unknown
 > = z.object({
   "Content-Length": z.number().int(),
+  "Gram-Key": z.string().optional(),
   "Gram-Project": z.string().optional(),
   "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "Content-Length": "contentLength",
+    "Gram-Key": "gramKey",
     "Gram-Project": "gramProject",
     "Gram-Session": "gramSession",
   });
@@ -40,6 +262,7 @@ export const UploadImageRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type UploadImageRequest$Outbound = {
   "Content-Length": number;
+  "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -51,11 +274,13 @@ export const UploadImageRequest$outboundSchema: z.ZodType<
   UploadImageRequest
 > = z.object({
   contentLength: z.number().int(),
+  gramKey: z.string().optional(),
   gramProject: z.string().optional(),
   gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     contentLength: "Content-Length",
+    gramKey: "Gram-Key",
     gramProject: "Gram-Project",
     gramSession: "Gram-Session",
   });
