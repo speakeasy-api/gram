@@ -1,6 +1,6 @@
 module github.com/speakeasy-api/gram
 
-go 1.24.1
+go 1.24.3
 
 replace goa.design/goa/v3 => github.com/speakeasy-api/goa/v3 v3.0.0-20250402162029-007a880aa38c
 
