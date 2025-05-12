@@ -15,8 +15,9 @@ const (
 )
 
 type AppInfo struct {
-	Name   string
-	GitSHA string
+	Name    string
+	Command string
+	GitSHA  string
 }
 
 func PushAppInfo(ctx context.Context, appInfo *AppInfo) context.Context {
@@ -29,8 +30,9 @@ func PullAppInfo(ctx context.Context) *AppInfo {
 	}
 
 	return &AppInfo{
-		Name:   "unset",
-		GitSHA: "unset",
+		Name:    "unset",
+		Command: "unset",
+		GitSHA:  "unset",
 	}
 }
 

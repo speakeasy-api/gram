@@ -13,10 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/o11y"
 )
 
-var (
-	GitSHA = "dev"
-)
-
 func newApp() *cli.App {
 	return &cli.App{
 		Name:  "gram",
@@ -44,8 +40,9 @@ func newApp() *cli.App {
 		Commands: []*cli.Command{newStartCommand(), newWorkerCommand(), newVersionCommand()},
 		Before: func(c *cli.Context) error {
 			c.Context = o11y.PushAppInfo(c.Context, &o11y.AppInfo{
-				Name:   "gram",
-				GitSHA: GitSHA,
+				Name:    "gram",
+				Command: "",
+				GitSHA:  GitSHA,
 			})
 
 			shortGitSHA := GitSHA
@@ -56,8 +53,7 @@ func newApp() *cli.App {
 			logger := slog.New(o11y.NewLogHandler(c.String("log-level"), c.Bool("log-pretty")))
 			logger = logger.With(
 				slog.String("app", "gram"),
-				slog.String("app_name", "gram"),
-				slog.String("app_git_sha", shortGitSHA),
+				slog.String("v", shortGitSHA),
 			)
 
 			// Sets GOMAXPROCS to match the Linux container CPU quota.

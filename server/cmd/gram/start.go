@@ -185,12 +185,14 @@ func newStartCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			o11y.PullAppInfo(c.Context).Command = "server"
+			logger := PullLogger(c.Context).With(slog.String("cmd", "server"))
+
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
-			logger := PullLogger(ctx)
 
 			if c.Bool("observe") {
-				shutdown, err := o11y.SetupOTelSDK(ctx)
+				shutdown, err := o11y.SetupOTelSDK(ctx, logger)
 				if err != nil {
 					return err
 				}
@@ -251,10 +253,11 @@ func newStartCommand() *cli.Command {
 			}
 
 			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
-				address:      c.String("temporal-address"),
-				namespace:    c.String("temporal-namespace"),
-				certPEMBlock: []byte(c.String("temporal-client-cert")),
-				keyPEMBlock:  []byte(c.String("temporal-client-key")),
+				enableTracing: c.Bool("observe"),
+				address:       c.String("temporal-address"),
+				namespace:     c.String("temporal-namespace"),
+				certPEMBlock:  []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:   []byte(c.String("temporal-client-key")),
 			})
 			if err != nil {
 				return err

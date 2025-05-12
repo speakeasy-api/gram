@@ -99,6 +99,8 @@ services:
       - --web.enable-remote-write-receiver
       - --enable-feature=exemplar-storage
       - --enable-feature=native-histograms
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
     volumes:
       - ./local/prometheus/prometheus.yaml:/etc/prometheus.yaml
 

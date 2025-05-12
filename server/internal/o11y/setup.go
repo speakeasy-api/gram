@@ -3,18 +3,21 @@ package o11y
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 
+	"github.com/go-logr/logr"
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	"goa.design/clue/clue"
 )
 
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
+func SetupOTelSDK(ctx context.Context, logger *slog.Logger) (shutdown func(context.Context) error, err error) {
 	var shutdownFuncs []func(context.Context) error
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
@@ -34,47 +37,56 @@ func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		err = errors.Join(inErr, shutdown(ctx))
 	}
 
-	// Set up propagator.
-	prop := newPropagator()
-	otel.SetTextMapPropagator(prop)
+	prop := propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
 
-	// Set up trace provider.
-	tracerProvider, err := newTracerProvider(ctx)
+	metricsExporter, err := otlpmetricgrpc.New(ctx)
 	if err != nil {
 		handleErr(err)
 		return
 	}
-	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
-	otel.SetTracerProvider(tracerProvider)
+	shutdownFuncs = append(shutdownFuncs, metricsExporter.Shutdown)
 
-	return
-}
-
-func newPropagator() propagation.TextMapPropagator {
-	return propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	)
-}
-
-func newTracerProvider(ctx context.Context) (*trace.TracerProvider, error) {
-	traceExporter, err := otlptracegrpc.New(
-		ctx,
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint("localhost:4317"),
-	)
+	traceExporter, err := otlptracegrpc.New(ctx)
 	if err != nil {
-		return nil, err
+		handleErr(err)
+		return
 	}
+	shutdownFuncs = append(shutdownFuncs, traceExporter.Shutdown)
 
 	appInfo := PullAppInfo(ctx)
-	tracerProvider := trace.NewTracerProvider(
-		trace.WithBatcher(traceExporter),
-		trace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(appInfo.Name),
-			semconv.VCSRefHeadRevision(appInfo.GitSHA),
-		)),
+	serviceName := appInfo.Name
+	if appInfo.Command != "" {
+		serviceName = fmt.Sprintf("%s:%s", appInfo.Name, appInfo.Command)
+	}
+
+	cfg, err := clue.NewConfig(
+		ctx,
+		serviceName,
+		appInfo.GitSHA,
+		metricsExporter,
+		traceExporter,
+		clue.WithPropagators(prop),
+		clue.WithErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+			logger.ErrorContext(ctx, "otel error", slog.String("error", err.Error()))
+		})),
 	)
-	return tracerProvider, nil
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	otellogger := logr.FromSlogHandler(logger.Handler())
+	clue.ConfigureOpenTelemetry(ctx, cfg)
+	otel.SetLogger(otellogger)
+
+	err = runtime.Start()
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	return
 }

@@ -80,11 +80,9 @@ linters:
         - '^github.com/go-redis/cache/v9\.Item$'
         - '^github.com/pb33f/libopenapi/datamodel\.DocumentConfiguration$'
         - '^github.com/gomarkdown/markdown/html\.RendererOptions$'
-        - '^go.temporal.io/sdk/internal\.StartWorkflowOptions$'
-        - '^go.temporal.io/sdk/internal\.ActivityOptions$'
         - '^go.temporal.io/sdk/internal\.RetryPolicy$'
-        - '^go.temporal.io/sdk/internal\.ClientOptions$'
-        - '^go.temporal.io/sdk/internal\.WorkerOptions$'
+        - '^go.temporal.io/sdk/internal\..+Options$'
+        - '^go.temporal.io/sdk/contrib/opentelemetry\..+Options$'
     exhaustive:
       check:
         - switch

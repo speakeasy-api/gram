@@ -17,9 +17,11 @@ import (
 	"github.com/pgx-contrib/pgxotel"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 
@@ -126,10 +128,11 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 }
 
 type temporalClientOptions struct {
-	address      string
-	namespace    string
-	certPEMBlock []byte
-	keyPEMBlock  []byte
+	enableTracing bool
+	address       string
+	namespace     string
+	certPEMBlock  []byte
+	keyPEMBlock   []byte
 }
 
 func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.Client, func(context.Context) error, error) {
@@ -148,12 +151,30 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 		connOpts.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	}
 
-	temporalClient, err := client.Dial(client.Options{
+	clientOptions := client.Options{
 		HostPort:          opts.address,
 		Namespace:         opts.namespace,
 		ConnectionOptions: connOpts,
 		Logger:            logger.With(slog.String("component", "temporal")),
-	})
+	}
+
+	interceptors := []interceptor.ClientInterceptor{}
+
+	if opts.enableTracing {
+		tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
+			TextMapPropagator: otel.GetTextMapPropagator(),
+		})
+		if err != nil {
+			return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal tracing interceptor: %w", err)
+		}
+
+		interceptors = append(interceptors, tracingInterceptor)
+		clientOptions.MetricsHandler = opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{})
+	}
+
+	clientOptions.Interceptors = interceptors
+
+	temporalClient, err := client.Dial(clientOptions)
 	if err != nil {
 		return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal client: %w", err)
 	}
