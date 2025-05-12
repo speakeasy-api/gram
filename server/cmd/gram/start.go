@@ -206,6 +206,11 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			// Ping the database to ensure connectivity
+			if err := db.Ping(ctx); err != nil {
+				logger.ErrorContext(ctx, "failed to ping database", slog.String("error", err.Error()))
+				return fmt.Errorf("database ping failed: %w", err)
+			}
 			defer db.Close()
 
 			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
