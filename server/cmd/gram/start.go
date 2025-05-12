@@ -310,17 +310,12 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid environment: %s", c.String("environment"))
 			}
 
-			chatService := chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter)
-
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.DevCORSMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
-			mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-				chatService.HandleCompletion(w, r)
-			})
 
 			auth.Attach(mux, auth.NewService(logger.With(slog.String("component", "auth")), db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
@@ -337,6 +332,7 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient))
+			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

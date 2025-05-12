@@ -67,6 +67,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		service.HandleCompletion(w, r)
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

@@ -5,11 +5,11 @@ import { CodeSnippet } from "@speakeasy-api/moonshine";
 const VERCEL_AI_SDK = "Vercel AI SDK" as const;
 const LANGCHAIN = "LangChain" as const;
 const OPENAI_AGENTS_SDK = "OpenAI Agents SDK" as const;
-const FUNCION_CALLING = "Funcion Calling" as const;
+const FUNCTION_CALLING = "Function Calling" as const;
 
 const FRAMEWORKS = {
-  typescript: [VERCEL_AI_SDK, LANGCHAIN, FUNCION_CALLING] as const,
-  python: [OPENAI_AGENTS_SDK, LANGCHAIN, FUNCION_CALLING] as const,
+  typescript: [VERCEL_AI_SDK, LANGCHAIN, FUNCTION_CALLING] as const,
+  python: [OPENAI_AGENTS_SDK, LANGCHAIN, FUNCTION_CALLING] as const,
 } as const;
 
 type Language = keyof typeof FRAMEWORKS;
@@ -84,7 +84,7 @@ const result = await executor.invoke({
 });
 
 console.log(result.output);`,
-    [FUNCION_CALLING]: `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
+    [FUNCTION_CALLING]: `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
 
 const key = process.env.GRAM_API_KEY ?? "";
 
@@ -174,7 +174,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())`,
-    [FUNCION_CALLING]: `import os
+    [FUNCTION_CALLING]: `import os
 from gram_ai.function_calling import GramFunctionCalling
 
 key = "<GRAM_API_KEY>"
