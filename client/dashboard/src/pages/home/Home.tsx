@@ -132,9 +132,7 @@ function DeploymentTools({
           + New OpenAPI Source
         </CreateThingCard>
       </Cards>
-      <Heading variant="h3" className="mt-4">
-        Third Party Integrations
-      </Heading>
+      <Heading variant="h3">Third Party Integrations</Heading>
       <Cards>
         {deployment.packages.map((pkg) => (
           <PackageCard

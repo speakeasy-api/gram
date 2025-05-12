@@ -253,23 +253,26 @@ export function ToolsetView({
   );
 
   return (
-    <Page.Body className={cn(className, "max-w-2xl")}>
-      <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
-      {missingEnvVarsAlert}
-      <Cards loading={!toolset}>
-        {toolset?.httpTools.map((tool) => (
-          <ToolCard
-            key={tool.id}
-            tool={tool}
-            onRemove={() => removeToolFromToolset(tool.name)}
-          />
-        ))}
-        <CreateThingCard
-          onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
-        >
-          + Add Tool
-        </CreateThingCard>
-      </Cards>
+    <Page.Body className={className}>
+      {/* This div is so that the scrollbox still extends the width of the page */}
+      <div className="max-w-2xl">
+        <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
+        {missingEnvVarsAlert}
+        <Cards loading={!toolset}>
+          {toolset?.httpTools.map((tool) => (
+            <ToolCard
+              key={tool.id}
+              tool={tool}
+              onRemove={() => removeToolFromToolset(tool.name)}
+            />
+          ))}
+          <CreateThingCard
+            onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
+          >
+            + Add Tool
+          </CreateThingCard>
+        </Cards>
+      </div>
     </Page.Body>
   );
 }

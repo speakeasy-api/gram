@@ -14,7 +14,7 @@ const CardComponent = ({
     <div
       data-slot="card"
       className={cn(
-        "bg-card max-w-2xl text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm group/card",
+        "bg-card max-w-2xl text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm group/card last:mb-8",
         size === "sm" && "gap-4 py-4",
         className
       )}

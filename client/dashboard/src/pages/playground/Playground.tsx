@@ -102,11 +102,7 @@ export default function Playground() {
         }
       }}
     >
-      <Stack
-        direction="horizontal"
-        gap={2}
-        align="center"
-      >
+      <Stack direction="horizontal" gap={2} align="center">
         <Icon name="history" className="opacity-50" />
         <Type variant="small">Chat History</Type>
       </Stack>
@@ -120,7 +116,10 @@ export default function Playground() {
         <Page.Header.Actions>{chatHistoryButton}</Page.Header.Actions>
       </Page.Header>
       <Page.Body className="max-w-full">
-        <ResizablePanel direction="horizontal" className="h-full">
+        <ResizablePanel
+          direction="horizontal"
+          className="h-full [&>[role='separator']]:border-border"
+        >
           <ResizablePanel.Pane minSize={35}>
             <ChatWindow configRef={chatConfigRef} chatId={chatId} />
           </ResizablePanel.Pane>
