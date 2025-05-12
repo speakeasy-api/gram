@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -122,6 +123,45 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 	}
 
 	return redisClient, nil
+}
+
+type temporalClientOptions struct {
+	address      string
+	namespace    string
+	certPEMBlock []byte
+	keyPEMBlock  []byte
+}
+
+func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.Client, func(context.Context) error, error) {
+	var nilShutdownFunc = func(context.Context) error { return nil }
+	if opts.address == "" || opts.namespace == "" {
+		return nil, nilShutdownFunc, nil
+	}
+
+	var connOpts client.ConnectionOptions
+	if len(opts.certPEMBlock) > 0 && len(opts.keyPEMBlock) > 0 {
+		cert, err := tls.X509KeyPair(opts.certPEMBlock, opts.keyPEMBlock)
+		if err != nil {
+			return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal client: %w", err)
+		}
+
+		connOpts.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+	}
+
+	temporalClient, err := client.Dial(client.Options{
+		HostPort:          opts.address,
+		Namespace:         opts.namespace,
+		ConnectionOptions: connOpts,
+		Logger:            logger.With(slog.String("component", "temporal")),
+	})
+	if err != nil {
+		return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal client: %w", err)
+	}
+
+	return temporalClient, func(context.Context) error {
+		temporalClient.Close()
+		return nil
+	}, nil
 }
 
 func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) worker.Worker {

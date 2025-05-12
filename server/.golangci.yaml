@@ -65,6 +65,7 @@ linters:
         - ifElseChain
     exhaustruct:
       exclude:
+        - '^crypto/tls\.Config$'
         - '^net\.Dialer$'
         - '^net/url\.URL$'
         - '^net/http\.Server$'

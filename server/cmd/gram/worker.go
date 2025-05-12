@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -31,6 +32,16 @@ func newWorkerCommand() *cli.Command {
 				Usage:   "The temporal namespace to use",
 				EnvVars: []string{"TEMPORAL_NAMESPACE"},
 				Value:   "default",
+			},
+			&cli.StringFlag{
+				Name:    "temporal-client-cert",
+				Usage:   "Client cert of the Temporal server",
+				EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
+			},
+			&cli.StringFlag{
+				Name:    "temporal-client-key",
+				Usage:   "Client key of the Temporal server",
+				EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
 			},
 			&cli.StringFlag{
 				Name:    "control-address",
@@ -79,6 +90,20 @@ func newWorkerCommand() *cli.Command {
 			defer cancel()
 			logger := PullLogger(ctx)
 
+			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+				address:      c.String("temporal-address"),
+				namespace:    c.String("temporal-namespace"),
+				certPEMBlock: []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:  []byte(c.String("temporal-client-key")),
+			})
+			if err != nil {
+				return err
+			}
+			if temporalClient == nil {
+				return errors.New("insufficient options to create temporal client")
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			if c.Bool("observe") {
 				shutdown, err := o11y.SetupOTelSDK(ctx)
 				if err != nil {
@@ -104,19 +129,6 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
-
-			temporalClient, err := client.Dial(client.Options{
-				HostPort:  c.String("temporal-address"),
-				Namespace: c.String("temporal-namespace"),
-				Logger:    logger.With(slog.String("component", "temporal")),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create temporal client: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, func(context.Context) error {
-				temporalClient.Close()
-				return nil
-			})
 
 			{
 				controlServer := control.Server{

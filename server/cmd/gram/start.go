@@ -167,6 +167,16 @@ func newStartCommand() *cli.Command {
 				Usage:   "Namespace of the Temporal server",
 				EnvVars: []string{"TEMPORAL_NAMESPACE"},
 			},
+			&cli.StringFlag{
+				Name:    "temporal-client-cert",
+				Usage:   "Client cert of the Temporal server",
+				EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
+			},
+			&cli.StringFlag{
+				Name:    "temporal-client-key",
+				Usage:   "Client key of the Temporal server",
+				EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
+			},
 			&cli.BoolFlag{
 				Name:    "dev-single-process",
 				Usage:   "Run the server and worker in a single process for local development",
@@ -240,27 +250,20 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			var temporalClient client.Client
-			temporalAddress := c.String("temporal-address")
-			temporalNamespace := c.String("temporal-namespace")
-			temporalEnabled := temporalAddress != "" && temporalNamespace != ""
+			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+				address:      c.String("temporal-address"),
+				namespace:    c.String("temporal-namespace"),
+				certPEMBlock: []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:  []byte(c.String("temporal-client-key")),
+			})
+			if err != nil {
+				return err
+			}
 
-			if temporalEnabled {
-				temporalClient, err = client.Dial(client.Options{
-					HostPort:  temporalAddress,
-					Namespace: temporalNamespace,
-					Logger:    logger.With(slog.String("component", "temporal")),
-				})
-				if err != nil {
-					return fmt.Errorf("failed to create temporal client: %w", err)
-				}
-
-				shutdownFuncs = append(shutdownFuncs, func(context.Context) error {
-					temporalClient.Close()
-					return nil
-				})
-			} else {
+			if temporalClient == nil {
 				logger.WarnContext(ctx, "temporal disabled")
+			} else {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
 			{
