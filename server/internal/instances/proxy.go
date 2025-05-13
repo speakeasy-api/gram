@@ -23,6 +23,7 @@ import (
 
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/serialization"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
@@ -44,12 +45,11 @@ type ToolCallBody struct {
 	Body            json.RawMessage `json:"body"`
 }
 
-func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, r *http.Request, environmentEntries []environments_repo.EnvironmentEntry, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) {
+func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, r *http.Request, environmentEntries []environments_repo.EnvironmentEntry, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(r.Body).Decode(&toolCallBody); err != nil {
 		logger.ErrorContext(ctx, "invalid request body", slog.String("error", err.Error()))
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
 	}
 
 	// Transform environment entries into a map
@@ -63,9 +63,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	if toolCallBody.PathParameters != nil {
 		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.PathSettings)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse path parameter settings", slog.String("error", err.Error()))
-			http.Error(w, "problem parsing parameter settings", http.StatusInternalServerError)
-			return
+			return oops.E(oops.CodeUnexpected, err, "failed to parse path parameter settings").Log(ctx, logger)
 		}
 		pathParams := make(map[string]string)
 		for name, value := range toolCallBody.PathParameters {
@@ -84,9 +82,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		urlStr := insertPathParams(requestPath, pathParams)
 		parsedURL, parseErr := url.Parse(urlStr)
 		if parseErr != nil {
-			logger.ErrorContext(ctx, "failed to parse URL with path parameters", slog.String("error", parseErr.Error()))
-			http.Error(w, "Failed to parse URL with path parameters", http.StatusInternalServerError)
-			return
+			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse URL with path parameters").Log(ctx, logger)
 		}
 		requestPath = parsedURL.String()
 	}
@@ -103,8 +99,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 
 	if serverURL == "" {
 		logger.ErrorContext(ctx, "no server URL provided for tool", slog.String("tool", toolExecutionInfo.Tool.Name))
-		http.Error(w, "No server URL provided for tool", http.StatusInternalServerError)
-		return
+		return oops.E(oops.CodeUnexpected, nil, "no server URL provided for tool").Log(ctx, logger)
 	}
 
 	// Create a new request
@@ -115,9 +110,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		// Assume toolCallBody.Body is a JSON object (map[string]interface{})
 		var formMap map[string]interface{}
 		if err := json.Unmarshal(toolCallBody.Body, &formMap); err != nil {
-			logger.ErrorContext(ctx, "failed to unmarshal form body", slog.String("error", err.Error()))
-			http.Error(w, "Invalid form body", http.StatusBadRequest)
-			return
+			return oops.E(oops.CodeBadRequest, err, "failed to parse form body").Log(ctx, logger)
 		}
 		values := url.Values{}
 		for k, v := range formMap {
@@ -131,8 +124,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 			strings.NewReader(encoded),
 		)
 		if err != nil {
-			http.Error(w, "Failed to create request", http.StatusInternalServerError)
-			return
+			return oops.E(oops.CodeUnexpected, err, "failed to build url-encoded request").Log(ctx, logger)
 		}
 		req.Header.Set("Content-Type", toolExecutionInfo.Tool.RequestContentType.String)
 	} else {
@@ -143,8 +135,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 			bytes.NewReader(toolCallBody.Body),
 		)
 		if err != nil {
-			http.Error(w, "Failed to create request", http.StatusInternalServerError)
-			return
+			return oops.E(oops.CodeUnexpected, err, "failed to build json request").Log(ctx, logger)
 		}
 		if toolExecutionInfo.Tool.RequestContentType.String != "" {
 			req.Header.Set("Content-Type", toolExecutionInfo.Tool.RequestContentType.String)
@@ -154,9 +145,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	if toolCallBody.QueryParameters != nil {
 		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.QuerySettings)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse query parameter settings", slog.String("error", err.Error()))
-			http.Error(w, "problem parsing parameter settings", http.StatusInternalServerError)
-			return
+			return oops.E(oops.CodeBadRequest, err, "failed to parse query parameter settings").Log(ctx, logger)
 		}
 		values := url.Values{}
 		for name, value := range toolCallBody.QueryParameters {
@@ -183,9 +172,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	if toolCallBody.Headers != nil {
 		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.HeaderSettings)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse header parameter settings", slog.String("error", err.Error()))
-			http.Error(w, "problem parsing parameter settings", http.StatusInternalServerError)
-			return
+			return oops.E(oops.CodeBadRequest, err, "failed to parse header parameter settings").Log(ctx, logger)
 		}
 		for name, value := range toolCallBody.Headers {
 			parameterSettings := parameterSettings[name]
@@ -205,15 +192,13 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	processSecurity(ctx, logger, req, toolExecutionInfo, envVars)
 
 	if err := protectSSRF(ctx, logger, req.URL); err != nil {
-		logger.ErrorContext(ctx, "blocked SSRF request", slog.String("error", err.Error()))
-		http.Error(w, "blocked SSRF request", http.StatusForbidden)
-		return
+		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
 	}
 
-	reverseProxyRequest(ctx, tracer, logger, toolExecutionInfo.Tool.Name, w, req)
+	return reverseProxyRequest(ctx, tracer, logger, toolExecutionInfo.Tool.Name, w, req)
 }
 
-func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, toolName string, w http.ResponseWriter, req *http.Request) {
+func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, toolName string, w http.ResponseWriter, req *http.Request) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", toolName))
 	defer span.End()
 
@@ -249,9 +234,7 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 	resp, err := client.Do(req)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		logger.ErrorContext(ctx, "failed to execute request", slog.String("error", err.Error()))
-		w.WriteHeader(http.StatusBadGateway)
-		return
+		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return resp.Body.Close()
@@ -315,6 +298,8 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 			logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
 		}
 	}
+
+	return nil
 }
 
 func protectSSRF(ctx context.Context, logger *slog.Logger, parsed *url.URL) error {

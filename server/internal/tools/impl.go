@@ -74,7 +74,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 	tools, err := s.repo.ListTools(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools").Log(ctx, s.logger)
 	}
 
 	result := &gen.ListToolsResult{

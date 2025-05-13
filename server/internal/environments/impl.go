@@ -76,7 +76,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 
 	environment, err := s.repo.CreateEnvironment(ctx, input)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment").Log(ctx, s.logger)
 	}
 
 	names := make([]string, len(payload.Entries))
@@ -92,7 +92,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		Values:        values,
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment entries").Log(ctx, s.logger)
 	}
 
 	entries := make([]*gen.EnvironmentEntry, len(payload.Entries))
@@ -126,14 +126,14 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 
 	environments, err := s.repo.ListEnvironments(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environments").Log(ctx, s.logger)
 	}
 
 	var result []*gen.Environment
 	for _, environment := range environments {
 		entries, err := s.entries.ListEnvironmentEntries(ctx, environment.ID, true)
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 		}
 
 		var genEntries []*gen.EnvironmentEntry
@@ -174,7 +174,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
 	}
 
 	updateInput := repo.UpdateEnvironmentParams{
@@ -193,7 +193,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 	_, err = s.repo.UpdateEnvironment(ctx, updateInput)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment").Log(ctx, s.logger)
 	}
 
 	projectID := *authCtx.ProjectID
@@ -207,7 +207,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 			Name:          updatedEntry.Name,
 			Value:         updatedEntry.Value, // This is the actual environment value to update too, do not redact it
 		}); err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update environment entry").Log(ctx, s.logger)
 		}
 	}
 	for _, removedEntry := range payload.EntriesToRemove {
@@ -215,13 +215,13 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 			EnvironmentID: environment.ID,
 			Name:          removedEntry,
 		}); err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete environment entry").Log(ctx, s.logger)
 		}
 	}
 
 	entries, err := s.entries.ListEnvironmentEntries(ctx, environment.ID, true)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 	}
 
 	genEntries := make([]*gen.EnvironmentEntry, len(entries))

@@ -105,12 +105,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 			return nil, oops.E(oops.CodeConflict, nil, "toolset slug already exists")
 		}
 
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset").Log(ctx, s.logger)
 	}
 
 	toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, createdToolset.Slug, *authCtx.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
 	}
 
 	return toolsetDetails, nil
@@ -124,14 +124,14 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 
 	toolsets, err := s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
 	}
 
 	result := make([]*gen.ToolsetDetails, len(toolsets))
 	for i, toolset := range toolsets {
 		toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, toolset.Slug, *authCtx.ProjectID)
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
 		}
 		result[i] = toolsetDetails
 	}
@@ -153,7 +153,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
 	}
 
 	// Convert update params
@@ -196,7 +196,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, updatedToolset.Slug, *authCtx.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
 	}
 
 	return toolsetDetails, nil

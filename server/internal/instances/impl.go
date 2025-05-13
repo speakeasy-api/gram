@@ -65,7 +65,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 	mux.Handle("POST", "/rpc/instances.invoke/tool", func(w http.ResponseWriter, r *http.Request) {
-		service.ExecuteInstanceTool(w, r)
+		oops.ErrHandle(service.logger, service.ExecuteInstanceTool).ServeHTTP(w, r)
 	})
 }
 
@@ -77,11 +77,11 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 
 	toolset, err := s.toolset.LoadToolsetDetails(ctx, conv.ToLower(payload.ToolsetSlug), *authCtx.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
 	}
 
 	if toolset.DefaultEnvironmentSlug == nil && payload.EnvironmentSlug == nil {
-		return nil, oops.E(oops.CodeInvalid, nil, "environment is required")
+		return nil, oops.E(oops.CodeInvalid, nil, "environment is required").Log(ctx, s.logger)
 	}
 
 	var envModel environments_repo.Environment
@@ -97,12 +97,12 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		})
 	}
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
 	}
 
 	environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, true)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
 	}
 
 	genEntries := make([]*gen.EnvironmentEntry, len(environmentEntries))
@@ -158,7 +158,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}, nil
 }
 
-func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
+func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) error {
 	// TODO: Handling security, we can probably factor this out into something smarter like a proxy
 	sc := security.APIKeyScheme{
 		Name:           auth.SessionSecurityScheme,
@@ -174,8 +174,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
+			return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
 		}
 	}
 	sc = security.APIKeyScheme{
@@ -185,26 +184,22 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
+		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
 	}
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
-		http.Error(w, "project ID is required", http.StatusUnauthorized)
-		return
+		return oops.E(oops.CodeUnauthorized, nil, "project ID is required").Log(ctx, s.logger)
 	}
 
 	toolID := r.URL.Query().Get(tooldIdQueryParam)
 	if toolID == "" {
-		http.Error(w, "tool_id query parameter is required", http.StatusBadRequest)
-		return
+		return oops.E(oops.CodeBadRequest, nil, "tool_id query parameter is required").Log(ctx, s.logger)
 	}
 
 	environmentSlug := r.URL.Query().Get(environmentSlugQueryParam)
 	if environmentSlug == "" {
-		http.Error(w, "environment_slug query parameter is required", http.StatusBadRequest)
-		return
+		return oops.E(oops.CodeBadRequest, nil, "environment_slug query parameter is required").Log(ctx, s.logger)
 	}
 
 	envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
@@ -212,23 +207,20 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) {
 		Slug:      strings.ToLower(environmentSlug),
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
 	}
 
 	environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, false)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
 	}
 
 	executionInfo, err := s.toolset.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, s.logger)
 	}
 
-	InstanceToolProxy(ctx, s.tracer, s.logger, w, r, environmentEntries, executionInfo)
+	return InstanceToolProxy(ctx, s.tracer, s.logger, w, r, environmentEntries, executionInfo)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

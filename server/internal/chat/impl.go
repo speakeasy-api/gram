@@ -19,6 +19,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+
 	gen "github.com/speakeasy-api/gram/gen/chat"
 	srv "github.com/speakeasy-api/gram/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/internal/auth"
@@ -29,10 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/security"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -68,7 +69,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 	mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-		service.HandleCompletion(w, r)
+		oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP(w, r)
 	})
 }
 
@@ -151,7 +152,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 }
 
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
-func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	// Authorize with session or API key
 	sc := security.APIKeyScheme{
 		Name:           auth.SessionSecurityScheme,
@@ -168,8 +169,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
+			return oops.E(oops.CodeUnauthorized, err, "unauthorized access").Log(ctx, s.logger)
 		}
 	}
 
@@ -181,19 +181,16 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
+		return oops.E(oops.CodeUnauthorized, err, "unauthorized access").Log(ctx, s.logger)
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	if authCtx.ProjectID == nil {
-		http.Error(w, "Unauthorized -- no project ID", http.StatusUnauthorized)
-		return
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required").Log(ctx, s.logger)
 	}
 
 	orgID := ""
@@ -214,25 +211,19 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	// Read the request body
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to read request body", slog.String("error", err.Error()))
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
-		return
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
 	}
 
 	var chatRequest OpenAIChatRequest
 	if err := json.Unmarshal(reqBody, &chatRequest); err != nil {
-		s.logger.ErrorContext(ctx, "failed to unmarshal request body", slog.String("error", err.Error()))
-		http.Error(w, "Failed to unmarshal request body", http.StatusBadRequest)
-		return
+		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
 	}
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
 	chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, chatIDHeader, chatRequest)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to start or resume chat", slog.String("error", err.Error()))
-		http.Error(w, "Failed to start or resume chat", http.StatusInternalServerError)
-		return
+		return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 	}
 
 	// Create a new reader with the same content for the proxy
@@ -331,6 +322,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 
 	// Serve the proxy through our custom writer
 	proxy.ServeHTTP(respCaptor, r)
+	return nil
 }
 
 func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, chatIDHeader string, request OpenAIChatRequest) (uuid.UUID, error) {
@@ -484,10 +476,13 @@ func (r *responseCaptor) processLine(line string) {
 
 						if _, ok := r.accumulatedToolCalls[tc.Index]; !ok {
 							r.accumulatedToolCalls[tc.Index] = ToolCall{
-								Index:    tc.Index,
-								ID:       tc.ID,
-								Type:     tc.Type,
-								Function: ToolCallFunction{}, //nolint:exhaustruct // filled in later
+								Index: tc.Index,
+								ID:    tc.ID,
+								Type:  tc.Type,
+								Function: ToolCallFunction{
+									Name:      "",
+									Arguments: "",
+								},
 							}
 						}
 
