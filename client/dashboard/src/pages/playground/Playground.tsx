@@ -406,23 +406,30 @@ function ChatInner({
         throw new Error(`Tool ${toolCall.toolName} not found`);
       }
 
-      const response = await fetch(
-        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
-          tool.id
-        }&environment_slug=${configRef.current.environmentSlug}`,
-        {
-          method: "POST",
-          headers: {
-            "gram-session": session.session,
-            "gram-project": project.slug,
-          },
-          body: JSON.stringify(toolCall.args),
+      try {
+        const response = await fetch(
+          `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
+            tool.id
+          }&environment_slug=${configRef.current.environmentSlug}`,
+          {
+            method: "POST",
+            headers: {
+              "gram-session": session.session,
+              "gram-project": project.slug,
+            },
+            body: JSON.stringify(toolCall.args),
+          }
+        );
+
+        const result = await response.json();
+
+        return result || `status code: ${response.status}`;
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          return `Error: ${err.message}`;
         }
-      );
-
-      const result = await response.json();
-
-      return result || "";
+        return `Tool Call Error`;
+      }
     },
   });
 
