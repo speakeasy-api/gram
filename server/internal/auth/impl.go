@@ -110,23 +110,21 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if len(userInfo.Organizations) == 0 {
 		return redirectWithError(errors.New("must create a speakeasy organization before proceeding with gram"))
 	}
+	activeOrganizationID := userInfo.Organizations[0].ID
 
-	activeOrganizationID := ""
-	if len(userInfo.Organizations) > 0 {
-		activeOrganizationID = userInfo.Organizations[0].ID
-
-		// For admins we allow you to override the active organization returned by header if present
-		// Otherwise we default speakeasy-self being the active organization if present
+	// For speakeasy users and admins we default speakeasy-team being the active organization if present
+	// For admins we allow you to override the active organization returned by header if present
+	if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
+		override := "speakeasy-team"
 		if userInfo.Admin {
-			adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx)
-			if adminOverride == "" {
-				adminOverride = "speakeasy-team"
+			if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+				override = adminOverride
 			}
-			for _, org := range userInfo.Organizations {
-				if org.Slug == adminOverride {
-					activeOrganizationID = org.ID
-					break
-				}
+		}
+		for _, org := range userInfo.Organizations {
+			if org.Slug == override {
+				activeOrganizationID = org.ID
+				break
 			}
 		}
 	}
