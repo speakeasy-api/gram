@@ -214,6 +214,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
 	}
 
+	// Create a new reader with the same content for the proxy
+	r.Body = io.NopCloser(strings.NewReader(string(reqBody)))
+
 	var chatRequest OpenAIChatRequest
 	if err := json.Unmarshal(reqBody, &chatRequest); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
@@ -221,28 +224,29 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
-	chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, chatIDHeader, chatRequest)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
-	}
+	respCaptor := w
 
-	// Create a new reader with the same content for the proxy
-	r.Body = io.NopCloser(strings.NewReader(string(reqBody)))
+	if chatIDHeader != "" {
+		chatID, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, chatIDHeader, chatRequest)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
+		}
 
-	// Check if this is a streaming request
-	isStreaming := chatRequest.Stream
+		// Check if this is a streaming request
+		isStreaming := chatRequest.Stream
 
-	// Create a custom response writer to capture the response
-	//nolint:exhaustruct // the other fields are set during processing
-	respCaptor := &responseCaptor{
-		ResponseWriter:       w,
-		logger:               s.logger,
-		ctx:                  ctx,
-		isStreaming:          isStreaming,
-		chatID:               chatID,
-		repo:                 s.repo,
-		messageContent:       &strings.Builder{},
-		accumulatedToolCalls: make(map[int]ToolCall),
+		// Create a custom response writer to capture the response
+		//nolint:exhaustruct // the other fields are set during processing
+		respCaptor = &responseCaptor{
+			ResponseWriter:       w,
+			logger:               s.logger,
+			ctx:                  ctx,
+			isStreaming:          isStreaming,
+			chatID:               chatID,
+			repo:                 s.repo,
+			messageContent:       &strings.Builder{},
+			accumulatedToolCalls: make(map[int]ToolCall),
+		}
 	}
 
 	// Set up the proxy to OpenAI
@@ -276,46 +280,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		resp.Header.Del("Access-Control-Allow-Methods")
 		resp.Header.Del("Access-Control-Allow-Headers")
 
-		// For non-streaming responses, we can log the entire body
-		if !isStreaming {
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "failed to read response body", slog.String("error", err.Error()))
-				return err
-			}
-
-			// Parse and log the complete response
-			var chatResponse OpenAIChatResponse
-			if err := json.Unmarshal(body, &chatResponse); err == nil {
-				if len(chatResponse.Choices) > 0 {
-					assistantMsg := chatResponse.Choices[0].Message
-					toolCallsJSON, err := json.Marshal(assistantMsg.ToolCalls)
-					if err != nil {
-						s.logger.ErrorContext(ctx, "failed to marshal tool calls", slog.String("error", err.Error()))
-					}
-
-					_, err = s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{{
-						ChatID:       chatID,
-						Role:         "assistant",
-						Model:        conv.ToPGText(chatRequest.Model),
-						Content:      assistantMsg.Content,
-						MessageID:    conv.ToPGText(chatResponse.ID),
-						ToolCallID:   conv.ToPGText(assistantMsg.ToolCallID),
-						UserID:       conv.ToPGText(userID),
-						ToolCalls:    toolCallsJSON,
-						FinishReason: conv.ToPGTextEmpty(""),
-					}})
-					if err != nil {
-						s.logger.ErrorContext(ctx, "failed to store chat message", slog.String("error", err.Error()))
-					}
-				}
-			} else {
-				s.logger.InfoContext(ctx, "response body (could not parse)", slog.String("body", string(body)))
-			}
-
-			// Restore the body for the client
-			resp.Body = io.NopCloser(strings.NewReader(string(body)))
-		}
+		// TODO: Store chat history for non-streaming requests
 
 		return nil
 	}

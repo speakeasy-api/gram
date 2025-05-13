@@ -1,8 +1,9 @@
 import { Page } from "@/components/page-layout";
+import { Button } from "@/components/ui/button";
 import { Combobox, DropdownItem } from "@/components/ui/combobox";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
-import { useProject, useSession } from "@/contexts/Auth";
+import { useIsAdmin, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { dateTimeFormatters } from "@/lib/dates";
 import { capitalize, getServerURL } from "@/lib/utils";
@@ -22,10 +23,18 @@ import {
   ResizablePanel,
   Stack,
 } from "@speakeasy-api/moonshine";
-import { jsonSchema, smoothStream, streamText, ToolInvocation } from "ai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  generateObject,
+  jsonSchema,
+  smoothStream,
+  streamText,
+  Tool,
+  ToolInvocation,
+} from "ai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { v7 as uuidv7 } from "uuid";
+import { z } from "zod";
 import { OnboardingContent } from "../onboarding/Onboarding";
 import { ToolsetView } from "../toolsets/Toolset";
 
@@ -59,6 +68,7 @@ export default function Playground() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
     searchParams.get("environment") ?? null
   );
+  const [dynamicToolset, setDynamicToolset] = useState(false);
   const [chatId, setChatId] = useState<string>(uuidv7());
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
@@ -121,13 +131,19 @@ export default function Playground() {
           className="h-full [&>[role='separator']]:border-border"
         >
           <ResizablePanel.Pane minSize={35}>
-            <ChatWindow configRef={chatConfigRef} chatId={chatId} />
+            <ChatWindow
+              configRef={chatConfigRef}
+              chatId={chatId}
+              dynamicToolset={dynamicToolset}
+            />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
             <ToolsetPanel
               configRef={chatConfigRef}
               setSelectedToolset={setSelectedToolset}
               setSelectedEnvironment={setSelectedEnvironment}
+              dynamicToolset={dynamicToolset}
+              setDynamicToolset={setDynamicToolset}
             />
           </ResizablePanel.Pane>
         </ResizablePanel>
@@ -178,13 +194,18 @@ export function ToolsetPanel({
   configRef,
   setSelectedToolset,
   setSelectedEnvironment,
+  dynamicToolset,
+  setDynamicToolset,
 }: {
   configRef: ChatConfig;
   setSelectedToolset: (toolset: string) => void;
   setSelectedEnvironment: (environment: string) => void;
+  dynamicToolset: boolean;
+  setDynamicToolset: (dynamicToolset: boolean) => void;
 }) {
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();
+  const isAdmin = useIsAdmin();
 
   const toolsets = toolsetsData?.toolsets;
   const environments = environmentsData?.environments;
@@ -212,6 +233,16 @@ export function ToolsetPanel({
       }
     }
   }, [environments, configRef, setSelectedEnvironment, toolset]);
+
+  useEffect(() => {
+    if (
+      toolset?.httpTools?.length &&
+      toolset.httpTools.length > 40 &&
+      isAdmin
+    ) {
+      setDynamicToolset(true);
+    }
+  }, [toolset, isAdmin, setDynamicToolset]);
 
   const toolsetDropdownItems =
     toolsets?.map((toolset) => ({
@@ -271,11 +302,27 @@ export function ToolsetPanel({
           <Stack direction="horizontal" gap={2} align="center">
             <Heading variant="h5">Active toolset: </Heading>
             {toolsetDropdown}
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                icon={dynamicToolset ? "sparkles" : "lock"}
+                onClick={() => setDynamicToolset(!dynamicToolset)}
+                tooltip={
+                  dynamicToolset
+                    ? "Make the toolset static (use every tool in the toolset)"
+                    : "Make the toolset dynamic (use only relevant tools)"
+                }
+              >
+                {dynamicToolset ? "Dynamic" : "Static"}
+              </Button>
+            )}
           </Stack>
-          <Stack direction="horizontal" gap={2} align="center">
-            <Heading variant="h5">Active environment: </Heading>
-            {environmentDropdown}
-          </Stack>
+          {environmentDropdownItems.length > 1 && (
+            <Stack direction="horizontal" gap={2} align="center">
+              <Heading variant="h5">Active environment: </Heading>
+              {environmentDropdown}
+            </Stack>
+          )}
         </Stack>
       </div>
       <ToolsetView
@@ -290,9 +337,11 @@ export function ToolsetPanel({
 export function ChatWindow({
   configRef,
   chatId,
+  dynamicToolset,
 }: {
   configRef: ChatConfig;
   chatId: string;
+  dynamicToolset: boolean;
 }) {
   const [model, setModel] = useState(availableModels[0]?.value ?? "");
   const chatKey = `chat-${model}`;
@@ -305,25 +354,32 @@ export function ChatWindow({
       setModel={setModel}
       configRef={configRef}
       chatId={chatId}
+      dynamicToolset={dynamicToolset}
     />
   );
 }
+
+type Toolset = Record<string, Tool & { id: string }>;
 
 function ChatInner({
   model,
   setModel,
   configRef,
   chatId,
+  dynamicToolset,
 }: {
   model: string;
   setModel: (model: string) => void;
   configRef: ChatConfig;
   chatId: string;
+  dynamicToolset: boolean;
 }) {
   const session = useSession();
   const project = useProject();
   const { chatHistory, isLoading: isChatHistoryLoading } =
     useChatHistory(chatId);
+
+  const selectedTools = useRef<Toolset>({});
 
   const instance = useInstance(
     {
@@ -337,20 +393,26 @@ function ChatInner({
     }
   );
 
-  const tools = Object.fromEntries(
-    instance.data?.tools.map((tool) => {
-      return [
-        tool.name,
-        {
-          id: tool.id,
-          description: tool.description,
-          parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
-        },
-      ];
-    }) ?? []
+  const allTools: Toolset = useMemo(
+    () =>
+      Object.fromEntries(
+        instance.data?.tools.map((tool) => {
+          return [
+            tool.name,
+            {
+              id: tool.id,
+              description: tool.description,
+              parameters: jsonSchema(
+                tool.schema ? JSON.parse(tool.schema) : {}
+              ),
+            },
+          ];
+        }) ?? []
+      ),
+    [instance.data?.tools]
   );
 
-  const openrouter = createOpenRouter({
+  const openrouterChat = createOpenRouter({
     apiKey: "this is required",
     baseURL: getServerURL(),
     headers: {
@@ -360,15 +422,108 @@ function ChatInner({
     },
   });
 
+  const openrouterBasic = createOpenRouter({
+    apiKey: "this is required",
+    baseURL: getServerURL(),
+    headers: {
+      "Gram-Session": session.session,
+      "Gram-Project": project.slug,
+    },
+  });
+
+  const updateToolsTool = {
+    id: "refresh_tools",
+    name: "refresh_tools",
+    description: `If you are unable to fulfill the user's request with the current set of tools, use this tool to get a new set of tools.
+    The request is a description of the task you are trying to complete based on the conversation history. 
+    Try to incorporate not just the most recent messages, but also the overall task the user has been trying to accomplish over the course of the chat.`,
+    parameters: z.object({
+      priorConversationSummary: z.string(),
+      previouslyUsedTools: z.array(z.string()),
+      newRequest: z.string(),
+    }),
+  };
+
+  const updateSelectedTools = async (task: string): Promise<Toolset> => {
+    if (Object.keys(allTools).length === 0) return {};
+
+    if (!dynamicToolset) {
+      return allTools;
+    }
+
+    console.log("Updating tools for task", task);
+
+    const toolsString = Object.entries(allTools)
+      .map(([tool, toolInfo]) => `${tool}: ${toolInfo.description}`)
+      .join("\n");
+
+    const result = await generateObject({
+      model: openrouterBasic.chat(model),
+      prompt: `Below is a list of tools and a description of the task I want to complete. Please return a list of tool names that you think are relevant to the task.
+      Include any tools that you think might be useful for answering follow-up questions, taking into account the conversation history.
+      Try to return between 5 and 25 tools.
+      Try to include tools that were used in the past if they fit.
+      Tools: ${toolsString}
+      Task: ${task}`,
+      temperature: 0.5,
+      schema: z.object({
+        tools: z.array(z.string()),
+      }),
+    });
+
+    const filteredTools = Object.fromEntries(
+      Object.entries(allTools).filter(([tool]) =>
+        result.object.tools.includes(tool)
+      )
+    );
+
+    if (filteredTools[updateToolsTool.name]) {
+      throw new Error("update_tools tool already exists");
+    }
+
+    filteredTools[updateToolsTool.name] = updateToolsTool;
+
+    selectedTools.current = filteredTools;
+
+    console.log("Selected tools", filteredTools);
+
+    return filteredTools;
+  };
+
+  const updateSelectedToolsFromMessages = async (
+    messages: Message[]
+  ): Promise<Toolset> => {
+    const task = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+    return updateSelectedTools(task);
+  };
+
   const openaiFetch: typeof globalThis.fetch = async (_, init) => {
+    const messages = JSON.parse(init?.body as string).messages;
+
+    let tools = dynamicToolset ? selectedTools.current : allTools;
+    console.log("Tools", tools);
+
+    // On the first message, get the initial set of tools if we're using a dynamic toolset
+    if (Object.keys(tools).length === 0) {
+      console.log("Updating tools for first message");
+      tools = await updateSelectedToolsFromMessages(messages);
+    }
+
+    let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
+        The current date is ${new Date().toISOString()}`;
+
+    if (dynamicToolset) {
+      systemPrompt += `
+        If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it. 
+        The current date is ${new Date().toISOString()}`;
+    }
+
     const result = streamText({
-      model: openrouter.chat(model),
-      messages: JSON.parse(init?.body as string).messages,
+      model: openrouterChat.chat(model),
+      messages,
       tools,
       temperature: 0.5,
-      system:
-        "You are a helpful assistant that can answer questions and help with tasks. The current date is " +
-        new Date().toISOString(),
+      system: systemPrompt,
       experimental_transform: smoothStream({
         delayInMs: 15, // Looks a little smoother
       }),
@@ -401,12 +556,18 @@ function ChatInner({
     maxSteps: 5,
     initialMessages,
     onToolCall: async ({ toolCall }) => {
-      const tool = tools[toolCall.toolName];
-      if (!tool) {
-        throw new Error(`Tool ${toolCall.toolName} not found`);
-      }
-
       try {
+        if (toolCall.toolName === updateToolsTool.name) {
+          const args = updateToolsTool.parameters.parse(toolCall.args);
+          const result = await updateSelectedTools(JSON.stringify(args));
+          return `Updated tool list: ${Object.keys(result).join(", ")}`;
+        }
+
+        const tool = allTools[toolCall.toolName];
+        if (!tool) {
+          throw new Error(`Tool ${toolCall.toolName} not found`);
+        }
+
         const response = await fetch(
           `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
             tool.id
