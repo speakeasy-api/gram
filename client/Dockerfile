@@ -1,4 +1,4 @@
-FROM node:18 as build
+FROM node:18 AS build
 
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}

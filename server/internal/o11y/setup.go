@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/go-logr/logr"
@@ -11,14 +12,25 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"goa.design/clue/clue"
 )
 
+type SetupOTelSDKOptions struct {
+	Discard bool
+}
+
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func SetupOTelSDK(ctx context.Context, logger *slog.Logger) (shutdown func(context.Context) error, err error) {
+func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDKOptions) (shutdown func(context.Context) error, err error) {
 	var shutdownFuncs []func(context.Context) error
+
+	var metricExporter sdkmetric.Exporter
+	var spanExporter sdktrace.SpanExporter
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
 	// The errors from the calls are joined.
@@ -42,19 +54,41 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger) (shutdown func(conte
 		propagation.Baggage{},
 	)
 
-	metricsExporter, err := otlpmetricgrpc.New(ctx)
-	if err != nil {
-		handleErr(err)
-		return
+	if options.Discard {
+		exp, err := stdoutmetric.New(stdoutmetric.WithWriter(io.Discard))
+		if err != nil {
+			handleErr(err)
+			return nil, err
+		}
+		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
+		metricExporter = exp
+	} else {
+		exp, err := otlpmetricgrpc.New(ctx)
+		if err != nil {
+			handleErr(err)
+			return nil, err
+		}
+		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
+		metricExporter = exp
 	}
-	shutdownFuncs = append(shutdownFuncs, metricsExporter.Shutdown)
 
-	traceExporter, err := otlptracegrpc.New(ctx)
-	if err != nil {
-		handleErr(err)
-		return
+	if options.Discard {
+		exp, err := stdouttrace.New(stdouttrace.WithWriter(io.Discard))
+		if err != nil {
+			handleErr(err)
+			return nil, err
+		}
+		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
+		spanExporter = exp
+	} else {
+		exp, err := otlptracegrpc.New(ctx)
+		if err != nil {
+			handleErr(err)
+			return nil, err
+		}
+		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
+		spanExporter = exp
 	}
-	shutdownFuncs = append(shutdownFuncs, traceExporter.Shutdown)
 
 	appInfo := PullAppInfo(ctx)
 	serviceName := appInfo.Name
@@ -66,8 +100,8 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger) (shutdown func(conte
 		ctx,
 		serviceName,
 		appInfo.GitSHA,
-		metricsExporter,
-		traceExporter,
+		metricExporter,
+		spanExporter,
 		clue.WithPropagators(prop),
 		clue.WithErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 			logger.ErrorContext(ctx, "otel error", slog.String("error", err.Error()))

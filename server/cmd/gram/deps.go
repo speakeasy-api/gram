@@ -33,26 +33,23 @@ import (
 )
 
 type dbClientOptions struct {
-	enableTracing       bool
 	enableUnsafeLogging bool
 }
 
 func newDBClient(ctx context.Context, logger *slog.Logger, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {
 	poolcfg := must.Value(pgxpool.ParseConfig(connstring))
-	if opts.enableTracing {
-		consoleLogLevel := tracelog.LogLevelNone
-		if opts.enableUnsafeLogging {
-			consoleLogLevel = tracelog.LogLevelDebug
-		}
-
-		poolcfg.ConnConfig.Tracer = multitracer.New(
-			&pgxotel.QueryTracer{
-				Name:    "pgx",
-				Options: []trace.TracerOption{},
-			},
-			o11y.NewPGXLogger(logger, consoleLogLevel),
-		)
+	consoleLogLevel := tracelog.LogLevelNone
+	if opts.enableUnsafeLogging {
+		consoleLogLevel = tracelog.LogLevelDebug
 	}
+
+	poolcfg.ConnConfig.Tracer = multitracer.New(
+		&pgxotel.QueryTracer{
+			Name:    "pgx",
+			Options: []trace.TracerOption{},
+		},
+		o11y.NewPGXLogger(logger, consoleLogLevel),
+	)
 
 	return pgxpool.NewWithConfig(ctx, poolcfg)
 }
@@ -96,7 +93,6 @@ func newAssetStorage(ctx context.Context, opts assetStorageOptions) (assets.Blob
 type redisClientOptions struct {
 	redisAddr     string
 	redisPassword string
-	enableTracing bool
 }
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
@@ -114,25 +110,22 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 		return nil, fmt.Errorf("redis connection failed: %w", err)
 	}
 
-	if opts.enableTracing {
-		attrs := redisotel.WithAttributes(
-			semconv.DBSystemRedis,
-			semconv.DBRedisDBIndex(db),
-		)
-		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
-			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
-		}
+	attrs := redisotel.WithAttributes(
+		semconv.DBSystemRedis,
+		semconv.DBRedisDBIndex(db),
+	)
+	if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
+		return nil, fmt.Errorf("failed to instrument redis client: %w", err)
 	}
 
 	return redisClient, nil
 }
 
 type temporalClientOptions struct {
-	enableTracing bool
-	address       string
-	namespace     string
-	certPEMBlock  []byte
-	keyPEMBlock   []byte
+	address      string
+	namespace    string
+	certPEMBlock []byte
+	keyPEMBlock  []byte
 }
 
 func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.Client, func(context.Context) error, error) {
@@ -160,17 +153,15 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 
 	interceptors := []interceptor.ClientInterceptor{}
 
-	if opts.enableTracing {
-		tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
-			TextMapPropagator: otel.GetTextMapPropagator(),
-		})
-		if err != nil {
-			return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal tracing interceptor: %w", err)
-		}
-
-		interceptors = append(interceptors, tracingInterceptor)
-		clientOptions.MetricsHandler = opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{})
+	tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
+		TextMapPropagator: otel.GetTextMapPropagator(),
+	})
+	if err != nil {
+		return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal tracing interceptor: %w", err)
 	}
+
+	interceptors = append(interceptors, tracingInterceptor)
+	clientOptions.MetricsHandler = opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{})
 
 	clientOptions.Interceptors = interceptors
 

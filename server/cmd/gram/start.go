@@ -191,16 +191,15 @@ func newStartCommand() *cli.Command {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
-			if c.Bool("observe") {
-				shutdown, err := o11y.SetupOTelSDK(ctx, logger)
-				if err != nil {
-					return err
-				}
-				shutdownFuncs = append(shutdownFuncs, shutdown)
+			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				Discard: !c.Bool("observe"),
+			})
+			if err != nil {
+				return err
 			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			db, err := newDBClient(ctx, logger, c.String("database-url"), dbClientOptions{
-				enableTracing:       c.Bool("observe"),
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
@@ -225,7 +224,6 @@ func newStartCommand() *cli.Command {
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
-				enableTracing: c.Bool("observe"),
 			})
 			if err != nil {
 				return err
@@ -258,11 +256,10 @@ func newStartCommand() *cli.Command {
 			}
 
 			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
-				enableTracing: c.Bool("observe"),
-				address:       c.String("temporal-address"),
-				namespace:     c.String("temporal-namespace"),
-				certPEMBlock:  []byte(c.String("temporal-client-cert")),
-				keyPEMBlock:   []byte(c.String("temporal-client-key")),
+				address:      c.String("temporal-address"),
+				namespace:    c.String("temporal-namespace"),
+				certPEMBlock: []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:  []byte(c.String("temporal-client-key")),
 			})
 			if err != nil {
 				return err

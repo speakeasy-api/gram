@@ -93,11 +93,10 @@ func newWorkerCommand() *cli.Command {
 			defer cancel()
 
 			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
-				enableTracing: c.Bool("observe"),
-				address:       c.String("temporal-address"),
-				namespace:     c.String("temporal-namespace"),
-				certPEMBlock:  []byte(c.String("temporal-client-cert")),
-				keyPEMBlock:   []byte(c.String("temporal-client-key")),
+				address:      c.String("temporal-address"),
+				namespace:    c.String("temporal-namespace"),
+				certPEMBlock: []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:  []byte(c.String("temporal-client-key")),
 			})
 			if err != nil {
 				return err
@@ -107,16 +106,15 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			if c.Bool("observe") {
-				shutdown, err := o11y.SetupOTelSDK(ctx, logger)
-				if err != nil {
-					return err
-				}
-				shutdownFuncs = append(shutdownFuncs, shutdown)
+			shutdown, err = o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				Discard: !c.Bool("observe"),
+			})
+			if err != nil {
+				return err
 			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			db, err := newDBClient(ctx, logger, c.String("database-url"), dbClientOptions{
-				enableTracing:       c.Bool("observe"),
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
