@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"runtime"
 	"sync"
 
+	"github.com/speakeasy-api/gram/internal/conv"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
@@ -27,6 +29,7 @@ func E(code Code, cause error, public string, args ...any) *ShareableError {
 
 	return &ShareableError{
 		code:    code,
+		id:      goa.NewErrorID(),
 		cause:   cause,
 		private: "",
 		public:  msg,
@@ -41,6 +44,7 @@ func EE(code Code, cause error, public string, private string) *ShareableError {
 
 	return &ShareableError{
 		code:    code,
+		id:      goa.NewErrorID(),
 		cause:   cause,
 		public:  public,
 		private: private,
@@ -55,6 +59,7 @@ func C(code Code) *ShareableError {
 
 	return &ShareableError{
 		code:    code,
+		id:      goa.NewErrorID(),
 		cause:   nil,
 		private: "",
 		public:  code.UserMessage(),
@@ -64,6 +69,7 @@ func C(code Code) *ShareableError {
 
 type ShareableError struct {
 	code    Code
+	id      string
 	cause   error
 	public  string
 	private string
@@ -107,9 +113,9 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 	trace.SpanFromContext(ctx).SetStatus(codes.Error, e.String())
 
 	if len(args) > 0 {
-		logger.ErrorContext(ctx, e.public, append(args, slog.String("error", e.String()))...)
+		logger.ErrorContext(ctx, e.public, append(args, slog.String("error_id", e.id), slog.String("error", e.String()))...)
 	} else {
-		logger.ErrorContext(ctx, e.public, slog.String("error", e.String()))
+		logger.ErrorContext(ctx, e.public, slog.String("error_id", e.id), slog.String("error", e.String()))
 	}
 	return e
 }
@@ -124,7 +130,13 @@ func (e *ShareableError) AsGoa() *goa.ServiceError {
 		timeout, temporary, fault = false, false, false
 	}
 
-	return goa.NewServiceError(e, string(e.code), timeout, temporary, fault)
+	goaErr := goa.NewServiceError(e, string(e.code), timeout, temporary, fault)
+	goaErr.ID = e.id
+	return goaErr
+}
+
+func (e *ShareableError) HTTPStatus() int {
+	return conv.Default(StatusCodes[e.code], http.StatusInternalServerError)
 }
 
 func funcForPC(pc uintptr) string {
