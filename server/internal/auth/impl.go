@@ -120,7 +120,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		if userInfo.Admin {
 			adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx)
 			if adminOverride == "" {
-				adminOverride = "speakeasy-self"
+				adminOverride = "speakeasy-team"
 			}
 			for _, org := range userInfo.Organizations {
 				if org.Slug == adminOverride {
