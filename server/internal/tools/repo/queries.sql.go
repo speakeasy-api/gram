@@ -31,7 +31,7 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT 
-  http_tool_definitions.id, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
+  http_tool_definitions.id, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
   (select id from deployment) as owning_deployment_id,
   (CASE
     WHEN http_tool_definitions.project_id = $1 THEN ''
@@ -73,11 +73,17 @@ func (q *Queries) FindToolsByName(ctx context.Context, arg FindToolsByNameParams
 			&i.HttpToolDefinition.ProjectID,
 			&i.HttpToolDefinition.DeploymentID,
 			&i.HttpToolDefinition.Openapiv3DocumentID,
+			&i.HttpToolDefinition.Confirm,
+			&i.HttpToolDefinition.ConfirmPrompt,
 			&i.HttpToolDefinition.Name,
 			&i.HttpToolDefinition.Summary,
 			&i.HttpToolDefinition.Description,
 			&i.HttpToolDefinition.Openapiv3Operation,
 			&i.HttpToolDefinition.Tags,
+			&i.HttpToolDefinition.XGram,
+			&i.HttpToolDefinition.OriginalName,
+			&i.HttpToolDefinition.OriginalSummary,
+			&i.HttpToolDefinition.OriginalDescription,
 			&i.HttpToolDefinition.ServerEnvVar,
 			&i.HttpToolDefinition.DefaultServerUrl,
 			&i.HttpToolDefinition.Security,
@@ -126,7 +132,7 @@ third_party AS (
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
 )
-SELECT id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party))
 `
@@ -145,11 +151,17 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 		&i.ProjectID,
 		&i.DeploymentID,
 		&i.Openapiv3DocumentID,
+		&i.Confirm,
+		&i.ConfirmPrompt,
 		&i.Name,
 		&i.Summary,
 		&i.Description,
 		&i.Openapiv3Operation,
 		&i.Tags,
+		&i.XGram,
+		&i.OriginalName,
+		&i.OriginalSummary,
+		&i.OriginalDescription,
 		&i.ServerEnvVar,
 		&i.DefaultServerUrl,
 		&i.Security,
@@ -181,7 +193,7 @@ WITH deployment AS (
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, name, summary, description, openapiv3_operation, tags, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, deployment.id
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, deployment.id
 FROM http_tool_definitions
 INNER JOIN deployment ON http_tool_definitions.deployment_id = deployment.id
 WHERE http_tool_definitions.project_id = $1 
@@ -201,11 +213,17 @@ type ListFirstPartyHTTPToolsRow struct {
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
+	Confirm             pgtype.Text
+	ConfirmPrompt       pgtype.Text
 	Name                string
 	Summary             string
 	Description         string
 	Openapiv3Operation  pgtype.Text
 	Tags                []string
+	XGram               pgtype.Bool
+	OriginalName        pgtype.Text
+	OriginalSummary     pgtype.Text
+	OriginalDescription pgtype.Text
 	ServerEnvVar        string
 	DefaultServerUrl    pgtype.Text
 	Security            []byte
@@ -238,11 +256,17 @@ func (q *Queries) ListFirstPartyHTTPTools(ctx context.Context, arg ListFirstPart
 			&i.ProjectID,
 			&i.DeploymentID,
 			&i.Openapiv3DocumentID,
+			&i.Confirm,
+			&i.ConfirmPrompt,
 			&i.Name,
 			&i.Summary,
 			&i.Description,
 			&i.Openapiv3Operation,
 			&i.Tags,
+			&i.XGram,
+			&i.OriginalName,
+			&i.OriginalSummary,
+			&i.OriginalDescription,
 			&i.ServerEnvVar,
 			&i.DefaultServerUrl,
 			&i.Security,

@@ -55,11 +55,17 @@ type HttpToolDefinition struct {
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
+	Confirm             pgtype.Text
+	ConfirmPrompt       pgtype.Text
 	Name                string
 	Summary             string
 	Description         string
 	Openapiv3Operation  pgtype.Text
 	Tags                []string
+	XGram               pgtype.Bool
+	OriginalName        pgtype.Text
+	OriginalSummary     pgtype.Text
+	OriginalDescription pgtype.Text
 	ServerEnvVar        string
 	DefaultServerUrl    pgtype.Text
 	Security            []byte

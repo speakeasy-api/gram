@@ -245,11 +245,18 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
   openapiv3_document_id uuid,
 
+  confirm TEXT,
+  confirm_prompt TEXT,
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   summary TEXT NOT NULL,
   description TEXT NOT NULL,
   openapiv3_operation TEXT CHECK (openapiv3_operation <> '' AND CHAR_LENGTH(openapiv3_operation) <= 100),
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
+
+  x_gram BOOLEAN,
+  original_name TEXT,
+  original_summary TEXT,
+  original_description TEXT,
 
   server_env_var TEXT NOT NULL,
   default_server_url TEXT,

@@ -1290,7 +1290,6 @@ paths:
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - {}
             summary: getLatestDeployment deployments
             tags:
                 - deployments

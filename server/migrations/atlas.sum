@@ -1,4 +1,4 @@
-h1:O0a7VWvRZrx/Wk6uvyDac/ibwBnw/ecmr5EBA1CSbU4=
+h1:OOCCH3ajMRgFYrS2RpG6U+8krbmeYtkYVQGQW4YFBhU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -8,3 +8,4 @@ h1:O0a7VWvRZrx/Wk6uvyDac/ibwBnw/ecmr5EBA1CSbU4=
 20250506142853_packages-description-column.sql h1:j9DZFKZsd1iZzBFjQWlT5ZioTr7OF4uDggxnOuN/kuI=
 20250507214842_openrouter-table.sql h1:m4U6lidlwiXAjlYQSyUoEIWFZ3xdrqj3GYuAHwYEGOE=
 20250509153302_create-chats-tables.sql h1:MIcuDX/K2/RzPQgRP708AvpuRoJ67HnCFntol4ljPxU=
+20250512202105_http-tool-definition-overrides.sql h1:relKQbZFZ2qoKP3LcT7CzfzjA6vs9AzQvGtv96EwLUY=
