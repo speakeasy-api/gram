@@ -34,9 +34,17 @@ const groupColumns: Column<ToolGroup>[] = [
     header: "Tool Source",
     key: "name",
     render: (row) => (
-      <Stack direction={"horizontal"} gap={4}>
+      <Stack direction={"horizontal"} gap={4} align={"center"}>
         <Type className="capitalize">{row.key}</Type>
-        {row.tools[0]?.packageName && <Badge>Third Party</Badge>}
+        {row.tools[0]?.packageName && (
+          <Badge
+            variant={"outline"}
+            size={"sm"}
+            className="text-muted-foreground"
+          >
+            Third Party
+          </Badge>
+        )}
       </Stack>
     ),
     width: "0.5fr",
@@ -184,8 +192,14 @@ export function ToolSelect() {
     toolGroupsFinal.sort((a, b) => {
       const aEnabled = a.tools.some((t) => t.enabled);
       const bEnabled = b.tools.some((t) => t.enabled);
+
+      // Groups that contain enabled tools first
       if (aEnabled && !bEnabled) return -1;
       if (!aEnabled && bEnabled) return 1;
+      // First party tools first
+      if (a.tools[0]?.packageName && !b.tools[0]?.packageName) return 1;
+      if (!a.tools[0]?.packageName && b.tools[0]?.packageName) return -1;
+      // Alphabetical
       return b.key.localeCompare(a.key);
     });
 

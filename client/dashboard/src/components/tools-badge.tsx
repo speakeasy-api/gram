@@ -10,7 +10,7 @@ import { reduceToolNames as simplifyToolNames } from "@/lib/toolNames";
 
 export const ToolsBadge = ({
   tools,
-  size = "sm",
+  size = "md",
   variant = "default",
 }: {
   tools: ({ name: string } | string)[] | undefined;

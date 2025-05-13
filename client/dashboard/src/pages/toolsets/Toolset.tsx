@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
 import { Dot } from "@/components/ui/dot";
 import { Heading } from "@/components/ui/heading";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { groupTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
@@ -252,14 +254,39 @@ export function ToolsetView({
     </Button>
   );
 
+  const grouped = groupTools(toolset?.httpTools || []);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(
+    grouped.map((group) => group.key)
+  );
+  const groupFilterItems = grouped.map((group) => ({
+    label: group.key,
+    value: group.key,
+  }));
+  const filterButton = (
+    <MultiSelect
+      options={groupFilterItems}
+      defaultValue={groupFilterItems.map((group) => group.value)}
+      onValueChange={setSelectedGroups}
+      placeholder="Filter tools"
+      className="w-fit mb-4"
+    />
+  );
+
+  const toolsToDisplay = grouped
+    .filter(
+      (group) => !selectedGroups.length || selectedGroups.includes(group.key)
+    )
+    .flatMap((group) => group.tools);
+
   return (
     <Page.Body className={className}>
       {/* This div is so that the scrollbox still extends the width of the page */}
       <div className="max-w-2xl">
         <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
+        {groupFilterItems.length > 1 && filterButton}
         {missingEnvVarsAlert}
         <Cards loading={!toolset}>
-          {toolset?.httpTools.map((tool) => (
+          {toolsToDisplay.map((tool) => (
             <ToolCard
               key={tool.id}
               tool={tool}
@@ -439,8 +466,8 @@ export const ToolsetEnvironmentBadge = ({
 
   const colors = {
     default: {
-      warn: "text-orange-800",
-      success: "text-green-800",
+      warn: "dark:text-orange-800 text-orange-300",
+      success: "dark:text-green-800 text-green-300",
     },
     outline: {
       warn: "text-orange-500",
@@ -464,7 +491,7 @@ export const ToolsetEnvironmentBadge = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
-                      <AlertTriangle className={cn("w-3 h-3", colors.warn)} />
+                      <AlertTriangle className={cn("w-4 h-4", colors.warn)} />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -476,7 +503,7 @@ export const ToolsetEnvironmentBadge = ({
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <Check className={cn("w-3 h-3", colors.success)} />
+              <Check className={cn("w-4 h-4 stroke-3", colors.success)} />
             ))}
           Default Env
         </Badge>

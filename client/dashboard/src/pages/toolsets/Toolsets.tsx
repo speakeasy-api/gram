@@ -142,7 +142,7 @@ function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
             />
           </Card.Title>
           <Stack direction="horizontal" gap={2} align="center">
-            <ToolsetEnvironmentBadge toolset={toolset} size="sm" />
+            <ToolsetEnvironmentBadge toolset={toolset}  />
             <ToolsBadge tools={toolset.httpTools} />
           </Stack>
         </Stack>

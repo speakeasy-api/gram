@@ -39,6 +39,8 @@ const emptySession: Session = {
   refetch: () => Promise.resolve(emptySession),
 };
 
+const PREFERRED_PROJECT_KEY = "preferredProject";
+
 const SessionContext = createContext<Session>(emptySession);
 
 export const useSession = () => {
@@ -64,6 +66,7 @@ export const useProject = () => {
   }
 
   const switchProject = async (slug: string) => {
+    localStorage.setItem(PREFERRED_PROJECT_KEY, slug);
     navigate(`/${organization.slug}/${slug}`);
   };
 
@@ -168,7 +171,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // if we're logged in but the URL doesn't have a project slug, redirect to the default project
   if (organization && !projectSlug) {
-    navigate(`/${organization.slug}/${organization.projects[0]!.slug}`);
+    let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
+
+    if (
+      !preferredProject ||
+      !organization.projects.find((p) => p.slug === preferredProject)
+    ) {
+      preferredProject = organization.projects[0]!.slug;
+    }
+
+    navigate(`/${organization.slug}/${preferredProject}`);
   }
 
   const session: Session = {
