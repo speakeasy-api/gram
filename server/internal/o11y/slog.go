@@ -7,6 +7,7 @@ import (
 
 	charmlog "github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/tracelog"
+	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -73,6 +74,14 @@ func (h *ContextHandler) WithGroup(name string) slog.Handler {
 }
 
 func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		record.Add("trace_id", spanCtx.TraceID().String())
+	}
+	if spanCtx.HasSpanID() {
+		record.Add("span_id", spanCtx.SpanID().String())
+	}
+
 	if service, ok := ctx.Value(goa.ServiceKey).(string); ok {
 		record.Add("goa_service", service)
 	}
