@@ -201,6 +201,24 @@ type CreateProjectUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateProjectGatewayErrorResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "gateway_error" error.
+type CreateProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListProjectsUnauthorizedResponseBody is the type of the "projects" service
 // "listProjects" endpoint HTTP response body for the "unauthorized" error.
 type ListProjectsUnauthorizedResponseBody struct {
@@ -350,6 +368,24 @@ type ListProjectsInvariantViolationResponseBody struct {
 // ListProjectsUnexpectedResponseBody is the type of the "projects" service
 // "listProjects" endpoint HTTP response body for the "unexpected" error.
 type ListProjectsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListProjectsGatewayErrorResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "gateway_error" error.
+type ListProjectsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -545,6 +581,21 @@ func NewCreateProjectUnexpected(body *CreateProjectUnexpectedResponseBody) *goa.
 	return v
 }
 
+// NewCreateProjectGatewayError builds a projects service createProject
+// endpoint gateway_error error.
+func NewCreateProjectGatewayError(body *CreateProjectGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListProjectsResultOK builds a "projects" service "listProjects" endpoint
 // result from a HTTP "OK" response.
 func NewListProjectsResultOK(body *ListProjectsResponseBody) *projects.ListProjectsResult {
@@ -680,6 +731,21 @@ func NewListProjectsInvariantViolation(body *ListProjectsInvariantViolationRespo
 // NewListProjectsUnexpected builds a projects service listProjects endpoint
 // unexpected error.
 func NewListProjectsUnexpected(body *ListProjectsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListProjectsGatewayError builds a projects service listProjects endpoint
+// gateway_error error.
+func NewListProjectsGatewayError(body *ListProjectsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -938,6 +1004,30 @@ func ValidateCreateProjectUnexpectedResponseBody(body *CreateProjectUnexpectedRe
 	return
 }
 
+// ValidateCreateProjectGatewayErrorResponseBody runs the validations defined
+// on createProject_gateway_error_response_body
+func ValidateCreateProjectGatewayErrorResponseBody(body *CreateProjectGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListProjectsUnauthorizedResponseBody runs the validations defined on
 // listProjects_unauthorized_response_body
 func ValidateListProjectsUnauthorizedResponseBody(body *ListProjectsUnauthorizedResponseBody) (err error) {
@@ -1133,6 +1223,30 @@ func ValidateListProjectsInvariantViolationResponseBody(body *ListProjectsInvari
 // ValidateListProjectsUnexpectedResponseBody runs the validations defined on
 // listProjects_unexpected_response_body
 func ValidateListProjectsUnexpectedResponseBody(body *ListProjectsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListProjectsGatewayErrorResponseBody runs the validations defined on
+// listProjects_gateway_error_response_body
+func ValidateListProjectsGatewayErrorResponseBody(body *ListProjectsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

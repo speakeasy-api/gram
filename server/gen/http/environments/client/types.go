@@ -264,6 +264,25 @@ type CreateEnvironmentUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateEnvironmentGatewayErrorResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateEnvironmentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListEnvironmentsUnauthorizedResponseBody is the type of the "environments"
 // service "listEnvironments" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -420,6 +439,25 @@ type ListEnvironmentsInvariantViolationResponseBody struct {
 // service "listEnvironments" endpoint HTTP response body for the "unexpected"
 // error.
 type ListEnvironmentsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListEnvironmentsGatewayErrorResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListEnvironmentsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -606,6 +644,25 @@ type UpdateEnvironmentUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateEnvironmentGatewayErrorResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateEnvironmentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteEnvironmentUnauthorizedResponseBody is the type of the "environments"
 // service "deleteEnvironment" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -762,6 +819,25 @@ type DeleteEnvironmentInvariantViolationResponseBody struct {
 // service "deleteEnvironment" endpoint HTTP response body for the "unexpected"
 // error.
 type DeleteEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteEnvironmentGatewayErrorResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteEnvironmentGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1021,6 +1097,21 @@ func NewCreateEnvironmentUnexpected(body *CreateEnvironmentUnexpectedResponseBod
 	return v
 }
 
+// NewCreateEnvironmentGatewayError builds a environments service
+// createEnvironment endpoint gateway_error error.
+func NewCreateEnvironmentGatewayError(body *CreateEnvironmentGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListEnvironmentsResultOK builds a "environments" service
 // "listEnvironments" endpoint result from a HTTP "OK" response.
 func NewListEnvironmentsResultOK(body *ListEnvironmentsResponseBody) *environments.ListEnvironmentsResult {
@@ -1156,6 +1247,21 @@ func NewListEnvironmentsInvariantViolation(body *ListEnvironmentsInvariantViolat
 // NewListEnvironmentsUnexpected builds a environments service listEnvironments
 // endpoint unexpected error.
 func NewListEnvironmentsUnexpected(body *ListEnvironmentsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListEnvironmentsGatewayError builds a environments service
+// listEnvironments endpoint gateway_error error.
+func NewListEnvironmentsGatewayError(body *ListEnvironmentsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1324,6 +1430,21 @@ func NewUpdateEnvironmentUnexpected(body *UpdateEnvironmentUnexpectedResponseBod
 	return v
 }
 
+// NewUpdateEnvironmentGatewayError builds a environments service
+// updateEnvironment endpoint gateway_error error.
+func NewUpdateEnvironmentGatewayError(body *UpdateEnvironmentGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteEnvironmentUnauthorized builds a environments service
 // deleteEnvironment endpoint unauthorized error.
 func NewDeleteEnvironmentUnauthorized(body *DeleteEnvironmentUnauthorizedResponseBody) *goa.ServiceError {
@@ -1447,6 +1568,21 @@ func NewDeleteEnvironmentInvariantViolation(body *DeleteEnvironmentInvariantViol
 // NewDeleteEnvironmentUnexpected builds a environments service
 // deleteEnvironment endpoint unexpected error.
 func NewDeleteEnvironmentUnexpected(body *DeleteEnvironmentUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteEnvironmentGatewayError builds a environments service
+// deleteEnvironment endpoint gateway_error error.
+func NewDeleteEnvironmentGatewayError(body *DeleteEnvironmentGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1793,6 +1929,30 @@ func ValidateCreateEnvironmentUnexpectedResponseBody(body *CreateEnvironmentUnex
 	return
 }
 
+// ValidateCreateEnvironmentGatewayErrorResponseBody runs the validations
+// defined on createEnvironment_gateway_error_response_body
+func ValidateCreateEnvironmentGatewayErrorResponseBody(body *CreateEnvironmentGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListEnvironmentsUnauthorizedResponseBody runs the validations
 // defined on listEnvironments_unauthorized_response_body
 func ValidateListEnvironmentsUnauthorizedResponseBody(body *ListEnvironmentsUnauthorizedResponseBody) (err error) {
@@ -1988,6 +2148,30 @@ func ValidateListEnvironmentsInvariantViolationResponseBody(body *ListEnvironmen
 // ValidateListEnvironmentsUnexpectedResponseBody runs the validations defined
 // on listEnvironments_unexpected_response_body
 func ValidateListEnvironmentsUnexpectedResponseBody(body *ListEnvironmentsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListEnvironmentsGatewayErrorResponseBody runs the validations
+// defined on listEnvironments_gateway_error_response_body
+func ValidateListEnvironmentsGatewayErrorResponseBody(body *ListEnvironmentsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2225,6 +2409,30 @@ func ValidateUpdateEnvironmentUnexpectedResponseBody(body *UpdateEnvironmentUnex
 	return
 }
 
+// ValidateUpdateEnvironmentGatewayErrorResponseBody runs the validations
+// defined on updateEnvironment_gateway_error_response_body
+func ValidateUpdateEnvironmentGatewayErrorResponseBody(body *UpdateEnvironmentGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteEnvironmentUnauthorizedResponseBody runs the validations
 // defined on deleteEnvironment_unauthorized_response_body
 func ValidateDeleteEnvironmentUnauthorizedResponseBody(body *DeleteEnvironmentUnauthorizedResponseBody) (err error) {
@@ -2420,6 +2628,30 @@ func ValidateDeleteEnvironmentInvariantViolationResponseBody(body *DeleteEnviron
 // ValidateDeleteEnvironmentUnexpectedResponseBody runs the validations defined
 // on deleteEnvironment_unexpected_response_body
 func ValidateDeleteEnvironmentUnexpectedResponseBody(body *DeleteEnvironmentUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteEnvironmentGatewayErrorResponseBody runs the validations
+// defined on deleteEnvironment_gateway_error_response_body
+func ValidateDeleteEnvironmentGatewayErrorResponseBody(body *DeleteEnvironmentGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

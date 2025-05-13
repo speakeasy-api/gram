@@ -210,6 +210,24 @@ type CreateKeyUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateKeyGatewayErrorResponseBody is the type of the "keys" service
+// "createKey" endpoint HTTP response body for the "gateway_error" error.
+type CreateKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListKeysUnauthorizedResponseBody is the type of the "keys" service
 // "listKeys" endpoint HTTP response body for the "unauthorized" error.
 type ListKeysUnauthorizedResponseBody struct {
@@ -372,6 +390,24 @@ type ListKeysUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListKeysGatewayErrorResponseBody is the type of the "keys" service
+// "listKeys" endpoint HTTP response body for the "gateway_error" error.
+type ListKeysGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RevokeKeyUnauthorizedResponseBody is the type of the "keys" service
 // "revokeKey" endpoint HTTP response body for the "unauthorized" error.
 type RevokeKeyUnauthorizedResponseBody struct {
@@ -519,6 +555,24 @@ type RevokeKeyInvariantViolationResponseBody struct {
 // RevokeKeyUnexpectedResponseBody is the type of the "keys" service
 // "revokeKey" endpoint HTTP response body for the "unexpected" error.
 type RevokeKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevokeKeyGatewayErrorResponseBody is the type of the "keys" service
+// "revokeKey" endpoint HTTP response body for the "gateway_error" error.
+type RevokeKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -719,6 +773,21 @@ func NewCreateKeyUnexpected(body *CreateKeyUnexpectedResponseBody) *goa.ServiceE
 	return v
 }
 
+// NewCreateKeyGatewayError builds a keys service createKey endpoint
+// gateway_error error.
+func NewCreateKeyGatewayError(body *CreateKeyGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListKeysResultOK builds a "keys" service "listKeys" endpoint result from
 // a HTTP "OK" response.
 func NewListKeysResultOK(body *ListKeysResponseBody) *keys.ListKeysResult {
@@ -862,6 +931,21 @@ func NewListKeysUnexpected(body *ListKeysUnexpectedResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewListKeysGatewayError builds a keys service listKeys endpoint
+// gateway_error error.
+func NewListKeysGatewayError(body *ListKeysGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRevokeKeyUnauthorized builds a keys service revokeKey endpoint
 // unauthorized error.
 func NewRevokeKeyUnauthorized(body *RevokeKeyUnauthorizedResponseBody) *goa.ServiceError {
@@ -983,6 +1067,21 @@ func NewRevokeKeyInvariantViolation(body *RevokeKeyInvariantViolationResponseBod
 // NewRevokeKeyUnexpected builds a keys service revokeKey endpoint unexpected
 // error.
 func NewRevokeKeyUnexpected(body *RevokeKeyUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevokeKeyGatewayError builds a keys service revokeKey endpoint
+// gateway_error error.
+func NewRevokeKeyGatewayError(body *RevokeKeyGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1263,6 +1362,30 @@ func ValidateCreateKeyUnexpectedResponseBody(body *CreateKeyUnexpectedResponseBo
 	return
 }
 
+// ValidateCreateKeyGatewayErrorResponseBody runs the validations defined on
+// createKey_gateway_error_response_body
+func ValidateCreateKeyGatewayErrorResponseBody(body *CreateKeyGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListKeysUnauthorizedResponseBody runs the validations defined on
 // listKeys_unauthorized_response_body
 func ValidateListKeysUnauthorizedResponseBody(body *ListKeysUnauthorizedResponseBody) (err error) {
@@ -1479,6 +1602,30 @@ func ValidateListKeysUnexpectedResponseBody(body *ListKeysUnexpectedResponseBody
 	return
 }
 
+// ValidateListKeysGatewayErrorResponseBody runs the validations defined on
+// listKeys_gateway_error_response_body
+func ValidateListKeysGatewayErrorResponseBody(body *ListKeysGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRevokeKeyUnauthorizedResponseBody runs the validations defined on
 // revokeKey_unauthorized_response_body
 func ValidateRevokeKeyUnauthorizedResponseBody(body *RevokeKeyUnauthorizedResponseBody) (err error) {
@@ -1674,6 +1821,30 @@ func ValidateRevokeKeyInvariantViolationResponseBody(body *RevokeKeyInvariantVio
 // ValidateRevokeKeyUnexpectedResponseBody runs the validations defined on
 // revokeKey_unexpected_response_body
 func ValidateRevokeKeyUnexpectedResponseBody(body *RevokeKeyUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevokeKeyGatewayErrorResponseBody runs the validations defined on
+// revokeKey_gateway_error_response_body
+func ValidateRevokeKeyGatewayErrorResponseBody(body *RevokeKeyGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

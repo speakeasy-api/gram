@@ -201,6 +201,24 @@ type CreateProjectUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateProjectGatewayErrorResponseBody is the type of the "projects" service
+// "createProject" endpoint HTTP response body for the "gateway_error" error.
+type CreateProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListProjectsUnauthorizedResponseBody is the type of the "projects" service
 // "listProjects" endpoint HTTP response body for the "unauthorized" error.
 type ListProjectsUnauthorizedResponseBody struct {
@@ -350,6 +368,24 @@ type ListProjectsInvariantViolationResponseBody struct {
 // ListProjectsUnexpectedResponseBody is the type of the "projects" service
 // "listProjects" endpoint HTTP response body for the "unexpected" error.
 type ListProjectsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectsGatewayErrorResponseBody is the type of the "projects" service
+// "listProjects" endpoint HTTP response body for the "gateway_error" error.
+type ListProjectsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -542,6 +578,20 @@ func NewCreateProjectUnexpectedResponseBody(res *goa.ServiceError) *CreateProjec
 	return body
 }
 
+// NewCreateProjectGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createProject" endpoint of the "projects" service.
+func NewCreateProjectGatewayErrorResponseBody(res *goa.ServiceError) *CreateProjectGatewayErrorResponseBody {
+	body := &CreateProjectGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListProjectsUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listProjects" endpoint of the "projects" service.
 func NewListProjectsUnauthorizedResponseBody(res *goa.ServiceError) *ListProjectsUnauthorizedResponseBody {
@@ -658,6 +708,20 @@ func NewListProjectsInvariantViolationResponseBody(res *goa.ServiceError) *ListP
 // result of the "listProjects" endpoint of the "projects" service.
 func NewListProjectsUnexpectedResponseBody(res *goa.ServiceError) *ListProjectsUnexpectedResponseBody {
 	body := &ListProjectsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listProjects" endpoint of the "projects" service.
+func NewListProjectsGatewayErrorResponseBody(res *goa.ServiceError) *ListProjectsGatewayErrorResponseBody {
+	body := &ListProjectsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

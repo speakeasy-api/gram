@@ -282,6 +282,25 @@ type GetDeploymentUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetDeploymentGatewayErrorResponseBody is the type of the "deployments"
+// service "getDeployment" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetDeploymentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetLatestDeploymentUnauthorizedResponseBody is the type of the "deployments"
 // service "getLatestDeployment" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -438,6 +457,25 @@ type GetLatestDeploymentInvariantViolationResponseBody struct {
 // service "getLatestDeployment" endpoint HTTP response body for the
 // "unexpected" error.
 type GetLatestDeploymentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetLatestDeploymentGatewayErrorResponseBody is the type of the "deployments"
+// service "getLatestDeployment" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetLatestDeploymentGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -623,6 +661,25 @@ type CreateDeploymentUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateDeploymentGatewayErrorResponseBody is the type of the "deployments"
+// service "createDeployment" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateDeploymentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // EvolveUnauthorizedResponseBody is the type of the "deployments" service
 // "evolve" endpoint HTTP response body for the "unauthorized" error.
 type EvolveUnauthorizedResponseBody struct {
@@ -771,6 +828,24 @@ type EvolveInvariantViolationResponseBody struct {
 // EvolveUnexpectedResponseBody is the type of the "deployments" service
 // "evolve" endpoint HTTP response body for the "unexpected" error.
 type EvolveUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvolveGatewayErrorResponseBody is the type of the "deployments" service
+// "evolve" endpoint HTTP response body for the "gateway_error" error.
+type EvolveGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -939,6 +1014,25 @@ type ListDeploymentsInvariantViolationResponseBody struct {
 // service "listDeployments" endpoint HTTP response body for the "unexpected"
 // error.
 type ListDeploymentsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeploymentsGatewayErrorResponseBody is the type of the "deployments"
+// service "listDeployments" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDeploymentsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1264,6 +1358,20 @@ func NewGetDeploymentUnexpectedResponseBody(res *goa.ServiceError) *GetDeploymen
 	return body
 }
 
+// NewGetDeploymentGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getDeployment" endpoint of the "deployments" service.
+func NewGetDeploymentGatewayErrorResponseBody(res *goa.ServiceError) *GetDeploymentGatewayErrorResponseBody {
+	body := &GetDeploymentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetLatestDeploymentUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getLatestDeployment" endpoint of the "deployments"
 // service.
@@ -1389,6 +1497,21 @@ func NewGetLatestDeploymentInvariantViolationResponseBody(res *goa.ServiceError)
 // service.
 func NewGetLatestDeploymentUnexpectedResponseBody(res *goa.ServiceError) *GetLatestDeploymentUnexpectedResponseBody {
 	body := &GetLatestDeploymentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetLatestDeploymentGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getLatestDeployment" endpoint of the "deployments"
+// service.
+func NewGetLatestDeploymentGatewayErrorResponseBody(res *goa.ServiceError) *GetLatestDeploymentGatewayErrorResponseBody {
+	body := &GetLatestDeploymentGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1528,6 +1651,21 @@ func NewCreateDeploymentUnexpectedResponseBody(res *goa.ServiceError) *CreateDep
 	return body
 }
 
+// NewCreateDeploymentGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createDeployment" endpoint of the "deployments"
+// service.
+func NewCreateDeploymentGatewayErrorResponseBody(res *goa.ServiceError) *CreateDeploymentGatewayErrorResponseBody {
+	body := &CreateDeploymentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewEvolveUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "evolve" endpoint of the "deployments" service.
 func NewEvolveUnauthorizedResponseBody(res *goa.ServiceError) *EvolveUnauthorizedResponseBody {
@@ -1644,6 +1782,20 @@ func NewEvolveInvariantViolationResponseBody(res *goa.ServiceError) *EvolveInvar
 // result of the "evolve" endpoint of the "deployments" service.
 func NewEvolveUnexpectedResponseBody(res *goa.ServiceError) *EvolveUnexpectedResponseBody {
 	body := &EvolveUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvolveGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "evolve" endpoint of the "deployments" service.
+func NewEvolveGatewayErrorResponseBody(res *goa.ServiceError) *EvolveGatewayErrorResponseBody {
+	body := &EvolveGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1773,6 +1925,21 @@ func NewListDeploymentsInvariantViolationResponseBody(res *goa.ServiceError) *Li
 // the result of the "listDeployments" endpoint of the "deployments" service.
 func NewListDeploymentsUnexpectedResponseBody(res *goa.ServiceError) *ListDeploymentsUnexpectedResponseBody {
 	body := &ListDeploymentsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeploymentsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listDeployments" endpoint of the "deployments"
+// service.
+func NewListDeploymentsGatewayErrorResponseBody(res *goa.ServiceError) *ListDeploymentsGatewayErrorResponseBody {
+	body := &ListDeploymentsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

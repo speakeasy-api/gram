@@ -1,5 +1,7 @@
 package oops
 
+import "net/http"
+
 type Code string
 
 const (
@@ -12,7 +14,21 @@ const (
 	CodeInvalid            Code = "invalid"
 	CodeUnexpected         Code = "unexpected"
 	CodeInvariantViolation Code = "invariant_violation"
+	CodeGatewayError       Code = "gateway_error"
 )
+
+var StatusCodes = map[Code]int{
+	CodeUnauthorized:       http.StatusUnauthorized,
+	CodeForbidden:          http.StatusForbidden,
+	CodeBadRequest:         http.StatusBadRequest,
+	CodeNotFound:           http.StatusNotFound,
+	CodeConflict:           http.StatusConflict,
+	CodeUnsupportedMedia:   http.StatusUnsupportedMediaType,
+	CodeInvalid:            http.StatusUnprocessableEntity,
+	CodeUnexpected:         http.StatusInternalServerError,
+	CodeInvariantViolation: http.StatusUnprocessableEntity,
+	CodeGatewayError:       http.StatusBadGateway,
+}
 
 func (c Code) UserMessage() string {
 	switch c {

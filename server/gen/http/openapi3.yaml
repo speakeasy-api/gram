@@ -94,6 +94,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
             summary: serveImage assets
@@ -196,6 +202,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -301,6 +313,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -392,6 +410,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             summary: callback auth
             tags:
                 - auth
@@ -476,6 +500,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
             summary: info auth
@@ -545,6 +575,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             summary: login auth
             tags:
                 - auth
@@ -620,6 +656,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
             summary: logout auth
@@ -716,6 +758,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
             summary: switchScopes auth
@@ -798,6 +846,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -889,6 +943,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -995,6 +1055,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -1093,6 +1159,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -1193,6 +1265,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -1285,6 +1363,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -1384,6 +1468,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -1475,6 +1565,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -1564,6 +1660,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -1647,6 +1749,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -1746,6 +1854,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -1855,6 +1969,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -1957,6 +2077,12 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -2044,6 +2170,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -2126,6 +2258,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
             summary: createKey keys
@@ -2201,6 +2339,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
             summary: listKeys keys
@@ -2280,6 +2424,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
             summary: revokeKey keys
@@ -2375,6 +2525,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -2467,6 +2623,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -2567,6 +2729,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -2665,6 +2833,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -2769,6 +2943,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -2860,6 +3040,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
@@ -2944,6 +3130,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Authorization: []
                 - session_header_Gram-Session: []
@@ -3041,6 +3233,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -3130,6 +3328,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -3219,6 +3423,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -3312,6 +3522,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -3395,6 +3611,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -3494,6 +3716,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []

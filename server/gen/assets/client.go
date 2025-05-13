@@ -41,6 +41,7 @@ func NewClient(serveImage, uploadImage, uploadOpenAPIv3 goa.Endpoint) *Client {
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ServeImage(ctx context.Context, p *ServeImageForm) (res *ServeImageResult, resp io.ReadCloser, err error) {
 	var ires any
@@ -63,6 +64,7 @@ func (c *Client) ServeImage(ctx context.Context, p *ServeImageForm) (res *ServeI
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) UploadImage(ctx context.Context, p *UploadImageForm, req io.ReadCloser) (res *UploadImageResult, err error) {
 	var ires any
@@ -84,6 +86,7 @@ func (c *Client) UploadImage(ctx context.Context, p *UploadImageForm, req io.Rea
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) UploadOpenAPIv3(ctx context.Context, p *UploadOpenAPIv3Form, req io.ReadCloser) (res *UploadOpenAPIv3Result, err error) {
 	var ires any

@@ -44,6 +44,7 @@ func NewClient(createPackage, updatePackage, listPackages, listVersions, publish
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) CreatePackage(ctx context.Context, p *CreatePackagePayload) (res *CreatePackageResult, err error) {
 	var ires any
@@ -66,6 +67,7 @@ func (c *Client) CreatePackage(ctx context.Context, p *CreatePackagePayload) (re
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) UpdatePackage(ctx context.Context, p *UpdatePackagePayload) (res *UpdatePackageResult, err error) {
 	var ires any
@@ -87,6 +89,7 @@ func (c *Client) UpdatePackage(ctx context.Context, p *UpdatePackagePayload) (re
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListPackages(ctx context.Context, p *ListPackagesPayload) (res *ListPackagesResult, err error) {
 	var ires any
@@ -108,6 +111,7 @@ func (c *Client) ListPackages(ctx context.Context, p *ListPackagesPayload) (res 
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res *ListVersionsResult, err error) {
 	var ires any
@@ -129,6 +133,7 @@ func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res 
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) Publish(ctx context.Context, p *PublishPayload) (res *PublishPackageResult, err error) {
 	var ires any

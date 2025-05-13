@@ -264,6 +264,24 @@ type CreatePackageUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreatePackageGatewayErrorResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "gateway_error" error.
+type CreatePackageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdatePackageUnauthorizedResponseBody is the type of the "packages" service
 // "updatePackage" endpoint HTTP response body for the "unauthorized" error.
 type UpdatePackageUnauthorizedResponseBody struct {
@@ -413,6 +431,24 @@ type UpdatePackageInvariantViolationResponseBody struct {
 // UpdatePackageUnexpectedResponseBody is the type of the "packages" service
 // "updatePackage" endpoint HTTP response body for the "unexpected" error.
 type UpdatePackageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePackageGatewayErrorResponseBody is the type of the "packages" service
+// "updatePackage" endpoint HTTP response body for the "gateway_error" error.
+type UpdatePackageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -598,6 +634,24 @@ type ListPackagesUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPackagesGatewayErrorResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "gateway_error" error.
+type ListPackagesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListVersionsUnauthorizedResponseBody is the type of the "packages" service
 // "listVersions" endpoint HTTP response body for the "unauthorized" error.
 type ListVersionsUnauthorizedResponseBody struct {
@@ -762,6 +816,24 @@ type ListVersionsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListVersionsGatewayErrorResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "gateway_error" error.
+type ListVersionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // PublishUnauthorizedResponseBody is the type of the "packages" service
 // "publish" endpoint HTTP response body for the "unauthorized" error.
 type PublishUnauthorizedResponseBody struct {
@@ -909,6 +981,24 @@ type PublishInvariantViolationResponseBody struct {
 // PublishUnexpectedResponseBody is the type of the "packages" service
 // "publish" endpoint HTTP response body for the "unexpected" error.
 type PublishUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PublishGatewayErrorResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "gateway_error" error.
+type PublishGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1171,6 +1261,21 @@ func NewCreatePackageUnexpected(body *CreatePackageUnexpectedResponseBody) *goa.
 	return v
 }
 
+// NewCreatePackageGatewayError builds a packages service createPackage
+// endpoint gateway_error error.
+func NewCreatePackageGatewayError(body *CreatePackageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdatePackageResultOK builds a "packages" service "updatePackage"
 // endpoint result from a HTTP "OK" response.
 func NewUpdatePackageResultOK(body *UpdatePackageResponseBody) *packages.UpdatePackageResult {
@@ -1303,6 +1408,21 @@ func NewUpdatePackageInvariantViolation(body *UpdatePackageInvariantViolationRes
 // NewUpdatePackageUnexpected builds a packages service updatePackage endpoint
 // unexpected error.
 func NewUpdatePackageUnexpected(body *UpdatePackageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePackageGatewayError builds a packages service updatePackage
+// endpoint gateway_error error.
+func NewUpdatePackageGatewayError(body *UpdatePackageGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1472,6 +1592,21 @@ func NewListPackagesUnexpected(body *ListPackagesUnexpectedResponseBody) *goa.Se
 	return v
 }
 
+// NewListPackagesGatewayError builds a packages service listPackages endpoint
+// gateway_error error.
+func NewListPackagesGatewayError(body *ListPackagesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListVersionsResultOK builds a "packages" service "listVersions" endpoint
 // result from a HTTP "OK" response.
 func NewListVersionsResultOK(body *ListVersionsResponseBody) *packages.ListVersionsResult {
@@ -1620,6 +1755,21 @@ func NewListVersionsUnexpected(body *ListVersionsUnexpectedResponseBody) *goa.Se
 	return v
 }
 
+// NewListVersionsGatewayError builds a packages service listVersions endpoint
+// gateway_error error.
+func NewListVersionsGatewayError(body *ListVersionsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewPublishPackageResultOK builds a "packages" service "publish" endpoint
 // result from a HTTP "OK" response.
 func NewPublishPackageResultOK(body *PublishResponseBody) *packages.PublishPackageResult {
@@ -1751,6 +1901,21 @@ func NewPublishInvariantViolation(body *PublishInvariantViolationResponseBody) *
 // NewPublishUnexpected builds a packages service publish endpoint unexpected
 // error.
 func NewPublishUnexpected(body *PublishUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPublishGatewayError builds a packages service publish endpoint
+// gateway_error error.
+func NewPublishGatewayError(body *PublishGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2069,6 +2234,30 @@ func ValidateCreatePackageUnexpectedResponseBody(body *CreatePackageUnexpectedRe
 	return
 }
 
+// ValidateCreatePackageGatewayErrorResponseBody runs the validations defined
+// on createPackage_gateway_error_response_body
+func ValidateCreatePackageGatewayErrorResponseBody(body *CreatePackageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdatePackageUnauthorizedResponseBody runs the validations defined
 // on updatePackage_unauthorized_response_body
 func ValidateUpdatePackageUnauthorizedResponseBody(body *UpdatePackageUnauthorizedResponseBody) (err error) {
@@ -2264,6 +2453,30 @@ func ValidateUpdatePackageInvariantViolationResponseBody(body *UpdatePackageInva
 // ValidateUpdatePackageUnexpectedResponseBody runs the validations defined on
 // updatePackage_unexpected_response_body
 func ValidateUpdatePackageUnexpectedResponseBody(body *UpdatePackageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePackageGatewayErrorResponseBody runs the validations defined
+// on updatePackage_gateway_error_response_body
+func ValidateUpdatePackageGatewayErrorResponseBody(body *UpdatePackageGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2510,6 +2723,30 @@ func ValidateListPackagesUnexpectedResponseBody(body *ListPackagesUnexpectedResp
 	return
 }
 
+// ValidateListPackagesGatewayErrorResponseBody runs the validations defined on
+// listPackages_gateway_error_response_body
+func ValidateListPackagesGatewayErrorResponseBody(body *ListPackagesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListVersionsUnauthorizedResponseBody runs the validations defined on
 // listVersions_unauthorized_response_body
 func ValidateListVersionsUnauthorizedResponseBody(body *ListVersionsUnauthorizedResponseBody) (err error) {
@@ -2726,6 +2963,30 @@ func ValidateListVersionsUnexpectedResponseBody(body *ListVersionsUnexpectedResp
 	return
 }
 
+// ValidateListVersionsGatewayErrorResponseBody runs the validations defined on
+// listVersions_gateway_error_response_body
+func ValidateListVersionsGatewayErrorResponseBody(body *ListVersionsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidatePublishUnauthorizedResponseBody runs the validations defined on
 // publish_unauthorized_response_body
 func ValidatePublishUnauthorizedResponseBody(body *PublishUnauthorizedResponseBody) (err error) {
@@ -2921,6 +3182,30 @@ func ValidatePublishInvariantViolationResponseBody(body *PublishInvariantViolati
 // ValidatePublishUnexpectedResponseBody runs the validations defined on
 // publish_unexpected_response_body
 func ValidatePublishUnexpectedResponseBody(body *PublishUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePublishGatewayErrorResponseBody runs the validations defined on
+// publish_gateway_error_response_body
+func ValidatePublishGatewayErrorResponseBody(body *PublishGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

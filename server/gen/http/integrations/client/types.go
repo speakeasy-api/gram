@@ -187,6 +187,24 @@ type GetUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetGatewayErrorResponseBody is the type of the "integrations" service "get"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListUnauthorizedResponseBody is the type of the "integrations" service
 // "list" endpoint HTTP response body for the "unauthorized" error.
 type ListUnauthorizedResponseBody struct {
@@ -334,6 +352,24 @@ type ListInvariantViolationResponseBody struct {
 // ListUnexpectedResponseBody is the type of the "integrations" service "list"
 // endpoint HTTP response body for the "unexpected" error.
 type ListUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayErrorResponseBody is the type of the "integrations" service
+// "list" endpoint HTTP response body for the "gateway_error" error.
+type ListGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -529,6 +565,21 @@ func NewGetUnexpected(body *GetUnexpectedResponseBody) *goa.ServiceError {
 	return v
 }
 
+// NewGetGatewayError builds a integrations service get endpoint gateway_error
+// error.
+func NewGetGatewayError(body *GetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListIntegrationsResultOK builds a "integrations" service "list" endpoint
 // result from a HTTP "OK" response.
 func NewListIntegrationsResultOK(body *ListResponseBody) *integrations.ListIntegrationsResult {
@@ -662,6 +713,21 @@ func NewListInvariantViolation(body *ListInvariantViolationResponseBody) *goa.Se
 // NewListUnexpected builds a integrations service list endpoint unexpected
 // error.
 func NewListUnexpected(body *ListUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayError builds a integrations service list endpoint
+// gateway_error error.
+func NewListGatewayError(body *ListGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -912,6 +978,30 @@ func ValidateGetUnexpectedResponseBody(body *GetUnexpectedResponseBody) (err err
 	return
 }
 
+// ValidateGetGatewayErrorResponseBody runs the validations defined on
+// get_gateway_error_response_body
+func ValidateGetGatewayErrorResponseBody(body *GetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListUnauthorizedResponseBody runs the validations defined on
 // list_unauthorized_response_body
 func ValidateListUnauthorizedResponseBody(body *ListUnauthorizedResponseBody) (err error) {
@@ -1107,6 +1197,30 @@ func ValidateListInvariantViolationResponseBody(body *ListInvariantViolationResp
 // ValidateListUnexpectedResponseBody runs the validations defined on
 // list_unexpected_response_body
 func ValidateListUnexpectedResponseBody(body *ListUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayErrorResponseBody runs the validations defined on
+// list_gateway_error_response_body
+func ValidateListGatewayErrorResponseBody(body *ListGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

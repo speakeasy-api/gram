@@ -71,6 +71,7 @@ func EncodeCreateProjectRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeCreateProjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -235,6 +236,20 @@ func DecodeCreateProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("projects", "createProject", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body CreateProjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
+			}
+			err = ValidateCreateProjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("projects", "createProject", resp.StatusCode, string(body))
@@ -293,6 +308,7 @@ func EncodeListProjectsRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListProjectsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -457,6 +473,20 @@ func DecodeListProjectsResponse(decoder func(*http.Response) goahttp.Decoder, re
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("projects", "listProjects", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListProjectsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
+			}
+			err = ValidateListProjectsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("projects", "listProjects", resp.StatusCode, string(body))

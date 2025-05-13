@@ -51,24 +51,32 @@ toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + ` assets serve-image --id "Est repellendus consectetur velit impedit eum rem." --session-token "Soluta voluptas ullam perspiciatis eos sit."` + "\n" +
-		os.Args[0] + ` auth callback --id-token "Quia nobis rerum facilis."` + "\n" +
-		os.Args[0] + ` chat list-chats --session-token "Vitae corporis excepturi inventore." --project-slug-input "Similique voluptas praesentium rerum modi corrupti voluptatem."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Molestiae amet fugit vel illum." --apikey-token "Veniam voluptatem a facilis tenetur." --session-token "Quis nulla et molestias qui expedita." --project-slug-input "Non tempora iure sed reiciendis corporis voluptatem."` + "\n" +
+		os.Args[0] + ` auth callback --id-token "Suscipit mollitia voluptatem dolorem perspiciatis deleniti."` + "\n" +
+		os.Args[0] + ` chat list-chats --session-token "Ipsa architecto a occaecati." --project-slug-input "Nostrum adipisci doloremque."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Qui expedita." --apikey-token "Non tempora iure sed reiciendis corporis voluptatem." --session-token "Aut culpa temporibus eos atque dicta expedita." --project-slug-input "Officia ipsa."` + "\n" +
 		os.Args[0] + ` environments create-environment --body '{
-      "description": "Totam dignissimos dolorem.",
+      "description": "Aut aut neque quisquam error.",
       "entries": [
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          },
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
+         },
+         {
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
+         },
+         {
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          }
       ],
-      "name": "Pariatur vero est non.",
-      "organization_id": "Est aliquid."
-   }' --session-token "Est rerum ea." --project-slug-input "Veniam accusantium consectetur."` + "\n" +
+      "name": "Cumque rem velit.",
+      "organization_id": "Voluptatem consequuntur architecto."
+   }' --session-token "Vero nostrum labore et eaque perspiciatis fuga." --project-slug-input "Alias quas expedita quod vero aperiam."` + "\n" +
 		""
 }
 
@@ -813,7 +821,7 @@ Upload an image to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-image --content-type "Numquam quos." --content-length 3398054423061303167 --apikey-token "Voluptate at enim nihil fugit ducimus." --project-slug-input "Omnis doloremque in perferendis." --session-token "Ipsa architecto doloremque corrupti ut." --stream "goa.png"
+    %[1]s assets upload-image --content-type "Quia voluptate at enim." --content-length 9060067910495226380 --apikey-token "Ducimus qui omnis." --project-slug-input "In perferendis dolores." --session-token "Architecto doloremque corrupti." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -829,7 +837,7 @@ Upload an OpenAPI v3 document to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Deserunt harum possimus voluptatem." --content-length 7612079480198647223 --apikey-token "Ipsa qui adipisci odit voluptatem ut." --project-slug-input "Nesciunt rerum nam aliquid ipsa distinctio veritatis." --session-token "Non aliquid quae minus." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Voluptates ipsa qui adipisci odit voluptatem." --content-length 3971541589302024969 --apikey-token "Nesciunt rerum nam aliquid ipsa distinctio veritatis." --project-slug-input "Non aliquid quae minus." --session-token "Voluptatem cum ipsam voluptatem illum minima nobis." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -857,7 +865,7 @@ Handles the authentication callback.
     -id-token STRING: 
 
 Example:
-    %[1]s auth callback --id-token "Quia nobis rerum facilis."
+    %[1]s auth callback --id-token "Suscipit mollitia voluptatem dolorem perspiciatis deleniti."
 `, os.Args[0])
 }
 
@@ -880,7 +888,7 @@ Switches the authentication scope to a different organization.
     -session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Perspiciatis harum id." --project-id "Sunt non et dolores qui facere necessitatibus." --session-token "Nam ut."
+    %[1]s auth switch-scopes --organization-id "Et quod eligendi omnis voluptate laboriosam porro." --project-id "Saepe soluta at earum blanditiis voluptatibus." --session-token "In et."
 `, os.Args[0])
 }
 
@@ -891,7 +899,7 @@ Logs out the current user by clearing their session.
     -session-token STRING: 
 
 Example:
-    %[1]s auth logout --session-token "Distinctio consectetur commodi eos soluta pariatur excepturi."
+    %[1]s auth logout --session-token "Modi nulla."
 `, os.Args[0])
 }
 
@@ -902,7 +910,7 @@ Provides information about the current authentication status.
     -session-token STRING: 
 
 Example:
-    %[1]s auth info --session-token "Et animi ut distinctio dolore eius repellat."
+    %[1]s auth info --session-token "Dolores dolores voluptatibus alias iusto et."
 `, os.Args[0])
 }
 
@@ -928,7 +936,7 @@ List all chats for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s chat list-chats --session-token "Vitae corporis excepturi inventore." --project-slug-input "Similique voluptas praesentium rerum modi corrupti voluptatem."
+    %[1]s chat list-chats --session-token "Ipsa architecto a occaecati." --project-slug-input "Nostrum adipisci doloremque."
 `, os.Args[0])
 }
 
@@ -941,7 +949,7 @@ Load a chat by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s chat load-chat --id "Nisi iusto quasi ut quia consequatur." --session-token "Nisi reprehenderit cum." --project-slug-input "Illum quidem dolores est officia ducimus doloribus."
+    %[1]s chat load-chat --id "Eius esse." --session-token "Molestiae magni voluptatem dolore quidem totam." --project-slug-input "Accusantium eaque aut alias repellendus."
 `, os.Args[0])
 }
 
@@ -973,7 +981,7 @@ Get a deployment by its ID.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Molestiae amet fugit vel illum." --apikey-token "Veniam voluptatem a facilis tenetur." --session-token "Quis nulla et molestias qui expedita." --project-slug-input "Non tempora iure sed reiciendis corporis voluptatem."
+    %[1]s deployments get-deployment --id "Qui expedita." --apikey-token "Non tempora iure sed reiciendis corporis voluptatem." --session-token "Aut culpa temporibus eos atque dicta expedita." --project-slug-input "Officia ipsa."
 `, os.Args[0])
 }
 
@@ -986,7 +994,7 @@ Get the latest deployment for a project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-latest-deployment --apikey-token "Ducimus in molestiae eveniet aut in non." --session-token "Reprehenderit blanditiis ratione praesentium." --project-slug-input "Officiis nostrum earum non qui consequuntur aut."
+    %[1]s deployments get-latest-deployment --apikey-token "In praesentium." --session-token "Reprehenderit vel sed soluta nam sed." --project-slug-input "Qui officia."
 `, os.Args[0])
 }
 
@@ -1003,43 +1011,46 @@ Create a deployment to load tool definitions.
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Harum error.",
+      "external_url": "Rerum dolorem sit eius quia rem.",
       "github_pr": "1234",
       "github_repo": "speakeasyapi/gram",
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "openapiv3_assets": [
          {
-            "asset_id": "Aspernatur sequi repellat.",
-            "name": "Aut autem dolorum rerum dolorem sit eius.",
-            "slug": "tvf"
+            "asset_id": "Beatae voluptatem repellat qui aut.",
+            "name": "Officiis officiis.",
+            "slug": "usu"
          },
          {
-            "asset_id": "Aspernatur sequi repellat.",
-            "name": "Aut autem dolorum rerum dolorem sit eius.",
-            "slug": "tvf"
+            "asset_id": "Beatae voluptatem repellat qui aut.",
+            "name": "Officiis officiis.",
+            "slug": "usu"
          },
          {
-            "asset_id": "Aspernatur sequi repellat.",
-            "name": "Aut autem dolorum rerum dolorem sit eius.",
-            "slug": "tvf"
-         },
-         {
-            "asset_id": "Aspernatur sequi repellat.",
-            "name": "Aut autem dolorum rerum dolorem sit eius.",
-            "slug": "tvf"
+            "asset_id": "Beatae voluptatem repellat qui aut.",
+            "name": "Officiis officiis.",
+            "slug": "usu"
          }
       ],
       "packages": [
          {
-            "name": "Repellat qui aut quia officiis officiis.",
-            "version": "Voluptatem porro."
+            "name": "Veniam suscipit deleniti voluptatem eius.",
+            "version": "Itaque eos unde veniam."
          },
          {
-            "name": "Repellat qui aut quia officiis officiis.",
-            "version": "Voluptatem porro."
+            "name": "Veniam suscipit deleniti voluptatem eius.",
+            "version": "Itaque eos unde veniam."
+         },
+         {
+            "name": "Veniam suscipit deleniti voluptatem eius.",
+            "version": "Itaque eos unde veniam."
+         },
+         {
+            "name": "Veniam suscipit deleniti voluptatem eius.",
+            "version": "Itaque eos unde veniam."
          }
       ]
-   }' --apikey-token "Eligendi atque veniam suscipit deleniti voluptatem eius." --session-token "Itaque eos unde veniam." --project-slug-input "Eius eum ut." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
+   }' --apikey-token "Eius eum ut." --session-token "Cupiditate voluptas voluptatem nostrum culpa." --project-slug-input "Et fugiat omnis aut." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
 `, os.Args[0])
 }
 
@@ -1054,38 +1065,45 @@ Create a new deployment with additional or updated tool sources.
 
 Example:
     %[1]s deployments evolve --body '{
-      "deployment_id": "Quia sed.",
+      "deployment_id": "Quisquam aperiam adipisci molestias explicabo.",
       "exclude_openapiv3_assets": [
-         "Aliquam quisquam aperiam adipisci.",
-         "Explicabo aut."
+         "Voluptate est doloribus vitae at et.",
+         "Ipsa nisi tempora quasi.",
+         "Consectetur laudantium eos deleniti et iste ex.",
+         "Et deleniti qui quasi deserunt."
       ],
       "exclude_packages": [
-         "Quas iusto modi.",
-         "Accusantium eius in facilis saepe non."
+         "Aut nemo perspiciatis pariatur.",
+         "Eos consequatur et natus quia."
       ],
       "upsert_openapiv3_assets": [
          {
-            "asset_id": "Aspernatur sequi repellat.",
-            "name": "Aut autem dolorum rerum dolorem sit eius.",
-            "slug": "tvf"
+            "asset_id": "Beatae voluptatem repellat qui aut.",
+            "name": "Officiis officiis.",
+            "slug": "usu"
          },
          {
-            "asset_id": "Aspernatur sequi repellat.",
-            "name": "Aut autem dolorum rerum dolorem sit eius.",
-            "slug": "tvf"
+            "asset_id": "Beatae voluptatem repellat qui aut.",
+            "name": "Officiis officiis.",
+            "slug": "usu"
+         },
+         {
+            "asset_id": "Beatae voluptatem repellat qui aut.",
+            "name": "Officiis officiis.",
+            "slug": "usu"
          }
       ],
       "upsert_packages": [
          {
-            "name": "Exercitationem eum.",
-            "version": "Et eum et."
+            "name": "Quas iusto modi.",
+            "version": "Accusantium eius in facilis saepe non."
          },
          {
-            "name": "Exercitationem eum.",
-            "version": "Et eum et."
+            "name": "Quas iusto modi.",
+            "version": "Accusantium eius in facilis saepe non."
          }
       ]
-   }' --apikey-token "Amet voluptate est doloribus vitae at." --session-token "Dolor ipsa." --project-slug-input "Tempora quasi impedit consectetur laudantium eos."
+   }' --apikey-token "Architecto ipsam." --session-token "Doloribus mollitia saepe iure aut quis tempora." --project-slug-input "Sed amet et molestiae unde."
 `, os.Args[0])
 }
 
@@ -1099,7 +1117,7 @@ List all deployments in descending order of creation.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments list-deployments --cursor "Saepe iure aut." --apikey-token "Tempora voluptas sed amet et molestiae unde." --session-token "Sit temporibus." --project-slug-input "Expedita necessitatibus."
+    %[1]s deployments list-deployments --cursor "Aliquid in in doloribus nihil." --apikey-token "In non eos facilis et maxime." --session-token "Est facere asperiores qui minima." --project-slug-input "Aut et ratione."
 `, os.Args[0])
 }
 
@@ -1130,20 +1148,28 @@ Create a new environment
 
 Example:
     %[1]s environments create-environment --body '{
-      "description": "Totam dignissimos dolorem.",
+      "description": "Aut aut neque quisquam error.",
       "entries": [
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          },
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
+         },
+         {
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
+         },
+         {
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          }
       ],
-      "name": "Pariatur vero est non.",
-      "organization_id": "Est aliquid."
-   }' --session-token "Est rerum ea." --project-slug-input "Veniam accusantium consectetur."
+      "name": "Cumque rem velit.",
+      "organization_id": "Voluptatem consequuntur architecto."
+   }' --session-token "Vero nostrum labore et eaque perspiciatis fuga." --project-slug-input "Alias quas expedita quod vero aperiam."
 `, os.Args[0])
 }
 
@@ -1155,7 +1181,7 @@ List all environments for an organization
     -project-slug-input STRING: 
 
 Example:
-    %[1]s environments list-environments --session-token "Sit inventore." --project-slug-input "Dolorem qui."
+    %[1]s environments list-environments --session-token "Nihil ex velit qui." --project-slug-input "Quaerat quo."
 `, os.Args[0])
 }
 
@@ -1170,32 +1196,31 @@ Update an environment
 
 Example:
     %[1]s environments update-environment --body '{
-      "description": "Dolorem qui distinctio harum nulla.",
+      "description": "Est tenetur.",
       "entries_to_remove": [
-         "Sint ratione alias provident possimus.",
-         "Perspiciatis nobis.",
-         "Sit soluta dolor iure et unde sint."
+         "Iure voluptas cum consectetur dolor.",
+         "Aliquam eaque quas et libero et."
       ],
       "entries_to_update": [
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          },
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          },
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          },
          {
-            "name": "Sunt dolor.",
-            "value": "Veritatis totam dolor vel."
+            "name": "Et doloremque.",
+            "value": "Tempore similique voluptatum nemo eum ex."
          }
       ],
-      "name": "Libero nulla similique."
-   }' --slug "843" --session-token "Incidunt officiis inventore." --project-slug-input "Voluptatem unde laborum et."
+      "name": "Quo sunt expedita ipsam corporis consequatur ut."
+   }' --slug "dui" --session-token "Eveniet repudiandae." --project-slug-input "Ab nemo maiores reprehenderit."
 `, os.Args[0])
 }
 
@@ -1208,7 +1233,7 @@ Delete an environment
     -project-slug-input STRING: 
 
 Example:
-    %[1]s environments delete-environment --slug "agl" --session-token "Necessitatibus rerum sit." --project-slug-input "Veniam amet qui natus porro iure."
+    %[1]s environments delete-environment --slug "kzn" --session-token "Consequatur sit qui impedit sapiente est vel." --project-slug-input "Commodi pariatur temporibus."
 `, os.Args[0])
 }
 
@@ -1237,7 +1262,7 @@ Get a third-party integration by ID or name.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s integrations get --id "Amet dolorum necessitatibus enim officiis laudantium placeat." --name "Sit earum dignissimos dolor." --session-token "Voluptatem libero." --project-slug-input "Dignissimos ipsum exercitationem quia quas ex saepe."
+    %[1]s integrations get --id "Aliquam culpa quis repudiandae voluptatum." --name "Voluptatem nulla nesciunt qui sapiente." --session-token "Vero modi et." --project-slug-input "Hic praesentium."
 `, os.Args[0])
 }
 
@@ -1251,10 +1276,10 @@ List available third-party integrations.
 
 Example:
     %[1]s integrations list --keywords '[
-      "vd9",
-      "9ee",
-      "g1w"
-   ]' --session-token "Cumque dolor et molestiae doloremque." --project-slug-input "Omnis hic magni ea ipsum et."
+      "a2s",
+      "q89",
+      "8ub"
+   ]' --session-token "Aspernatur et sint." --project-slug-input "Incidunt voluptas et occaecati distinctio nostrum eius."
 `, os.Args[0])
 }
 
@@ -1282,8 +1307,8 @@ Create a new api key
 
 Example:
     %[1]s keys create-key --body '{
-      "name": "Illo repellendus."
-   }' --session-token "Est sit ut autem."
+      "name": "Itaque placeat iusto consectetur praesentium consequatur."
+   }' --session-token "Modi ducimus et et."
 `, os.Args[0])
 }
 
@@ -1294,7 +1319,7 @@ List all api keys for an organization
     -session-token STRING: 
 
 Example:
-    %[1]s keys list-keys --session-token "Iste est saepe."
+    %[1]s keys list-keys --session-token "Tempore iste perspiciatis."
 `, os.Args[0])
 }
 
@@ -1306,7 +1331,7 @@ Revoke a api key
     -session-token STRING: 
 
 Example:
-    %[1]s keys revoke-key --id "Hic consectetur." --session-token "Ex consequatur aperiam earum necessitatibus alias."
+    %[1]s keys revoke-key --id "Recusandae ipsum dolorum ut." --session-token "Nihil rerum repellat qui saepe."
 `, os.Args[0])
 }
 
@@ -1338,18 +1363,18 @@ Create a new package for a project.
 
 Example:
     %[1]s packages create-package --body '{
-      "description": "u17",
-      "image_asset_id": "2hg",
+      "description": "kzr",
+      "image_asset_id": "rxu",
       "keywords": [
-         "Maxime voluptatem occaecati nisi.",
-         "Autem blanditiis.",
-         "Sequi laudantium qui autem est dolores voluptas."
+         "Laudantium dignissimos similique iusto.",
+         "Quo laboriosam quae.",
+         "Aliquam cumque et quae sapiente corrupti quae."
       ],
-      "name": "gmf",
-      "summary": "bt1",
-      "title": "1kc",
-      "url": "mge"
-   }' --apikey-token "Consequatur eos voluptates vero." --session-token "Totam id voluptatum repellat ut voluptatem suscipit." --project-slug-input "Suscipit quo minima laboriosam ipsam qui."
+      "name": "6gb",
+      "summary": "o69",
+      "title": "w3a",
+      "url": "wi9"
+   }' --apikey-token "Occaecati nobis dolore facilis atque nesciunt pariatur." --session-token "Voluptatibus exercitationem nihil voluptatum eligendi omnis." --project-slug-input "Ut velit accusamus."
 `, os.Args[0])
 }
 
@@ -1364,18 +1389,18 @@ Update package details.
 
 Example:
     %[1]s packages update-package --body '{
-      "description": "zju",
-      "id": "vck",
-      "image_asset_id": "h99",
+      "description": "yff",
+      "id": "gjk",
+      "image_asset_id": "rwz",
       "keywords": [
-         "Sunt voluptatem veniam blanditiis.",
-         "Dolor non consequatur.",
-         "Doloribus quo aut quam."
+         "Distinctio quia nesciunt excepturi ea.",
+         "Reiciendis modi.",
+         "Harum accusamus beatae impedit omnis est."
       ],
-      "summary": "zmr",
-      "title": "aqv",
-      "url": "vjr"
-   }' --apikey-token "Qui consectetur fugiat repudiandae laboriosam voluptates quisquam." --session-token "Eos fuga ratione voluptatem et aspernatur repellendus." --project-slug-input "Consectetur et vel."
+      "summary": "ngk",
+      "title": "x2p",
+      "url": "nfb"
+   }' --apikey-token "Perferendis ducimus alias." --session-token "Rerum rerum sequi et quia." --project-slug-input "Sunt eos optio."
 `, os.Args[0])
 }
 
@@ -1388,7 +1413,7 @@ List all packages for a project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-packages --apikey-token "Et pariatur maiores dolorum." --session-token "Mollitia ratione dolore odio." --project-slug-input "Aliquid quis quo eaque sint."
+    %[1]s packages list-packages --apikey-token "Tenetur est sed reprehenderit consectetur nisi." --session-token "Hic corrupti necessitatibus dicta nihil perspiciatis praesentium." --project-slug-input "Magnam sit illum eum odio."
 `, os.Args[0])
 }
 
@@ -1402,7 +1427,7 @@ List published versions of a package.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-versions --name "Alias iure." --apikey-token "Rerum sequi et." --session-token "Excepturi sunt." --project-slug-input "Optio recusandae vel vel earum earum."
+    %[1]s packages list-versions --name "Quo atque voluptatibus aut minima iusto." --apikey-token "Occaecati accusantium quas ratione aut." --session-token "In rerum." --project-slug-input "Harum porro."
 `, os.Args[0])
 }
 
@@ -1417,11 +1442,11 @@ Publish a new version of a package.
 
 Example:
     %[1]s packages publish --body '{
-      "deployment_id": "Qui est repudiandae sint placeat sed explicabo.",
-      "name": "Est non architecto.",
-      "version": "Velit iure et corrupti quia quis.",
+      "deployment_id": "Aliquam harum voluptatum autem.",
+      "name": "Illo dolorem fugiat cupiditate corporis laborum cum.",
+      "version": "Accusamus et possimus id doloremque.",
       "visibility": "public"
-   }' --apikey-token "Perspiciatis totam iure." --session-token "Totam voluptatem tempora consequatur." --project-slug-input "Omnis laudantium distinctio qui."
+   }' --apikey-token "Ipsa velit atque et architecto nisi et." --session-token "Magni vel autem voluptas officiis repellendus autem." --project-slug-input "Minima sit numquam similique fugiat."
 `, os.Args[0])
 }
 
@@ -1449,9 +1474,9 @@ Create a new project.
 
 Example:
     %[1]s projects create-project --body '{
-      "name": "utq",
-      "organization_id": "Quia nihil eaque quam praesentium eligendi."
-   }' --apikey-token "Maxime similique nobis hic sed fugit cum." --session-token "Laborum eum nemo quisquam."
+      "name": "kew",
+      "organization_id": "Et autem et enim doloremque nesciunt."
+   }' --apikey-token "Odio libero ad fugiat." --session-token "Veniam mollitia nemo ab nulla asperiores temporibus."
 `, os.Args[0])
 }
 
@@ -1464,7 +1489,7 @@ List all projects for an organization.
     -apikey-token STRING: 
 
 Example:
-    %[1]s projects list-projects --organization-id "Nesciunt dolor nostrum minima provident error dolor." --session-token "Et non." --apikey-token "Et dolorem quibusdam."
+    %[1]s projects list-projects --organization-id "Asperiores et beatae vel autem voluptatem aliquid." --session-token "Labore nemo soluta ipsam provident." --apikey-token "Vitae in dolorem."
 `, os.Args[0])
 }
 
@@ -1491,7 +1516,7 @@ List all tools for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s tools list-tools --cursor "Fuga et sunt tempora qui et aliquam." --deployment-id "Ipsam asperiores." --session-token "Impedit inventore voluptatem laboriosam neque." --project-slug-input "Et asperiores."
+    %[1]s tools list-tools --cursor "Illum nihil et ipsa tempore est ipsam." --deployment-id "Accusamus harum." --session-token "Deleniti sapiente qui." --project-slug-input "Eius voluptatem qui dolorem soluta."
 `, os.Args[0])
 }
 
@@ -1520,7 +1545,7 @@ Load all relevant data for an instance of a toolset and environment
     -apikey-token STRING: 
 
 Example:
-    %[1]s instances get-instance --toolset-slug "gic" --environment-slug "3x3" --session-token "Velit minima voluptatem aliquam harum beatae quia." --project-slug-input "Dolor non veritatis esse." --apikey-token "Fuga natus facilis illo facilis recusandae."
+    %[1]s instances get-instance --toolset-slug "ibr" --environment-slug "84s" --session-token "Aut autem dolorum alias dolorem et." --project-slug-input "Excepturi ut aut expedita consequatur ea." --apikey-token "Sed et."
 `, os.Args[0])
 }
 
@@ -1551,16 +1576,15 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_slug": "m8t",
-      "description": "Asperiores necessitatibus accusamus repudiandae iste non.",
+      "default_environment_slug": "ew2",
+      "description": "Inventore reprehenderit.",
       "http_tool_names": [
-         "Incidunt natus exercitationem est.",
-         "Non odit laudantium eligendi quia sed.",
-         "Eveniet numquam sint quam.",
-         "Nisi rerum aut distinctio quo sunt."
+         "Inventore aliquam libero.",
+         "Sed ad rerum nisi quam deleniti.",
+         "Magni autem."
       ],
-      "name": "Omnis praesentium beatae in dolor aut."
-   }' --session-token "Dignissimos aspernatur architecto ab soluta aperiam." --project-slug-input "Quaerat dolorem tempore est nihil."
+      "name": "Veniam at cumque."
+   }' --session-token "Aliquam quia debitis." --project-slug-input "Ex velit animi quas nihil error."
 `, os.Args[0])
 }
 
@@ -1572,7 +1596,7 @@ List all toolsets for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Libero eos et voluptas at facilis numquam." --project-slug-input "Alias totam non aliquam maxime."
+    %[1]s toolsets list-toolsets --session-token "In cumque molestiae voluptate." --project-slug-input "Nostrum sint modi voluptatem itaque inventore distinctio."
 `, os.Args[0])
 }
 
@@ -1587,16 +1611,16 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "default_environment_slug": "dvm",
-      "description": "Molestias architecto officia ipsam voluptate.",
+      "default_environment_slug": "d1f",
+      "description": "Eos tempora.",
       "http_tool_names": [
-         "Enim soluta laborum.",
-         "Et placeat quae dolores.",
-         "Minima sit molestiae.",
-         "Et sed."
+         "Laboriosam beatae voluptatem tenetur sed sit aliquam.",
+         "Omnis enim ullam odit.",
+         "Assumenda vero incidunt.",
+         "Optio consequuntur."
       ],
-      "name": "Dignissimos molestiae perferendis."
-   }' --slug "r4w" --session-token "Maiores quae labore." --project-slug-input "Quaerat adipisci enim sed et."
+      "name": "Tenetur magni sed ut mollitia ut neque."
+   }' --slug "u0e" --session-token "Ut itaque totam ut aut." --project-slug-input "Et voluptate dolores odio."
 `, os.Args[0])
 }
 
@@ -1609,7 +1633,7 @@ Delete a toolset by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "1se" --session-token "Dignissimos iste eos asperiores officia molestiae." --project-slug-input "Nihil consequatur cum neque qui."
+    %[1]s toolsets delete-toolset --slug "rzd" --session-token "Cum qui voluptas eos." --project-slug-input "Ex est qui commodi."
 `, os.Args[0])
 }
 
@@ -1622,6 +1646,6 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset --slug "4xf" --session-token "Voluptas commodi." --project-slug-input "Mollitia et."
+    %[1]s toolsets get-toolset --slug "3b8" --session-token "Aut voluptas nihil consequatur consequuntur pariatur." --project-slug-input "Accusamus fuga."
 `, os.Args[0])
 }

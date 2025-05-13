@@ -147,3 +147,8 @@ func MakeInvariantViolation(err error) *goa.ServiceError {
 func MakeUnexpected(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unexpected", false, false, true)
 }
+
+// MakeGatewayError builds a goa.ServiceError from an error.
+func MakeGatewayError(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}

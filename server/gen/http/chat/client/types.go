@@ -200,6 +200,24 @@ type ListChatsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListChatsGatewayErrorResponseBody is the type of the "chat" service
+// "listChats" endpoint HTTP response body for the "gateway_error" error.
+type ListChatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // LoadChatUnauthorizedResponseBody is the type of the "chat" service
 // "loadChat" endpoint HTTP response body for the "unauthorized" error.
 type LoadChatUnauthorizedResponseBody struct {
@@ -347,6 +365,24 @@ type LoadChatInvariantViolationResponseBody struct {
 // LoadChatUnexpectedResponseBody is the type of the "chat" service "loadChat"
 // endpoint HTTP response body for the "unexpected" error.
 type LoadChatUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// LoadChatGatewayErrorResponseBody is the type of the "chat" service
+// "loadChat" endpoint HTTP response body for the "gateway_error" error.
+type LoadChatGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -545,6 +581,21 @@ func NewListChatsUnexpected(body *ListChatsUnexpectedResponseBody) *goa.ServiceE
 	return v
 }
 
+// NewListChatsGatewayError builds a chat service listChats endpoint
+// gateway_error error.
+func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLoadChatChatOK builds a "chat" service "loadChat" endpoint result from a
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
@@ -683,6 +734,21 @@ func NewLoadChatInvariantViolation(body *LoadChatInvariantViolationResponseBody)
 // NewLoadChatUnexpected builds a chat service loadChat endpoint unexpected
 // error.
 func NewLoadChatUnexpected(body *LoadChatUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewLoadChatGatewayError builds a chat service loadChat endpoint
+// gateway_error error.
+func NewLoadChatGatewayError(body *LoadChatGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -967,6 +1033,30 @@ func ValidateListChatsUnexpectedResponseBody(body *ListChatsUnexpectedResponseBo
 	return
 }
 
+// ValidateListChatsGatewayErrorResponseBody runs the validations defined on
+// listChats_gateway_error_response_body
+func ValidateListChatsGatewayErrorResponseBody(body *ListChatsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLoadChatUnauthorizedResponseBody runs the validations defined on
 // loadChat_unauthorized_response_body
 func ValidateLoadChatUnauthorizedResponseBody(body *LoadChatUnauthorizedResponseBody) (err error) {
@@ -1162,6 +1252,30 @@ func ValidateLoadChatInvariantViolationResponseBody(body *LoadChatInvariantViola
 // ValidateLoadChatUnexpectedResponseBody runs the validations defined on
 // loadChat_unexpected_response_body
 func ValidateLoadChatUnexpectedResponseBody(body *LoadChatUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateLoadChatGatewayErrorResponseBody runs the validations defined on
+// loadChat_gateway_error_response_body
+func ValidateLoadChatGatewayErrorResponseBody(body *LoadChatGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

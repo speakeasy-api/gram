@@ -262,6 +262,25 @@ type CreateEnvironmentUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateEnvironmentGatewayErrorResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateEnvironmentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListEnvironmentsUnauthorizedResponseBody is the type of the "environments"
 // service "listEnvironments" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -418,6 +437,25 @@ type ListEnvironmentsInvariantViolationResponseBody struct {
 // service "listEnvironments" endpoint HTTP response body for the "unexpected"
 // error.
 type ListEnvironmentsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEnvironmentsGatewayErrorResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListEnvironmentsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -604,6 +642,25 @@ type UpdateEnvironmentUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateEnvironmentGatewayErrorResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateEnvironmentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteEnvironmentUnauthorizedResponseBody is the type of the "environments"
 // service "deleteEnvironment" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -760,6 +817,25 @@ type DeleteEnvironmentInvariantViolationResponseBody struct {
 // service "deleteEnvironment" endpoint HTTP response body for the "unexpected"
 // error.
 type DeleteEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteEnvironmentGatewayErrorResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteEnvironmentGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1012,6 +1088,21 @@ func NewCreateEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *CreateEn
 	return body
 }
 
+// NewCreateEnvironmentGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createEnvironment" endpoint of the "environments"
+// service.
+func NewCreateEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *CreateEnvironmentGatewayErrorResponseBody {
+	body := &CreateEnvironmentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListEnvironmentsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listEnvironments" endpoint of the "environments"
 // service.
@@ -1131,6 +1222,21 @@ func NewListEnvironmentsInvariantViolationResponseBody(res *goa.ServiceError) *L
 // the result of the "listEnvironments" endpoint of the "environments" service.
 func NewListEnvironmentsUnexpectedResponseBody(res *goa.ServiceError) *ListEnvironmentsUnexpectedResponseBody {
 	body := &ListEnvironmentsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEnvironmentsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listEnvironments" endpoint of the "environments"
+// service.
+func NewListEnvironmentsGatewayErrorResponseBody(res *goa.ServiceError) *ListEnvironmentsGatewayErrorResponseBody {
+	body := &ListEnvironmentsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1272,6 +1378,21 @@ func NewUpdateEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *UpdateEn
 	return body
 }
 
+// NewUpdateEnvironmentGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateEnvironment" endpoint of the "environments"
+// service.
+func NewUpdateEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *UpdateEnvironmentGatewayErrorResponseBody {
+	body := &UpdateEnvironmentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteEnvironmentUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "deleteEnvironment" endpoint of the "environments"
 // service.
@@ -1393,6 +1514,21 @@ func NewDeleteEnvironmentInvariantViolationResponseBody(res *goa.ServiceError) *
 // service.
 func NewDeleteEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *DeleteEnvironmentUnexpectedResponseBody {
 	body := &DeleteEnvironmentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteEnvironmentGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "deleteEnvironment" endpoint of the "environments"
+// service.
+func NewDeleteEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *DeleteEnvironmentGatewayErrorResponseBody {
+	body := &DeleteEnvironmentGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

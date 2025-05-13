@@ -36,6 +36,7 @@ func NewClient(getInstance goa.Endpoint) *Client {
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) GetInstance(ctx context.Context, p *GetInstanceForm) (res *GetInstanceResult, err error) {
 	var ires any

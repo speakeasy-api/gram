@@ -71,6 +71,7 @@ func EncodeCreateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeCreateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -235,6 +236,20 @@ func DecodeCreateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("toolsets", "createToolset", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body CreateToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			}
+			err = ValidateCreateToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+			}
+			return nil, NewCreateToolsetGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "createToolset", resp.StatusCode, string(body))
@@ -290,6 +305,7 @@ func EncodeListToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -454,6 +470,20 @@ func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, re
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("toolsets", "listToolsets", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolsetsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			}
+			err = ValidateListToolsetsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+			}
+			return nil, NewListToolsetsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "listToolsets", resp.StatusCode, string(body))
@@ -516,6 +546,7 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -680,6 +711,20 @@ func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("toolsets", "updateToolset", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			}
+			err = ValidateUpdateToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+			}
+			return nil, NewUpdateToolsetGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "updateToolset", resp.StatusCode, string(body))
@@ -738,6 +783,7 @@ func EncodeDeleteToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -889,6 +935,20 @@ func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("toolsets", "deleteToolset", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			}
+			err = ValidateDeleteToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+			}
+			return nil, NewDeleteToolsetGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "deleteToolset", resp.StatusCode, string(body))
@@ -947,6 +1007,7 @@ func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1111,6 +1172,20 @@ func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("toolsets", "getToolset", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body GetToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			}
+			err = ValidateGetToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+			}
+			return nil, NewGetToolsetGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "getToolset", resp.StatusCode, string(body))

@@ -38,6 +38,7 @@ func NewClient(listChats, loadChat goa.Endpoint) *Client {
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListChats(ctx context.Context, p *ListChatsPayload) (res *ListChatsResult, err error) {
 	var ires any
@@ -59,6 +60,7 @@ func (c *Client) ListChats(ctx context.Context, p *ListChatsPayload) (res *ListC
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) LoadChat(ctx context.Context, p *LoadChatPayload) (res *Chat, err error) {
 	var ires any

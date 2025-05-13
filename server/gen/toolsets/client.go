@@ -44,6 +44,7 @@ func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToo
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
@@ -65,6 +66,7 @@ func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (re
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res *ListToolsetsResult, err error) {
 	var ires any
@@ -86,6 +88,7 @@ func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res 
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any
@@ -107,6 +110,7 @@ func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (re
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) DeleteToolset(ctx context.Context, p *DeleteToolsetPayload) (err error) {
 	_, err = c.DeleteToolsetEndpoint(ctx, p)
@@ -124,6 +128,7 @@ func (c *Client) DeleteToolset(ctx context.Context, p *DeleteToolsetPayload) (er
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) GetToolset(ctx context.Context, p *GetToolsetPayload) (res *ToolsetDetails, err error) {
 	var ires any

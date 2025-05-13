@@ -38,6 +38,7 @@ func NewClient(createProject, listProjects goa.Endpoint) *Client {
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) CreateProject(ctx context.Context, p *CreateProjectPayload) (res *CreateProjectResult, err error) {
 	var ires any
@@ -59,6 +60,7 @@ func (c *Client) CreateProject(ctx context.Context, p *CreateProjectPayload) (re
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListProjects(ctx context.Context, p *ListProjectsPayload) (res *ListProjectsResult, err error) {
 	var ires any

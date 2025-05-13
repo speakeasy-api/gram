@@ -43,6 +43,7 @@ func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnv
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) CreateEnvironment(ctx context.Context, p *CreateEnvironmentPayload) (res *Environment, err error) {
 	var ires any
@@ -65,6 +66,7 @@ func (c *Client) CreateEnvironment(ctx context.Context, p *CreateEnvironmentPayl
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListEnvironments(ctx context.Context, p *ListEnvironmentsPayload) (res *ListEnvironmentsResult, err error) {
 	var ires any
@@ -87,6 +89,7 @@ func (c *Client) ListEnvironments(ctx context.Context, p *ListEnvironmentsPayloa
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayload) (res *Environment, err error) {
 	var ires any
@@ -109,6 +112,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayl
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) DeleteEnvironment(ctx context.Context, p *DeleteEnvironmentPayload) (err error) {
 	_, err = c.DeleteEnvironmentEndpoint(ctx, p)

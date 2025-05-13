@@ -44,6 +44,7 @@ func NewClient(callback, login, switchScopes, logout, info goa.Endpoint) *Client
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *CallbackResult, err error) {
 	var ires any
@@ -65,6 +66,7 @@ func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *Callbac
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) Login(ctx context.Context) (res *LoginResult, err error) {
 	var ires any
@@ -86,6 +88,7 @@ func (c *Client) Login(ctx context.Context) (res *LoginResult, err error) {
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) SwitchScopes(ctx context.Context, p *SwitchScopesPayload) (res *SwitchScopesResult, err error) {
 	var ires any
@@ -107,6 +110,7 @@ func (c *Client) SwitchScopes(ctx context.Context, p *SwitchScopesPayload) (res 
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResult, err error) {
 	var ires any
@@ -128,6 +132,7 @@ func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResul
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) Info(ctx context.Context, p *InfoPayload) (res *InfoResult, err error) {
 	var ires any

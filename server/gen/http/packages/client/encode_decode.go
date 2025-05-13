@@ -74,6 +74,7 @@ func EncodeCreatePackageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeCreatePackageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -238,6 +239,20 @@ func DecodeCreatePackageResponse(decoder func(*http.Response) goahttp.Decoder, r
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("packages", "createPackage", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body CreatePackageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
+			}
+			err = ValidateCreatePackageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("packages", "createPackage", resp.StatusCode, string(body))
@@ -301,6 +316,7 @@ func EncodeUpdatePackageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "not_modified" (type *packages.NotModified): http.StatusNotModified
 //   - error: internal error
 func DecodeUpdatePackageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -466,6 +482,20 @@ func DecodeUpdatePackageResponse(decoder func(*http.Response) goahttp.Decoder, r
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("packages", "updatePackage", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body UpdatePackageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "updatePackage", err)
+			}
+			err = ValidateUpdatePackageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "updatePackage", err)
+			}
+			return nil, NewUpdatePackageGatewayError(&body)
 		case http.StatusNotModified:
 			var (
 				body UpdatePackageNotModifiedResponseBody
@@ -539,6 +569,7 @@ func EncodeListPackagesRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListPackagesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -703,6 +734,20 @@ func DecodeListPackagesResponse(decoder func(*http.Response) goahttp.Decoder, re
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("packages", "listPackages", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListPackagesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listPackages", err)
+			}
+			err = ValidateListPackagesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listPackages", err)
+			}
+			return nil, NewListPackagesGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("packages", "listPackages", resp.StatusCode, string(body))
@@ -765,6 +810,7 @@ func EncodeListVersionsRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListVersionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -929,6 +975,20 @@ func DecodeListVersionsResponse(decoder func(*http.Response) goahttp.Decoder, re
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("packages", "listVersions", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListVersionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
+			}
+			err = ValidateListVersionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("packages", "listVersions", resp.StatusCode, string(body))
@@ -992,6 +1052,7 @@ func EncodePublishRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodePublishResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1156,6 +1217,20 @@ func DecodePublishResponse(decoder func(*http.Response) goahttp.Decoder, restore
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("packages", "publish", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body PublishGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
+			}
+			err = ValidatePublishGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("packages", "publish", resp.StatusCode, string(body))

@@ -45,6 +45,7 @@ func NewClient(getDeployment, getLatestDeployment, createDeployment, evolve, lis
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (res *GetDeploymentResult, err error) {
 	var ires any
@@ -67,6 +68,7 @@ func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (re
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) GetLatestDeployment(ctx context.Context, p *GetLatestDeploymentPayload) (res *GetLatestDeploymentResult, err error) {
 	var ires any
@@ -89,6 +91,7 @@ func (c *Client) GetLatestDeployment(ctx context.Context, p *GetLatestDeployment
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayload) (res *CreateDeploymentResult, err error) {
 	var ires any
@@ -110,6 +113,7 @@ func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayloa
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) Evolve(ctx context.Context, p *EvolvePayload) (res *EvolveResult, err error) {
 	var ires any
@@ -132,6 +136,7 @@ func (c *Client) Evolve(ctx context.Context, p *EvolvePayload) (res *EvolveResul
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListDeployments(ctx context.Context, p *ListDeploymentsPayload) (res *ListDeploymentResult, err error) {
 	var ires any

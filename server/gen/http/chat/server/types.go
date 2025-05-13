@@ -200,6 +200,24 @@ type ListChatsUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListChatsGatewayErrorResponseBody is the type of the "chat" service
+// "listChats" endpoint HTTP response body for the "gateway_error" error.
+type ListChatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // LoadChatUnauthorizedResponseBody is the type of the "chat" service
 // "loadChat" endpoint HTTP response body for the "unauthorized" error.
 type LoadChatUnauthorizedResponseBody struct {
@@ -347,6 +365,24 @@ type LoadChatInvariantViolationResponseBody struct {
 // LoadChatUnexpectedResponseBody is the type of the "chat" service "loadChat"
 // endpoint HTTP response body for the "unexpected" error.
 type LoadChatUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LoadChatGatewayErrorResponseBody is the type of the "chat" service
+// "loadChat" endpoint HTTP response body for the "gateway_error" error.
+type LoadChatGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -563,6 +599,20 @@ func NewListChatsUnexpectedResponseBody(res *goa.ServiceError) *ListChatsUnexpec
 	return body
 }
 
+// NewListChatsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listChats" endpoint of the "chat" service.
+func NewListChatsGatewayErrorResponseBody(res *goa.ServiceError) *ListChatsGatewayErrorResponseBody {
+	body := &ListChatsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoadChatUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "loadChat" endpoint of the "chat" service.
 func NewLoadChatUnauthorizedResponseBody(res *goa.ServiceError) *LoadChatUnauthorizedResponseBody {
@@ -679,6 +729,20 @@ func NewLoadChatInvariantViolationResponseBody(res *goa.ServiceError) *LoadChatI
 // result of the "loadChat" endpoint of the "chat" service.
 func NewLoadChatUnexpectedResponseBody(res *goa.ServiceError) *LoadChatUnexpectedResponseBody {
 	body := &LoadChatUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLoadChatGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "loadChat" endpoint of the "chat" service.
+func NewLoadChatGatewayErrorResponseBody(res *goa.ServiceError) *LoadChatGatewayErrorResponseBody {
+	body := &LoadChatGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -283,6 +283,25 @@ type GetDeploymentUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetDeploymentGatewayErrorResponseBody is the type of the "deployments"
+// service "getDeployment" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetDeploymentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetLatestDeploymentUnauthorizedResponseBody is the type of the "deployments"
 // service "getLatestDeployment" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -439,6 +458,25 @@ type GetLatestDeploymentInvariantViolationResponseBody struct {
 // service "getLatestDeployment" endpoint HTTP response body for the
 // "unexpected" error.
 type GetLatestDeploymentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetLatestDeploymentGatewayErrorResponseBody is the type of the "deployments"
+// service "getLatestDeployment" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetLatestDeploymentGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -624,6 +662,25 @@ type CreateDeploymentUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateDeploymentGatewayErrorResponseBody is the type of the "deployments"
+// service "createDeployment" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateDeploymentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // EvolveUnauthorizedResponseBody is the type of the "deployments" service
 // "evolve" endpoint HTTP response body for the "unauthorized" error.
 type EvolveUnauthorizedResponseBody struct {
@@ -772,6 +829,24 @@ type EvolveInvariantViolationResponseBody struct {
 // EvolveUnexpectedResponseBody is the type of the "deployments" service
 // "evolve" endpoint HTTP response body for the "unexpected" error.
 type EvolveUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvolveGatewayErrorResponseBody is the type of the "deployments" service
+// "evolve" endpoint HTTP response body for the "gateway_error" error.
+type EvolveGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -940,6 +1015,25 @@ type ListDeploymentsInvariantViolationResponseBody struct {
 // service "listDeployments" endpoint HTTP response body for the "unexpected"
 // error.
 type ListDeploymentsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDeploymentsGatewayErrorResponseBody is the type of the "deployments"
+// service "listDeployments" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDeploymentsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1278,6 +1372,21 @@ func NewGetDeploymentUnexpected(body *GetDeploymentUnexpectedResponseBody) *goa.
 	return v
 }
 
+// NewGetDeploymentGatewayError builds a deployments service getDeployment
+// endpoint gateway_error error.
+func NewGetDeploymentGatewayError(body *GetDeploymentGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetLatestDeploymentResultOK builds a "deployments" service
 // "getLatestDeployment" endpoint result from a HTTP "OK" response.
 func NewGetLatestDeploymentResultOK(body *GetLatestDeploymentResponseBody) *deployments.GetLatestDeploymentResult {
@@ -1412,6 +1521,21 @@ func NewGetLatestDeploymentInvariantViolation(body *GetLatestDeploymentInvariant
 // NewGetLatestDeploymentUnexpected builds a deployments service
 // getLatestDeployment endpoint unexpected error.
 func NewGetLatestDeploymentUnexpected(body *GetLatestDeploymentUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetLatestDeploymentGatewayError builds a deployments service
+// getLatestDeployment endpoint gateway_error error.
+func NewGetLatestDeploymentGatewayError(body *GetLatestDeploymentGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1570,6 +1694,21 @@ func NewCreateDeploymentUnexpected(body *CreateDeploymentUnexpectedResponseBody)
 	return v
 }
 
+// NewCreateDeploymentGatewayError builds a deployments service
+// createDeployment endpoint gateway_error error.
+func NewCreateDeploymentGatewayError(body *CreateDeploymentGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewEvolveResultOK builds a "deployments" service "evolve" endpoint result
 // from a HTTP "OK" response.
 func NewEvolveResultOK(body *EvolveResponseBody) *deployments.EvolveResult {
@@ -1703,6 +1842,21 @@ func NewEvolveInvariantViolation(body *EvolveInvariantViolationResponseBody) *go
 // NewEvolveUnexpected builds a deployments service evolve endpoint unexpected
 // error.
 func NewEvolveUnexpected(body *EvolveUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvolveGatewayError builds a deployments service evolve endpoint
+// gateway_error error.
+func NewEvolveGatewayError(body *EvolveGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1852,6 +2006,21 @@ func NewListDeploymentsInvariantViolation(body *ListDeploymentsInvariantViolatio
 // NewListDeploymentsUnexpected builds a deployments service listDeployments
 // endpoint unexpected error.
 func NewListDeploymentsUnexpected(body *ListDeploymentsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDeploymentsGatewayError builds a deployments service listDeployments
+// endpoint gateway_error error.
+func NewListDeploymentsGatewayError(body *ListDeploymentsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2175,6 +2344,30 @@ func ValidateGetDeploymentUnexpectedResponseBody(body *GetDeploymentUnexpectedRe
 	return
 }
 
+// ValidateGetDeploymentGatewayErrorResponseBody runs the validations defined
+// on getDeployment_gateway_error_response_body
+func ValidateGetDeploymentGatewayErrorResponseBody(body *GetDeploymentGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetLatestDeploymentUnauthorizedResponseBody runs the validations
 // defined on getLatestDeployment_unauthorized_response_body
 func ValidateGetLatestDeploymentUnauthorizedResponseBody(body *GetLatestDeploymentUnauthorizedResponseBody) (err error) {
@@ -2370,6 +2563,30 @@ func ValidateGetLatestDeploymentInvariantViolationResponseBody(body *GetLatestDe
 // ValidateGetLatestDeploymentUnexpectedResponseBody runs the validations
 // defined on getLatestDeployment_unexpected_response_body
 func ValidateGetLatestDeploymentUnexpectedResponseBody(body *GetLatestDeploymentUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetLatestDeploymentGatewayErrorResponseBody runs the validations
+// defined on getLatestDeployment_gateway_error_response_body
+func ValidateGetLatestDeploymentGatewayErrorResponseBody(body *GetLatestDeploymentGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2607,6 +2824,30 @@ func ValidateCreateDeploymentUnexpectedResponseBody(body *CreateDeploymentUnexpe
 	return
 }
 
+// ValidateCreateDeploymentGatewayErrorResponseBody runs the validations
+// defined on createDeployment_gateway_error_response_body
+func ValidateCreateDeploymentGatewayErrorResponseBody(body *CreateDeploymentGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateEvolveUnauthorizedResponseBody runs the validations defined on
 // evolve_unauthorized_response_body
 func ValidateEvolveUnauthorizedResponseBody(body *EvolveUnauthorizedResponseBody) (err error) {
@@ -2823,6 +3064,30 @@ func ValidateEvolveUnexpectedResponseBody(body *EvolveUnexpectedResponseBody) (e
 	return
 }
 
+// ValidateEvolveGatewayErrorResponseBody runs the validations defined on
+// evolve_gateway_error_response_body
+func ValidateEvolveGatewayErrorResponseBody(body *EvolveGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListDeploymentsUnauthorizedResponseBody runs the validations defined
 // on listDeployments_unauthorized_response_body
 func ValidateListDeploymentsUnauthorizedResponseBody(body *ListDeploymentsUnauthorizedResponseBody) (err error) {
@@ -3018,6 +3283,30 @@ func ValidateListDeploymentsInvariantViolationResponseBody(body *ListDeployments
 // ValidateListDeploymentsUnexpectedResponseBody runs the validations defined
 // on listDeployments_unexpected_response_body
 func ValidateListDeploymentsUnexpectedResponseBody(body *ListDeploymentsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDeploymentsGatewayErrorResponseBody runs the validations defined
+// on listDeployments_gateway_error_response_body
+func ValidateListDeploymentsGatewayErrorResponseBody(body *ListDeploymentsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

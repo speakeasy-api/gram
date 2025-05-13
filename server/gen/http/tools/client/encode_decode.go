@@ -74,6 +74,7 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -238,6 +239,20 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("tools", "listTools", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			}
+			err = ValidateListToolsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tools", "listTools", err)
+			}
+			return nil, NewListToolsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("tools", "listTools", resp.StatusCode, string(body))

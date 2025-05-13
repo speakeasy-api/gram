@@ -266,6 +266,24 @@ type CreatePackageUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreatePackageGatewayErrorResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "gateway_error" error.
+type CreatePackageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdatePackageUnauthorizedResponseBody is the type of the "packages" service
 // "updatePackage" endpoint HTTP response body for the "unauthorized" error.
 type UpdatePackageUnauthorizedResponseBody struct {
@@ -415,6 +433,24 @@ type UpdatePackageInvariantViolationResponseBody struct {
 // UpdatePackageUnexpectedResponseBody is the type of the "packages" service
 // "updatePackage" endpoint HTTP response body for the "unexpected" error.
 type UpdatePackageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePackageGatewayErrorResponseBody is the type of the "packages" service
+// "updatePackage" endpoint HTTP response body for the "gateway_error" error.
+type UpdatePackageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -600,6 +636,24 @@ type ListPackagesUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListPackagesGatewayErrorResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "gateway_error" error.
+type ListPackagesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListVersionsUnauthorizedResponseBody is the type of the "packages" service
 // "listVersions" endpoint HTTP response body for the "unauthorized" error.
 type ListVersionsUnauthorizedResponseBody struct {
@@ -764,6 +818,24 @@ type ListVersionsUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListVersionsGatewayErrorResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "gateway_error" error.
+type ListVersionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // PublishUnauthorizedResponseBody is the type of the "packages" service
 // "publish" endpoint HTTP response body for the "unauthorized" error.
 type PublishUnauthorizedResponseBody struct {
@@ -911,6 +983,24 @@ type PublishInvariantViolationResponseBody struct {
 // PublishUnexpectedResponseBody is the type of the "packages" service
 // "publish" endpoint HTTP response body for the "unexpected" error.
 type PublishUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PublishGatewayErrorResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "gateway_error" error.
+type PublishGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1169,6 +1259,20 @@ func NewCreatePackageUnexpectedResponseBody(res *goa.ServiceError) *CreatePackag
 	return body
 }
 
+// NewCreatePackageGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createPackage" endpoint of the "packages" service.
+func NewCreatePackageGatewayErrorResponseBody(res *goa.ServiceError) *CreatePackageGatewayErrorResponseBody {
+	body := &CreatePackageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdatePackageUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "updatePackage" endpoint of the "packages" service.
 func NewUpdatePackageUnauthorizedResponseBody(res *goa.ServiceError) *UpdatePackageUnauthorizedResponseBody {
@@ -1285,6 +1389,20 @@ func NewUpdatePackageInvariantViolationResponseBody(res *goa.ServiceError) *Upda
 // the result of the "updatePackage" endpoint of the "packages" service.
 func NewUpdatePackageUnexpectedResponseBody(res *goa.ServiceError) *UpdatePackageUnexpectedResponseBody {
 	body := &UpdatePackageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePackageGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "updatePackage" endpoint of the "packages" service.
+func NewUpdatePackageGatewayErrorResponseBody(res *goa.ServiceError) *UpdatePackageGatewayErrorResponseBody {
+	body := &UpdatePackageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1430,6 +1548,20 @@ func NewListPackagesUnexpectedResponseBody(res *goa.ServiceError) *ListPackagesU
 	return body
 }
 
+// NewListPackagesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listPackages" endpoint of the "packages" service.
+func NewListPackagesGatewayErrorResponseBody(res *goa.ServiceError) *ListPackagesGatewayErrorResponseBody {
+	body := &ListPackagesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListVersionsUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listVersions" endpoint of the "packages" service.
 func NewListVersionsUnauthorizedResponseBody(res *goa.ServiceError) *ListVersionsUnauthorizedResponseBody {
@@ -1556,6 +1688,20 @@ func NewListVersionsUnexpectedResponseBody(res *goa.ServiceError) *ListVersionsU
 	return body
 }
 
+// NewListVersionsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listVersions" endpoint of the "packages" service.
+func NewListVersionsGatewayErrorResponseBody(res *goa.ServiceError) *ListVersionsGatewayErrorResponseBody {
+	body := &ListVersionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewPublishUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "publish" endpoint of the "packages" service.
 func NewPublishUnauthorizedResponseBody(res *goa.ServiceError) *PublishUnauthorizedResponseBody {
@@ -1672,6 +1818,20 @@ func NewPublishInvariantViolationResponseBody(res *goa.ServiceError) *PublishInv
 // result of the "publish" endpoint of the "packages" service.
 func NewPublishUnexpectedResponseBody(res *goa.ServiceError) *PublishUnexpectedResponseBody {
 	body := &PublishUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPublishGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "publish" endpoint of the "packages" service.
+func NewPublishGatewayErrorResponseBody(res *goa.ServiceError) *PublishGatewayErrorResponseBody {
+	body := &PublishGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

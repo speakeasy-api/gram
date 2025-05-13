@@ -74,6 +74,7 @@ func EncodeGetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Re
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -238,6 +239,20 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("integrations", "get", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body GetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			}
+			err = ValidateGetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "get", err)
+			}
+			return nil, NewGetGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("integrations", "get", resp.StatusCode, string(body))
@@ -298,6 +313,7 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -462,6 +478,20 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("integrations", "list", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("integrations", "list", err)
+			}
+			err = ValidateListGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("integrations", "list", err)
+			}
+			return nil, NewListGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("integrations", "list", resp.StatusCode, string(body))

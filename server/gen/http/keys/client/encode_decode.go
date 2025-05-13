@@ -66,6 +66,7 @@ func EncodeCreateKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeCreateKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -230,6 +231,20 @@ func DecodeCreateKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("keys", "createKey", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body CreateKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			}
+			err = ValidateCreateKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "createKey", err)
+			}
+			return nil, NewCreateKeyGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("keys", "createKey", resp.StatusCode, string(body))
@@ -281,6 +296,7 @@ func EncodeListKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -445,6 +461,20 @@ func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("keys", "listKeys", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListKeysGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			}
+			err = ValidateListKeysGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+			}
+			return nil, NewListKeysGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("keys", "listKeys", resp.StatusCode, string(body))
@@ -499,6 +529,7 @@ func EncodeRevokeKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -650,6 +681,20 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("keys", "revokeKey", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body RevokeKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			}
+			err = ValidateRevokeKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+			}
+			return nil, NewRevokeKeyGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("keys", "revokeKey", resp.StatusCode, string(body))

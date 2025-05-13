@@ -74,6 +74,7 @@ func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -238,6 +239,20 @@ func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, r
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("deployments", "getDeployment", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body GetDeploymentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			}
+			err = ValidateGetDeploymentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+			}
+			return nil, NewGetDeploymentGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "getDeployment", resp.StatusCode, string(body))
@@ -298,6 +313,7 @@ func EncodeGetLatestDeploymentRequest(encoder func(*http.Request) goahttp.Encode
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeGetLatestDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -462,6 +478,20 @@ func DecodeGetLatestDeploymentResponse(decoder func(*http.Response) goahttp.Deco
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("deployments", "getLatestDeployment", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body GetLatestDeploymentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			}
+			err = ValidateGetLatestDeploymentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+			}
+			return nil, NewGetLatestDeploymentGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "getLatestDeployment", resp.StatusCode, string(body))
@@ -529,6 +559,7 @@ func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) 
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -693,6 +724,20 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("deployments", "createDeployment", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body CreateDeploymentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			}
+			err = ValidateCreateDeploymentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+			}
+			return nil, NewCreateDeploymentGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "createDeployment", resp.StatusCode, string(body))
@@ -756,6 +801,7 @@ func EncodeEvolveRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeEvolveResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -920,6 +966,20 @@ func DecodeEvolveResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("deployments", "evolve", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body EvolveGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			}
+			err = ValidateEvolveGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+			}
+			return nil, NewEvolveGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "evolve", resp.StatusCode, string(body))
@@ -984,6 +1044,7 @@ func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1148,6 +1209,20 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("deployments", "listDeployments", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListDeploymentsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			}
+			err = ValidateListDeploymentsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+			}
+			return nil, NewListDeploymentsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("deployments", "listDeployments", resp.StatusCode, string(body))

@@ -66,6 +66,7 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListChatsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -230,6 +231,20 @@ func DecodeListChatsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("chat", "listChats", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListChatsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChats", err)
+			}
+			err = ValidateListChatsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChats", err)
+			}
+			return nil, NewListChatsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("chat", "listChats", resp.StatusCode, string(body))
@@ -288,6 +303,7 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeLoadChatResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -452,6 +468,20 @@ func DecodeLoadChatResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("chat", "loadChat", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body LoadChatGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChat", err)
+			}
+			err = ValidateLoadChatGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChat", err)
+			}
+			return nil, NewLoadChatGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("chat", "loadChat", resp.StatusCode, string(body))

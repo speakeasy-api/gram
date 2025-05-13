@@ -293,6 +293,24 @@ type CreateToolsetUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "gateway_error" error.
+type CreateToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListToolsetsUnauthorizedResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "unauthorized" error.
 type ListToolsetsUnauthorizedResponseBody struct {
@@ -442,6 +460,24 @@ type ListToolsetsInvariantViolationResponseBody struct {
 // ListToolsetsUnexpectedResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "unexpected" error.
 type ListToolsetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsGatewayErrorResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "gateway_error" error.
+type ListToolsetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -621,6 +657,24 @@ type UpdateToolsetUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "gateway_error" error.
+type UpdateToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteToolsetUnauthorizedResponseBody is the type of the "toolsets" service
 // "deleteToolset" endpoint HTTP response body for the "unauthorized" error.
 type DeleteToolsetUnauthorizedResponseBody struct {
@@ -785,6 +839,24 @@ type DeleteToolsetUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DeleteToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "gateway_error" error.
+type DeleteToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetToolsetUnauthorizedResponseBody is the type of the "toolsets" service
 // "getToolset" endpoint HTTP response body for the "unauthorized" error.
 type GetToolsetUnauthorizedResponseBody struct {
@@ -933,6 +1005,24 @@ type GetToolsetInvariantViolationResponseBody struct {
 // GetToolsetUnexpectedResponseBody is the type of the "toolsets" service
 // "getToolset" endpoint HTTP response body for the "unexpected" error.
 type GetToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "gateway_error" error.
+type GetToolsetGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1217,6 +1307,21 @@ func NewCreateToolsetUnexpected(body *CreateToolsetUnexpectedResponseBody) *goa.
 	return v
 }
 
+// NewCreateToolsetGatewayError builds a toolsets service createToolset
+// endpoint gateway_error error.
+func NewCreateToolsetGatewayError(body *CreateToolsetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListToolsetsResultOK builds a "toolsets" service "listToolsets" endpoint
 // result from a HTTP "OK" response.
 func NewListToolsetsResultOK(body *ListToolsetsResponseBody) *toolsets.ListToolsetsResult {
@@ -1352,6 +1457,21 @@ func NewListToolsetsInvariantViolation(body *ListToolsetsInvariantViolationRespo
 // NewListToolsetsUnexpected builds a toolsets service listToolsets endpoint
 // unexpected error.
 func NewListToolsetsUnexpected(body *ListToolsetsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsGatewayError builds a toolsets service listToolsets endpoint
+// gateway_error error.
+func NewListToolsetsGatewayError(body *ListToolsetsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1530,6 +1650,21 @@ func NewUpdateToolsetUnexpected(body *UpdateToolsetUnexpectedResponseBody) *goa.
 	return v
 }
 
+// NewUpdateToolsetGatewayError builds a toolsets service updateToolset
+// endpoint gateway_error error.
+func NewUpdateToolsetGatewayError(body *UpdateToolsetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteToolsetUnauthorized builds a toolsets service deleteToolset
 // endpoint unauthorized error.
 func NewDeleteToolsetUnauthorized(body *DeleteToolsetUnauthorizedResponseBody) *goa.ServiceError {
@@ -1653,6 +1788,21 @@ func NewDeleteToolsetInvariantViolation(body *DeleteToolsetInvariantViolationRes
 // NewDeleteToolsetUnexpected builds a toolsets service deleteToolset endpoint
 // unexpected error.
 func NewDeleteToolsetUnexpected(body *DeleteToolsetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteToolsetGatewayError builds a toolsets service deleteToolset
+// endpoint gateway_error error.
+func NewDeleteToolsetGatewayError(body *DeleteToolsetGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1819,6 +1969,21 @@ func NewGetToolsetInvariantViolation(body *GetToolsetInvariantViolationResponseB
 // NewGetToolsetUnexpected builds a toolsets service getToolset endpoint
 // unexpected error.
 func NewGetToolsetUnexpected(body *GetToolsetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolsetGatewayError builds a toolsets service getToolset endpoint
+// gateway_error error.
+func NewGetToolsetGatewayError(body *GetToolsetGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2240,6 +2405,30 @@ func ValidateCreateToolsetUnexpectedResponseBody(body *CreateToolsetUnexpectedRe
 	return
 }
 
+// ValidateCreateToolsetGatewayErrorResponseBody runs the validations defined
+// on createToolset_gateway_error_response_body
+func ValidateCreateToolsetGatewayErrorResponseBody(body *CreateToolsetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListToolsetsUnauthorizedResponseBody runs the validations defined on
 // listToolsets_unauthorized_response_body
 func ValidateListToolsetsUnauthorizedResponseBody(body *ListToolsetsUnauthorizedResponseBody) (err error) {
@@ -2435,6 +2624,30 @@ func ValidateListToolsetsInvariantViolationResponseBody(body *ListToolsetsInvari
 // ValidateListToolsetsUnexpectedResponseBody runs the validations defined on
 // listToolsets_unexpected_response_body
 func ValidateListToolsetsUnexpectedResponseBody(body *ListToolsetsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsGatewayErrorResponseBody runs the validations defined on
+// listToolsets_gateway_error_response_body
+func ValidateListToolsetsGatewayErrorResponseBody(body *ListToolsetsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2672,6 +2885,30 @@ func ValidateUpdateToolsetUnexpectedResponseBody(body *UpdateToolsetUnexpectedRe
 	return
 }
 
+// ValidateUpdateToolsetGatewayErrorResponseBody runs the validations defined
+// on updateToolset_gateway_error_response_body
+func ValidateUpdateToolsetGatewayErrorResponseBody(body *UpdateToolsetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteToolsetUnauthorizedResponseBody runs the validations defined
 // on deleteToolset_unauthorized_response_body
 func ValidateDeleteToolsetUnauthorizedResponseBody(body *DeleteToolsetUnauthorizedResponseBody) (err error) {
@@ -2888,6 +3125,30 @@ func ValidateDeleteToolsetUnexpectedResponseBody(body *DeleteToolsetUnexpectedRe
 	return
 }
 
+// ValidateDeleteToolsetGatewayErrorResponseBody runs the validations defined
+// on deleteToolset_gateway_error_response_body
+func ValidateDeleteToolsetGatewayErrorResponseBody(body *DeleteToolsetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetToolsetUnauthorizedResponseBody runs the validations defined on
 // getToolset_unauthorized_response_body
 func ValidateGetToolsetUnauthorizedResponseBody(body *GetToolsetUnauthorizedResponseBody) (err error) {
@@ -3083,6 +3344,30 @@ func ValidateGetToolsetInvariantViolationResponseBody(body *GetToolsetInvariantV
 // ValidateGetToolsetUnexpectedResponseBody runs the validations defined on
 // getToolset_unexpected_response_body
 func ValidateGetToolsetUnexpectedResponseBody(body *GetToolsetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolsetGatewayErrorResponseBody runs the validations defined on
+// getToolset_gateway_error_response_body
+func ValidateGetToolsetGatewayErrorResponseBody(body *GetToolsetGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

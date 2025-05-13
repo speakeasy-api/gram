@@ -183,6 +183,24 @@ type ListToolsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListToolsGatewayErrorResponseBody is the type of the "tools" service
+// "listTools" endpoint HTTP response body for the "gateway_error" error.
+type ListToolsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ToolEntryResponseBody is used to define fields on response body types.
 type ToolEntryResponseBody struct {
 	// The tool ID
@@ -343,6 +361,21 @@ func NewListToolsInvariantViolation(body *ListToolsInvariantViolationResponseBod
 // NewListToolsUnexpected builds a tools service listTools endpoint unexpected
 // error.
 func NewListToolsUnexpected(body *ListToolsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsGatewayError builds a tools service listTools endpoint
+// gateway_error error.
+func NewListToolsGatewayError(body *ListToolsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -566,6 +599,30 @@ func ValidateListToolsInvariantViolationResponseBody(body *ListToolsInvariantVio
 // ValidateListToolsUnexpectedResponseBody runs the validations defined on
 // listTools_unexpected_response_body
 func ValidateListToolsUnexpectedResponseBody(body *ListToolsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsGatewayErrorResponseBody runs the validations defined on
+// listTools_gateway_error_response_body
+func ValidateListToolsGatewayErrorResponseBody(body *ListToolsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -40,6 +40,7 @@ func NewClient(createKey, listKeys, revokeKey goa.Endpoint) *Client {
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) CreateKey(ctx context.Context, p *CreateKeyPayload) (res *Key, err error) {
 	var ires any
@@ -61,6 +62,7 @@ func (c *Client) CreateKey(ctx context.Context, p *CreateKeyPayload) (res *Key, 
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKeysResult, err error) {
 	var ires any
@@ -82,6 +84,7 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKey
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
 func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error) {
 	_, err = c.RevokeKeyEndpoint(ctx, p)

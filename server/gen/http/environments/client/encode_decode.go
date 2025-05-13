@@ -71,6 +71,7 @@ func EncodeCreateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeCreateEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -235,6 +236,20 @@ func DecodeCreateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("environments", "createEnvironment", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body CreateEnvironmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			}
+			err = ValidateCreateEnvironmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+			}
+			return nil, NewCreateEnvironmentGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "createEnvironment", resp.StatusCode, string(body))
@@ -290,6 +305,7 @@ func EncodeListEnvironmentsRequest(encoder func(*http.Request) goahttp.Encoder) 
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeListEnvironmentsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -454,6 +470,20 @@ func DecodeListEnvironmentsResponse(decoder func(*http.Response) goahttp.Decoder
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("environments", "listEnvironments", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ListEnvironmentsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			}
+			err = ValidateListEnvironmentsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+			}
+			return nil, NewListEnvironmentsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "listEnvironments", resp.StatusCode, string(body))
@@ -516,6 +546,7 @@ func EncodeUpdateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -680,6 +711,20 @@ func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("environments", "updateEnvironment", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateEnvironmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			}
+			err = ValidateUpdateEnvironmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+			}
+			return nil, NewUpdateEnvironmentGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "updateEnvironment", resp.StatusCode, string(body))
@@ -738,6 +783,7 @@ func EncodeDeleteEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeDeleteEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -889,6 +935,20 @@ func DecodeDeleteEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("environments", "deleteEnvironment", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteEnvironmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			}
+			err = ValidateDeleteEnvironmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+			}
+			return nil, NewDeleteEnvironmentGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("environments", "deleteEnvironment", resp.StatusCode, string(body))

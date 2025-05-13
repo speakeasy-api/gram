@@ -187,6 +187,24 @@ type GetUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetGatewayErrorResponseBody is the type of the "integrations" service "get"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListUnauthorizedResponseBody is the type of the "integrations" service
 // "list" endpoint HTTP response body for the "unauthorized" error.
 type ListUnauthorizedResponseBody struct {
@@ -334,6 +352,24 @@ type ListInvariantViolationResponseBody struct {
 // ListUnexpectedResponseBody is the type of the "integrations" service "list"
 // endpoint HTTP response body for the "unexpected" error.
 type ListUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayErrorResponseBody is the type of the "integrations" service
+// "list" endpoint HTTP response body for the "gateway_error" error.
+type ListGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -537,6 +573,20 @@ func NewGetUnexpectedResponseBody(res *goa.ServiceError) *GetUnexpectedResponseB
 	return body
 }
 
+// NewGetGatewayErrorResponseBody builds the HTTP response body from the result
+// of the "get" endpoint of the "integrations" service.
+func NewGetGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayErrorResponseBody {
+	body := &GetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "list" endpoint of the "integrations" service.
 func NewListUnauthorizedResponseBody(res *goa.ServiceError) *ListUnauthorizedResponseBody {
@@ -653,6 +703,20 @@ func NewListInvariantViolationResponseBody(res *goa.ServiceError) *ListInvariant
 // of the "list" endpoint of the "integrations" service.
 func NewListUnexpectedResponseBody(res *goa.ServiceError) *ListUnexpectedResponseBody {
 	body := &ListUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "integrations" service.
+func NewListGatewayErrorResponseBody(res *goa.ServiceError) *ListGatewayErrorResponseBody {
+	body := &ListGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

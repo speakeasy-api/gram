@@ -24,6 +24,10 @@ func DeclareErrorResponses() {
 		Description(oops.CodeUnexpected.UserMessage())
 		Fault()
 	})
+	Error(string(oops.CodeGatewayError), func() {
+		Description(oops.CodeGatewayError.UserMessage())
+		Fault()
+	})
 
 	HTTP(func() {
 		Response(string(oops.CodeUnauthorized), StatusUnauthorized, func() {
@@ -51,6 +55,9 @@ func DeclareErrorResponses() {
 			ContentType("application/json")
 		})
 		Response(string(oops.CodeUnexpected), StatusInternalServerError, func() {
+			ContentType("application/json")
+		})
+		Response(string(oops.CodeGatewayError), StatusBadGateway, func() {
 			ContentType("application/json")
 		})
 	})

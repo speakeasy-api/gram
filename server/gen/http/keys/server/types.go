@@ -210,6 +210,24 @@ type CreateKeyUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateKeyGatewayErrorResponseBody is the type of the "keys" service
+// "createKey" endpoint HTTP response body for the "gateway_error" error.
+type CreateKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListKeysUnauthorizedResponseBody is the type of the "keys" service
 // "listKeys" endpoint HTTP response body for the "unauthorized" error.
 type ListKeysUnauthorizedResponseBody struct {
@@ -372,6 +390,24 @@ type ListKeysUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListKeysGatewayErrorResponseBody is the type of the "keys" service
+// "listKeys" endpoint HTTP response body for the "gateway_error" error.
+type ListKeysGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RevokeKeyUnauthorizedResponseBody is the type of the "keys" service
 // "revokeKey" endpoint HTTP response body for the "unauthorized" error.
 type RevokeKeyUnauthorizedResponseBody struct {
@@ -519,6 +555,24 @@ type RevokeKeyInvariantViolationResponseBody struct {
 // RevokeKeyUnexpectedResponseBody is the type of the "keys" service
 // "revokeKey" endpoint HTTP response body for the "unexpected" error.
 type RevokeKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeKeyGatewayErrorResponseBody is the type of the "keys" service
+// "revokeKey" endpoint HTTP response body for the "gateway_error" error.
+type RevokeKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -721,6 +775,20 @@ func NewCreateKeyUnexpectedResponseBody(res *goa.ServiceError) *CreateKeyUnexpec
 	return body
 }
 
+// NewCreateKeyGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "createKey" endpoint of the "keys" service.
+func NewCreateKeyGatewayErrorResponseBody(res *goa.ServiceError) *CreateKeyGatewayErrorResponseBody {
+	body := &CreateKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListKeysUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "listKeys" endpoint of the "keys" service.
 func NewListKeysUnauthorizedResponseBody(res *goa.ServiceError) *ListKeysUnauthorizedResponseBody {
@@ -847,6 +915,20 @@ func NewListKeysUnexpectedResponseBody(res *goa.ServiceError) *ListKeysUnexpecte
 	return body
 }
 
+// NewListKeysGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "keys" service.
+func NewListKeysGatewayErrorResponseBody(res *goa.ServiceError) *ListKeysGatewayErrorResponseBody {
+	body := &ListKeysGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRevokeKeyUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "revokeKey" endpoint of the "keys" service.
 func NewRevokeKeyUnauthorizedResponseBody(res *goa.ServiceError) *RevokeKeyUnauthorizedResponseBody {
@@ -963,6 +1045,20 @@ func NewRevokeKeyInvariantViolationResponseBody(res *goa.ServiceError) *RevokeKe
 // result of the "revokeKey" endpoint of the "keys" service.
 func NewRevokeKeyUnexpectedResponseBody(res *goa.ServiceError) *RevokeKeyUnexpectedResponseBody {
 	body := &RevokeKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeKeyGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "revokeKey" endpoint of the "keys" service.
+func NewRevokeKeyGatewayErrorResponseBody(res *goa.ServiceError) *RevokeKeyGatewayErrorResponseBody {
+	body := &RevokeKeyGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

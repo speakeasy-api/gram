@@ -63,6 +63,7 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -249,6 +250,20 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("auth", "callback", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body CallbackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			}
+			err = ValidateCallbackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "callback", err)
+			}
+			return nil, NewCallbackGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "callback", resp.StatusCode, string(body))
@@ -284,6 +299,7 @@ func (c *Client) BuildLoginRequest(ctx context.Context, v any) (*http.Request, e
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -448,6 +464,20 @@ func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("auth", "login", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body LoginGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			}
+			err = ValidateLoginGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "login", err)
+			}
+			return nil, NewLoginGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "login", resp.StatusCode, string(body))
@@ -507,6 +537,7 @@ func EncodeSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -687,6 +718,20 @@ func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, re
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("auth", "switchScopes", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body SwitchScopesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			}
+			err = ValidateSwitchScopesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+			}
+			return nil, NewSwitchScopesGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "switchScopes", resp.StatusCode, string(body))
@@ -738,6 +783,7 @@ func EncodeLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -910,6 +956,20 @@ func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("auth", "logout", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body LogoutGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			}
+			err = ValidateLogoutGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logout", err)
+			}
+			return nil, NewLogoutGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "logout", resp.StatusCode, string(body))
@@ -961,6 +1021,7 @@ func EncodeInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1152,6 +1213,20 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("auth", "info", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body InfoGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			}
+			err = ValidateInfoGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "info", err)
+			}
+			return nil, NewInfoGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "info", resp.StatusCode, string(body))

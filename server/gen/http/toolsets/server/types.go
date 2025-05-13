@@ -293,6 +293,24 @@ type CreateToolsetUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "gateway_error" error.
+type CreateToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListToolsetsUnauthorizedResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "unauthorized" error.
 type ListToolsetsUnauthorizedResponseBody struct {
@@ -442,6 +460,24 @@ type ListToolsetsInvariantViolationResponseBody struct {
 // ListToolsetsUnexpectedResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "unexpected" error.
 type ListToolsetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsetsGatewayErrorResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "gateway_error" error.
+type ListToolsetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -621,6 +657,24 @@ type UpdateToolsetUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "gateway_error" error.
+type UpdateToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteToolsetUnauthorizedResponseBody is the type of the "toolsets" service
 // "deleteToolset" endpoint HTTP response body for the "unauthorized" error.
 type DeleteToolsetUnauthorizedResponseBody struct {
@@ -785,6 +839,24 @@ type DeleteToolsetUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "gateway_error" error.
+type DeleteToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetToolsetUnauthorizedResponseBody is the type of the "toolsets" service
 // "getToolset" endpoint HTTP response body for the "unauthorized" error.
 type GetToolsetUnauthorizedResponseBody struct {
@@ -933,6 +1005,24 @@ type GetToolsetInvariantViolationResponseBody struct {
 // GetToolsetUnexpectedResponseBody is the type of the "toolsets" service
 // "getToolset" endpoint HTTP response body for the "unexpected" error.
 type GetToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "gateway_error" error.
+type GetToolsetGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1254,6 +1344,20 @@ func NewCreateToolsetUnexpectedResponseBody(res *goa.ServiceError) *CreateToolse
 	return body
 }
 
+// NewCreateToolsetGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createToolset" endpoint of the "toolsets" service.
+func NewCreateToolsetGatewayErrorResponseBody(res *goa.ServiceError) *CreateToolsetGatewayErrorResponseBody {
+	body := &CreateToolsetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListToolsetsUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listToolsets" endpoint of the "toolsets" service.
 func NewListToolsetsUnauthorizedResponseBody(res *goa.ServiceError) *ListToolsetsUnauthorizedResponseBody {
@@ -1370,6 +1474,20 @@ func NewListToolsetsInvariantViolationResponseBody(res *goa.ServiceError) *ListT
 // result of the "listToolsets" endpoint of the "toolsets" service.
 func NewListToolsetsUnexpectedResponseBody(res *goa.ServiceError) *ListToolsetsUnexpectedResponseBody {
 	body := &ListToolsetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsetsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listToolsets" endpoint of the "toolsets" service.
+func NewListToolsetsGatewayErrorResponseBody(res *goa.ServiceError) *ListToolsetsGatewayErrorResponseBody {
+	body := &ListToolsetsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1506,6 +1624,20 @@ func NewUpdateToolsetUnexpectedResponseBody(res *goa.ServiceError) *UpdateToolse
 	return body
 }
 
+// NewUpdateToolsetGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "updateToolset" endpoint of the "toolsets" service.
+func NewUpdateToolsetGatewayErrorResponseBody(res *goa.ServiceError) *UpdateToolsetGatewayErrorResponseBody {
+	body := &UpdateToolsetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteToolsetUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "deleteToolset" endpoint of the "toolsets" service.
 func NewDeleteToolsetUnauthorizedResponseBody(res *goa.ServiceError) *DeleteToolsetUnauthorizedResponseBody {
@@ -1632,6 +1764,20 @@ func NewDeleteToolsetUnexpectedResponseBody(res *goa.ServiceError) *DeleteToolse
 	return body
 }
 
+// NewDeleteToolsetGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "deleteToolset" endpoint of the "toolsets" service.
+func NewDeleteToolsetGatewayErrorResponseBody(res *goa.ServiceError) *DeleteToolsetGatewayErrorResponseBody {
+	body := &DeleteToolsetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetToolsetUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "getToolset" endpoint of the "toolsets" service.
 func NewGetToolsetUnauthorizedResponseBody(res *goa.ServiceError) *GetToolsetUnauthorizedResponseBody {
@@ -1748,6 +1894,20 @@ func NewGetToolsetInvariantViolationResponseBody(res *goa.ServiceError) *GetTool
 // result of the "getToolset" endpoint of the "toolsets" service.
 func NewGetToolsetUnexpectedResponseBody(res *goa.ServiceError) *GetToolsetUnexpectedResponseBody {
 	body := &GetToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolsetGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getToolset" endpoint of the "toolsets" service.
+func NewGetToolsetGatewayErrorResponseBody(res *goa.ServiceError) *GetToolsetGatewayErrorResponseBody {
+	body := &GetToolsetGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

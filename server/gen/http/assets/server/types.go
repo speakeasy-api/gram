@@ -188,6 +188,24 @@ type ServeImageUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ServeImageGatewayErrorResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "gateway_error" error.
+type ServeImageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UploadImageUnauthorizedResponseBody is the type of the "assets" service
 // "uploadImage" endpoint HTTP response body for the "unauthorized" error.
 type UploadImageUnauthorizedResponseBody struct {
@@ -336,6 +354,24 @@ type UploadImageInvariantViolationResponseBody struct {
 // UploadImageUnexpectedResponseBody is the type of the "assets" service
 // "uploadImage" endpoint HTTP response body for the "unexpected" error.
 type UploadImageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadImageGatewayErrorResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "gateway_error" error.
+type UploadImageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -515,6 +551,24 @@ type UploadOpenAPIv3UnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UploadOpenAPIv3GatewayErrorResponseBody is the type of the "assets" service
+// "uploadOpenAPIv3" endpoint HTTP response body for the "gateway_error" error.
+type UploadOpenAPIv3GatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AssetResponseBody is used to define fields on response body types.
 type AssetResponseBody struct {
 	// The ID of the asset
@@ -678,6 +732,20 @@ func NewServeImageUnexpectedResponseBody(res *goa.ServiceError) *ServeImageUnexp
 	return body
 }
 
+// NewServeImageGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "assets" service.
+func NewServeImageGatewayErrorResponseBody(res *goa.ServiceError) *ServeImageGatewayErrorResponseBody {
+	body := &ServeImageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUploadImageUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "uploadImage" endpoint of the "assets" service.
 func NewUploadImageUnauthorizedResponseBody(res *goa.ServiceError) *UploadImageUnauthorizedResponseBody {
@@ -794,6 +862,20 @@ func NewUploadImageInvariantViolationResponseBody(res *goa.ServiceError) *Upload
 // result of the "uploadImage" endpoint of the "assets" service.
 func NewUploadImageUnexpectedResponseBody(res *goa.ServiceError) *UploadImageUnexpectedResponseBody {
 	body := &UploadImageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadImageGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "uploadImage" endpoint of the "assets" service.
+func NewUploadImageGatewayErrorResponseBody(res *goa.ServiceError) *UploadImageGatewayErrorResponseBody {
+	body := &UploadImageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -921,6 +1003,20 @@ func NewUploadOpenAPIv3InvariantViolationResponseBody(res *goa.ServiceError) *Up
 // the result of the "uploadOpenAPIv3" endpoint of the "assets" service.
 func NewUploadOpenAPIv3UnexpectedResponseBody(res *goa.ServiceError) *UploadOpenAPIv3UnexpectedResponseBody {
 	body := &UploadOpenAPIv3UnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadOpenAPIv3GatewayErrorResponseBody builds the HTTP response body
+// from the result of the "uploadOpenAPIv3" endpoint of the "assets" service.
+func NewUploadOpenAPIv3GatewayErrorResponseBody(res *goa.ServiceError) *UploadOpenAPIv3GatewayErrorResponseBody {
+	body := &UploadOpenAPIv3GatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

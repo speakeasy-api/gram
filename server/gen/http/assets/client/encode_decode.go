@@ -68,6 +68,7 @@ func EncodeServeImageRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -248,6 +249,20 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("assets", "serveImage", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body ServeImageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveImage", err)
+			}
+			err = ValidateServeImageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveImage", err)
+			}
+			return nil, NewServeImageGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("assets", "serveImage", resp.StatusCode, string(body))
@@ -325,6 +340,7 @@ func EncodeUploadImageRequest(encoder func(*http.Request) goahttp.Encoder) func(
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeUploadImageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -489,6 +505,20 @@ func DecodeUploadImageResponse(decoder func(*http.Response) goahttp.Decoder, res
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("assets", "uploadImage", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body UploadImageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadImage", err)
+			}
+			err = ValidateUploadImageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadImage", err)
+			}
+			return nil, NewUploadImageGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("assets", "uploadImage", resp.StatusCode, string(body))
@@ -579,6 +609,7 @@ func EncodeUploadOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeUploadOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -743,6 +774,20 @@ func DecodeUploadOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder,
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("assets", "uploadOpenAPIv3", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body UploadOpenAPIv3GatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			}
+			err = ValidateUploadOpenAPIv3GatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+			}
+			return nil, NewUploadOpenAPIv3GatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("assets", "uploadOpenAPIv3", resp.StatusCode, string(body))

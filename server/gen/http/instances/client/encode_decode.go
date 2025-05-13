@@ -77,6 +77,7 @@ func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
 func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -241,6 +242,20 @@ func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, res
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("instances", "getInstance", resp.StatusCode, string(body))
 			}
+		case http.StatusBadGateway:
+			var (
+				body GetInstanceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
+			}
+			err = ValidateGetInstanceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("instances", "getInstance", resp.StatusCode, string(body))

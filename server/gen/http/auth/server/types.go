@@ -184,6 +184,24 @@ type CallbackUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CallbackGatewayErrorResponseBody is the type of the "auth" service
+// "callback" endpoint HTTP response body for the "gateway_error" error.
+type CallbackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "auth" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -331,6 +349,24 @@ type LoginInvariantViolationResponseBody struct {
 // LoginUnexpectedResponseBody is the type of the "auth" service "login"
 // endpoint HTTP response body for the "unexpected" error.
 type LoginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LoginGatewayErrorResponseBody is the type of the "auth" service "login"
+// endpoint HTTP response body for the "gateway_error" error.
+type LoginGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -509,6 +545,24 @@ type SwitchScopesUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SwitchScopesGatewayErrorResponseBody is the type of the "auth" service
+// "switchScopes" endpoint HTTP response body for the "gateway_error" error.
+type SwitchScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // LogoutUnauthorizedResponseBody is the type of the "auth" service "logout"
 // endpoint HTTP response body for the "unauthorized" error.
 type LogoutUnauthorizedResponseBody struct {
@@ -671,6 +725,24 @@ type LogoutUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// LogoutGatewayErrorResponseBody is the type of the "auth" service "logout"
+// endpoint HTTP response body for the "gateway_error" error.
+type LogoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // InfoUnauthorizedResponseBody is the type of the "auth" service "info"
 // endpoint HTTP response body for the "unauthorized" error.
 type InfoUnauthorizedResponseBody struct {
@@ -818,6 +890,24 @@ type InfoInvariantViolationResponseBody struct {
 // InfoUnexpectedResponseBody is the type of the "auth" service "info" endpoint
 // HTTP response body for the "unexpected" error.
 type InfoUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InfoGatewayErrorResponseBody is the type of the "auth" service "info"
+// endpoint HTTP response body for the "gateway_error" error.
+type InfoGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -999,6 +1089,20 @@ func NewCallbackUnexpectedResponseBody(res *goa.ServiceError) *CallbackUnexpecte
 	return body
 }
 
+// NewCallbackGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "auth" service.
+func NewCallbackGatewayErrorResponseBody(res *goa.ServiceError) *CallbackGatewayErrorResponseBody {
+	body := &CallbackGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "login" endpoint of the "auth" service.
 func NewLoginUnauthorizedResponseBody(res *goa.ServiceError) *LoginUnauthorizedResponseBody {
@@ -1115,6 +1219,20 @@ func NewLoginInvariantViolationResponseBody(res *goa.ServiceError) *LoginInvaria
 // of the "login" endpoint of the "auth" service.
 func NewLoginUnexpectedResponseBody(res *goa.ServiceError) *LoginUnexpectedResponseBody {
 	body := &LoginUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLoginGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "login" endpoint of the "auth" service.
+func NewLoginGatewayErrorResponseBody(res *goa.ServiceError) *LoginGatewayErrorResponseBody {
+	body := &LoginGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1251,6 +1369,20 @@ func NewSwitchScopesUnexpectedResponseBody(res *goa.ServiceError) *SwitchScopesU
 	return body
 }
 
+// NewSwitchScopesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "switchScopes" endpoint of the "auth" service.
+func NewSwitchScopesGatewayErrorResponseBody(res *goa.ServiceError) *SwitchScopesGatewayErrorResponseBody {
+	body := &SwitchScopesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLogoutUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "logout" endpoint of the "auth" service.
 func NewLogoutUnauthorizedResponseBody(res *goa.ServiceError) *LogoutUnauthorizedResponseBody {
@@ -1377,6 +1509,20 @@ func NewLogoutUnexpectedResponseBody(res *goa.ServiceError) *LogoutUnexpectedRes
 	return body
 }
 
+// NewLogoutGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "logout" endpoint of the "auth" service.
+func NewLogoutGatewayErrorResponseBody(res *goa.ServiceError) *LogoutGatewayErrorResponseBody {
+	body := &LogoutGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewInfoUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "info" endpoint of the "auth" service.
 func NewInfoUnauthorizedResponseBody(res *goa.ServiceError) *InfoUnauthorizedResponseBody {
@@ -1493,6 +1639,20 @@ func NewInfoInvariantViolationResponseBody(res *goa.ServiceError) *InfoInvariant
 // of the "info" endpoint of the "auth" service.
 func NewInfoUnexpectedResponseBody(res *goa.ServiceError) *InfoUnexpectedResponseBody {
 	body := &InfoUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInfoGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "info" endpoint of the "auth" service.
+func NewInfoGatewayErrorResponseBody(res *goa.ServiceError) *InfoGatewayErrorResponseBody {
+	body := &InfoGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

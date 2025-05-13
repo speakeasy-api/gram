@@ -186,6 +186,24 @@ type CallbackUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CallbackGatewayErrorResponseBody is the type of the "auth" service
+// "callback" endpoint HTTP response body for the "gateway_error" error.
+type CallbackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "auth" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -333,6 +351,24 @@ type LoginInvariantViolationResponseBody struct {
 // LoginUnexpectedResponseBody is the type of the "auth" service "login"
 // endpoint HTTP response body for the "unexpected" error.
 type LoginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// LoginGatewayErrorResponseBody is the type of the "auth" service "login"
+// endpoint HTTP response body for the "gateway_error" error.
+type LoginGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -511,6 +547,24 @@ type SwitchScopesUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SwitchScopesGatewayErrorResponseBody is the type of the "auth" service
+// "switchScopes" endpoint HTTP response body for the "gateway_error" error.
+type SwitchScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // LogoutUnauthorizedResponseBody is the type of the "auth" service "logout"
 // endpoint HTTP response body for the "unauthorized" error.
 type LogoutUnauthorizedResponseBody struct {
@@ -658,6 +712,24 @@ type LogoutInvariantViolationResponseBody struct {
 // LogoutUnexpectedResponseBody is the type of the "auth" service "logout"
 // endpoint HTTP response body for the "unexpected" error.
 type LogoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// LogoutGatewayErrorResponseBody is the type of the "auth" service "logout"
+// endpoint HTTP response body for the "gateway_error" error.
+type LogoutGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -835,6 +907,24 @@ type InfoUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// InfoGatewayErrorResponseBody is the type of the "auth" service "info"
+// endpoint HTTP response body for the "gateway_error" error.
+type InfoGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
@@ -997,6 +1087,21 @@ func NewCallbackUnexpected(body *CallbackUnexpectedResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewCallbackGatewayError builds a auth service callback endpoint
+// gateway_error error.
+func NewCallbackGatewayError(body *CallbackGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLoginResultTemporaryRedirect builds a "auth" service "login" endpoint
 // result from a HTTP "TemporaryRedirect" response.
 func NewLoginResultTemporaryRedirect(location string) *auth.LoginResult {
@@ -1122,6 +1227,21 @@ func NewLoginInvariantViolation(body *LoginInvariantViolationResponseBody) *goa.
 
 // NewLoginUnexpected builds a auth service login endpoint unexpected error.
 func NewLoginUnexpected(body *LoginUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewLoginGatewayError builds a auth service login endpoint gateway_error
+// error.
+func NewLoginGatewayError(body *LoginGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1279,6 +1399,21 @@ func NewSwitchScopesUnexpected(body *SwitchScopesUnexpectedResponseBody) *goa.Se
 	return v
 }
 
+// NewSwitchScopesGatewayError builds a auth service switchScopes endpoint
+// gateway_error error.
+func NewSwitchScopesGatewayError(body *SwitchScopesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLogoutResultOK builds a "auth" service "logout" endpoint result from a
 // HTTP "OK" response.
 func NewLogoutResultOK(sessionCookie string) *auth.LogoutResult {
@@ -1405,6 +1540,21 @@ func NewLogoutInvariantViolation(body *LogoutInvariantViolationResponseBody) *go
 
 // NewLogoutUnexpected builds a auth service logout endpoint unexpected error.
 func NewLogoutUnexpected(body *LogoutUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewLogoutGatewayError builds a auth service logout endpoint gateway_error
+// error.
+func NewLogoutGatewayError(body *LogoutGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1552,6 +1702,20 @@ func NewInfoInvariantViolation(body *InfoInvariantViolationResponseBody) *goa.Se
 
 // NewInfoUnexpected builds a auth service info endpoint unexpected error.
 func NewInfoUnexpected(body *InfoUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInfoGatewayError builds a auth service info endpoint gateway_error error.
+func NewInfoGatewayError(body *InfoGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1807,6 +1971,30 @@ func ValidateCallbackUnexpectedResponseBody(body *CallbackUnexpectedResponseBody
 	return
 }
 
+// ValidateCallbackGatewayErrorResponseBody runs the validations defined on
+// callback_gateway_error_response_body
+func ValidateCallbackGatewayErrorResponseBody(body *CallbackGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLoginUnauthorizedResponseBody runs the validations defined on
 // login_unauthorized_response_body
 func ValidateLoginUnauthorizedResponseBody(body *LoginUnauthorizedResponseBody) (err error) {
@@ -2002,6 +2190,30 @@ func ValidateLoginInvariantViolationResponseBody(body *LoginInvariantViolationRe
 // ValidateLoginUnexpectedResponseBody runs the validations defined on
 // login_unexpected_response_body
 func ValidateLoginUnexpectedResponseBody(body *LoginUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateLoginGatewayErrorResponseBody runs the validations defined on
+// login_gateway_error_response_body
+func ValidateLoginGatewayErrorResponseBody(body *LoginGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2239,6 +2451,30 @@ func ValidateSwitchScopesUnexpectedResponseBody(body *SwitchScopesUnexpectedResp
 	return
 }
 
+// ValidateSwitchScopesGatewayErrorResponseBody runs the validations defined on
+// switchScopes_gateway_error_response_body
+func ValidateSwitchScopesGatewayErrorResponseBody(body *SwitchScopesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLogoutUnauthorizedResponseBody runs the validations defined on
 // logout_unauthorized_response_body
 func ValidateLogoutUnauthorizedResponseBody(body *LogoutUnauthorizedResponseBody) (err error) {
@@ -2455,6 +2691,30 @@ func ValidateLogoutUnexpectedResponseBody(body *LogoutUnexpectedResponseBody) (e
 	return
 }
 
+// ValidateLogoutGatewayErrorResponseBody runs the validations defined on
+// logout_gateway_error_response_body
+func ValidateLogoutGatewayErrorResponseBody(body *LogoutGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateInfoUnauthorizedResponseBody runs the validations defined on
 // info_unauthorized_response_body
 func ValidateInfoUnauthorizedResponseBody(body *InfoUnauthorizedResponseBody) (err error) {
@@ -2650,6 +2910,30 @@ func ValidateInfoInvariantViolationResponseBody(body *InfoInvariantViolationResp
 // ValidateInfoUnexpectedResponseBody runs the validations defined on
 // info_unexpected_response_body
 func ValidateInfoUnexpectedResponseBody(body *InfoUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInfoGatewayErrorResponseBody runs the validations defined on
+// info_gateway_error_response_body
+func ValidateInfoGatewayErrorResponseBody(body *InfoGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

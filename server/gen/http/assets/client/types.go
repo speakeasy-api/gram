@@ -188,6 +188,24 @@ type ServeImageUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ServeImageGatewayErrorResponseBody is the type of the "assets" service
+// "serveImage" endpoint HTTP response body for the "gateway_error" error.
+type ServeImageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UploadImageUnauthorizedResponseBody is the type of the "assets" service
 // "uploadImage" endpoint HTTP response body for the "unauthorized" error.
 type UploadImageUnauthorizedResponseBody struct {
@@ -336,6 +354,24 @@ type UploadImageInvariantViolationResponseBody struct {
 // UploadImageUnexpectedResponseBody is the type of the "assets" service
 // "uploadImage" endpoint HTTP response body for the "unexpected" error.
 type UploadImageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UploadImageGatewayErrorResponseBody is the type of the "assets" service
+// "uploadImage" endpoint HTTP response body for the "gateway_error" error.
+type UploadImageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -515,6 +551,24 @@ type UploadOpenAPIv3UnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UploadOpenAPIv3GatewayErrorResponseBody is the type of the "assets" service
+// "uploadOpenAPIv3" endpoint HTTP response body for the "gateway_error" error.
+type UploadOpenAPIv3GatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AssetResponseBody is used to define fields on response body types.
 type AssetResponseBody struct {
 	// The ID of the asset
@@ -678,6 +732,21 @@ func NewServeImageUnexpected(body *ServeImageUnexpectedResponseBody) *goa.Servic
 	return v
 }
 
+// NewServeImageGatewayError builds a assets service serveImage endpoint
+// gateway_error error.
+func NewServeImageGatewayError(body *ServeImageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUploadImageResultOK builds a "assets" service "uploadImage" endpoint
 // result from a HTTP "OK" response.
 func NewUploadImageResultOK(body *UploadImageResponseBody) *assets.UploadImageResult {
@@ -822,6 +891,21 @@ func NewUploadImageUnexpected(body *UploadImageUnexpectedResponseBody) *goa.Serv
 	return v
 }
 
+// NewUploadImageGatewayError builds a assets service uploadImage endpoint
+// gateway_error error.
+func NewUploadImageGatewayError(body *UploadImageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUploadOpenAPIv3ResultOK builds a "assets" service "uploadOpenAPIv3"
 // endpoint result from a HTTP "OK" response.
 func NewUploadOpenAPIv3ResultOK(body *UploadOpenAPIv3ResponseBody) *assets.UploadOpenAPIv3Result {
@@ -954,6 +1038,21 @@ func NewUploadOpenAPIv3InvariantViolation(body *UploadOpenAPIv3InvariantViolatio
 // NewUploadOpenAPIv3Unexpected builds a assets service uploadOpenAPIv3
 // endpoint unexpected error.
 func NewUploadOpenAPIv3Unexpected(body *UploadOpenAPIv3UnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUploadOpenAPIv3GatewayError builds a assets service uploadOpenAPIv3
+// endpoint gateway_error error.
+func NewUploadOpenAPIv3GatewayError(body *UploadOpenAPIv3GatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1210,6 +1309,30 @@ func ValidateServeImageUnexpectedResponseBody(body *ServeImageUnexpectedResponse
 	return
 }
 
+// ValidateServeImageGatewayErrorResponseBody runs the validations defined on
+// serveImage_gateway_error_response_body
+func ValidateServeImageGatewayErrorResponseBody(body *ServeImageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUploadImageUnauthorizedResponseBody runs the validations defined on
 // uploadImage_unauthorized_response_body
 func ValidateUploadImageUnauthorizedResponseBody(body *UploadImageUnauthorizedResponseBody) (err error) {
@@ -1426,6 +1549,30 @@ func ValidateUploadImageUnexpectedResponseBody(body *UploadImageUnexpectedRespon
 	return
 }
 
+// ValidateUploadImageGatewayErrorResponseBody runs the validations defined on
+// uploadImage_gateway_error_response_body
+func ValidateUploadImageGatewayErrorResponseBody(body *UploadImageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUploadOpenAPIv3UnauthorizedResponseBody runs the validations defined
 // on uploadOpenAPIv3_unauthorized_response_body
 func ValidateUploadOpenAPIv3UnauthorizedResponseBody(body *UploadOpenAPIv3UnauthorizedResponseBody) (err error) {
@@ -1621,6 +1768,30 @@ func ValidateUploadOpenAPIv3InvariantViolationResponseBody(body *UploadOpenAPIv3
 // ValidateUploadOpenAPIv3UnexpectedResponseBody runs the validations defined
 // on uploadOpenAPIv3_unexpected_response_body
 func ValidateUploadOpenAPIv3UnexpectedResponseBody(body *UploadOpenAPIv3UnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUploadOpenAPIv3GatewayErrorResponseBody runs the validations defined
+// on uploadOpenAPIv3_gateway_error_response_body
+func ValidateUploadOpenAPIv3GatewayErrorResponseBody(body *UploadOpenAPIv3GatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
