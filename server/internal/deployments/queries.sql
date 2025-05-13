@@ -262,6 +262,12 @@ INSERT INTO http_tool_definitions (
   , summary
   , description
   , tags
+  , confirm
+  , confirm_prompt
+  , x_gram
+  , original_name
+  , original_summary
+  , original_description
   , security
   , http_method
   , path
@@ -282,6 +288,12 @@ INSERT INTO http_tool_definitions (
   , @summary
   , @description
   , @tags
+  , @confirm
+  , @confirm_prompt
+  , @x_gram
+  , @original_name
+  , @original_summary
+  , @original_description
   , @security
   , @http_method
   , @path

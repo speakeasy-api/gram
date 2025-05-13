@@ -4557,6 +4557,12 @@ components:
         HTTPToolDefinition:
             type: object
             properties:
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
                 created_at:
                     type: string
                     description: The creation date of the tool.
@@ -4616,6 +4622,7 @@ components:
                 - name
                 - summary
                 - description
+                - confirm
                 - tags
                 - http_method
                 - path
@@ -5166,6 +5173,12 @@ components:
         ToolEntry:
             type: object
             properties:
+                confirm:
+                    type: string
+                    description: The confirmation mode for the tool
+                confirmPrompt:
+                    type: string
+                    description: The confirmation prompt for the tool
                 created_at:
                     type: string
                     description: The creation date of the tool.
@@ -5203,6 +5216,7 @@ components:
                 - name
                 - summary
                 - description
+                - confirm
                 - openapiv3DocumentId
                 - httpMethod
                 - path

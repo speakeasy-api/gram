@@ -213,6 +213,10 @@ type ToolEntryResponseBody struct {
 	Summary string `form:"summary" json:"summary" xml:"summary"`
 	// The tool description
 	Description string `form:"description" json:"description" xml:"description"`
+	// The confirmation mode for the tool
+	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
+	// The confirmation prompt for the tool
+	ConfirmPrompt *string `form:"confirmPrompt,omitempty" json:"confirmPrompt,omitempty" xml:"confirmPrompt,omitempty"`
 	// The OpenAPI v3 document ID
 	Openapiv3DocumentID string `form:"openapiv3DocumentId" json:"openapiv3DocumentId" xml:"openapiv3DocumentId"`
 	// The package name

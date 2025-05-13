@@ -227,6 +227,10 @@ type HTTPToolDefinitionResponseBody struct {
 	Summary string `form:"summary" json:"summary" xml:"summary"`
 	// Description of the tool
 	Description string `form:"description" json:"description" xml:"description"`
+	// Confirmation mode for the tool
+	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// OpenAPI v3 operation
 	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
 	// The tags list for this http tool

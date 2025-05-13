@@ -213,6 +213,10 @@ type ToolEntryResponseBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The tool description
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// The confirmation prompt for the tool
+	ConfirmPrompt *string `form:"confirmPrompt,omitempty" json:"confirmPrompt,omitempty" xml:"confirmPrompt,omitempty"`
 	// The OpenAPI v3 document ID
 	Openapiv3DocumentID *string `form:"openapiv3DocumentId,omitempty" json:"openapiv3DocumentId,omitempty" xml:"openapiv3DocumentId,omitempty"`
 	// The package name
@@ -661,6 +665,9 @@ func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Confirm == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confirm", "body"))
 	}
 	if body.Openapiv3DocumentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3DocumentId", "body"))

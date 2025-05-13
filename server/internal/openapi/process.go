@@ -14,6 +14,7 @@ import (
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
@@ -387,6 +388,8 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		defaultServer = s.extractDefaultServer(ctx, logger, docInfo, op.Servers)
 	}
 
+	descriptor := parseToolDescriptor(ctx, logger, docInfo, op)
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
@@ -395,10 +398,16 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),
 		Openapiv3Operation:  conv.ToPGText(op.OperationId),
-		Name:                tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, op.OperationId)),
+		Name:                descriptor.name,
 		Tags:                op.Tags,
-		Summary:             op.Summary,
-		Description:         op.Description,
+		Summary:             descriptor.summary,
+		Description:         descriptor.description,
+		Confirm:             conv.PtrToPGTextEmpty(descriptor.confirm),
+		ConfirmPrompt:       conv.PtrToPGTextEmpty(descriptor.confirmPrompt),
+		OriginalName:        conv.PtrToPGTextEmpty(descriptor.originalName),
+		OriginalSummary:     conv.PtrToPGTextEmpty(descriptor.originalSummary),
+		OriginalDescription: conv.PtrToPGTextEmpty(descriptor.originalDescription),
+		XGram:               pgtype.Bool{Bool: descriptor.extensionFound, Valid: true},
 		SchemaVersion:       "1.0.0",
 		Schema:              schemaBytes,
 		ServerEnvVar:        serverEnvVar,
@@ -408,6 +417,71 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 	}, nil
+}
+
+type gramExtension struct {
+	Confirm       *string `yaml:"confirm"`
+	ConfirmPrompt *string `yaml:"confirmPrompt"`
+	Name          *string `yaml:"name"`
+	Summary       *string `yaml:"summary"`
+	Description   *string `yaml:"description"`
+}
+
+type toolDescriptor struct {
+	extensionFound      bool
+	name                string
+	summary             string
+	description         string
+	confirm             *string
+	confirmPrompt       *string
+	originalName        *string
+	originalSummary     *string
+	originalDescription *string
+}
+
+func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, op *v3.Operation) toolDescriptor {
+	gramExtNode, _ := op.Extensions.Get("x-gram")
+	name := tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, op.OperationId))
+	description := op.Description
+	summary := op.Summary
+
+	toolDesc := toolDescriptor{
+		extensionFound:      false,
+		confirm:             conv.Ptr("always"),
+		confirmPrompt:       nil,
+		name:                name,
+		summary:             summary,
+		description:         description,
+		originalName:        nil,
+		originalSummary:     nil,
+		originalDescription: nil,
+	}
+
+	if gramExtNode == nil {
+		return toolDesc
+	}
+
+	var ext gramExtension
+	if err := gramExtNode.Decode(&ext); err != nil {
+		msg := fmt.Sprintf("error parsing gram extension: [%d:%d]: %s", gramExtNode.Line, gramExtNode.Column, err.Error())
+		logger.WarnContext(ctx, msg)
+
+		return toolDesc
+	}
+
+	sanitizedName := tools.SanitizeName(conv.PtrValOr(ext.Name, ""))
+
+	return toolDescriptor{
+		extensionFound:      true,
+		name:                conv.Default(sanitizedName, name),
+		summary:             conv.PtrValOr(ext.Summary, summary),
+		description:         conv.PtrValOr(ext.Description, description),
+		originalName:        conv.PtrEmpty(name),
+		originalSummary:     conv.PtrEmpty(summary),
+		originalDescription: conv.PtrEmpty(description),
+		confirm:             conv.Ptr(conv.PtrValOr(ext.Confirm, "always")),
+		confirmPrompt:       ext.ConfirmPrompt,
+	}
 }
 
 type jsonSchemaObject struct {

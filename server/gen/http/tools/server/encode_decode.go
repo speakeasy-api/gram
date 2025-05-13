@@ -242,6 +242,8 @@ func marshalToolsToolEntryToToolEntryResponseBody(v *tools.ToolEntry) *ToolEntry
 		Name:                v.Name,
 		Summary:             v.Summary,
 		Description:         v.Description,
+		Confirm:             v.Confirm,
+		ConfirmPrompt:       v.ConfirmPrompt,
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		PackageName:         v.PackageName,
 		HTTPMethod:          v.HTTPMethod,

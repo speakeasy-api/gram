@@ -137,6 +137,8 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			Name:                tool.Name,
 			Summary:             tool.Summary,
 			Description:         tool.Description,
+			Confirm:             tool.Confirm,
+			ConfirmPrompt:       tool.ConfirmPrompt,
 			Openapiv3Operation:  tool.Openapiv3Operation,
 			Tags:                tool.Tags,
 			Security:            tool.Security,

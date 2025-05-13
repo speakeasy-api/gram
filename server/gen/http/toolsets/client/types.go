@@ -1055,6 +1055,10 @@ type HTTPToolDefinitionResponseBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Description of the tool
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// OpenAPI v3 operation
 	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
 	// The tags list for this http tool
@@ -3409,6 +3413,9 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Confirm == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confirm", "body"))
 	}
 	if body.Tags == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))

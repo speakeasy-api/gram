@@ -71,6 +71,10 @@ type ToolEntry struct {
 	Summary string
 	// The tool description
 	Description string
+	// The confirmation mode for the tool
+	Confirm string
+	// The confirmation prompt for the tool
+	ConfirmPrompt *string
 	// The OpenAPI v3 document ID
 	Openapiv3DocumentID string
 	// The package name

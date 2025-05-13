@@ -319,6 +319,8 @@ SELECT
   http_tool_definitions.summary,
   http_tool_definitions.description,
   http_tool_definitions.http_method,
+  http_tool_definitions.confirm,
+  http_tool_definitions.confirm_prompt,
   http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
   http_tool_definitions.created_at,
@@ -349,6 +351,8 @@ type ListToolsRow struct {
 	Summary             string
 	Description         string
 	HttpMethod          string
+	Confirm             pgtype.Text
+	ConfirmPrompt       pgtype.Text
 	Path                string
 	Openapiv3DocumentID uuid.NullUUID
 	CreatedAt           pgtype.Timestamptz
@@ -371,6 +375,8 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 			&i.Summary,
 			&i.Description,
 			&i.HttpMethod,
+			&i.Confirm,
+			&i.ConfirmPrompt,
 			&i.Path,
 			&i.Openapiv3DocumentID,
 			&i.CreatedAt,

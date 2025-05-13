@@ -43,6 +43,8 @@ SELECT
   http_tool_definitions.summary,
   http_tool_definitions.description,
   http_tool_definitions.http_method,
+  http_tool_definitions.confirm,
+  http_tool_definitions.confirm_prompt,
   http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
   http_tool_definitions.created_at,

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/tools/repo"
@@ -94,6 +95,8 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			Name:                tool.Name,
 			Summary:             tool.Summary,
 			Description:         tool.Description,
+			Confirm:             conv.PtrValOr(conv.FromPGText[string](tool.Confirm), "always"),
+			ConfirmPrompt:       conv.FromPGText[string](tool.ConfirmPrompt),
 			HTTPMethod:          tool.HttpMethod,
 			Path:                tool.Path,
 			Openapiv3DocumentID: tool.Openapiv3DocumentID.UUID.String(),

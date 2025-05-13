@@ -67,6 +67,8 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 				Name:                def.HttpToolDefinition.Name,
 				Summary:             def.HttpToolDefinition.Summary,
 				Description:         def.HttpToolDefinition.Description,
+				Confirm:             conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "always"),
+				ConfirmPrompt:       conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt),
 				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
 				Tags:                def.HttpToolDefinition.Tags,
 				Security:            conv.FromBytes(def.HttpToolDefinition.Security),

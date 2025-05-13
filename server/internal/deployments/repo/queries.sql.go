@@ -272,6 +272,12 @@ INSERT INTO http_tool_definitions (
   , summary
   , description
   , tags
+  , confirm
+  , confirm_prompt
+  , x_gram
+  , original_name
+  , original_summary
+  , original_description
   , security
   , http_method
   , path
@@ -303,6 +309,12 @@ INSERT INTO http_tool_definitions (
   , $17
   , $18
   , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
 )
 RETURNING id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
 `
@@ -316,6 +328,12 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	Summary             string
 	Description         string
 	Tags                []string
+	Confirm             pgtype.Text
+	ConfirmPrompt       pgtype.Text
+	XGram               pgtype.Bool
+	OriginalName        pgtype.Text
+	OriginalSummary     pgtype.Text
+	OriginalDescription pgtype.Text
 	Security            []byte
 	HttpMethod          string
 	Path                string
@@ -339,6 +357,12 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.Summary,
 		arg.Description,
 		arg.Tags,
+		arg.Confirm,
+		arg.ConfirmPrompt,
+		arg.XGram,
+		arg.OriginalName,
+		arg.OriginalSummary,
+		arg.OriginalDescription,
 		arg.Security,
 		arg.HttpMethod,
 		arg.Path,

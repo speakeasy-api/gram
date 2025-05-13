@@ -12,6 +12,15 @@ func Ptr[T any](v T) *T {
 	return &v
 }
 
+func PtrEmpty[T comparable](v T) *T {
+	var zero T
+	if v == zero {
+		return nil
+	}
+
+	return &v
+}
+
 func PtrValOr[T any](ptr *T, def T) T {
 	if ptr == nil {
 		return def

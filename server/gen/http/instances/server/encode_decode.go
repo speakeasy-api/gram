@@ -274,6 +274,8 @@ func marshalInstancesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *insta
 		Name:                v.Name,
 		Summary:             v.Summary,
 		Description:         v.Description,
+		Confirm:             v.Confirm,
+		ConfirmPrompt:       v.ConfirmPrompt,
 		Openapiv3Operation:  v.Openapiv3Operation,
 		Security:            v.Security,
 		HTTPMethod:          v.HTTPMethod,

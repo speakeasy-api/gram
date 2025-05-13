@@ -120,6 +120,10 @@ type HTTPToolDefinition struct {
 	Summary string
 	// Description of the tool
 	Description string
+	// Confirmation mode for the tool
+	Confirm string
+	// Prompt for the confirmation
+	ConfirmPrompt *string
 	// OpenAPI v3 operation
 	Openapiv3Operation *string
 	// The tags list for this http tool
