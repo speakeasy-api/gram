@@ -1,16 +1,14 @@
 /* Define CSS variables for font families using system fonts and fallbacks */
 :root {
   /* DM Sans fallback - use system UI fonts that are similar */
-  /* --font-dm-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-    "Segoe UI Symbol";
+  --font-dm-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 
   /* Cormorant fallback - use serif fonts */
-  /* --font-cormorant: Georgia, Cambria, "Times New Roman", Times, serif; */
+  --font-cormorant: Georgia, Cambria, "Times New Roman", Times, serif;
 
   /* IBM Plex Mono fallback - use monospace fonts */
-  /* --font-ibm-plex-mono: SFMono-Regular, Menlo, Monaco, Consolas, */
-  /* "Liberation Mono", "Courier New", monospace; */
+  --font-ibm-plex-mono: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 @tailwind base;
@@ -18,9 +16,9 @@
 @tailwind utilities;
 
 /* Import Google Fonts */
-/* @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Cormorant:wght@300;400;500;600;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&display=swap"); */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&display=swap');
 
 @layer base {
   :root {
@@ -53,14 +51,6 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
-
-    /* Custom font faces */
-    --font-diatype: "Diatype", -apple-system, BlinkMacSystemFont, "Segoe UI",
-      Roboto, Helvetica, Arial, sans-serif;
-    --font-diatype-mono: "Diatype Mono", SFMono-Regular, Menlo, Monaco, Consolas,
-      "Liberation Mono", "Courier New", monospace;
-    --font-tobias: "Tobias", "Cormorant", Georgia, Cambria, "Times New Roman",
-      Times, serif;
   }
 
   .dark {
@@ -92,13 +82,14 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
   }
+}
 
+@layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-default);
   }
 }
 
@@ -123,47 +114,11 @@
   border-color: attr(data-border-color);
 }
 
+
 .inherit-all {
   font: inherit;
   color: inherit;
   text-align: inherit;
   text-transform: inherit;
   letter-spacing: inherit;
-}
-
-/* Custom font faces */
-@font-face {
-  font-family: "Diatype";
-  src: url("/fonts/diatype/ABCDiatype-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Diatype";
-  src: url("/fonts/diatype/ABCDiatype-Light.woff2") format("woff2");
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Diatype Mono";
-  src: url("/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Diatype Mono";
-  src: url("/fonts/diatype-mono/ABCDiatypeMono-Light.woff2") format("woff2");
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Tobias";
-  src: url("/fonts/tobias/Tobias-Thin.woff2") format("woff2");
-  font-weight: 100;
-  font-style: normal;
-  font-display: swap;
 }
