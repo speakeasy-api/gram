@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { ToolsetDetails } from "@gram/client/models/components";
@@ -142,7 +143,7 @@ function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
             />
           </Card.Title>
           <Stack direction="horizontal" gap={2} align="center">
-            <ToolsetEnvironmentBadge toolset={toolset}  />
+            <ToolsetEnvironmentBadge toolset={toolset} />
             <ToolsBadge tools={toolset.httpTools} />
           </Stack>
         </Stack>
@@ -157,20 +158,27 @@ function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
         </Stack>
       </Card.Header>
       <Card.Content>
-        <div className="flex items-center gap-2">
-          <routes.toolsets.toolset.Link params={[toolset.slug]}>
-            <Button variant="outline">Edit</Button>
-          </routes.toolsets.toolset.Link>
-          <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
-            <Button
-              variant="outline"
-              className="group"
-              tooltip="Open in chat playground"
-            >
-              Playground
-              <routes.playground.Icon className="text-muted-foreground group-hover:text-foreground trans" />
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <routes.toolsets.toolset.Link params={[toolset.slug]}>
+              <Button variant="outline">Edit</Button>
+            </routes.toolsets.toolset.Link>
+            <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
+              <Button
+                variant="outline"
+                className="group"
+                tooltip="Open in chat playground"
+              >
+                Playground
+                <routes.playground.Icon className="text-muted-foreground group-hover:text-foreground trans" />
+              </Button>
+            </routes.playground.Link>
+          </div>
+          <SimpleTooltip tooltip="Toolsets as a hosted MCP are coming soon!">
+            <Button variant="outline" className="group" disabled>
+              MCP Server
             </Button>
-          </routes.playground.Link>
+          </SimpleTooltip>
         </div>
       </Card.Content>
     </Card>
