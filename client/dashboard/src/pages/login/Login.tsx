@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { LoginSection } from "./components/login-section";
-import { PromptsSection } from "./components/prompt-section";
+import { JourneyDemo } from "./components/chat-preview";
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 
@@ -17,15 +17,9 @@ export default function Login() {
 
   return (
     <Page>
-      <main
-        className="flex min-h-screen flex-col md:flex-row"
-        style={{
-          /* Apply the main font family from CSS variables */
-          fontFamily: "var(--font-dm-sans)",
-        }}
-      >
+      <main className="flex min-h-screen flex-col md:flex-row">
+        <JourneyDemo />
         <LoginSection />
-        <PromptsSection />
       </main>
     </Page>
   );

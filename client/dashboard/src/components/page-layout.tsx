@@ -2,9 +2,7 @@ import { cn } from "@/lib/utils.ts";
 import { PageHeader } from "./page-header.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="h-[98vh] flex flex-col overflow-hidden">{children}</div>
-  );
+  return <div className="flex flex-col overflow-hidden">{children}</div>;
 }
 
 function PageBody({
@@ -18,7 +16,7 @@ function PageBody({
     <div
       className={cn(
         "@container/main flex flex-col gap-4 p-8 pb-0 overflow-y-auto h-full",
-        className,
+        className
       )}
     >
       {children}

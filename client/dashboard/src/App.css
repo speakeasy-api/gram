@@ -4,6 +4,42 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@font-face {
+  font-family: "Diatype";
+  src: url("/fonts/diatype/ABCDiatype-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Diatype";
+  src: url("/fonts/diatype/ABCDiatype-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Diatype Mono";
+  src: url("/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Diatype Mono";
+  src: url("/fonts/diatype-mono/ABCDiatypeMono-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Tobias";
+  src: url("/fonts/tobias/Tobias-Thin.woff2") format("woff2");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -42,6 +78,48 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --header-height: 3rem;
   --sidebar-width: 16rem;
+
+  /* Colors */
+  --color-red-*: initial;
+  --color-red-500: #c83228;
+  --color-red-800: #320f1e;
+  --color-blue-*: initial;
+  --color-blue-300: #9bc3ff;
+  --color-blue-500: #2873d7;
+  --color-blue-800: #00143c;
+  --color-green-*: initial;
+  --color-green-500: #5a8250;
+  --color-green-800: #002314;
+  --color-orange-*: initial;
+  --color-orange-500: #fb873f;
+  --color-yellow-*: initial;
+  --color-yellow-800: #d2dc91;
+  --color-orange-*: initial;
+  --color-orange-500: #fb873f;
+
+  /* Tech colors */
+  --color-php-primary: var(--color-red-800);
+  --color-swift-primary: var(--color-red-500);
+  --color-ruby-primary: var(--color-orange-500);
+  --color-unity-primary: var(--color-yellow-800);
+  --color-terraform-primary: var(--color-green-500);
+  --color-c-primary: var(--color-green-800);
+  --color-go-primary: var(--color-blue-800);
+  --color-java-primary: var(--color-blue-500);
+  --color-python-primary: var(--color-blue-300);
+
+  --gradient-primary: linear-gradient(
+    90deg,
+    var(--color-php-primary) 0%,
+    var(--color-swift-primary) 12.56%,
+    var(--color-ruby-primary) 25.06%,
+    var(--color-unity-primary) 37.56%,
+    var(--color-terraform-primary) 50.06%,
+    var(--color-c-primary) 62.06%,
+    var(--color-go-primary) 74.06%,
+    var(--color-java-primary) 86.06%,
+    var(--color-python-primary) 97.06%
+  );
 }
 
 :root {
@@ -77,6 +155,12 @@
   --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
   --sidebar-border: oklch(0.923 0.003 48.717);
   --sidebar-ring: oklch(0.709 0.01 56.259);
+  --font-diatype: "Diatype", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-diatype-mono: "Diatype Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --font-tobias: "Tobias", "Cormorant", Georgia, Cambria, "Times New Roman",
+    Times, serif;
 }
 
 .dark {
@@ -119,6 +203,7 @@
   }
   body {
     @apply bg-sidebar text-foreground;
+    font-family: var(--font-diatype);
   }
   button {
     @apply cursor-pointer;
@@ -129,4 +214,81 @@
   transition-property: all;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@utility text-heading-2xl {
+  font-size: 7rem;
+  line-height: 1;
+  font-weight: 300;
+  letter-spacing: -0.05em;
+  font-family: var(--font-tobias);
+}
+
+@utility text-heading-xl {
+  font-size: 4.5rem;
+  line-height: 1;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  font-family: var(--font-tobias);
+}
+
+@utility text-heading-lg {
+  font-size: 3.25rem;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-family: var(--font-tobias);
+}
+
+@utility text-body-xl {
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-family: var(--font-diatype);
+}
+
+@utility text-body-lg {
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-family: var(--font-diatype);
+}
+
+@utility text-body-md {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 150%;
+  letter-spacing: -0.01em;
+  font-family: var(--font-diatype);
+}
+
+@utility text-body-base {
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 150%;
+  letter-spacing: 0.0025em;
+  font-family: var(--font-diatype);
+}
+
+@utility text-mono {
+  font-family: var(--font-diatype-mono);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+@utility text-mono-light {
+  font-family: var(--font-diatype-mono);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  font-weight: 300;
+}
+
+@utility bg-gradient-primary {
+  background: var(--gradient-primary);
+}
+
+@utility border-gradient-primary {
+  border-image: var(--gradient-primary) 1;
 }

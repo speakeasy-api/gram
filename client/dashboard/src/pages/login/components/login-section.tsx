@@ -1,10 +1,10 @@
 "use client";
 
-import { GramLogo } from "@/components/gram-logo";
 import { Button } from "@/components/ui/button";
 import { getServerURL } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 
+// TODO: FARAZ WILL FINISH THIS
 export function LoginSection() {
   const [searchParams] = useSearchParams();
   const signinError = searchParams.get("signin_error");
@@ -15,14 +15,14 @@ export function LoginSection() {
 
   return (
     <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white">
-      <div className="w-full max-w-md flex flex-col items-center">
-        <div className="flex flex-col items-center text-center mb-12">
-          <GramLogo className="text-7xl" />
+      <div className="w-full max-w-md flex flex-col items-center gap-8">
+        <div className="flex flex-col items-center gap-4">
+          <h1 className="text-heading-xl">gram</h1>
+          <p className="text-body-lg text-center">
+            The AI Tools platform, chat and Build agentic workflows with your
+            APIs
+          </p>
         </div>
-
-        <p className="text-gray-600 text-center max-w-sm text-[22px] tracking-wide font-light mb-16">
-          Your AI-powered chat assistant for calling APIs with natural language
-        </p>
 
         {signinError && (
           <p className="text-red-600 text-center mb-4">
@@ -30,17 +30,8 @@ export function LoginSection() {
           </p>
         )}
 
-        <Button
-          className="w-80 py-6 text-lg text-white font-mono font-light tracking-wide uppercase"
-          style={{
-            background:
-              "linear-gradient(2.77deg, #1E1E21 1.88%, #2B2B2F 97.5%)",
-            border: "none",
-            fontFamily: "var(--font-ibm-plex-mono)", // Add explicit font-family
-          }}
-          onClick={handleLogin}
-        >
-          Login
+        <Button className="px-10 py-3 rounded-xs" onClick={handleLogin}>
+          <span className="text-mono-light text-white">Login</span>
         </Button>
       </div>
     </div>
