@@ -26,7 +26,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.environments,
   ];
 
-  const secondaryNavItems = [routes.sdk, routes.settings, routes.docs];
+  const secondaryNavItems = [
+    routes.sdk,
+    routes.slackApp,
+    routes.settings,
+    routes.docs,
+  ];
 
   const playgroundCTA = (
     <SidebarMenuButton

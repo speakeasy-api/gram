@@ -15,6 +15,7 @@ import { useNavigate, useLocation, Link } from "react-router";
 import { useMemo } from "react";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
+import SlackApp from "./pages/slackapp/SlackApp";
 
 type AppRouteBasic = {
   title: string;
@@ -112,6 +113,12 @@ const ROUTE_STRUCTURE = {
     url: "sdk",
     icon: "code" as IconName,
     component: SDK,
+  },
+  slackApp: {
+    title: "Slack App",
+    url: "slack-app",
+    icon: "slack" as IconName,
+    component: SlackApp,
   },
   uploadOpenAPI: {
     title: "Upload OpenAPI",
