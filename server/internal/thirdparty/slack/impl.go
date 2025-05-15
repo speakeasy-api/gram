@@ -287,11 +287,6 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 	processEvent := false
 	switch event.Event.Type {
 	case "app_mention":
-		if event.Event.ChannelType != "channel" {
-			processEvent = true
-			break
-		}
-
 		cacheKey := types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)
 		// If we are already watching this thread, we will pick up the message event instead
 		if _, err := s.watchedThreadsCache.Get(ctx, cacheKey); err != nil {
