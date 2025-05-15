@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -27,37 +28,41 @@ import (
 	gen "github.com/speakeasy-api/gram/gen/slack"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/background"
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/repo"
+	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
 	"github.com/speakeasy-api/gram/internal/toolsets"
+	"go.temporal.io/sdk/client"
 )
 
 type Configurations struct {
-	GramServerURL        string
-	SignInRedirectURL    string
-	SlackAppInstallURL   string
-	SlackAppClientID     string
-	SlackAppClientSecret string
-	SlackSigningSecret   string
+	GramServerURL      string
+	SignInRedirectURL  string
+	SlackAppInstallURL string
+	SlackSigningSecret string
 }
 
 // Service for gram dashboard authentication endpoints
 // Service for gram dashboard authentication endpoints
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	sessions *sessions.Manager
-	enc      *encryption.Encryption
-	repo     *repo.Queries
-	auth     *auth.Auth
-	toolset  *toolsets.Toolsets
-	cfg      *Configurations
-	client   *SlackClient
+	tracer              trace.Tracer
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	sessions            *sessions.Manager
+	enc                 *encryption.Encryption
+	repo                *repo.Queries
+	auth                *auth.Auth
+	toolset             *toolsets.Toolsets
+	cfg                 *Configurations
+	client              *SlackClient
+	temporal            client.Client
+	watchedThreadsCache cache.Cache[types.AppMentionedThreads]
 }
 
 func SlackInstallURL(env string) string {
@@ -80,18 +85,20 @@ func SlackClientID(env string) string {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, cfg Configurations) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, redisClient *redis.Client, client *SlackClient, temporal client.Client, cfg Configurations) *Service {
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
-		logger:   logger,
-		db:       db,
-		sessions: sessions,
-		enc:      enc,
-		repo:     repo.New(db),
-		auth:     auth.New(logger, db, sessions),
-		toolset:  toolsets.NewToolsets(db),
-		cfg:      &cfg,
-		client:   NewSlackClient(cfg.SlackAppClientID, cfg.SlackAppClientSecret),
+		tracer:              otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
+		logger:              logger,
+		db:                  db,
+		sessions:            sessions,
+		enc:                 enc,
+		repo:                repo.New(db),
+		auth:                auth.New(logger, db, sessions),
+		toolset:             toolsets.NewToolsets(db),
+		cfg:                 &cfg,
+		client:              client,
+		temporal:            temporal,
+		watchedThreadsCache: cache.New[types.AppMentionedThreads](logger.With(slog.String("cache", "watched_threads")), redisClient, types.AppMentionedThreadCacheExpiry, cache.SuffixNone),
 	}
 }
 
@@ -250,40 +257,6 @@ func (s *Service) UpdateSlackConnection(ctx context.Context, payload *gen.Update
 	}, nil
 }
 
-// SlackEvent represents the top-level Slack event callback payload
-// See: https://api.slack.com/events-api#receiving_events
-type SlackEvent struct {
-	Token          string          `json:"token"`
-	Challenge      string          `json:"challenge,omitempty"`
-	TeamID         string          `json:"team_id"`
-	APIAppID       string          `json:"api_app_id"`
-	Event          SlackInnerEvent `json:"event"`
-	Type           string          `json:"type"`
-	EventID        string          `json:"event_id"`
-	EventTime      int64           `json:"event_time"`
-	Authorizations []Authorization `json:"authorizations"`
-	EventContext   string          `json:"event_context"`
-}
-
-type SlackInnerEvent struct {
-	Type        string `json:"type"`
-	Channel     string `json:"channel"`
-	User        string `json:"user"`
-	Text        string `json:"text"`
-	Ts          string `json:"ts"`
-	ThreadTs    string `json:"thread_ts"`
-	EventTs     string `json:"event_ts"`
-	ChannelType string `json:"channel_type"`
-}
-
-type Authorization struct {
-	EnterpriseID        *string `json:"enterprise_id"`
-	TeamID              string  `json:"team_id"`
-	UserID              string  `json:"user_id"`
-	IsBot               bool    `json:"is_bot"`
-	IsEnterpriseInstall bool    `json:"is_enterprise_install"`
-}
-
 func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -291,12 +264,10 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnauthorized, err, "request payload failed validation").Log(ctx, s.logger)
 	}
 
-	var event SlackEvent
+	var event types.SlackEvent
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request payload").Log(ctx, s.logger)
 	}
-
-	s.logger.InfoContext(ctx, "received slack event", slog.Any("event", event))
 
 	// Respond to Slack's URL verification challenge
 	if event.Type == "url_verification" && event.Challenge != "" {
@@ -306,6 +277,52 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 			return oops.E(oops.CodeUnexpected, err, "failed to write slack response").Log(ctx, s.logger)
 		}
 		return nil
+	}
+
+	switch event.Event.Type {
+	case "app_mention":
+		if event.Event.ChannelType == "channel" {
+			// We store that we want to watch this specific thread
+			if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
+				TeamID:   event.TeamID,
+				Channel:  event.Event.Channel,
+				ThreadTs: event.Event.ThreadTs,
+			}); err != nil {
+				s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
+			}
+		}
+
+		if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
+			Event: event,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error kicking off slack event workflow").Log(ctx, s.logger)
+		}
+	case "message":
+		var processEvent bool
+
+		// We do not want to respond to our own message
+		if event.Event.User != event.Authorizations[0].UserID {
+			if event.Event.ChannelType == "im" {
+				processEvent = true
+			}
+
+			if event.Event.ChannelType == "channel" {
+				// This is a message in a channel thread that we are tracking
+				if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, event.Event.ThreadTs)); err != nil {
+					processEvent = true
+				}
+			}
+		}
+
+		if processEvent {
+			if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
+				Event: event,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error kicking off slack event workflow").Log(ctx, s.logger)
+			}
+		}
+	default:
+		s.logger.InfoContext(ctx, "we do not process this event type", slog.Any("event_type", event.Event.Type))
 	}
 
 	w.WriteHeader(http.StatusOK)

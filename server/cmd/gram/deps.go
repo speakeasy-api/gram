@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 )
 
 type dbClientOptions struct {
@@ -176,7 +177,7 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 	}, nil
 }
 
-func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) worker.Worker {
+func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack.SlackClient) worker.Worker {
 	temporalWorker := worker.New(client, string(background.TaskQueueMain), worker.Options{
 		Interceptors: []interceptor.WorkerInterceptor{
 			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
@@ -190,6 +191,7 @@ func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Po
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
 
 	temporalWorker.RegisterWorkflow(background.ProcessDeploymentWorkflow)
+	temporalWorker.RegisterWorkflow(background.SlackEventWorkflow)
 
 	return temporalWorker
 }

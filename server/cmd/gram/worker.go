@@ -8,7 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/control"
+	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -84,6 +86,18 @@ func newWorkerCommand() *cli.Command {
 				EnvVars:  []string{"GRAM_ASSETS_URI"},
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "encryption-key",
+				Usage:    "Key for App level AES encryption/decyryption",
+				Required: true,
+				EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
+			},
+			&cli.StringFlag{
+				Name:     "slack-client-secret",
+				Usage:    "The slack client secret",
+				EnvVars:  []string{"SLACK_CLIENT_SECRET"},
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			o11y.PullAppInfo(c.Context).Command = "worker"
@@ -127,6 +141,11 @@ func newWorkerCommand() *cli.Command {
 			}
 			defer db.Close()
 
+			encryptionClient, err := encryption.New(c.String("encryption-key"))
+			if err != nil {
+				return err
+			}
+
 			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
 				assetsBackend: c.String("assets-backend"),
 				assetsURI:     c.String("assets-uri"),
@@ -155,7 +174,9 @@ func newWorkerCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage)
+			slackClient := slack.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+
+			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient)
 
 			return temporalWorker.Run(worker.InterruptCh())
 		},

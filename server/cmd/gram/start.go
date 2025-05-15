@@ -320,6 +320,8 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid environment: %s", c.String("environment"))
 			}
 
+			slackClient := slack.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.DevCORSMiddleware)
@@ -343,13 +345,11 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
-			slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, slack.Configurations{
-				GramServerURL:        serverURL,
-				SignInRedirectURL:    auth.FormSignInRedirectURL(c.String("environment")),
-				SlackAppInstallURL:   slack.SlackInstallURL(c.String("environment")),
-				SlackAppClientID:     slack.SlackClientID(c.String("environment")),
-				SlackAppClientSecret: c.String("slack-client-secret"),
-				SlackSigningSecret:   c.String("slack-signing-secret"),
+			slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
+				GramServerURL:      serverURL,
+				SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("environment")),
+				SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
+				SlackSigningSecret: c.String("slack-signing-secret"),
 			}))
 
 			srv := &http.Server{
@@ -373,7 +373,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage)
+					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", slog.String("error", err.Error()))
 					}

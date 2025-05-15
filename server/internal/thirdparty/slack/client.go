@@ -9,6 +9,9 @@ import (
 	"net/url"
 
 	"github.com/hashicorp/go-cleanhttp"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/encryption"
+	"github.com/speakeasy-api/gram/internal/thirdparty/slack/repo"
 )
 
 const slackServer = "https://slack.com/api"
@@ -17,13 +20,17 @@ type SlackClient struct {
 	clientID     string
 	clientSecret string
 	client       *http.Client
+	enc          *encryption.Encryption
+	repo         *repo.Queries
 }
 
-func NewSlackClient(clientID, clientSecret string) *SlackClient {
+func NewSlackClient(clientID, clientSecret string, db *pgxpool.Pool, enc *encryption.Encryption) *SlackClient {
 	return &SlackClient{
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		client:       cleanhttp.DefaultPooledClient(),
+		enc:          enc,
+		repo:         repo.New(db),
 	}
 }
 
