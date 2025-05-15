@@ -241,6 +241,17 @@ type Project struct {
 	Deleted        bool
 }
 
+type SlackAppConnection struct {
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	AccessToken        string
+	SlackTeamName      string
+	SlackTeamID        string
+	DefaultToolsetSlug pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
 type Toolset struct {
 	ID                     uuid.UUID
 	OrganizationID         string

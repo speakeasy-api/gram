@@ -7,6 +7,95 @@ servers:
     - url: http://localhost:80
       description: Default server for gram
 paths:
+    /rpc/{project_slug}/slack.login:
+        get:
+            description: Proxies to auth login through speakeasy oidc.
+            operationId: slackLogin
+            parameters:
+                - in: path
+                  name: project_slug
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: The URL to redirect to after authentication
+                            schema:
+                                description: The URL to redirect to after authentication
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_query_project_slug: []
+                  session_header_Gram-Session: []
+            summary: login slack
+            tags:
+                - slack
+            x-speakeasy-name-override: slackLogin
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/assets.serveImage:
         get:
             description: Serve an image from Gram.
@@ -3145,6 +3234,365 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListProjects
+    /rpc/slack.callback:
+        get:
+            description: Handles the authentication callback.
+            operationId: slackCallback
+            parameters:
+                - allowEmptyValue: true
+                  description: The state parameter from the callback
+                  in: query
+                  name: state
+                  required: true
+                  schema:
+                    description: The state parameter from the callback
+                    type: string
+                - allowEmptyValue: true
+                  description: The code parameter from the callback
+                  in: query
+                  name: code
+                  required: true
+                  schema:
+                    description: The code parameter from the callback
+                    type: string
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: The URL to redirect to after authentication
+                            schema:
+                                description: The URL to redirect to after authentication
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: callback slack
+            tags:
+                - slack
+            x-speakeasy-name-override: slackCallback
+            x-speakeasy-react-hook:
+                disabled: true
+    /rpc/slack.deleteConnection:
+        delete:
+            description: delete slack connection for an organization and project.
+            operationId: deleteSlackConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteSlackConnection slack
+            tags:
+                - slack
+            x-speakeasy-name-override: deleteSlackConnection
+            x-speakeasy-react-hook:
+                name: deleteSlackConnection
+    /rpc/slack.getConnection:
+        get:
+            description: get slack connection for an organization and project.
+            operationId: getSlackConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetSlackConnectionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getSlackConnection slack
+            tags:
+                - slack
+            x-speakeasy-name-override: getSlackConnection
+            x-speakeasy-react-hook:
+                name: getSlackConnection
+    /rpc/slack.updateConnection:
+        post:
+            description: update slack connection for an organization and project.
+            operationId: updateSlackConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSlackConnectionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetSlackConnectionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateSlackConnection slack
+            tags:
+                - slack
+            x-speakeasy-name-override: updateSlackConnection
+            x-speakeasy-react-hook:
+                name: updateSlackConnection
     /rpc/tools.list:
         get:
             description: List all tools for a project
@@ -4554,6 +5002,32 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        GetSlackConnectionResult:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                default_toolset_slug:
+                    type: string
+                    description: The default toolset slug for this Slack connection
+                slack_team_id:
+                    type: string
+                    description: The ID of the connected Slack team
+                slack_team_name:
+                    type: string
+                    description: The name of the connected Slack team
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - slack_team_name
+                - slack_team_id
+                - default_toolset_slug
+                - created_at
+                - updated_at
         HTTPToolDefinition:
             type: object
             properties:
@@ -5369,6 +5843,14 @@ components:
                     $ref: '#/components/schemas/Package'
             required:
                 - package
+        UpdateSlackConnectionRequestBody:
+            type: object
+            properties:
+                default_toolset_slug:
+                    type: string
+                    description: The default toolset slug for this Slack connection
+            required:
+                - default_toolset_slug
         UpdateToolsetForm:
             type: object
             properties:
@@ -5480,6 +5962,11 @@ components:
             description: project slug header auth.
             name: Gram-Project
             in: header
+        project_slug_query_project_slug:
+            type: apiKey
+            description: project slug header auth.
+            name: project_slug
+            in: query
         session_header_Gram-Session:
             type: apiKey
             description: Session based auth. By cookie or header.
@@ -5504,6 +5991,8 @@ tags:
       description: Manages packages in Gram.
     - name: projects
       description: Manages projects in Gram.
+    - name: slack
+      description: Auth and interactions for the Gram Slack App.
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: instances

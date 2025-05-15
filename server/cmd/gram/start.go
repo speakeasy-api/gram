@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/packages"
 	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
@@ -182,6 +183,18 @@ func newStartCommand() *cli.Command {
 				Usage:   "Run the server and worker in a single process for local development",
 				EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 				Value:   false,
+			},
+			&cli.StringFlag{
+				Name:     "slack-client-secret",
+				Usage:    "The slack client secret",
+				EnvVars:  []string{"SLACK_CLIENT_SECRET"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "slack-signing-secret",
+				Usage:    "The slack signing secret",
+				EnvVars:  []string{"SLACK_SIGNING_SECRET"},
+				Required: false,
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -330,6 +343,14 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
+			slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, slack.Configurations{
+				GramServerURL:        serverURL,
+				SignInRedirectURL:    auth.FormSignInRedirectURL(c.String("environment")),
+				SlackAppInstallURL:   slack.SlackInstallURL(c.String("environment")),
+				SlackAppClientID:     slack.SlackClientID(c.String("environment")),
+				SlackAppClientSecret: c.String("slack-client-secret"),
+				SlackSigningSecret:   c.String("slack-signing-secret"),
+			}))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
