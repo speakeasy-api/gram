@@ -271,6 +271,7 @@ type SlackInnerEvent struct {
 	User        string `json:"user"`
 	Text        string `json:"text"`
 	Ts          string `json:"ts"`
+	ThreadTs    string `json:"thread_ts"`
 	EventTs     string `json:"event_ts"`
 	ChannelType string `json:"channel_type"`
 }
