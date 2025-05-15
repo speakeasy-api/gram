@@ -279,23 +279,35 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		return nil
 	}
 
+	threadTs := event.Event.ThreadTs
+	if threadTs == "" {
+		threadTs = event.Event.Ts
+	}
+
 	switch event.Event.Type {
 	case "app_mention":
+		processEvent := true
 		if event.Event.ChannelType == "channel" {
-			// We store that we want to watch this specific thread
-			if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
-				TeamID:   event.TeamID,
-				Channel:  event.Event.Channel,
-				ThreadTs: event.Event.ThreadTs,
-			}); err != nil {
-				s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
+			if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)); err != nil {
+				// We store that we want to watch this specific thread
+				if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
+					TeamID:   event.TeamID,
+					Channel:  event.Event.Channel,
+					ThreadTs: threadTs,
+				}); err != nil {
+					s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
+				}
+			} else {
+				// If we are already watching this thread, we will pick up the message event
+				processEvent = false
 			}
 		}
-
-		if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
-			Event: event,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error kicking off slack event workflow").Log(ctx, s.logger)
+		if processEvent {
+			if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
+				Event: event,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error kicking off slack event workflow").Log(ctx, s.logger)
+			}
 		}
 	case "message":
 		var processEvent bool
@@ -308,7 +320,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 
 			if event.Event.ChannelType == "channel" {
 				// This is a message in a channel thread that we are tracking
-				if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, event.Event.ThreadTs)); err == nil {
+				if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)); err == nil {
 					processEvent = true
 				}
 			}
