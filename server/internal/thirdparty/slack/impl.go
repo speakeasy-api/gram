@@ -308,7 +308,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 
 			if event.Event.ChannelType == "channel" {
 				// This is a message in a channel thread that we are tracking
-				if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, event.Event.ThreadTs)); err != nil {
+				if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, event.Event.ThreadTs)); err == nil {
 					processEvent = true
 				}
 			}
