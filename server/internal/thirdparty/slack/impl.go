@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -287,19 +288,14 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 	processEvent := false
 	switch event.Event.Type {
 	case "app_mention":
-		cacheKey := types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)
-		// If we are already watching this thread, we will pick up the message event instead
-		if _, err := s.watchedThreadsCache.Get(ctx, cacheKey); err != nil {
-			// Cache miss: start watching this thread
-			if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
-				TeamID:   event.TeamID,
-				Channel:  event.Event.Channel,
-				ThreadTs: threadTs,
-			}); err != nil {
-				s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
-			}
-			processEvent = true
+		if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
+			TeamID:   event.TeamID,
+			Channel:  event.Event.Channel,
+			ThreadTs: threadTs,
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
 		}
+		processEvent = true
 
 	case "message":
 		// Ignore messages from the bot itself
@@ -309,6 +305,12 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 
 		if event.Event.ChannelType == "im" {
 			processEvent = true
+			break
+		}
+
+		if strings.HasPrefix(event.Event.Text, "<@") {
+			processEvent = false
+			break
 		}
 
 		if event.Event.ChannelType == "channel" {
