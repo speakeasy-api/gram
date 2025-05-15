@@ -284,57 +284,55 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		threadTs = event.Event.Ts
 	}
 
+	processEvent := false
 	switch event.Event.Type {
 	case "app_mention":
-		processEvent := true
-		if event.Event.ChannelType == "channel" {
-			if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)); err != nil {
-				// We store that we want to watch this specific thread
-				if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
-					TeamID:   event.TeamID,
-					Channel:  event.Event.Channel,
-					ThreadTs: threadTs,
-				}); err != nil {
-					s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
-				}
-			} else {
-				// If we are already watching this thread, we will pick up the message event
-				processEvent = false
-			}
+		if event.Event.ChannelType != "channel" {
+			processEvent = true
+			break
 		}
-		if processEvent {
-			if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
-				Event: event,
-			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "error kicking off slack event workflow").Log(ctx, s.logger)
-			}
-		}
-	case "message":
-		var processEvent bool
 
-		// We do not want to respond to our own message
-		if event.Event.User != event.Authorizations[0].UserID {
-			if event.Event.ChannelType == "im" {
+		cacheKey := types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)
+		// If we are already watching this thread, we will pick up the message event instead
+		if _, err := s.watchedThreadsCache.Get(ctx, cacheKey); err != nil {
+			// Cache miss: start watching this thread
+			if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
+				TeamID:   event.TeamID,
+				Channel:  event.Event.Channel,
+				ThreadTs: threadTs,
+			}); err != nil {
+				s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
+			}
+			processEvent = true
+		}
+
+	case "message":
+		// Ignore messages from the bot itself
+		if event.Event.User == event.Authorizations[0].UserID {
+			break
+		}
+
+		if event.Event.ChannelType == "im" {
+			processEvent = true
+		}
+
+		if event.Event.ChannelType == "channel" {
+			cacheKey := types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)
+			if _, err := s.watchedThreadsCache.Get(ctx, cacheKey); err == nil {
 				processEvent = true
 			}
-
-			if event.Event.ChannelType == "channel" {
-				// This is a message in a channel thread that we are tracking
-				if _, err := s.watchedThreadsCache.Get(ctx, types.AppMentionedThreadsCacheKey(event.TeamID, event.Event.Channel, threadTs)); err == nil {
-					processEvent = true
-				}
-			}
 		}
 
-		if processEvent {
-			if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
-				Event: event,
-			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "error kicking off slack event workflow").Log(ctx, s.logger)
-			}
-		}
 	default:
 		s.logger.InfoContext(ctx, "we do not process this event type", slog.Any("event_type", event.Event.Type))
+	}
+
+	if processEvent {
+		if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
+			Event: event,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error kicking off slack event workflow").Log(ctx, s.logger)
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
