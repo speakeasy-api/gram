@@ -1,10 +1,19 @@
 package slack
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"math"
+	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -94,6 +103,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	// payloads may end up being polymorphic defining this outside of goa
+	mux.Handle("POST", "/rpc/slack.events", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.SlackEventHandler).ServeHTTP(w, r)
+	})
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
@@ -237,6 +250,108 @@ func (s *Service) UpdateSlackConnection(ctx context.Context, payload *gen.Update
 	}, nil
 }
 
+// SlackEvent represents the top-level Slack event callback payload
+// See: https://api.slack.com/events-api#receiving_events
+type SlackEvent struct {
+	Token          string          `json:"token"`
+	Challenge      string          `json:"challenge,omitempty"`
+	TeamID         string          `json:"team_id"`
+	APIAppID       string          `json:"api_app_id"`
+	Event          SlackInnerEvent `json:"event"`
+	Type           string          `json:"type"`
+	EventID        string          `json:"event_id"`
+	EventTime      int64           `json:"event_time"`
+	Authorizations []Authorization `json:"authorizations"`
+	EventContext   string          `json:"event_context"`
+}
+
+type SlackInnerEvent struct {
+	Type        string `json:"type"`
+	Channel     string `json:"channel"`
+	User        string `json:"user"`
+	Text        string `json:"text"`
+	Ts          string `json:"ts"`
+	EventTs     string `json:"event_ts"`
+	ChannelType string `json:"channel_type"`
+}
+
+type Authorization struct {
+	EnterpriseID        *string `json:"enterprise_id"`
+	TeamID              string  `json:"team_id"`
+	UserID              string  `json:"user_id"`
+	IsBot               bool    `json:"is_bot"`
+	IsEnterpriseInstall bool    `json:"is_enterprise_install"`
+}
+
+func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	if err := validateSlackEvent(r, s.cfg.SlackSigningSecret); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "request payload failed validation").Log(ctx, s.logger)
+	}
+
+	var event SlackEvent
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid request payload").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "received slack event", slog.Any("event", event))
+
+	// Respond to Slack's URL verification challenge
+	if event.Type == "url_verification" && event.Challenge != "" {
+		w.Header().Set("Content-Type", "text/plain")
+		_, err := w.Write([]byte(event.Challenge))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to write slack response").Log(ctx, s.logger)
+		}
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// validateSlackEvent validates the Slack request signature and timestamp.
+// This follows slacks recommended standards https://api.slack.com/authentication/verifying-requests-from-slack
+func validateSlackEvent(r *http.Request, signingSecret string) error {
+	timestamp := r.Header.Get("X-Slack-Request-Timestamp")
+	if timestamp == "" {
+		return fmt.Errorf("missing X-Slack-Request-Timestamp header")
+	}
+	sig := r.Header.Get("X-Slack-Signature")
+	if sig == "" {
+		return fmt.Errorf("missing X-Slack-Signature header")
+	}
+
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp: %w", err)
+	}
+	if math.Abs(float64(time.Now().Unix()-ts)) > 60*5 {
+		return fmt.Errorf("request timestamp is too old or too far in the future")
+	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read request body: %w", err)
+	}
+	// Restore the body for further reading
+	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(bodyBytes)))
+
+	baseString := "v0:" + timestamp + ":" + string(bodyBytes)
+
+	h := hmac.New(sha256.New, []byte(signingSecret))
+	h.Write([]byte(baseString))
+	computed := h.Sum(nil)
+	computedSig := "v0=" + hex.EncodeToString(computed)
+
+	if !hmac.Equal([]byte(computedSig), []byte(sig)) {
+		return fmt.Errorf("invalid Slack signature")
+	}
+	return nil
 }
