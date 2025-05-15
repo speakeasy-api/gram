@@ -304,7 +304,6 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to write slack response").Log(ctx, s.logger)
 		}
-		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
