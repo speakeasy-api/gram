@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -62,7 +63,7 @@ type Service struct {
 	auth                *auth.Auth
 	toolset             *toolsets.Toolsets
 	cfg                 *Configurations
-	client              *SlackClient
+	client              *slack_client.SlackClient
 	temporal            client.Client
 	watchedThreadsCache cache.Cache[types.AppMentionedThreads]
 }
@@ -87,7 +88,7 @@ func SlackClientID(env string) string {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, redisClient *redis.Client, client *SlackClient, temporal client.Client, cfg Configurations) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, redisClient *redis.Client, client *slack_client.SlackClient, temporal client.Client, cfg Configurations) *Service {
 	return &Service{
 		tracer:              otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
 		logger:              logger,

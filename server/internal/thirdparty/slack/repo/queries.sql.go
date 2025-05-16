@@ -107,6 +107,28 @@ func (q *Queries) GetSlackAppConnection(ctx context.Context, arg GetSlackAppConn
 	return i, err
 }
 
+const getSlackAppConnectionByTeamID = `-- name: GetSlackAppConnectionByTeamID :one
+SELECT organization_id, project_id, access_token, slack_team_name, slack_team_id, default_toolset_slug, created_at, updated_at
+FROM slack_app_connections
+WHERE slack_team_id = $1
+`
+
+func (q *Queries) GetSlackAppConnectionByTeamID(ctx context.Context, slackTeamID string) (SlackAppConnection, error) {
+	row := q.db.QueryRow(ctx, getSlackAppConnectionByTeamID, slackTeamID)
+	var i SlackAppConnection
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessToken,
+		&i.SlackTeamName,
+		&i.SlackTeamID,
+		&i.DefaultToolsetSlug,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateSlackAppConnection = `-- name: UpdateSlackAppConnection :one
 UPDATE slack_app_connections
 SET

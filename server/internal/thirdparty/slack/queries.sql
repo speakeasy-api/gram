@@ -31,6 +31,11 @@ FROM slack_app_connections
 WHERE organization_id = @organization_id
   AND project_id = @project_id;
 
+-- name: GetSlackAppConnectionByTeamID :one
+SELECT *
+FROM slack_app_connections
+WHERE slack_team_id = @slack_team_id;
+
 -- name: DeleteSlackAppConnection :exec
 DELETE FROM slack_app_connections
 WHERE organization_id = @organization_id

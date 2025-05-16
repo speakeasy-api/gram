@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
+	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.temporal.io/sdk/client"
@@ -321,7 +322,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid environment: %s", c.String("environment"))
 			}
 
-			slackClient := slack.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 
 			mux := goahttp.NewMuxer()
 

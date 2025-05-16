@@ -17,6 +17,7 @@ import (
 	"github.com/pgx-contrib/pgxotel"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
@@ -30,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 )
 
 type dbClientOptions struct {
@@ -177,7 +177,7 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 	}, nil
 }
 
-func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack.SlackClient) worker.Worker {
+func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient) worker.Worker {
 	temporalWorker := worker.New(client, string(background.TaskQueueMain), worker.Options{
 		Interceptors: []interceptor.WorkerInterceptor{
 			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
@@ -186,9 +186,11 @@ func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Po
 		},
 	})
 
-	activities := background.NewActivities(logger, db, assetStorage)
+	activities := background.NewActivities(logger, db, assetStorage, slackClient)
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
+	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
+	temporalWorker.RegisterActivity(activities.PostSlackMessage)
 
 	temporalWorker.RegisterWorkflow(background.ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(background.SlackEventWorkflow)
