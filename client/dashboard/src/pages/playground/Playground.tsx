@@ -1,4 +1,6 @@
+import { HttpRoute } from "@/components/http-route";
 import { Page } from "@/components/page-layout";
+import { ProjectAvatar } from "@/components/project-menu";
 import { Button } from "@/components/ui/button";
 import { Combobox, DropdownItem } from "@/components/ui/combobox";
 import { Heading } from "@/components/ui/heading";
@@ -22,6 +24,7 @@ import {
   Icon,
   ResizablePanel,
   Stack,
+  useToolCallApproval,
 } from "@speakeasy-api/moonshine";
 import {
   generateObject,
@@ -69,7 +72,9 @@ export default function Playground() {
     searchParams.get("environment") ?? null
   );
   const [dynamicToolset, setDynamicToolset] = useState(false);
-  const [chatId, setChatId] = useState<string>(uuidv7());
+  const [chatId, setChatId] = useState<string>(
+    searchParams.get("chatId") ?? uuidv7()
+  );
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -111,6 +116,7 @@ export default function Playground() {
           refetchChats();
         }
       }}
+      className="w-fit"
     >
       <Stack direction="horizontal" gap={2} align="center">
         <Icon name="history" className="opacity-50" />
@@ -119,11 +125,30 @@ export default function Playground() {
     </Combobox>
   );
 
+  const shareChatButton = (
+    <Button
+      size="sm"
+      icon="link"
+      variant={"ghost"}
+      onClick={() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("chatId", chatId);
+        navigator.clipboard.writeText(url.toString());
+        alert("Chat link copied to clipboard");
+      }}
+    >
+      Share chat
+    </Button>
+  );
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>{chatHistoryButton}</Page.Header.Actions>
+        <Page.Header.Actions className="gap-2">
+          {shareChatButton}
+          {chatHistoryButton}
+        </Page.Header.Actions>
       </Page.Header>
       <Page.Body className="max-w-full">
         <ResizablePanel
@@ -235,13 +260,9 @@ export function ToolsetPanel({
   }, [environments, configRef, setSelectedEnvironment, toolset]);
 
   useEffect(() => {
-    if (
-      toolset?.httpTools?.length &&
-      toolset.httpTools.length > 40 &&
-      isAdmin
-    ) {
-      setDynamicToolset(true);
-    }
+    const isDynamic =
+      toolset?.httpTools?.length && toolset.httpTools.length > 40 && isAdmin;
+    setDynamicToolset(!!isDynamic);
   }, [toolset, isAdmin, setDynamicToolset]);
 
   const toolsetDropdownItems =
@@ -359,7 +380,10 @@ export function ChatWindow({
   );
 }
 
-type Toolset = Record<string, Tool & { id: string }>;
+type Toolset = Record<
+  string,
+  Tool & { id: string; method?: string; path?: string }
+>;
 
 function ChatInner({
   model,
@@ -401,7 +425,8 @@ function ChatInner({
             tool.name,
             {
               id: tool.id,
-              description: tool.description,
+              method: tool.httpMethod,
+              path: tool.path,
               parameters: jsonSchema(
                 tool.schema ? JSON.parse(tool.schema) : {}
               ),
@@ -451,8 +476,6 @@ function ChatInner({
       return allTools;
     }
 
-    console.log("Updating tools for task", task);
-
     const toolsString = Object.entries(allTools)
       .map(([tool, toolInfo]) => `${tool}: ${toolInfo.description}`)
       .join("\n");
@@ -472,8 +495,8 @@ function ChatInner({
     });
 
     const filteredTools = Object.fromEntries(
-      Object.entries(allTools).filter(([tool]) =>
-        result.object.tools.includes(tool)
+      Object.entries(allTools).filter(([toolName]) =>
+        result.object.tools.includes(toolName)
       )
     );
 
@@ -484,8 +507,6 @@ function ChatInner({
     filteredTools[updateToolsTool.name] = updateToolsTool;
 
     selectedTools.current = filteredTools;
-
-    console.log("Selected tools", filteredTools);
 
     return filteredTools;
   };
@@ -501,11 +522,9 @@ function ChatInner({
     const messages = JSON.parse(init?.body as string).messages;
 
     let tools = dynamicToolset ? selectedTools.current : allTools;
-    console.log("Tools", tools);
 
     // On the first message, get the initial set of tools if we're using a dynamic toolset
-    if (Object.keys(tools).length === 0) {
-      console.log("Updating tools for first message");
+    if (dynamicToolset && Object.keys(tools).length === 0) {
       tools = await updateSelectedToolsFromMessages(messages);
     }
 
@@ -543,6 +562,46 @@ function ChatInner({
       ]
     : chatHistory ?? [];
 
+  const toolCallApproval = useToolCallApproval({
+    executeToolCall: async (toolCall) => {
+      if (toolCall.toolName === updateToolsTool.name) {
+        const args = updateToolsTool.parameters.parse(toolCall.args);
+        const result = await updateSelectedTools(JSON.stringify(args));
+        return `Updated tool list: ${Object.keys(result).join(", ")}`;
+      }
+
+      const tool = allTools[toolCall.toolName];
+      if (!tool) {
+        throw new Error(`Tool ${toolCall.toolName} not found`);
+      }
+
+      const response = await fetch(
+        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
+          tool.id
+        }&environment_slug=${configRef.current.environmentSlug}`,
+        {
+          method: "POST",
+          headers: {
+            "gram-session": session.session,
+            "gram-project": project.slug,
+          },
+          body: JSON.stringify(toolCall.args),
+        }
+      );
+
+      const result = await response.json();
+
+      return result || `status code: ${response.status}`;
+    },
+    requiresApproval: (toolCall) => {
+      const tool = allTools[toolCall.toolName];
+      if (tool?.method === "GET") {
+        return false;
+      }
+      return toolCall.toolName !== updateToolsTool.name;
+    },
+  });
+
   const {
     messages: chatMessages,
     status,
@@ -555,43 +614,7 @@ function ChatInner({
     },
     maxSteps: 5,
     initialMessages,
-    onToolCall: async ({ toolCall }) => {
-      try {
-        if (toolCall.toolName === updateToolsTool.name) {
-          const args = updateToolsTool.parameters.parse(toolCall.args);
-          const result = await updateSelectedTools(JSON.stringify(args));
-          return `Updated tool list: ${Object.keys(result).join(", ")}`;
-        }
-
-        const tool = allTools[toolCall.toolName];
-        if (!tool) {
-          throw new Error(`Tool ${toolCall.toolName} not found`);
-        }
-
-        const response = await fetch(
-          `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
-            tool.id
-          }&environment_slug=${configRef.current.environmentSlug}`,
-          {
-            method: "POST",
-            headers: {
-              "gram-session": session.session,
-              "gram-project": project.slug,
-            },
-            body: JSON.stringify(toolCall.args),
-          }
-        );
-
-        const result = await response.json();
-
-        return result || `status code: ${response.status}`;
-      } catch (err: unknown) {
-        if (err instanceof Error) {
-          return `Error: ${err.message}`;
-        }
-        return `Tool Call Error`;
-      }
-    },
+    onToolCall: toolCallApproval.toolCallFn,
   });
 
   const handleSend = useCallback(
@@ -604,6 +627,39 @@ function ChatInner({
     [append]
   );
 
+  const JsonDisplay = ({ json }: { json: string }) => {
+    return (
+      <pre className="typography-body-xs max-h-48 overflow-auto rounded bg-neutral-900 p-2 break-all whitespace-pre-wrap text-neutral-300">
+        {json}
+      </pre>
+    );
+  };
+
+  const toolCallComponents = {
+    input: (props: { toolName: string; args: string }) => {
+      const tool = allTools[props.toolName];
+      return (
+        <Stack gap={2}>
+          {tool?.method && tool?.path && (
+            <HttpRoute method={tool.method} path={tool.path} />
+          )}
+          <JsonDisplay json={props.args} />
+        </Stack>
+      );
+    },
+    result: (props: { toolName: string; result: string }) => {
+      const tool = allTools[props.toolName];
+      return (
+        <Stack gap={2}>
+          <Type variant="small" className="font-medium text-muted-foreground">
+            {tool?.method ? "Response Body" : "Result"}
+          </Type>
+          <JsonDisplay json={props.result} />
+        </Stack>
+      );
+    },
+  };
+
   // TODO: fix this
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const m = chatMessages as any;
@@ -613,7 +669,16 @@ function ChatInner({
       messages={m}
       isLoading={status === "streaming" || isChatHistoryLoading}
       onSendMessage={handleSend}
-      className="pb-4"
+      className={"pb-4"}
+      toolCallApproval={toolCallApproval}
+      components={{
+        message: {
+          avatar: {
+            user: () => <ProjectAvatar project={project} className="h-6 w-6" />,
+          },
+          toolCall: toolCallComponents,
+        },
+      }}
       modelSelector={{
         model,
         onModelChange: setModel,

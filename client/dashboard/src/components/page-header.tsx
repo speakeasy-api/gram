@@ -1,13 +1,25 @@
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Heading } from "./ui/heading.tsx";
-import { Link, useLocation } from "react-router";
-import React from "react";
 import { useSlugs } from "@/contexts/Sdk.tsx";
+import { cn } from "@/lib/utils.ts";
+import React from "react";
+import { Link, useLocation } from "react-router";
+import { Heading } from "./ui/heading.tsx";
 
-function PageHeaderComponent({ children }: { children: React.ReactNode }) {
+function PageHeaderComponent({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
+    <header
+      className={cn(
+        "flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)",
+        className
+      )}
+    >
       <div className="flex w-full items-center px-3 gap-3">
         <SidebarTrigger className="-ml-1 mx-0 px-0" />
         <Separator
@@ -20,16 +32,30 @@ function PageHeaderComponent({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PageHeaderTitle({ children }: { children: React.ReactNode }) {
+function PageHeaderTitle({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <Heading variant="h4" className="ml-1">
+    <Heading variant="h4" className={cn("ml-1", className)}>
       {children}
     </Heading>
   );
 }
 
-function PageHeaderActions({ children }: { children: React.ReactNode }) {
-  return <div className="ml-auto flex items-center">{children}</div>;
+function PageHeaderActions({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("ml-auto flex items-center", className)}>{children}</div>
+  );
 }
 
 function PageHeaderBreadcrumbs() {

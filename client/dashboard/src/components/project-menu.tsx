@@ -53,7 +53,7 @@ function getProjectColors(label: string): {
   };
 }
 
-function ProjectAvatar({
+export function ProjectAvatar({
   project,
   className,
 }: {
