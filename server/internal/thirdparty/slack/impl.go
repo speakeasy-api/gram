@@ -282,6 +282,12 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		return nil
 	}
 
+	_, err := s.repo.GetSlackAppConnectionByTeamID(ctx, event.TeamID)
+	if err != nil {
+		s.logger.InfoContext(ctx, "skipping an event with no slack app connection", slog.Any("team_id", event.TeamID))
+		w.WriteHeader(http.StatusOK)
+	}
+
 	threadTs := event.Event.ThreadTs
 	if threadTs == "" {
 		threadTs = event.Event.Ts
@@ -290,6 +296,9 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 	processEvent := false
 	switch event.Event.Type {
 	case "app_mention":
+		if event.Event.Text == "" {
+			break
+		}
 		if err := s.watchedThreadsCache.Store(ctx, types.AppMentionedThreads{
 			TeamID:   event.TeamID,
 			Channel:  event.Event.Channel,
@@ -300,6 +309,9 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		processEvent = true
 
 	case "message":
+		if event.Event.Text == "" {
+			break
+		}
 		// Ignore messages from the bot itself
 		if event.Event.User == event.Authorizations[0].UserID {
 			break
@@ -310,7 +322,8 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 			break
 		}
 
-		if strings.HasPrefix(event.Event.Text, "<@") {
+		// This will be processed by app_mention, slack sends duplicate event
+		if strings.HasPrefix(event.Event.Text, fmt.Sprintf("<@%s>", event.Authorizations[0].UserID)) {
 			processEvent = false
 			break
 		}

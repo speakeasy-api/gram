@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/background/activities"
+	"github.com/speakeasy-api/gram/internal/chat"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
 )
@@ -18,14 +19,16 @@ type Activities struct {
 	transitionDeployment   *activities.TransitionDeployment
 	getSlackProjectContext *activities.GetSlackProjectContext
 	postSlackMessage       *activities.PostSlackMessage
+	slackChatCompletion    *activities.SlackChatCompletion
 }
 
-func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient) *Activities {
+func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient) *Activities {
 	return &Activities{
 		processDeployment:      activities.NewProcessDeployment(logger, db, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
 		getSlackProjectContext: activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:       activities.NewPostSlackMessageActivity(logger, slackClient),
+		slackChatCompletion:    activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 	}
 }
 
@@ -43,4 +46,8 @@ func (a *Activities) GetSlackProjectContext(ctx context.Context, event types.Sla
 
 func (a *Activities) PostSlackMessage(ctx context.Context, input activities.PostSlackMessageInput) error {
 	return a.postSlackMessage.Do(ctx, input)
+}
+
+func (a *Activities) SlackChatCompletion(ctx context.Context, input activities.SlackChatCompletionInput) (string, error) {
+	return a.slackChatCompletion.Do(ctx, input)
 }

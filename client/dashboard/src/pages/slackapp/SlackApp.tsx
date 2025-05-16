@@ -7,7 +7,7 @@ export default function SlackApp() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        Chat with Gram toolsets using the Gram Slack App - COMING SOON!
+        Chat with Gram toolsets using the Gram Slack App!
       </Page.Body>
     </Page>
   );

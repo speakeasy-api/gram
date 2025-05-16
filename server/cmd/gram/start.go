@@ -323,7 +323,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
-
+			chatClient := chat.NewChatClient(logger, db, openRouter, encryptionClient)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.DevCORSMiddleware)
@@ -376,7 +376,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient)
+					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient, chatClient)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", slog.String("error", err.Error()))
 					}

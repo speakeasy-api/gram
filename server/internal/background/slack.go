@@ -64,10 +64,30 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 
 	// Remove bot tag from the prompt
 	words := strings.Fields(params.Event.Event.Text)
-	if strings.HasPrefix(words[0], "<@") {
+	if strings.HasPrefix(words[0], fmt.Sprintf("<@%s>", params.Event.Authorizations[0].UserID)) {
 		words = words[1:]
 		if len(words) == 0 {
 			return postSlackErrorMessage(ctx, a, params.Event, fmt.Errorf("no content found in prompt"))
+		}
+	}
+
+	if params.Event.Event.Type == "message" && params.Event.Event.ChannelType == "channel" {
+		// If we are in a thread only go to chat completions if 'gram' is in the first two words (case-insensitive)
+		maxCheck := min(2, len(words))
+		gramIdx := -1
+		for i := 0; i < maxCheck; i++ {
+			if strings.ToLower(words[i]) == "gram" {
+				gramIdx = i
+				break
+			}
+		}
+		if gramIdx == -1 {
+			return &ProcessSlackEventResult{Status: "success"}, nil
+		}
+		// Remove all words up to and including 'gram'
+		words = words[gramIdx+1:]
+		if len(words) == 0 {
+			return postSlackErrorMessage(ctx, a, params.Event, fmt.Errorf("no content found in prompt after 'gram'"))
 		}
 	}
 
@@ -92,7 +112,41 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 		}, nil
 	}
 
+	// Toolset selection: look for [toolset] or (toolset) as the first word
+	potentialSelectedToolset := ""
+	if (strings.HasPrefix(words[0], "[") && strings.HasSuffix(words[0], "]")) ||
+		(strings.HasPrefix(words[0], "(") && strings.HasSuffix(words[0], ")")) {
+		potentialSelectedToolset = words[0][1 : len(words[0])-1]
+	}
+
+	chosenToolsetSlug := ""
+	if toolsResponse.DefaultToolsetSlug != nil {
+		chosenToolsetSlug = *toolsResponse.DefaultToolsetSlug
+	}
+	if potentialSelectedToolset != "" {
+		for _, toolset := range toolsResponse.Toolsets {
+			if toolset.Slug == potentialSelectedToolset {
+				words = words[1:] // take out the toolset slug from prompt
+				chosenToolsetSlug = toolset.Slug
+				break
+			}
+		}
+	}
+
 	sanitizedPrompt := strings.Join(words, " ")
+	var chatResponse string
+	err = workflow.ExecuteActivity(
+		ctx,
+		a.SlackChatCompletion,
+		activities.SlackChatCompletionInput{
+			Event:       params.Event,
+			Prompt:      sanitizedPrompt,
+			ToolsetSlug: chosenToolsetSlug,
+		},
+	).Get(ctx, &chatResponse)
+	if err != nil {
+		return postSlackErrorMessage(ctx, a, params.Event, err)
+	}
 
 	if err := workflow.ExecuteActivity(
 		ctx,
@@ -101,7 +155,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 			Event: params.Event,
 			PostInput: slack_client.SlackPostMessageInput{
 				ChannelID: params.Event.Event.Channel,
-				Message:   fmt.Sprintf("I'm not connected to an LLM yet leave me alone.\nCan't respond to:\n_%s_", sanitizedPrompt),
+				Message:   chatResponse,
 				ThreadTS:  &params.Event.Event.Ts,
 			},
 		},
@@ -138,7 +192,7 @@ func formatListToolsSlackMessage(input activities.SlackProjectContextResponse) s
 func postSlackErrorMessage(ctx workflow.Context, a *Activities, event types.SlackEvent, err error) (*ProcessSlackEventResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Error("error in slack event workflow", slog.String("error", err.Error()))
-	msg := fmt.Sprintf("*Error:* \n I cannot complete your request \n `%s`\n", err.Error())
+	msg := "*Error:* \n Apologies I am unable to complete your request."
 	activityErr := workflow.ExecuteActivity(
 		ctx,
 		a.PostSlackMessage,

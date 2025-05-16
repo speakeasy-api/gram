@@ -7,9 +7,11 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
@@ -24,6 +26,12 @@ func newWorkerCommand() *cli.Command {
 		Name:  "worker",
 		Usage: "Start the temporal worker",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "environment",
+				Usage:    "The current server environment", // local, dev, prod
+				Required: true,
+				EnvVars:  []string{"GRAM_ENVIRONMENT"},
+			},
 			&cli.StringFlag{
 				Name:    "temporal-address",
 				Usage:   "The address of the temporal server",
@@ -98,6 +106,16 @@ func newWorkerCommand() *cli.Command {
 				Usage:    "The slack client secret",
 				EnvVars:  []string{"SLACK_CLIENT_SECRET"},
 				Required: false,
+			},
+			&cli.StringFlag{
+				Name:    "openrouter-dev-key",
+				Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
+				EnvVars: []string{"OPENROUTER_DEV_KEY"},
+			},
+			&cli.StringFlag{
+				Name:    "openrouter-provisioning-key",
+				Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
+				EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -175,9 +193,17 @@ func newWorkerCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+			var openRouter openrouter.Provisioner
+			if c.String("environment") == "local" {
+				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+			} else {
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"))
+			}
 
-			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient)
+			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+			chatClient := chat.NewChatClient(logger, db, openRouter, encryptionClient)
+
+			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient, chatClient)
 
 			return temporalWorker.Run(worker.InterruptCh())
 		},

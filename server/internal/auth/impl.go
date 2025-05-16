@@ -105,7 +105,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if !userInfo.Admin && !userInfo.UserWhitelisted {
-		// TODO: This will be replaced with a redirect to the gram marketing waitlist page
 		return &gen.CallbackResult{
 			Location:      gramWaitlistTypeForm,
 			SessionToken:  "",

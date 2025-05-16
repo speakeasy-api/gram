@@ -1,18 +1,24 @@
 package chat
 
+import "encoding/json"
+
 // OpenAIChatMessage represents a message in the OpenAI chat API
 type OpenAIChatMessage struct {
 	Role       string     `json:"role"`
 	Content    string     `json:"content"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Name       string     `json:"name,omitempty"` // used for tool responses
 }
 
 // OpenAIChatRequest represents the request structure for OpenAI chat completions
 type OpenAIChatRequest struct {
-	Model    string              `json:"model"`
-	Messages []OpenAIChatMessage `json:"messages"`
-	Stream   bool                `json:"stream"`
+	Model       string              `json:"model"`
+	Messages    []OpenAIChatMessage `json:"messages"`
+	Stream      bool                `json:"stream"`
+	Tools       []Tool              `json:"tools,omitempty"`
+	ToolChoice  string              `json:"tool_choice,omitempty"` // e.g. "auto"
+	Temperature float32             `json:"temperature,omitempty"`
 }
 
 // ToolCallFunction represents the function part of a tool call
@@ -25,8 +31,21 @@ type ToolCallFunction struct {
 type ToolCall struct {
 	Index    int              `json:"index,omitempty"`
 	ID       string           `json:"id,omitempty"`
-	Type     string           `json:"type,omitempty"`
+	Type     string           `json:"type,omitempty"` // always "function"
 	Function ToolCallFunction `json:"function,omitempty"`
+}
+
+// Tool defines a function tool available to the model
+type Tool struct {
+	Type     string              `json:"type"` // always "function"
+	Function *FunctionDefinition `json:"function"`
+}
+
+// FunctionDefinition defines a callable function's name and input schema
+type FunctionDefinition struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters"`
 }
 
 // ChunkDelta represents the delta content in a streaming response chunk
