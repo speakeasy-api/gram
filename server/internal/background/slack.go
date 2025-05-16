@@ -101,7 +101,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 			Event: params.Event,
 			PostInput: slack_client.SlackPostMessageInput{
 				ChannelID: params.Event.Event.Channel,
-				Message:   fmt.Sprintf("I'm not connected to an LLM yet leave me alone. \n Can't respond to %s", sanitizedPrompt),
+				Message:   fmt.Sprintf("I'm not connected to an LLM yet leave me alone.\nCan't respond to:\n_%s_", sanitizedPrompt),
 				ThreadTS:  &params.Event.Event.Ts,
 			},
 		},
