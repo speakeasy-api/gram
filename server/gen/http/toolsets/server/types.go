@@ -72,7 +72,7 @@ type CreateToolsetResponseBody struct {
 // "listToolsets" endpoint HTTP response body.
 type ListToolsetsResponseBody struct {
 	// The list of toolsets
-	Toolsets []*ToolsetDetailsResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	Toolsets []*ToolsetResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -1079,8 +1079,8 @@ type HTTPToolDefinitionResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// ToolsetDetailsResponseBody is used to define fields on response body types.
-type ToolsetDetailsResponseBody struct {
+// ToolsetResponseBody is used to define fields on response body types.
+type ToolsetResponseBody struct {
 	// The ID of the toolset
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this toolset belongs to
@@ -1107,7 +1107,7 @@ type ToolsetDetailsResponseBody struct {
 
 // NewCreateToolsetResponseBody builds the HTTP response body from the result
 // of the "createToolset" endpoint of the "toolsets" service.
-func NewCreateToolsetResponseBody(res *toolsets.ToolsetDetails) *CreateToolsetResponseBody {
+func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody {
 	body := &CreateToolsetResponseBody{
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
@@ -1131,7 +1131,7 @@ func NewCreateToolsetResponseBody(res *toolsets.ToolsetDetails) *CreateToolsetRe
 	if res.HTTPTools != nil {
 		body.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(res.HTTPTools))
 		for i, val := range res.HTTPTools {
-			body.HTTPTools[i] = marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			body.HTTPTools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
 		}
 	} else {
 		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
@@ -1144,19 +1144,19 @@ func NewCreateToolsetResponseBody(res *toolsets.ToolsetDetails) *CreateToolsetRe
 func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsetsResponseBody {
 	body := &ListToolsetsResponseBody{}
 	if res.Toolsets != nil {
-		body.Toolsets = make([]*ToolsetDetailsResponseBody, len(res.Toolsets))
+		body.Toolsets = make([]*ToolsetResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
-			body.Toolsets[i] = marshalToolsetsToolsetDetailsToToolsetDetailsResponseBody(val)
+			body.Toolsets[i] = marshalTypesToolsetToToolsetResponseBody(val)
 		}
 	} else {
-		body.Toolsets = []*ToolsetDetailsResponseBody{}
+		body.Toolsets = []*ToolsetResponseBody{}
 	}
 	return body
 }
 
 // NewUpdateToolsetResponseBody builds the HTTP response body from the result
 // of the "updateToolset" endpoint of the "toolsets" service.
-func NewUpdateToolsetResponseBody(res *toolsets.ToolsetDetails) *UpdateToolsetResponseBody {
+func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody {
 	body := &UpdateToolsetResponseBody{
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
@@ -1180,7 +1180,7 @@ func NewUpdateToolsetResponseBody(res *toolsets.ToolsetDetails) *UpdateToolsetRe
 	if res.HTTPTools != nil {
 		body.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(res.HTTPTools))
 		for i, val := range res.HTTPTools {
-			body.HTTPTools[i] = marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			body.HTTPTools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
 		}
 	} else {
 		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
@@ -1190,7 +1190,7 @@ func NewUpdateToolsetResponseBody(res *toolsets.ToolsetDetails) *UpdateToolsetRe
 
 // NewGetToolsetResponseBody builds the HTTP response body from the result of
 // the "getToolset" endpoint of the "toolsets" service.
-func NewGetToolsetResponseBody(res *toolsets.ToolsetDetails) *GetToolsetResponseBody {
+func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	body := &GetToolsetResponseBody{
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
@@ -1214,7 +1214,7 @@ func NewGetToolsetResponseBody(res *toolsets.ToolsetDetails) *GetToolsetResponse
 	if res.HTTPTools != nil {
 		body.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(res.HTTPTools))
 		for i, val := range res.HTTPTools {
-			body.HTTPTools[i] = marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			body.HTTPTools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
 		}
 	} else {
 		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}

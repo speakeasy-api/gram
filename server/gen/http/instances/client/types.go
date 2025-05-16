@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	instances "github.com/speakeasy-api/gram/gen/instances"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -293,9 +294,9 @@ func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanc
 		Name:        *body.Name,
 		Description: body.Description,
 	}
-	v.Tools = make([]*instances.HTTPToolDefinition, len(body.Tools))
+	v.Tools = make([]*types.HTTPToolDefinition, len(body.Tools))
 	for i, val := range body.Tools {
-		v.Tools[i] = unmarshalHTTPToolDefinitionResponseBodyToInstancesHTTPToolDefinition(val)
+		v.Tools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
 	}
 	if body.RelevantEnvironmentVariables != nil {
 		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
@@ -303,7 +304,7 @@ func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanc
 			v.RelevantEnvironmentVariables[i] = val
 		}
 	}
-	v.Environment = unmarshalEnvironmentResponseBodyToInstancesEnvironment(body.Environment)
+	v.Environment = unmarshalEnvironmentResponseBodyToTypesEnvironment(body.Environment)
 
 	return v
 }

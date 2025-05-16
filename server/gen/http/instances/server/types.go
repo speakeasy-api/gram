@@ -295,7 +295,7 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 	if res.Tools != nil {
 		body.Tools = make([]*HTTPToolDefinitionResponseBody, len(res.Tools))
 		for i, val := range res.Tools {
-			body.Tools[i] = marshalInstancesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			body.Tools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
 		}
 	} else {
 		body.Tools = []*HTTPToolDefinitionResponseBody{}
@@ -307,7 +307,7 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 		}
 	}
 	if res.Environment != nil {
-		body.Environment = marshalInstancesEnvironmentToEnvironmentResponseBody(res.Environment)
+		body.Environment = marshalTypesEnvironmentToEnvironmentResponseBody(res.Environment)
 	}
 	return body
 }

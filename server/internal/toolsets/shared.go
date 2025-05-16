@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	gen "github.com/speakeasy-api/gram/gen/toolsets"
 	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/conv"
 	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
@@ -30,7 +29,7 @@ func NewToolsets(db *pgxpool.Pool) *Toolsets {
 	}
 }
 
-func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectID uuid.UUID) (*gen.ToolsetDetails, error) {
+func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectID uuid.UUID) (*types.Toolset, error) {
 	toolset, err := t.repo.GetToolset(ctx, repo.GetToolsetParams{
 		Slug:      strings.ToLower(slug),
 		ProjectID: projectID,
@@ -39,7 +38,7 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 		return nil, err
 	}
 
-	var httpTools []*gen.HTTPToolDefinition
+	var httpTools []*types.HTTPToolDefinition
 	var relevantEnvVars []string
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := t.toolsRepo.FindToolsByName(ctx, toolsRepo.FindToolsByNameParams{
@@ -51,7 +50,7 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 			return nil, err
 		}
 
-		httpTools = make([]*gen.HTTPToolDefinition, 0, len(definitions))
+		httpTools = make([]*types.HTTPToolDefinition, 0, len(definitions))
 		seen := make(map[string]bool, 0)
 		for _, def := range definitions {
 			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
@@ -59,7 +58,7 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 			}
 			seen[def.HttpToolDefinition.ID.String()] = true
 
-			httpTools = append(httpTools, &gen.HTTPToolDefinition{
+			httpTools = append(httpTools, &types.HTTPToolDefinition{
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
@@ -86,7 +85,7 @@ func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectI
 		}
 	}
 
-	return &gen.ToolsetDetails{
+	return &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
 		ProjectID:                    toolset.ProjectID.String(),

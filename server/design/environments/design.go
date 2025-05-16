@@ -21,7 +21,7 @@ var _ = Service("environments", func() {
 			security.ProjectPayload()
 		})
 
-		Result(Environment)
+		Result(shared.Environment)
 
 		HTTP(func() {
 			POST("/rpc/environments.create")
@@ -66,7 +66,7 @@ var _ = Service("environments", func() {
 			security.ProjectPayload()
 		})
 
-		Result(Environment)
+		Result(shared.Environment)
 
 		HTTP(func() {
 			POST("/rpc/environments.update")
@@ -105,23 +105,6 @@ var _ = Service("environments", func() {
 	})
 })
 
-var EnvironmentEntry = Type("EnvironmentEntry", func() {
-	Description("A single environment entry")
-
-	Attribute("name", String, "The name of the environment variable")
-	Attribute("value", String, "Redacted values of the environment variable")
-	Attribute("created_at", String, func() {
-		Description("The creation date of the environment entry")
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Description("When the environment entry was last updated")
-		Format(FormatDateTime)
-	})
-
-	Required("name", "value", "created_at", "updated_at")
-})
-
 var EnvironmentEntryInput = Type("EnvironmentEntryInput", func() {
 	Description("A single environment entry")
 
@@ -157,6 +140,6 @@ var UpdateEnvironmentForm = Type("UpdateEnvironmentForm", func() {
 var ListEnvironmentsResult = Type("ListEnvironmentsResult", func() {
 	Description("Result type for listing environments")
 
-	Attribute("environments", ArrayOf(Environment))
+	Attribute("environments", ArrayOf(shared.Environment))
 	Required("environments")
 })

@@ -10,6 +10,7 @@ package environments
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -45,13 +46,13 @@ func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnv
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateEnvironment(ctx context.Context, p *CreateEnvironmentPayload) (res *Environment, err error) {
+func (c *Client) CreateEnvironment(ctx context.Context, p *CreateEnvironmentPayload) (res *types.Environment, err error) {
 	var ires any
 	ires, err = c.CreateEnvironmentEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*Environment), nil
+	return ires.(*types.Environment), nil
 }
 
 // ListEnvironments calls the "listEnvironments" endpoint of the "environments"
@@ -91,13 +92,13 @@ func (c *Client) ListEnvironments(ctx context.Context, p *ListEnvironmentsPayloa
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayload) (res *Environment, err error) {
+func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayload) (res *types.Environment, err error) {
 	var ires any
 	ires, err = c.UpdateEnvironmentEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*Environment), nil
+	return ires.(*types.Environment), nil
 }
 
 // DeleteEnvironment calls the "deleteEnvironment" endpoint of the

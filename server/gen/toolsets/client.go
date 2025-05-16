@@ -10,6 +10,7 @@ package toolsets
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -46,13 +47,13 @@ func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToo
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (res *ToolsetDetails, err error) {
+func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (res *types.Toolset, err error) {
 	var ires any
 	ires, err = c.CreateToolsetEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ToolsetDetails), nil
+	return ires.(*types.Toolset), nil
 }
 
 // ListToolsets calls the "listToolsets" endpoint of the "toolsets" service.
@@ -90,13 +91,13 @@ func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res 
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (res *ToolsetDetails, err error) {
+func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (res *types.Toolset, err error) {
 	var ires any
 	ires, err = c.UpdateToolsetEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ToolsetDetails), nil
+	return ires.(*types.Toolset), nil
 }
 
 // DeleteToolset calls the "deleteToolset" endpoint of the "toolsets" service.
@@ -130,11 +131,11 @@ func (c *Client) DeleteToolset(ctx context.Context, p *DeleteToolsetPayload) (er
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetToolset(ctx context.Context, p *GetToolsetPayload) (res *ToolsetDetails, err error) {
+func (c *Client) GetToolset(ctx context.Context, p *GetToolsetPayload) (res *types.Toolset, err error) {
 	var ires any
 	ires, err = c.GetToolsetEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ToolsetDetails), nil
+	return ires.(*types.Toolset), nil
 }

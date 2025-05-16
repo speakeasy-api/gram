@@ -18,11 +18,11 @@ import (
 // Managing toolset environments.
 type Service interface {
 	// Create a new environment
-	CreateEnvironment(context.Context, *CreateEnvironmentPayload) (res *Environment, err error)
+	CreateEnvironment(context.Context, *CreateEnvironmentPayload) (res *types.Environment, err error)
 	// List all environments for an organization
 	ListEnvironments(context.Context, *ListEnvironmentsPayload) (res *ListEnvironmentsResult, err error)
 	// Update an environment
-	UpdateEnvironment(context.Context, *UpdateEnvironmentPayload) (res *Environment, err error)
+	UpdateEnvironment(context.Context, *UpdateEnvironmentPayload) (res *types.Environment, err error)
 	// Delete an environment
 	DeleteEnvironment(context.Context, *DeleteEnvironmentPayload) (err error)
 }
@@ -73,41 +73,6 @@ type DeleteEnvironmentPayload struct {
 	ProjectSlugInput *string
 }
 
-// Environment is the result type of the environments service createEnvironment
-// method.
-type Environment struct {
-	// The ID of the environment
-	ID string
-	// The organization ID this environment belongs to
-	OrganizationID string
-	// The project ID this environment belongs to
-	ProjectID string
-	// The name of the environment
-	Name string
-	// The slug identifier for the environment
-	Slug types.Slug
-	// The description of the environment
-	Description *string
-	// List of environment entries
-	Entries []*EnvironmentEntry
-	// The creation date of the environment
-	CreatedAt string
-	// When the environment was last updated
-	UpdatedAt string
-}
-
-// A single environment entry
-type EnvironmentEntry struct {
-	// The name of the environment variable
-	Name string
-	// Redacted values of the environment variable
-	Value string
-	// The creation date of the environment entry
-	CreatedAt string
-	// When the environment entry was last updated
-	UpdatedAt string
-}
-
 // A single environment entry
 type EnvironmentEntryInput struct {
 	// The name of the environment variable
@@ -126,7 +91,7 @@ type ListEnvironmentsPayload struct {
 // ListEnvironmentsResult is the result type of the environments service
 // listEnvironments method.
 type ListEnvironmentsResult struct {
-	Environments []*Environment
+	Environments []*types.Environment
 }
 
 // UpdateEnvironmentPayload is the payload type of the environments service

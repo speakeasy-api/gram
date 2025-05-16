@@ -18,15 +18,15 @@ import (
 // Managed toolsets for gram AI consumers.
 type Service interface {
 	// Create a new toolset with associated tools
-	CreateToolset(context.Context, *CreateToolsetPayload) (res *ToolsetDetails, err error)
+	CreateToolset(context.Context, *CreateToolsetPayload) (res *types.Toolset, err error)
 	// List all toolsets for a project
 	ListToolsets(context.Context, *ListToolsetsPayload) (res *ListToolsetsResult, err error)
 	// Update a toolset's properties including name, description, and HTTP tools
-	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *ToolsetDetails, err error)
+	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *types.Toolset, err error)
 	// Delete a toolset by its ID
 	DeleteToolset(context.Context, *DeleteToolsetPayload) (err error)
 	// Get detailed information about a toolset including full HTTP tool definitions
-	GetToolset(context.Context, *GetToolsetPayload) (res *ToolsetDetails, err error)
+	GetToolset(context.Context, *GetToolsetPayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -84,45 +84,6 @@ type GetToolsetPayload struct {
 	ProjectSlugInput *string
 }
 
-type HTTPToolDefinition struct {
-	// The ID of the HTTP tool
-	ID string
-	// The ID of the project
-	ProjectID string
-	// The ID of the deployment
-	DeploymentID string
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string
-	// The name of the tool
-	Name string
-	// Summary of the tool
-	Summary string
-	// Description of the tool
-	Description string
-	// Confirmation mode for the tool
-	Confirm string
-	// Prompt for the confirmation
-	ConfirmPrompt *string
-	// OpenAPI v3 operation
-	Openapiv3Operation *string
-	// The tags list for this http tool
-	Tags []string
-	// Security requirements for the underlying HTTP endpoint
-	Security *string
-	// HTTP method for the request
-	HTTPMethod string
-	// Path for the request
-	Path string
-	// Version of the schema
-	SchemaVersion *string
-	// JSON schema for the request
-	Schema string
-	// The creation date of the tool.
-	CreatedAt string
-	// The last update date of the tool.
-	UpdatedAt string
-}
-
 // ListToolsetsPayload is the payload type of the toolsets service listToolsets
 // method.
 type ListToolsetsPayload struct {
@@ -134,34 +95,7 @@ type ListToolsetsPayload struct {
 // method.
 type ListToolsetsResult struct {
 	// The list of toolsets
-	Toolsets []*ToolsetDetails
-}
-
-// ToolsetDetails is the result type of the toolsets service createToolset
-// method.
-type ToolsetDetails struct {
-	// The ID of the toolset
-	ID string
-	// The project ID this toolset belongs to
-	ProjectID string
-	// The organization ID this toolset belongs to
-	OrganizationID string
-	// The name of the toolset
-	Name string
-	// The slug of the toolset
-	Slug types.Slug
-	// Description of the toolset
-	Description *string
-	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *types.Slug
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinition
-	// When the toolset was created.
-	CreatedAt string
-	// When the toolset was last updated.
-	UpdatedAt string
+	Toolsets []*types.Toolset
 }
 
 // UpdateToolsetPayload is the payload type of the toolsets service

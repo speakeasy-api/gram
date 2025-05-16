@@ -3726,7 +3726,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ToolsetDetails'
+                                $ref: '#/components/schemas/Toolset'
                     description: OK response.
                 "400":
                     content:
@@ -3920,7 +3920,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ToolsetDetails'
+                                $ref: '#/components/schemas/Toolset'
                     description: OK response.
                 "400":
                     content:
@@ -4114,7 +4114,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ToolsetDetails'
+                                $ref: '#/components/schemas/Toolset'
                     description: OK response.
                 "400":
                     content:
@@ -5374,7 +5374,7 @@ components:
                 toolsets:
                     type: array
                     items:
-                        $ref: '#/components/schemas/ToolsetDetails'
+                        $ref: '#/components/schemas/Toolset'
                     description: The list of toolsets
             required:
                 - toolsets
@@ -5695,6 +5695,61 @@ components:
                 - httpMethod
                 - path
                 - created_at
+        Toolset:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                default_environment_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                description:
+                    type: string
+                    description: Description of the toolset
+                http_tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HTTPToolDefinition'
+                    description: The HTTP tools in this toolset
+                id:
+                    type: string
+                    description: The ID of the toolset
+                name:
+                    type: string
+                    description: The name of the toolset
+                organization_id:
+                    type: string
+                    description: The organization ID this toolset belongs to
+                project_id:
+                    type: string
+                    description: The project ID this toolset belongs to
+                relevant_environment_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables that are relevant to the toolset
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - organization_id
+                - name
+                - slug
+                - http_tools
+                - created_at
+                - updated_at
         ToolsetDetails:
             type: object
             properties:
@@ -5983,6 +6038,8 @@ tags:
       description: Manages deployments of tools from upstream sources.
     - name: environments
       description: Managing toolset environments.
+    - name: instances
+      description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations
       description: Explore third-party tools in Gram.
     - name: keys
@@ -5995,7 +6052,5 @@ tags:
       description: Auth and interactions for the Gram Slack App.
     - name: tools
       description: Dashboard API for interacting with tools.
-    - name: instances
-      description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: toolsets
       description: Managed toolsets for gram AI consumers.

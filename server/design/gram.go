@@ -24,7 +24,3 @@ var _ = API("gram", func() {
 	Description("Gram is the tools platform for AI agents")
 	Meta("openapi:example", "false")
 })
-
-func init() {
-
-}

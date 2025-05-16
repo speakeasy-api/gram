@@ -980,11 +980,11 @@ func marshalEnvironmentEntryInputRequestBodyToEnvironmentsEnvironmentEntryInput(
 	return res
 }
 
-// unmarshalEnvironmentEntryResponseBodyToEnvironmentsEnvironmentEntry builds a
-// value of type *environments.EnvironmentEntry from a value of type
+// unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry builds a value
+// of type *types.EnvironmentEntry from a value of type
 // *EnvironmentEntryResponseBody.
-func unmarshalEnvironmentEntryResponseBodyToEnvironmentsEnvironmentEntry(v *EnvironmentEntryResponseBody) *environments.EnvironmentEntry {
-	res := &environments.EnvironmentEntry{
+func unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(v *EnvironmentEntryResponseBody) *types.EnvironmentEntry {
+	res := &types.EnvironmentEntry{
 		Name:      *v.Name,
 		Value:     *v.Value,
 		CreatedAt: *v.CreatedAt,
@@ -994,10 +994,10 @@ func unmarshalEnvironmentEntryResponseBodyToEnvironmentsEnvironmentEntry(v *Envi
 	return res
 }
 
-// unmarshalEnvironmentResponseBodyToEnvironmentsEnvironment builds a value of
-// type *environments.Environment from a value of type *EnvironmentResponseBody.
-func unmarshalEnvironmentResponseBodyToEnvironmentsEnvironment(v *EnvironmentResponseBody) *environments.Environment {
-	res := &environments.Environment{
+// unmarshalEnvironmentResponseBodyToTypesEnvironment builds a value of type
+// *types.Environment from a value of type *EnvironmentResponseBody.
+func unmarshalEnvironmentResponseBodyToTypesEnvironment(v *EnvironmentResponseBody) *types.Environment {
+	res := &types.Environment{
 		ID:             *v.ID,
 		OrganizationID: *v.OrganizationID,
 		ProjectID:      *v.ProjectID,
@@ -1007,9 +1007,9 @@ func unmarshalEnvironmentResponseBodyToEnvironmentsEnvironment(v *EnvironmentRes
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
-	res.Entries = make([]*environments.EnvironmentEntry, len(v.Entries))
+	res.Entries = make([]*types.EnvironmentEntry, len(v.Entries))
 	for i, val := range v.Entries {
-		res.Entries[i] = unmarshalEnvironmentEntryResponseBodyToEnvironmentsEnvironmentEntry(val)
+		res.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
 	}
 
 	return res

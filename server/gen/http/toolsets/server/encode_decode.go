@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -24,7 +25,7 @@ import (
 // toolsets createToolset endpoint.
 func EncodeCreateToolsetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*toolsets.ToolsetDetails)
+		res, _ := v.(*types.Toolset)
 		enc := encoder(ctx, w)
 		body := NewCreateToolsetResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -452,7 +453,7 @@ func EncodeListToolsetsError(encoder func(context.Context, http.ResponseWriter) 
 // toolsets updateToolset endpoint.
 func EncodeUpdateToolsetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*toolsets.ToolsetDetails)
+		res, _ := v.(*types.Toolset)
 		enc := encoder(ctx, w)
 		body := NewUpdateToolsetResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -902,7 +903,7 @@ func EncodeDeleteToolsetError(encoder func(context.Context, http.ResponseWriter)
 // toolsets getToolset endpoint.
 func EncodeGetToolsetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*toolsets.ToolsetDetails)
+		res, _ := v.(*types.Toolset)
 		enc := encoder(ctx, w)
 		body := NewGetToolsetResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -1115,10 +1116,10 @@ func EncodeGetToolsetError(encoder func(context.Context, http.ResponseWriter) go
 	}
 }
 
-// marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
+// marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
 // value of type *HTTPToolDefinitionResponseBody from a value of type
-// *toolsets.HTTPToolDefinition.
-func marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *toolsets.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
+// *types.HTTPToolDefinition.
+func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
 	res := &HTTPToolDefinitionResponseBody{
 		ID:                  v.ID,
 		ProjectID:           v.ProjectID,
@@ -1150,11 +1151,10 @@ func marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *toolse
 	return res
 }
 
-// marshalToolsetsToolsetDetailsToToolsetDetailsResponseBody builds a value of
-// type *ToolsetDetailsResponseBody from a value of type
-// *toolsets.ToolsetDetails.
-func marshalToolsetsToolsetDetailsToToolsetDetailsResponseBody(v *toolsets.ToolsetDetails) *ToolsetDetailsResponseBody {
-	res := &ToolsetDetailsResponseBody{
+// marshalTypesToolsetToToolsetResponseBody builds a value of type
+// *ToolsetResponseBody from a value of type *types.Toolset.
+func marshalTypesToolsetToToolsetResponseBody(v *types.Toolset) *ToolsetResponseBody {
+	res := &ToolsetResponseBody{
 		ID:             v.ID,
 		ProjectID:      v.ProjectID,
 		OrganizationID: v.OrganizationID,
@@ -1177,7 +1177,7 @@ func marshalToolsetsToolsetDetailsToToolsetDetailsResponseBody(v *toolsets.Tools
 	if v.HTTPTools != nil {
 		res.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(v.HTTPTools))
 		for i, val := range v.HTTPTools {
-			res.HTTPTools[i] = marshalToolsetsHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			res.HTTPTools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
 		}
 	} else {
 		res.HTTPTools = []*HTTPToolDefinitionResponseBody{}

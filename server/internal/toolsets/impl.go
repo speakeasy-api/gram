@@ -16,6 +16,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/gen/http/toolsets/server"
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
+	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
@@ -60,7 +61,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*gen.ToolsetDetails, error) {
+func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -127,7 +128,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
 	}
 
-	result := make([]*gen.ToolsetDetails, len(toolsets))
+	result := make([]*types.Toolset, len(toolsets))
 	for i, toolset := range toolsets {
 		toolsetDetails, err := s.toolsets.LoadToolsetDetails(ctx, toolset.Slug, *authCtx.ProjectID)
 		if err != nil {
@@ -141,7 +142,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 	}, nil
 }
 
-func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*gen.ToolsetDetails, error) {
+func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -214,7 +215,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	})
 }
 
-func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*gen.ToolsetDetails, error) {
+func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)

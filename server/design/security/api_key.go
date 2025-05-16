@@ -20,3 +20,7 @@ var ByKeyPayload = func() {
 var ByKeyHeader = func() {
 	Header(fmt.Sprintf("apikey_token:%s", auth.APIKeyHeader), String, "API Key header")
 }
+
+var ByKeyNamedHeader = func(name string) {
+	Header(fmt.Sprintf("apikey_token:%s", name), String, "API Key header")
+}

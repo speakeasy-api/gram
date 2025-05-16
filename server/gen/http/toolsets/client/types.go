@@ -72,7 +72,7 @@ type CreateToolsetResponseBody struct {
 // "listToolsets" endpoint HTTP response body.
 type ListToolsetsResponseBody struct {
 	// The list of toolsets
-	Toolsets []*ToolsetDetailsResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	Toolsets []*ToolsetResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -1079,8 +1079,8 @@ type HTTPToolDefinitionResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// ToolsetDetailsResponseBody is used to define fields on response body types.
-type ToolsetDetailsResponseBody struct {
+// ToolsetResponseBody is used to define fields on response body types.
+type ToolsetResponseBody struct {
 	// The ID of the toolset
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this toolset belongs to
@@ -1145,10 +1145,10 @@ func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolse
 	return body
 }
 
-// NewCreateToolsetToolsetDetailsOK builds a "toolsets" service "createToolset"
+// NewCreateToolsetToolsetOK builds a "toolsets" service "createToolset"
 // endpoint result from a HTTP "OK" response.
-func NewCreateToolsetToolsetDetailsOK(body *CreateToolsetResponseBody) *toolsets.ToolsetDetails {
-	v := &toolsets.ToolsetDetails{
+func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
+	v := &types.Toolset{
 		ID:             *body.ID,
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
@@ -1168,9 +1168,9 @@ func NewCreateToolsetToolsetDetailsOK(body *CreateToolsetResponseBody) *toolsets
 			v.RelevantEnvironmentVariables[i] = val
 		}
 	}
-	v.HTTPTools = make([]*toolsets.HTTPToolDefinition, len(body.HTTPTools))
+	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
 	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(val)
+		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
 	}
 
 	return v
@@ -1330,9 +1330,9 @@ func NewCreateToolsetGatewayError(body *CreateToolsetGatewayErrorResponseBody) *
 // result from a HTTP "OK" response.
 func NewListToolsetsResultOK(body *ListToolsetsResponseBody) *toolsets.ListToolsetsResult {
 	v := &toolsets.ListToolsetsResult{}
-	v.Toolsets = make([]*toolsets.ToolsetDetails, len(body.Toolsets))
+	v.Toolsets = make([]*types.Toolset, len(body.Toolsets))
 	for i, val := range body.Toolsets {
-		v.Toolsets[i] = unmarshalToolsetDetailsResponseBodyToToolsetsToolsetDetails(val)
+		v.Toolsets[i] = unmarshalToolsetResponseBodyToTypesToolset(val)
 	}
 
 	return v
@@ -1488,10 +1488,10 @@ func NewListToolsetsGatewayError(body *ListToolsetsGatewayErrorResponseBody) *go
 	return v
 }
 
-// NewUpdateToolsetToolsetDetailsOK builds a "toolsets" service "updateToolset"
+// NewUpdateToolsetToolsetOK builds a "toolsets" service "updateToolset"
 // endpoint result from a HTTP "OK" response.
-func NewUpdateToolsetToolsetDetailsOK(body *UpdateToolsetResponseBody) *toolsets.ToolsetDetails {
-	v := &toolsets.ToolsetDetails{
+func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
+	v := &types.Toolset{
 		ID:             *body.ID,
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
@@ -1511,9 +1511,9 @@ func NewUpdateToolsetToolsetDetailsOK(body *UpdateToolsetResponseBody) *toolsets
 			v.RelevantEnvironmentVariables[i] = val
 		}
 	}
-	v.HTTPTools = make([]*toolsets.HTTPToolDefinition, len(body.HTTPTools))
+	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
 	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(val)
+		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
 	}
 
 	return v
@@ -1819,10 +1819,10 @@ func NewDeleteToolsetGatewayError(body *DeleteToolsetGatewayErrorResponseBody) *
 	return v
 }
 
-// NewGetToolsetToolsetDetailsOK builds a "toolsets" service "getToolset"
-// endpoint result from a HTTP "OK" response.
-func NewGetToolsetToolsetDetailsOK(body *GetToolsetResponseBody) *toolsets.ToolsetDetails {
-	v := &toolsets.ToolsetDetails{
+// NewGetToolsetToolsetOK builds a "toolsets" service "getToolset" endpoint
+// result from a HTTP "OK" response.
+func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
+	v := &types.Toolset{
 		ID:             *body.ID,
 		ProjectID:      *body.ProjectID,
 		OrganizationID: *body.OrganizationID,
@@ -1842,9 +1842,9 @@ func NewGetToolsetToolsetDetailsOK(body *GetToolsetResponseBody) *toolsets.Tools
 			v.RelevantEnvironmentVariables[i] = val
 		}
 	}
-	v.HTTPTools = make([]*toolsets.HTTPToolDefinition, len(body.HTTPTools))
+	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
 	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(val)
+		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
 	}
 
 	return v
@@ -2067,7 +2067,7 @@ func ValidateListToolsetsResponseBody(body *ListToolsetsResponseBody) (err error
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
-			if err2 := ValidateToolsetDetailsResponseBody(e); err2 != nil {
+			if err2 := ValidateToolsetResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3444,9 +3444,9 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	return
 }
 
-// ValidateToolsetDetailsResponseBody runs the validations defined on
-// ToolsetDetailsResponseBody
-func ValidateToolsetDetailsResponseBody(body *ToolsetDetailsResponseBody) (err error) {
+// ValidateToolsetResponseBody runs the validations defined on
+// ToolsetResponseBody
+func ValidateToolsetResponseBody(body *ToolsetResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

@@ -44,40 +44,6 @@ const ServiceName = "instances"
 // MethodKey key.
 var MethodNames = [1]string{"getInstance"}
 
-// Model representing an environment
-type Environment struct {
-	// The ID of the environment
-	ID string
-	// The organization ID this environment belongs to
-	OrganizationID string
-	// The project ID this environment belongs to
-	ProjectID string
-	// The name of the environment
-	Name string
-	// The slug identifier for the environment
-	Slug types.Slug
-	// The description of the environment
-	Description *string
-	// List of environment entries
-	Entries []*EnvironmentEntry
-	// The creation date of the environment
-	CreatedAt string
-	// When the environment was last updated
-	UpdatedAt string
-}
-
-// A single environment entry
-type EnvironmentEntry struct {
-	// The name of the environment variable
-	Name string
-	// Redacted values of the environment variable
-	Value string
-	// The creation date of the environment entry
-	CreatedAt string
-	// When the environment entry was last updated
-	UpdatedAt string
-}
-
 // GetInstanceForm is the payload type of the instances service getInstance
 // method.
 type GetInstanceForm struct {
@@ -98,50 +64,11 @@ type GetInstanceResult struct {
 	// The description of the toolset
 	Description *string
 	// The list of tools
-	Tools []*HTTPToolDefinition
+	Tools []*types.HTTPToolDefinition
 	// The environment variables that are relevant to the toolset
 	RelevantEnvironmentVariables []string
 	// The environment
-	Environment *Environment
-}
-
-type HTTPToolDefinition struct {
-	// The ID of the HTTP tool
-	ID string
-	// The ID of the project
-	ProjectID string
-	// The ID of the deployment
-	DeploymentID string
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string
-	// The name of the tool
-	Name string
-	// Summary of the tool
-	Summary string
-	// Description of the tool
-	Description string
-	// Confirmation mode for the tool
-	Confirm string
-	// Prompt for the confirmation
-	ConfirmPrompt *string
-	// OpenAPI v3 operation
-	Openapiv3Operation *string
-	// The tags list for this http tool
-	Tags []string
-	// Security requirements for the underlying HTTP endpoint
-	Security *string
-	// HTTP method for the request
-	HTTPMethod string
-	// Path for the request
-	Path string
-	// Version of the schema
-	SchemaVersion *string
-	// JSON schema for the request
-	Schema string
-	// The creation date of the tool.
-	CreatedAt string
-	// The last update date of the tool.
-	UpdatedAt string
+	Environment *types.Environment
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

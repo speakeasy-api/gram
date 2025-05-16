@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	environments "github.com/speakeasy-api/gram/gen/environments"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -24,7 +25,7 @@ import (
 // the environments createEnvironment endpoint.
 func EncodeCreateEnvironmentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*environments.Environment)
+		res, _ := v.(*types.Environment)
 		enc := encoder(ctx, w)
 		body := NewCreateEnvironmentResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -452,7 +453,7 @@ func EncodeListEnvironmentsError(encoder func(context.Context, http.ResponseWrit
 // the environments updateEnvironment endpoint.
 func EncodeUpdateEnvironmentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*environments.Environment)
+		res, _ := v.(*types.Environment)
 		enc := encoder(ctx, w)
 		body := NewUpdateEnvironmentResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -910,10 +911,10 @@ func unmarshalEnvironmentEntryInputRequestBodyToEnvironmentsEnvironmentEntryInpu
 	return res
 }
 
-// marshalEnvironmentsEnvironmentEntryToEnvironmentEntryResponseBody builds a
-// value of type *EnvironmentEntryResponseBody from a value of type
-// *environments.EnvironmentEntry.
-func marshalEnvironmentsEnvironmentEntryToEnvironmentEntryResponseBody(v *environments.EnvironmentEntry) *EnvironmentEntryResponseBody {
+// marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody builds a value of
+// type *EnvironmentEntryResponseBody from a value of type
+// *types.EnvironmentEntry.
+func marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(v *types.EnvironmentEntry) *EnvironmentEntryResponseBody {
 	res := &EnvironmentEntryResponseBody{
 		Name:      v.Name,
 		Value:     v.Value,
@@ -924,9 +925,9 @@ func marshalEnvironmentsEnvironmentEntryToEnvironmentEntryResponseBody(v *enviro
 	return res
 }
 
-// marshalEnvironmentsEnvironmentToEnvironmentResponseBody builds a value of
-// type *EnvironmentResponseBody from a value of type *environments.Environment.
-func marshalEnvironmentsEnvironmentToEnvironmentResponseBody(v *environments.Environment) *EnvironmentResponseBody {
+// marshalTypesEnvironmentToEnvironmentResponseBody builds a value of type
+// *EnvironmentResponseBody from a value of type *types.Environment.
+func marshalTypesEnvironmentToEnvironmentResponseBody(v *types.Environment) *EnvironmentResponseBody {
 	res := &EnvironmentResponseBody{
 		ID:             v.ID,
 		OrganizationID: v.OrganizationID,
@@ -940,7 +941,7 @@ func marshalEnvironmentsEnvironmentToEnvironmentResponseBody(v *environments.Env
 	if v.Entries != nil {
 		res.Entries = make([]*EnvironmentEntryResponseBody, len(v.Entries))
 		for i, val := range v.Entries {
-			res.Entries[i] = marshalEnvironmentsEnvironmentEntryToEnvironmentEntryResponseBody(val)
+			res.Entries[i] = marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(val)
 		}
 	} else {
 		res.Entries = []*EnvironmentEntryResponseBody{}

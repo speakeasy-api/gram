@@ -19,7 +19,7 @@ var _ = Service("toolsets", func() {
 			security.SessionPayload()
 		})
 
-		Result(ToolsetDetails)
+		Result(shared.Toolset)
 
 		HTTP(func() {
 			POST("/rpc/toolsets.create")
@@ -63,7 +63,7 @@ var _ = Service("toolsets", func() {
 			security.SessionPayload()
 		})
 
-		Result(ToolsetDetails)
+		Result(shared.Toolset)
 
 		HTTP(func() {
 			Param("slug")
@@ -111,7 +111,7 @@ var _ = Service("toolsets", func() {
 			security.ProjectPayload()
 		})
 
-		Result(ToolsetDetails)
+		Result(shared.Toolset)
 
 		HTTP(func() {
 			GET("/rpc/toolsets.get")
@@ -137,7 +137,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 })
 
 var ListToolsetsResult = Type("ListToolsetsResult", func() {
-	Attribute("toolsets", ArrayOf(ToolsetDetails), "The list of toolsets")
+	Attribute("toolsets", ArrayOf(shared.Toolset), "The list of toolsets")
 	Required("toolsets")
 })
 

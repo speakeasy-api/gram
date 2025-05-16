@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	instances "github.com/speakeasy-api/gram/gen/instances"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -262,10 +263,10 @@ func EncodeGetInstanceError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
-// marshalInstancesHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
+// marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
 // value of type *HTTPToolDefinitionResponseBody from a value of type
-// *instances.HTTPToolDefinition.
-func marshalInstancesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *instances.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
+// *types.HTTPToolDefinition.
+func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
 	res := &HTTPToolDefinitionResponseBody{
 		ID:                  v.ID,
 		ProjectID:           v.ProjectID,
@@ -297,9 +298,9 @@ func marshalInstancesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *insta
 	return res
 }
 
-// marshalInstancesEnvironmentToEnvironmentResponseBody builds a value of type
-// *EnvironmentResponseBody from a value of type *instances.Environment.
-func marshalInstancesEnvironmentToEnvironmentResponseBody(v *instances.Environment) *EnvironmentResponseBody {
+// marshalTypesEnvironmentToEnvironmentResponseBody builds a value of type
+// *EnvironmentResponseBody from a value of type *types.Environment.
+func marshalTypesEnvironmentToEnvironmentResponseBody(v *types.Environment) *EnvironmentResponseBody {
 	res := &EnvironmentResponseBody{
 		ID:             v.ID,
 		OrganizationID: v.OrganizationID,
@@ -313,7 +314,7 @@ func marshalInstancesEnvironmentToEnvironmentResponseBody(v *instances.Environme
 	if v.Entries != nil {
 		res.Entries = make([]*EnvironmentEntryResponseBody, len(v.Entries))
 		for i, val := range v.Entries {
-			res.Entries[i] = marshalInstancesEnvironmentEntryToEnvironmentEntryResponseBody(val)
+			res.Entries[i] = marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(val)
 		}
 	} else {
 		res.Entries = []*EnvironmentEntryResponseBody{}
@@ -322,10 +323,10 @@ func marshalInstancesEnvironmentToEnvironmentResponseBody(v *instances.Environme
 	return res
 }
 
-// marshalInstancesEnvironmentEntryToEnvironmentEntryResponseBody builds a
-// value of type *EnvironmentEntryResponseBody from a value of type
-// *instances.EnvironmentEntry.
-func marshalInstancesEnvironmentEntryToEnvironmentEntryResponseBody(v *instances.EnvironmentEntry) *EnvironmentEntryResponseBody {
+// marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody builds a value of
+// type *EnvironmentEntryResponseBody from a value of type
+// *types.EnvironmentEntry.
+func marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(v *types.EnvironmentEntry) *EnvironmentEntryResponseBody {
 	res := &EnvironmentEntryResponseBody{
 		Name:      v.Name,
 		Value:     v.Value,

@@ -896,7 +896,7 @@ type EnvironmentEntryInputRequestBody struct {
 
 // NewCreateEnvironmentResponseBody builds the HTTP response body from the
 // result of the "createEnvironment" endpoint of the "environments" service.
-func NewCreateEnvironmentResponseBody(res *environments.Environment) *CreateEnvironmentResponseBody {
+func NewCreateEnvironmentResponseBody(res *types.Environment) *CreateEnvironmentResponseBody {
 	body := &CreateEnvironmentResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
@@ -910,7 +910,7 @@ func NewCreateEnvironmentResponseBody(res *environments.Environment) *CreateEnvi
 	if res.Entries != nil {
 		body.Entries = make([]*EnvironmentEntryResponseBody, len(res.Entries))
 		for i, val := range res.Entries {
-			body.Entries[i] = marshalEnvironmentsEnvironmentEntryToEnvironmentEntryResponseBody(val)
+			body.Entries[i] = marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(val)
 		}
 	} else {
 		body.Entries = []*EnvironmentEntryResponseBody{}
@@ -925,7 +925,7 @@ func NewListEnvironmentsResponseBody(res *environments.ListEnvironmentsResult) *
 	if res.Environments != nil {
 		body.Environments = make([]*EnvironmentResponseBody, len(res.Environments))
 		for i, val := range res.Environments {
-			body.Environments[i] = marshalEnvironmentsEnvironmentToEnvironmentResponseBody(val)
+			body.Environments[i] = marshalTypesEnvironmentToEnvironmentResponseBody(val)
 		}
 	} else {
 		body.Environments = []*EnvironmentResponseBody{}
@@ -935,7 +935,7 @@ func NewListEnvironmentsResponseBody(res *environments.ListEnvironmentsResult) *
 
 // NewUpdateEnvironmentResponseBody builds the HTTP response body from the
 // result of the "updateEnvironment" endpoint of the "environments" service.
-func NewUpdateEnvironmentResponseBody(res *environments.Environment) *UpdateEnvironmentResponseBody {
+func NewUpdateEnvironmentResponseBody(res *types.Environment) *UpdateEnvironmentResponseBody {
 	body := &UpdateEnvironmentResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
@@ -949,7 +949,7 @@ func NewUpdateEnvironmentResponseBody(res *environments.Environment) *UpdateEnvi
 	if res.Entries != nil {
 		body.Entries = make([]*EnvironmentEntryResponseBody, len(res.Entries))
 		for i, val := range res.Entries {
-			body.Entries[i] = marshalEnvironmentsEnvironmentEntryToEnvironmentEntryResponseBody(val)
+			body.Entries[i] = marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(val)
 		}
 	} else {
 		body.Entries = []*EnvironmentEntryResponseBody{}

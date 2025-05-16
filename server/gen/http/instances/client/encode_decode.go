@@ -263,11 +263,11 @@ func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
-// unmarshalHTTPToolDefinitionResponseBodyToInstancesHTTPToolDefinition builds
-// a value of type *instances.HTTPToolDefinition from a value of type
+// unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition builds a
+// value of type *types.HTTPToolDefinition from a value of type
 // *HTTPToolDefinitionResponseBody.
-func unmarshalHTTPToolDefinitionResponseBodyToInstancesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *instances.HTTPToolDefinition {
-	res := &instances.HTTPToolDefinition{
+func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
+	res := &types.HTTPToolDefinition{
 		ID:                  *v.ID,
 		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
@@ -294,10 +294,10 @@ func unmarshalHTTPToolDefinitionResponseBodyToInstancesHTTPToolDefinition(v *HTT
 	return res
 }
 
-// unmarshalEnvironmentResponseBodyToInstancesEnvironment builds a value of
-// type *instances.Environment from a value of type *EnvironmentResponseBody.
-func unmarshalEnvironmentResponseBodyToInstancesEnvironment(v *EnvironmentResponseBody) *instances.Environment {
-	res := &instances.Environment{
+// unmarshalEnvironmentResponseBodyToTypesEnvironment builds a value of type
+// *types.Environment from a value of type *EnvironmentResponseBody.
+func unmarshalEnvironmentResponseBodyToTypesEnvironment(v *EnvironmentResponseBody) *types.Environment {
+	res := &types.Environment{
 		ID:             *v.ID,
 		OrganizationID: *v.OrganizationID,
 		ProjectID:      *v.ProjectID,
@@ -307,19 +307,19 @@ func unmarshalEnvironmentResponseBodyToInstancesEnvironment(v *EnvironmentRespon
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
-	res.Entries = make([]*instances.EnvironmentEntry, len(v.Entries))
+	res.Entries = make([]*types.EnvironmentEntry, len(v.Entries))
 	for i, val := range v.Entries {
-		res.Entries[i] = unmarshalEnvironmentEntryResponseBodyToInstancesEnvironmentEntry(val)
+		res.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
 	}
 
 	return res
 }
 
-// unmarshalEnvironmentEntryResponseBodyToInstancesEnvironmentEntry builds a
-// value of type *instances.EnvironmentEntry from a value of type
+// unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry builds a value
+// of type *types.EnvironmentEntry from a value of type
 // *EnvironmentEntryResponseBody.
-func unmarshalEnvironmentEntryResponseBodyToInstancesEnvironmentEntry(v *EnvironmentEntryResponseBody) *instances.EnvironmentEntry {
-	res := &instances.EnvironmentEntry{
+func unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(v *EnvironmentEntryResponseBody) *types.EnvironmentEntry {
+	res := &types.EnvironmentEntry{
 		Name:      *v.Name,
 		Value:     *v.Value,
 		CreatedAt: *v.CreatedAt,

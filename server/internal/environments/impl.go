@@ -58,7 +58,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvironmentPayload) (*gen.Environment, error) {
+func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvironmentPayload) (*types.Environment, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -95,9 +95,9 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create environment entries").Log(ctx, s.logger)
 	}
 
-	entries := make([]*gen.EnvironmentEntry, len(payload.Entries))
+	entries := make([]*types.EnvironmentEntry, len(payload.Entries))
 	for i, entry := range rows {
-		entries[i] = &gen.EnvironmentEntry{
+		entries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
@@ -105,7 +105,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		}
 	}
 
-	return &gen.Environment{
+	return &types.Environment{
 		ID:             environment.ID.String(),
 		OrganizationID: environment.OrganizationID,
 		ProjectID:      environment.ProjectID.String(),
@@ -129,16 +129,16 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environments").Log(ctx, s.logger)
 	}
 
-	var result []*gen.Environment
+	var result []*types.Environment
 	for _, environment := range environments {
 		entries, err := s.entries.ListEnvironmentEntries(ctx, environment.ID, true)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 		}
 
-		var genEntries []*gen.EnvironmentEntry
+		var genEntries []*types.EnvironmentEntry
 		for _, entry := range entries {
-			genEntries = append(genEntries, &gen.EnvironmentEntry{
+			genEntries = append(genEntries, &types.EnvironmentEntry{
 				Name:      entry.Name,
 				Value:     entry.Value,
 				CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
@@ -146,7 +146,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 			})
 		}
 
-		result = append(result, &gen.Environment{
+		result = append(result, &types.Environment{
 			ID:             environment.ID.String(),
 			OrganizationID: environment.OrganizationID,
 			ProjectID:      environment.ProjectID.String(),
@@ -163,7 +163,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 
 }
 
-func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvironmentPayload) (*gen.Environment, error) {
+func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvironmentPayload) (*types.Environment, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -224,9 +224,9 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 	}
 
-	genEntries := make([]*gen.EnvironmentEntry, len(entries))
+	genEntries := make([]*types.EnvironmentEntry, len(entries))
 	for i, entry := range entries {
-		genEntries[i] = &gen.EnvironmentEntry{
+		genEntries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
@@ -234,7 +234,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
-	return &gen.Environment{
+	return &types.Environment{
 		ID:             environment.ID.String(),
 		OrganizationID: environment.OrganizationID,
 		ProjectID:      environment.ProjectID.String(),

@@ -105,9 +105,9 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
 	}
 
-	genEntries := make([]*gen.EnvironmentEntry, len(environmentEntries))
+	genEntries := make([]*types.EnvironmentEntry, len(environmentEntries))
 	for i, entry := range environmentEntries {
-		genEntries[i] = &gen.EnvironmentEntry{
+		genEntries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
@@ -115,7 +115,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		}
 	}
 
-	environment := &gen.Environment{
+	environment := &types.Environment{
 		ID:             envModel.ID.String(),
 		OrganizationID: envModel.OrganizationID,
 		ProjectID:      envModel.ProjectID.String(),
@@ -127,9 +127,9 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		UpdatedAt:      envModel.UpdatedAt.Time.Format(time.RFC3339),
 	}
 
-	httpTools := make([]*gen.HTTPToolDefinition, len(toolset.HTTPTools))
+	httpTools := make([]*types.HTTPToolDefinition, len(toolset.HTTPTools))
 	for i, tool := range toolset.HTTPTools {
-		httpTools[i] = &gen.HTTPToolDefinition{
+		httpTools[i] = &types.HTTPToolDefinition{
 			ID:                  tool.ID,
 			ProjectID:           tool.ProjectID,
 			DeploymentID:        tool.DeploymentID,

@@ -3,10 +3,8 @@ package tools
 import (
 	. "goa.design/goa/v3/dsl"
 
-	"github.com/speakeasy-api/gram/design/environments"
 	"github.com/speakeasy-api/gram/design/security"
 	"github.com/speakeasy-api/gram/design/shared"
-	"github.com/speakeasy-api/gram/design/tools"
 )
 
 var _ = Service("instances", func() {
@@ -52,8 +50,8 @@ var GetInstanceForm = Type("GetInstanceForm", func() {
 var GetInstanceResult = Type("GetInstanceResult", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "The description of the toolset")
-	Attribute("tools", ArrayOf(tools.HTTPToolDefinition), "The list of tools")
+	Attribute("tools", ArrayOf(shared.HTTPToolDefinition), "The list of tools")
 	Attribute("relevant_environment_variables", ArrayOf(String), "The environment variables that are relevant to the toolset")
-	Attribute("environment", environments.Environment, "The environment")
+	Attribute("environment", shared.Environment, "The environment")
 	Required("name", "tools", "environment")
 })

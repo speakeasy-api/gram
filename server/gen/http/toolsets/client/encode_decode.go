@@ -101,7 +101,7 @@ func DecodeCreateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 			if err != nil {
 				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
 			}
-			res := NewCreateToolsetToolsetDetailsOK(&body)
+			res := NewCreateToolsetToolsetOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -576,7 +576,7 @@ func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 			if err != nil {
 				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
 			}
-			res := NewUpdateToolsetToolsetDetailsOK(&body)
+			res := NewUpdateToolsetToolsetOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1037,7 +1037,7 @@ func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			if err != nil {
 				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
 			}
-			res := NewGetToolsetToolsetDetailsOK(&body)
+			res := NewGetToolsetToolsetOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1193,11 +1193,11 @@ func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
-// unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition builds a
-// value of type *toolsets.HTTPToolDefinition from a value of type
+// unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition builds a
+// value of type *types.HTTPToolDefinition from a value of type
 // *HTTPToolDefinitionResponseBody.
-func unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *toolsets.HTTPToolDefinition {
-	res := &toolsets.HTTPToolDefinition{
+func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
+	res := &types.HTTPToolDefinition{
 		ID:                  *v.ID,
 		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
@@ -1224,11 +1224,10 @@ func unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(v *HTTP
 	return res
 }
 
-// unmarshalToolsetDetailsResponseBodyToToolsetsToolsetDetails builds a value
-// of type *toolsets.ToolsetDetails from a value of type
-// *ToolsetDetailsResponseBody.
-func unmarshalToolsetDetailsResponseBodyToToolsetsToolsetDetails(v *ToolsetDetailsResponseBody) *toolsets.ToolsetDetails {
-	res := &toolsets.ToolsetDetails{
+// unmarshalToolsetResponseBodyToTypesToolset builds a value of type
+// *types.Toolset from a value of type *ToolsetResponseBody.
+func unmarshalToolsetResponseBodyToTypesToolset(v *ToolsetResponseBody) *types.Toolset {
+	res := &types.Toolset{
 		ID:             *v.ID,
 		ProjectID:      *v.ProjectID,
 		OrganizationID: *v.OrganizationID,
@@ -1248,9 +1247,9 @@ func unmarshalToolsetDetailsResponseBodyToToolsetsToolsetDetails(v *ToolsetDetai
 			res.RelevantEnvironmentVariables[i] = val
 		}
 	}
-	res.HTTPTools = make([]*toolsets.HTTPToolDefinition, len(v.HTTPTools))
+	res.HTTPTools = make([]*types.HTTPToolDefinition, len(v.HTTPTools))
 	for i, val := range v.HTTPTools {
-		res.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToToolsetsHTTPToolDefinition(val)
+		res.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
 	}
 
 	return res

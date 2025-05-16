@@ -943,8 +943,8 @@ func NewUpdateEnvironmentRequestBody(p *environments.UpdateEnvironmentPayload) *
 
 // NewCreateEnvironmentEnvironmentOK builds a "environments" service
 // "createEnvironment" endpoint result from a HTTP "OK" response.
-func NewCreateEnvironmentEnvironmentOK(body *CreateEnvironmentResponseBody) *environments.Environment {
-	v := &environments.Environment{
+func NewCreateEnvironmentEnvironmentOK(body *CreateEnvironmentResponseBody) *types.Environment {
+	v := &types.Environment{
 		ID:             *body.ID,
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
@@ -954,9 +954,9 @@ func NewCreateEnvironmentEnvironmentOK(body *CreateEnvironmentResponseBody) *env
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
-	v.Entries = make([]*environments.EnvironmentEntry, len(body.Entries))
+	v.Entries = make([]*types.EnvironmentEntry, len(body.Entries))
 	for i, val := range body.Entries {
-		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToEnvironmentsEnvironmentEntry(val)
+		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
 	}
 
 	return v
@@ -1116,9 +1116,9 @@ func NewCreateEnvironmentGatewayError(body *CreateEnvironmentGatewayErrorRespons
 // "listEnvironments" endpoint result from a HTTP "OK" response.
 func NewListEnvironmentsResultOK(body *ListEnvironmentsResponseBody) *environments.ListEnvironmentsResult {
 	v := &environments.ListEnvironmentsResult{}
-	v.Environments = make([]*environments.Environment, len(body.Environments))
+	v.Environments = make([]*types.Environment, len(body.Environments))
 	for i, val := range body.Environments {
-		v.Environments[i] = unmarshalEnvironmentResponseBodyToEnvironmentsEnvironment(val)
+		v.Environments[i] = unmarshalEnvironmentResponseBodyToTypesEnvironment(val)
 	}
 
 	return v
@@ -1276,8 +1276,8 @@ func NewListEnvironmentsGatewayError(body *ListEnvironmentsGatewayErrorResponseB
 
 // NewUpdateEnvironmentEnvironmentOK builds a "environments" service
 // "updateEnvironment" endpoint result from a HTTP "OK" response.
-func NewUpdateEnvironmentEnvironmentOK(body *UpdateEnvironmentResponseBody) *environments.Environment {
-	v := &environments.Environment{
+func NewUpdateEnvironmentEnvironmentOK(body *UpdateEnvironmentResponseBody) *types.Environment {
+	v := &types.Environment{
 		ID:             *body.ID,
 		OrganizationID: *body.OrganizationID,
 		ProjectID:      *body.ProjectID,
@@ -1287,9 +1287,9 @@ func NewUpdateEnvironmentEnvironmentOK(body *UpdateEnvironmentResponseBody) *env
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
-	v.Entries = make([]*environments.EnvironmentEntry, len(body.Entries))
+	v.Entries = make([]*types.EnvironmentEntry, len(body.Entries))
 	for i, val := range body.Entries {
-		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToEnvironmentsEnvironmentEntry(val)
+		v.Entries[i] = unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(val)
 	}
 
 	return v
