@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
@@ -25,6 +26,10 @@ func NewKeyAuth(db *pgxpool.Pool) *ByKey {
 func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []string) (context.Context, error) {
 	if key == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if len(key) >= len("bearer ") && strings.ToLower(key[:len("bearer ")]) == "bearer " {
+		key = key[len("bearer "):]
 	}
 
 	apiKey, err := k.keyDB.GetAPIKeyByToken(ctx, key)
