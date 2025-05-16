@@ -48,11 +48,11 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useServeImage } from "@gram/client/react-query/assetsServeImage.js";
+import { useSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
 
 export function Example() {
-  const { data, error, status } = useServeImage({
-    id: "<id>",
+  const { data, error, status } = useSlackSlackLogin({
+    projectSlug: "<value>",
   });
 
   // Render the UI here...
@@ -66,13 +66,13 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useServeImage } from "@gram/client/react-query/assetsServeImage.js";
+import { useSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useServeImage(
+  const { data, error, status } = useSlackSlackLogin(
     {
-      id: "<id>",
+      projectSlug: "<value>",
     },
     {
       // TanStack Query options:
@@ -110,10 +110,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUploadImageMutation } from "@gram/client/react-query/assetsUploadImage.js";
+import { useMcpMcpNumberServeMutation } from "@gram/client/react-query/mcpMcpNumberServe.js";
 
 export function Example() {
-  const { mutate, status } = useUploadImageMutation();
+  const { mutate, status } = useMcpMcpNumberServeMutation();
 
   return (
     <form
@@ -123,7 +123,9 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          contentLength: 461855,
+          project: "<value>",
+          toolset: "<value>",
+          environment: "<value>",
         });
       }}
     >
@@ -140,10 +142,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUploadImageMutation } from "@gram/client/react-query/assetsUploadImage.js";
+import { useMcpMcpNumberServeMutation } from "@gram/client/react-query/mcpMcpNumberServe.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useUploadImageMutation({
+  const { mutate, status } = useMcpMcpNumberServeMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -175,7 +177,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateServeImage, invalidateAllServeImage } from "@gram/client/react-query/assetsServeImage.js";
+import { invalidateSlackSlackLogin, invalidateAllSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/client/react-query/example.js";
 
@@ -193,9 +195,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateServeImage(queryClient, /* ... arguments ... */);
+            invalidateSlackSlackLogin(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllServeImage(queryClient);
+            invalidateAllSlackSlackLogin(queryClient);
           },
         });
       }}
@@ -223,7 +225,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
-import { useServeImageSuspense } from "@gram/client/react-query/assetsServeImage.js";
+import { useSlackSlackLoginSuspense } from "@gram/client/react-query/slackSlackLogin.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore();
@@ -256,8 +258,8 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useServeImageSuspense({
-    id: "<id>",
+  const { data } = useSlackSlackLoginSuspense({
+    projectSlug: "<value>",
   });
 
   // Render the UI here...
@@ -278,14 +280,14 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/client";
-import { prefetchServeImage } from "@gram/client/react-query/assetsServeImage.js";
+import { prefetchSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
   const gram = new GramCore();
 
-  await prefetchServeImage(queryClient, gram, {
-    id: "<id>",
+  await prefetchSlackSlackLogin(queryClient, gram, {
+    projectSlug: "<value>",
   });
 
   return (

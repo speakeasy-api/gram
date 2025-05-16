@@ -84,7 +84,7 @@ run();
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## info
@@ -183,7 +183,7 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## login
@@ -252,7 +252,7 @@ run();
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## logout
@@ -340,7 +340,7 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## switchScopes
@@ -428,5 +428,5 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |

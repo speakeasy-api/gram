@@ -10,7 +10,7 @@ import { Type } from "@/components/ui/type";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { ToolsetDetails } from "@gram/client/models/components";
+import { Toolset } from "@gram/client/models/components";
 import {
   useCreateToolsetMutation,
   useListToolsetsSuspense,
@@ -128,7 +128,7 @@ export function CreateThingCard({
   );
 }
 
-function ToolsetCard({ toolset }: { toolset: ToolsetDetails }) {
+function ToolsetCard({ toolset }: { toolset: Toolset }) {
   const routes = useRoutes();
 
   return (

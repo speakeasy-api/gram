@@ -1,23 +1,23 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 15a58e65e110c204ecd896069ecf3dea
+  docChecksum: 302b1819995759caaa5fe0e9ed259517
   docVersion: 0.0.1
-  speakeasyVersion: 1.543.1
-  generationVersion: 2.598.21
-  releaseVersion: 0.11.2
-  configChecksum: 67141ee8a077ad4359183e61257b5d24
+  speakeasyVersion: 1.546.1
+  generationVersion: 2.604.2
+  releaseVersion: 0.11.3
+  configChecksum: ce5decb7d36b432a4ff5f74a08033e9c
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.7
+    core: 3.21.8
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
-    globalServerURLs: 2.82.4
+    globalServerURLs: 2.82.5
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -64,6 +64,7 @@ generatedFiles:
   - docs/models/components/getinstanceresult.md
   - docs/models/components/getintegrationresult.md
   - docs/models/components/getlatestdeploymentresult.md
+  - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
@@ -91,10 +92,11 @@ generatedFiles:
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
   - docs/models/components/toolentry.md
-  - docs/models/components/toolsetdetails.md
+  - docs/models/components/toolset.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatepackageform.md
   - docs/models/components/updatepackageresult.md
+  - docs/models/components/updateslackconnectionrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
   - docs/models/components/uploadimageresult.md
   - docs/models/components/uploadopenapiv3result.md
@@ -121,6 +123,8 @@ generatedFiles:
   - docs/models/operations/createtoolsetsecurity.md
   - docs/models/operations/deleteenvironmentrequest.md
   - docs/models/operations/deleteenvironmentsecurity.md
+  - docs/models/operations/deleteslackconnectionrequest.md
+  - docs/models/operations/deleteslackconnectionsecurity.md
   - docs/models/operations/deletetoolsetrequest.md
   - docs/models/operations/deletetoolsetsecurity.md
   - docs/models/operations/evolvedeploymentrequest.md
@@ -139,6 +143,8 @@ generatedFiles:
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md
   - docs/models/operations/getlatestdeploymentsecurityoption2.md
+  - docs/models/operations/getslackconnectionrequest.md
+  - docs/models/operations/getslackconnectionsecurity.md
   - docs/models/operations/gettoolsetrequest.md
   - docs/models/operations/gettoolsetsecurity.md
   - docs/models/operations/integrationsnumbergetrequest.md
@@ -174,6 +180,9 @@ generatedFiles:
   - docs/models/operations/logoutrequest.md
   - docs/models/operations/logoutresponse.md
   - docs/models/operations/logoutsecurity.md
+  - docs/models/operations/mcpnumberserverequest.md
+  - docs/models/operations/mcpnumberserveresponse.md
+  - docs/models/operations/mcpnumberservesecurity.md
   - docs/models/operations/publishrequest.md
   - docs/models/operations/publishsecurity.md
   - docs/models/operations/publishsecurityoption1.md
@@ -186,6 +195,11 @@ generatedFiles:
   - docs/models/operations/sessioninforequest.md
   - docs/models/operations/sessioninforesponse.md
   - docs/models/operations/sessioninfosecurity.md
+  - docs/models/operations/slackcallbackrequest.md
+  - docs/models/operations/slackcallbackresponse.md
+  - docs/models/operations/slackloginrequest.md
+  - docs/models/operations/slackloginresponse.md
+  - docs/models/operations/slackloginsecurity.md
   - docs/models/operations/switchauthscopesrequest.md
   - docs/models/operations/switchauthscopesresponse.md
   - docs/models/operations/switchauthscopessecurity.md
@@ -196,6 +210,8 @@ generatedFiles:
   - docs/models/operations/updatepackagesecurity.md
   - docs/models/operations/updatepackagesecurityoption1.md
   - docs/models/operations/updatepackagesecurityoption2.md
+  - docs/models/operations/updateslackconnectionrequest.md
+  - docs/models/operations/updateslackconnectionsecurity.md
   - docs/models/operations/updatetoolsetrequest.md
   - docs/models/operations/updatetoolsetsecurity.md
   - docs/models/operations/uploadimagerequest.md
@@ -215,8 +231,10 @@ generatedFiles:
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
+  - docs/sdks/mcp/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
+  - docs/sdks/slack/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
   - eslint.config.mjs
@@ -248,6 +266,7 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
+  - src/funcs/mcpMcpNumberServe.ts
   - src/funcs/packagesCreate.ts
   - src/funcs/packagesList.ts
   - src/funcs/packagesListVersions.ts
@@ -255,6 +274,11 @@ generatedFiles:
   - src/funcs/packagesUpdate.ts
   - src/funcs/projectsCreate.ts
   - src/funcs/projectsList.ts
+  - src/funcs/slackDeleteSlackConnection.ts
+  - src/funcs/slackGetSlackConnection.ts
+  - src/funcs/slackSlackCallback.ts
+  - src/funcs/slackSlackLogin.ts
+  - src/funcs/slackUpdateSlackConnection.ts
   - src/funcs/toolsList.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
@@ -309,6 +333,7 @@ generatedFiles:
   - src/models/components/getinstanceresult.ts
   - src/models/components/getintegrationresult.ts
   - src/models/components/getlatestdeploymentresult.ts
+  - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
@@ -336,10 +361,11 @@ generatedFiles:
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
   - src/models/components/toolentry.ts
-  - src/models/components/toolsetdetails.ts
+  - src/models/components/toolset.ts
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatepackageform.ts
   - src/models/components/updatepackageresult.ts
+  - src/models/components/updateslackconnectionrequestbody.ts
   - src/models/components/updatetoolsetrequestbody.ts
   - src/models/components/uploadimageresult.ts
   - src/models/components/uploadopenapiv3result.ts
@@ -357,11 +383,13 @@ generatedFiles:
   - src/models/operations/createproject.ts
   - src/models/operations/createtoolset.ts
   - src/models/operations/deleteenvironment.ts
+  - src/models/operations/deleteslackconnection.ts
   - src/models/operations/deletetoolset.ts
   - src/models/operations/evolvedeployment.ts
   - src/models/operations/getdeployment.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
+  - src/models/operations/getslackconnection.ts
   - src/models/operations/gettoolset.ts
   - src/models/operations/index.ts
   - src/models/operations/integrationsnumberget.ts
@@ -377,13 +405,17 @@ generatedFiles:
   - src/models/operations/listversions.ts
   - src/models/operations/loadchat.ts
   - src/models/operations/logout.ts
+  - src/models/operations/mcpnumberserve.ts
   - src/models/operations/publish.ts
   - src/models/operations/revokeapikey.ts
   - src/models/operations/serveimage.ts
   - src/models/operations/sessioninfo.ts
+  - src/models/operations/slackcallback.ts
+  - src/models/operations/slacklogin.ts
   - src/models/operations/switchauthscopes.ts
   - src/models/operations/updateenvironment.ts
   - src/models/operations/updatepackage.ts
+  - src/models/operations/updateslackconnection.ts
   - src/models/operations/updatetoolset.ts
   - src/models/operations/uploadimage.ts
   - src/models/operations/uploadopenapiv3asset.ts
@@ -396,9 +428,11 @@ generatedFiles:
   - src/react-query/createProject.ts
   - src/react-query/createToolset.ts
   - src/react-query/deleteEnvironment.ts
+  - src/react-query/deleteSlackConnection.ts
   - src/react-query/deleteToolset.ts
   - src/react-query/deployment.ts
   - src/react-query/evolveDeployment.ts
+  - src/react-query/getSlackConnection.ts
   - src/react-query/index.ts
   - src/react-query/instance.ts
   - src/react-query/integrationsIntegrationsNumberGet.ts
@@ -415,6 +449,7 @@ generatedFiles:
   - src/react-query/listVersions.ts
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
+  - src/react-query/mcpMcpNumberServe.ts
   - src/react-query/publishPackage.ts
   - src/react-query/revokeAPIKey.ts
   - src/react-query/serveImage.ts
@@ -423,6 +458,7 @@ generatedFiles:
   - src/react-query/toolset.ts
   - src/react-query/updateEnvironment.ts
   - src/react-query/updatePackage.ts
+  - src/react-query/updateSlackConnection.ts
   - src/react-query/updateToolset.ts
   - src/react-query/uploadImage.ts
   - src/react-query/uploadOpenAPIv3.ts
@@ -435,9 +471,11 @@ generatedFiles:
   - src/sdk/instances.ts
   - src/sdk/integrations.ts
   - src/sdk/keys.ts
+  - src/sdk/mcp.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
   - src/sdk/sdk.ts
+  - src/sdk/slack.ts
   - src/sdk/tools.ts
   - src/sdk/toolsets.ts
   - src/types/async.ts
@@ -451,526 +489,67 @@ generatedFiles:
   - src/types/streams.ts
   - tsconfig.json
 examples:
-  assets#uploadOpenAPIv3:
-    speakeasy-default-assets#upload-open-AP-iv3:
-      parameters:
-        header:
-          Content-Length: 924456
-      requestBody:
-        '*/*': "x-file: example.file"
-      responses:
-        "200":
-          application/json: {"asset": {"content_length": 309292, "content_type": "<value>", "created_at": "2025-08-06T08:52:40.387Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-07T16:19:35.673Z", "url": "https://deafening-loaf.name"}}
-  auth#callback:
-    speakeasy-default-auth#callback:
-      parameters:
-        query:
-          shared_token: "<value>"
-  auth#info:
-    speakeasy-default-auth#info:
-      responses:
-        "200":
-          application/json: {"active_organization_id": "<id>", "organizations": [{"account_type": "<value>", "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "projects": [{"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}, {"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}, {"project_id": "<id>", "project_name": "<value>", "project_slug": "<value>"}]}], "user_email": "<value>", "user_id": "<id>"}
-  auth#logout: {}
-  auth#switchScopes: {}
-  deployments#addOpenAPIv3Source:
-    speakeasy-default-deployments#add-open-AP-iv3-source:
-      requestBody:
-        application/json: {"asset_id": "<id>", "name": "<value>", "slug": "<value>"}
-      responses:
-        "200":
-          application/json: {"deployment": {"created_at": "2025-06-05T00:59:43.463Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
-  deployments#createDeployment:
-    "":
-      parameters:
-        header:
-          Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
-      requestBody:
-        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
-      responses:
-        "200":
-          application/json: {"deployment": {"created_at": "2024-01-18T04:57:23.652Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
-  deployments#getDeployment:
-    speakeasy-default-deployments#get-deployment:
-      parameters:
-        query:
-          id: "<id>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-04-28T00:14:36.618Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
-  deployments#listDeployments:
-    speakeasy-default-deployments#list-deployments:
-      responses:
-        "200":
-          application/json: {"items": [{"asset_count": 456392, "created_at": "2025-06-24T06:00:13.351Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
-  environments#createEnvironment:
-    speakeasy-default-environments#create-environment:
-      requestBody:
-        application/json: {"entries": [], "name": "<value>", "organization_id": "<id>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2024-12-08T14:08:22.081Z", "entries": [{"created_at": "2025-08-12T14:04:12.312Z", "name": "<value>", "updated_at": "2024-09-24T01:28:36.076Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-01-27T21:16:48.167Z"}
-  environments#deleteEnvironment:
-    speakeasy-default-environments#delete-environment:
+  mcp#serve:
+    speakeasy-default-mcp#serve:
       parameters:
         path:
-          slug: "<value>"
-        header: {}
-  environments#listEnvironments:
-    speakeasy-default-environments#list-environments:
+          project: "<value>"
+          toolset: "<value>"
+          environment: "<value>"
       responses:
         "200":
-          application/json: {"environments": [{"created_at": "2023-04-09T09:12:47.380Z", "entries": [{"created_at": "2025-10-02T09:18:08.014Z", "name": "<value>", "updated_at": "2024-02-21T19:19:10.126Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-07T04:05:23.413Z"}]}
-  environments#updateEnvironment:
-    speakeasy-default-environments#update-environment:
-      parameters:
-        path:
-          slug: "<value>"
-        header: {}
-      requestBody:
-        application/json: {"entries_to_remove": ["<value>"], "entries_to_update": []}
-      responses:
-        "200":
-          application/json: {"created_at": "2023-08-07T22:29:01.687Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-05-25T04:22:07.250Z"}
-  instances#loadInstance:
-    speakeasy-default-instances#load-instance:
-      parameters:
-        query:
-          toolset_slug: "<value>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"environment": {"created_at": "2023-07-31T19:02:18.027Z", "entries": [{"created_at": "2024-06-04T14:37:25.747Z", "name": "<value>", "updated_at": "2023-08-10T06:48:28.182Z", "value": "<value>"}, {"created_at": "2024-05-13T08:19:13.014Z", "name": "<value>", "updated_at": "2024-04-23T11:43:05.947Z", "value": "<value>"}, {"created_at": "2023-12-20T05:46:23.123Z", "name": "<value>", "updated_at": "2024-08-03T16:29:36.656Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-25T14:32:40.435Z"}, "name": "<value>", "tools": [{"created_at": "2025-06-14T23:33:47.853Z", "deployment_id": "<id>", "description": "whopping pro victoriously provided zowie confound habit", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2024-10-22T20:00:15.335Z"}, {"created_at": "2023-07-08T16:52:36.181Z", "deployment_id": "<id>", "description": "powerless modulo happily violently gah provided daily", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/srv", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-06-22T07:26:27.262Z"}]}
-  keys#createKey:
-    speakeasy-default-keys#create-key:
-      requestBody:
-        application/json: {"name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2023-02-04T15:44:05.452Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2025-10-26T04:54:37.718Z"}
-  keys#listKeys:
-    speakeasy-default-keys#list-keys:
-      responses:
-        "200":
-          application/json: {"keys": [{"created_at": "2025-01-16T17:32:25.648Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>", "<value>"], "token": "<value>", "updated_at": "2023-04-03T20:02:04.409Z"}]}
-  keys#revokeKey:
-    speakeasy-default-keys#revoke-key:
-      parameters:
-        path:
-          id: "<id>"
-        header: {}
-  tools#listTools:
-    speakeasy-default-tools#list-tools:
-      responses:
-        "200":
-          application/json: {"tools": [{"created_at": "2023-06-14T22:04:15.509Z", "deployment_id": "<id>", "description": "rubric while smoothly unless yeast", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-29T20:57:29.586Z"}]}
-  toolsets#createToolset:
-    speakeasy-default-toolsets#create-toolset:
-      requestBody:
-        application/json: {"name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-01-31T23:54:16.910Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-23T20:15:31.508Z"}
-  toolsets#deleteToolset:
-    speakeasy-default-toolsets#delete-toolset:
-      parameters:
-        path:
-          slug: "<value>"
-        header: {}
-  toolsets#getToolsetDetails:
-    speakeasy-default-toolsets#get-toolset-details:
-      parameters:
-        path:
-          slug: "<value>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2024-04-05T12:22:08.877Z", "http_tools": [{"created_at": "2025-06-30T15:43:44.156Z", "deployment_id": "<id>", "description": "cook jellyfish perspire until embossing er offensively as uselessly", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/share", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2024-12-06T23:51:20.681Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-26T16:46:42.146Z"}
-  toolsets#listToolsets:
-    speakeasy-default-toolsets#list-toolsets:
-      responses:
-        "200":
-          application/json: {"toolsets": []}
-  toolsets#updateToolset:
-    speakeasy-default-toolsets#update-toolset:
-      parameters:
-        path:
-          slug: "<value>"
-        header: {}
-      requestBody:
-        application/json: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2023-10-11T13:18:21.498Z", "http_tools": [{"created_at": "2023-10-03T01:38:33.695Z", "deployment_id": "<id>", "description": "energetically under an pish", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Applications", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-28T13:20:29.259Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-06T02:30:28.396Z"}
-  uploadOpenAPIv3Asset:
-    speakeasy-default-upload-open-AP-iv3-asset:
-      parameters:
-        header:
-          Content-Length: 342044
-      responses:
-        "200":
-          application/json: {"asset": {"content_length": 980702, "content_type": "<value>", "created_at": "2023-05-05T02:34:33.347Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-07-21T22:57:42.919Z"}}
+          application/json: "x-file: example.file"
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  slackLogin:
+    speakeasy-default-slack-login:
+      parameters:
+        path:
+          project_slug: "<value>"
+        header: {}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  authCallback:
-    speakeasy-default-auth-callback:
+  slackCallback:
+    speakeasy-default-slack-callback:
       parameters:
         query:
-          shared_token: "<value>"
-          id_token: "<value>"
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  sessionInfo:
-    speakeasy-default-session-info:
-      responses:
-        "200":
-          application/json: {"active_organization_id": "<id>", "is_admin": true, "organizations": [], "user_email": "<value>", "user_id": "<id>"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  logout:
-    speakeasy-default-logout:
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  switchAuthScopes:
-    speakeasy-default-switch-auth-scopes:
+          state: "Colorado"
+          code: "<value>"
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  addOpenAPIv3ToDeployment:
-    speakeasy-default-add-open-AP-iv3-to-deployment:
-      requestBody:
-        application/json: {"asset_id": "<id>", "name": "<value>", "slug": "<value>"}
+  deleteSlackConnection:
+    speakeasy-default-delete-slack-connection:
       responses:
-        "200":
-          application/json: {"deployment": {"created_at": "2024-08-21T13:39:22.662Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
-  createDeployment:
-    "":
-      parameters:
-        header:
-          Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
-      requestBody:
-        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
-      responses:
-        "200":
-          application/json: {"deployment": {"created_at": "2024-06-17T07:14:55.338Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getSlackConnection:
+    speakeasy-default-get-slack-connection:
+      responses:
+        "200":
+          application/json: {"created_at": "2023-03-09T08:39:00.721Z", "default_toolset_slug": "<value>", "slack_team_id": "<id>", "slack_team_name": "<value>", "updated_at": "2024-12-17T08:06:32.757Z"}
+        "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getDeployment:
-    speakeasy-default-get-deployment:
-      parameters:
-        query:
-          id: "<id>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2023-10-30T17:38:07.047Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  listDeployments:
-    speakeasy-default-list-deployments:
-      responses:
-        "200":
-          application/json: {"items": [{"asset_count": 547272, "created_at": "2025-01-13T10:26:00.433Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}, {"asset_count": 177706, "created_at": "2023-09-09T18:28:08.953Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}, {"asset_count": 152837, "created_at": "2024-11-27T13:02:27.296Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createEnvironment:
-    speakeasy-default-create-environment:
-      requestBody:
-        application/json: {"entries": [{"name": "<value>", "value": "<value>"}], "name": "<value>", "organization_id": "<id>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2024-11-30T17:06:07.804Z", "entries": [{"created_at": "2023-05-28T06:20:22.766Z", "name": "<value>", "updated_at": "2023-03-17T15:39:20.911Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-05-22T22:27:14.379Z"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  deleteEnvironment:
-    speakeasy-default-delete-environment:
-      parameters:
-        path:
-          slug: "<value>"
-        query:
-          slug: "<value>"
-        header: {}
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listEnvironments:
-    speakeasy-default-list-environments:
-      responses:
-        "200":
-          application/json: {"environments": [{"created_at": "2024-08-22T19:26:20.850Z", "entries": [{"created_at": "2023-07-14T18:23:27.528Z", "name": "<value>", "updated_at": "2023-09-09T18:28:08.953Z", "value": "<value>"}, {"created_at": "2023-06-17T12:14:27.999Z", "name": "<value>", "updated_at": "2024-11-27T13:02:27.296Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-01T18:25:37.169Z"}, {"created_at": "2023-01-20T06:21:22.156Z", "entries": [{"created_at": "2023-04-05T09:49:38.010Z", "name": "<value>", "updated_at": "2023-03-17T01:57:00.187Z", "value": "<value>"}, {"created_at": "2025-01-24T00:05:25.844Z", "name": "<value>", "updated_at": "2024-07-12T19:57:33.016Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-25T18:23:24.264Z"}, {"created_at": "2023-01-09T04:26:27.312Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-08T01:09:52.088Z"}]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  updateEnvironment:
-    speakeasy-default-update-environment:
-      parameters:
-        path:
-          slug: "<value>"
-        query:
-          slug: "<value>"
-        header: {}
+  updateSlackConnection:
+    speakeasy-default-update-slack-connection:
       requestBody:
-        application/json: {"entries_to_remove": [], "entries_to_update": []}
+        application/json: {"default_toolset_slug": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-04-22T23:31:14.301Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-03-31T22:01:21.951Z"}
+          application/json: {"created_at": "2024-12-27T19:09:56.313Z", "default_toolset_slug": "<value>", "slack_team_id": "<id>", "slack_team_name": "<value>", "updated_at": "2024-04-10T07:55:45.666Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  loadInstance:
-    speakeasy-default-load-instance:
-      parameters:
-        query:
-          toolset_slug: "<value>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"environment": {"created_at": "2025-04-30T10:11:49.833Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-07-22T09:00:14.525Z"}, "name": "<value>", "tools": [{"created_at": "2025-04-27T15:39:41.657Z", "deployment_id": "<id>", "description": "qua ew whitewash", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/Library", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2025-04-14T01:05:16.425Z"}, {"created_at": "2023-11-25T13:02:35.894Z", "deployment_id": "<id>", "description": "steeple randomize uh-huh heartfelt sweetly yippee rim shadowbox not specific", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/X11R6", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2025-06-11T15:26:29.539Z"}]}
-  createAPIKey:
-    speakeasy-default-create-API-key:
-      requestBody:
-        application/json: {"name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2024-06-17T07:14:55.338Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>"], "token": "<value>", "updated_at": "2024-04-02T12:48:32.253Z"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  listAPIKeys:
-    speakeasy-default-list-API-keys:
-      responses:
-        "200":
-          application/json: {"keys": [{"created_at": "2024-08-22T19:26:20.850Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value>", "<value>"], "token": "<value>", "updated_at": "2023-07-14T18:23:27.528Z"}, {"created_at": "2023-09-09T18:28:08.953Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2024-11-27T13:02:27.296Z"}, {"created_at": "2024-12-01T18:25:37.169Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": [], "token": "<value>", "updated_at": "2025-02-26T06:14:46.641Z"}]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  revokeAPIKey:
-    speakeasy-default-revoke-API-key:
-      parameters:
-        path:
-          id: "<id>"
-        query:
-          id: "<id>"
-        header: {}
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listTools:
-    speakeasy-default-list-tools:
-      responses:
-        "200":
-          application/json: {"tools": [{"created_at": "2024-08-22T19:26:20.850Z", "deploymentId": "<id>", "description": "that bah since zowie loudly aha although gosh whenever", "httpMethod": "<value>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "path": "/usr/libexec", "summary": "<value>"}, {"created_at": "2025-07-06T02:51:23.749Z", "deploymentId": "<id>", "description": "beneath meanwhile synthesise angrily", "httpMethod": "<value>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "path": "/root", "summary": "<value>"}, {"created_at": "2023-04-20T19:52:18.966Z", "deploymentId": "<id>", "description": "kindheartedly nor fooey a supposing regarding times uselessly", "httpMethod": "<value>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "path": "/usr", "summary": "<value>"}]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createToolset:
-    speakeasy-default-create-toolset:
-      requestBody:
-        application/json: {"name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2024-06-17T07:14:55.338Z", "http_tools": [{"created_at": "2024-04-02T12:48:32.253Z", "deployment_id": "<id>", "description": "sweetly after boo yuck", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/rescue", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2024-12-24T00:15:46.309Z"}, {"created_at": "2024-08-26T07:54:28.842Z", "deployment_id": "<id>", "description": "up bulky electronics through for ick superb nudge embalm simple", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/var/yp", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-11-06T13:12:23.698Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-06-30T08:34:56.549Z"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  deleteToolset:
-    speakeasy-default-delete-toolset:
-      parameters:
-        path:
-          slug: "<value>"
-        query:
-          slug: "<value>"
-        header: {}
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  describeToolset:
-    speakeasy-default-describe-toolset:
-      parameters:
-        query:
-          slug: "<value>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-10-10T23:33:09.777Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-25T09:34:15.935Z"}
-  listToolsets:
-    speakeasy-default-list-toolsets:
-      responses:
-        "200":
-          application/json: {"toolsets": [{"created_at": "2024-08-22T19:26:20.850Z", "http_tools": [{"created_at": "2023-07-14T18:23:27.528Z", "deployment_id": "<id>", "description": "biodegrade miserably fedora blah", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/src", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2024-05-19T11:06:26.987Z"}, {"created_at": "2024-04-11T03:59:08.538Z", "deployment_id": "<id>", "description": "beside tromp worth reluctantly wound accompanist", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/local/src", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2025-05-02T01:42:40.060Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-07-08T07:59:15.466Z"}, {"created_at": "2025-11-05T16:19:50.933Z", "http_tools": [{"created_at": "2023-01-23T14:15:37.576Z", "deployment_id": "<id>", "description": "unless brightly for dead meh yippee", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-10-22T07:49:38.272Z"}, {"created_at": "2024-02-27T07:39:18.966Z", "deployment_id": "<id>", "description": "jump joyfully discourse merrily wherever failing orchestrate lest validity yuck", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/root", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2025-11-21T00:24:26.155Z"}, {"created_at": "2024-11-16T21:16:42.369Z", "deployment_id": "<id>", "description": "pish hence lowball", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/var/tmp", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2023-01-21T07:06:12.853Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-08-05T18:20:08.987Z"}, {"created_at": "2024-11-12T02:36:59.348Z", "http_tools": [{"created_at": "2025-08-19T10:34:27.488Z", "deployment_id": "<id>", "description": "likable widow less if cuckoo ack so gosh boohoo", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>"], "updated_at": "2024-05-24T09:19:28.400Z"}, {"created_at": "2025-01-08T00:53:45.951Z", "deployment_id": "<id>", "description": "save lively ouch till round meaningfully oddly dishonor", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>"], "updated_at": "2023-05-07T21:01:22.996Z"}, {"created_at": "2023-04-17T02:32:11.293Z", "deployment_id": "<id>", "description": "tomography how until", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/opt/include", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": [], "updated_at": "2025-12-11T13:56:50.064Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-08-27T12:00:34.207Z"}]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  updateToolset:
-    speakeasy-default-update-toolset:
-      parameters:
-        path:
-          slug: "<value>"
-        query:
-          slug: "<value>"
-        header: {}
-      requestBody:
-        application/json: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2023-08-29T14:25:47.167Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-04-22T23:31:14.301Z"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getInstance:
-    speakeasy-default-get-instance:
-      parameters:
-        query:
-          toolset_slug: "<value>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"environment": {"created_at": "2025-09-06T15:47:55.334Z", "entries": [{"created_at": "2023-10-17T17:29:24.836Z", "name": "<value>", "updated_at": "2023-05-13T16:40:27.328Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-09-10T09:37:31.701Z"}, "name": "<value>", "tools": []}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  getToolset:
-    speakeasy-default-get-toolset:
-      parameters:
-        query:
-          slug: "<value>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-09-06T15:47:55.334Z", "http_tools": [{"created_at": "2023-10-17T17:29:24.836Z", "deployment_id": "<id>", "description": "er since uniform", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/etc/namedb", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value>", "<value>", "<value>"], "updated_at": "2023-04-10T02:07:05.852Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-04-03T20:31:34.723Z"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  authLogin:
-    speakeasy-default-auth-login:
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  evolveDeployment:
-    speakeasy-default-evolve-deployment:
-      requestBody:
-        application/json: {}
-      responses:
-        "200":
-          application/json: {"deployment": {"created_at": "2024-12-30T07:56:41.751Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createProject:
-    speakeasy-default-create-project:
-      requestBody:
-        application/json: {"name": "<value>", "organization_id": "<id>"}
-      responses:
-        "200":
-          application/json: {"project": {"created_at": "2024-06-17T07:14:55.338Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2024-11-30T17:06:07.804Z"}}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  listProjects:
-    speakeasy-default-list-projects:
-      parameters:
-        query:
-          organization_id: "<id>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  getLatestDeployment:
-    speakeasy-default-get-latest-deployment:
-      responses:
-        "200":
-          application/json: {"deployment": {"created_at": "2023-09-04T19:36:52.690Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  createPackage:
-    speakeasy-default-create-package:
-      requestBody:
-        application/json: {"name": "<value>", "summary": "<value>", "title": "<value>"}
-      responses:
-        "200":
-          application/json: {"package": {"created_at": "2024-06-17T07:14:55.338Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-11-30T17:06:07.804Z"}}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  listVersions:
-    speakeasy-default-list-versions:
-      parameters:
-        query:
-          name: "<value>"
-        header: {}
-      responses:
-        "200":
-          application/json: {"package": {"created_at": "2023-04-16T04:47:43.839Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-01-01T08:22:37.739Z"}, "versions": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  publish:
-    speakeasy-default-publish:
-      requestBody:
-        application/json: {"deployment_id": "<id>", "name": "<value>", "version": "<value>", "visibility": "private"}
-      responses:
-        "200":
-          application/json: {"package": {"created_at": "2025-03-12T05:01:06.792Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2025-05-31T13:12:58.117Z"}, "version": {"created_at": "2023-06-02T13:12:45.469Z", "deployment_id": "<id>", "id": "<id>", "package_id": "<id>", "semver": "<value>", "visibility": "<value>"}}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  listIntegrations:
-    speakeasy-default-list-integrations:
-      responses:
-        "200":
-          application/json: {}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   serveImage:
@@ -983,52 +562,82 @@ examples:
         "200":
           application/json: "x-file: example.file"
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   uploadImage:
     speakeasy-default-upload-image:
       parameters:
         header:
-          Content-Length: 461855
+          Content-Length: 768839
       responses:
         "200":
-          application/json: {"asset": {"content_length": 456449, "content_type": "<value>", "created_at": "2024-01-26T17:57:26.765Z", "id": "<id>", "kind": "image", "sha256": "<value>", "updated_at": "2023-07-16T04:21:23.399Z"}}
+          application/json: {"asset": {"content_length": 13570, "content_type": "<value>", "created_at": "2024-09-16T20:22:24.939Z", "id": "<id>", "kind": "image", "sha256": "<value>", "updated_at": "2023-04-20T05:51:53.998Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  uploadOpenAPIv3Asset:
+    speakeasy-default-upload-open-AP-iv3-asset:
+      parameters:
+        header:
+          Content-Length: 513080
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 489001, "content_type": "<value>", "created_at": "2023-01-04T07:07:28.052Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-08-13T13:44:54.327Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  authCallback:
+    speakeasy-default-auth-callback:
+      parameters:
+        query:
+          id_token: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  sessionInfo:
+    speakeasy-default-session-info:
+      responses:
+        "200":
+          application/json: {"active_organization_id": "<id>", "is_admin": false, "organizations": [{"account_type": "<value>", "id": "<id>", "name": "<value>", "projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}], "slug": "<value>"}, {"account_type": "<value>", "id": "<id>", "name": "<value>", "projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}], "slug": "<value>"}], "user_email": "<value>", "user_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  authLogin:
+    speakeasy-default-auth-login:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  logout:
+    speakeasy-default-logout:
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  switchAuthScopes:
+    speakeasy-default-switch-auth-scopes:
+      responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  integrations#get:
-    speakeasy-default-integrations#get:
-      responses:
-        "200":
-          application/json: {}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  updatePackage:
-    speakeasy-default-update-package:
-      requestBody:
-        application/json: {"id": "<id>"}
-      responses:
-        "200":
-          application/json: {"package": {"created_at": "2025-07-28T19:04:48.565Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-10-16T10:52:42.015Z"}}
-        "304":
-          application/json: {"location": "<value>"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listChats:
     speakeasy-default-list-chats:
       responses:
         "200":
-          application/json: {"chats": [{"created_at": "2024-08-22T19:26:20.850Z", "id": "<id>", "num_messages": 678317, "title": "<value>", "updated_at": "2023-07-14T18:23:27.528Z", "user_id": "<id>"}, {"created_at": "2023-09-09T18:28:08.953Z", "id": "<id>", "num_messages": 152837, "title": "<value>", "updated_at": "2024-11-27T13:02:27.296Z", "user_id": "<id>"}, {"created_at": "2024-12-01T18:25:37.169Z", "id": "<id>", "num_messages": 17577, "title": "<value>", "updated_at": "2025-02-26T06:14:46.641Z", "user_id": "<id>"}]}
+          application/json: {"chats": [{"created_at": "2024-09-09T21:12:11.561Z", "id": "<id>", "num_messages": 448273, "title": "<value>", "updated_at": "2023-02-28T09:13:49.707Z", "user_id": "<id>"}, {"created_at": "2024-09-09T21:12:11.561Z", "id": "<id>", "num_messages": 448273, "title": "<value>", "updated_at": "2023-02-28T09:13:49.707Z", "user_id": "<id>"}, {"created_at": "2024-09-09T21:12:11.561Z", "id": "<id>", "num_messages": 448273, "title": "<value>", "updated_at": "2023-02-28T09:13:49.707Z", "user_id": "<id>"}]}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   loadChat:
     speakeasy-default-load-chat:
       parameters:
@@ -1037,19 +646,323 @@ examples:
         header: {}
       responses:
         "200":
-          application/json: {"created_at": "2025-04-30T10:11:49.833Z", "id": "<id>", "messages": [], "num_messages": 184649, "title": "<value>", "updated_at": "2024-08-27T23:25:16.656Z", "user_id": "<id>"}
+          application/json: {"created_at": "2024-04-09T14:22:10.370Z", "id": "<id>", "messages": [{"created_at": "2025-11-05T12:22:55.772Z", "id": "<id>", "model": "Aventador", "role": "<value>"}, {"created_at": "2025-11-05T12:22:55.772Z", "id": "<id>", "model": "Aventador", "role": "<value>"}, {"created_at": "2025-11-05T12:22:55.772Z", "id": "<id>", "model": "Aventador", "role": "<value>"}], "num_messages": 795032, "title": "<value>", "updated_at": "2024-03-05T16:47:00.180Z", "user_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createDeployment:
+    "":
+      parameters:
+        header:
+          Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
+      requestBody:
+        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  evolveDeployment:
+    speakeasy-default-evolve-deployment:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}, {"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+        "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getDeployment:
+    speakeasy-default-get-deployment:
+      parameters:
+        query:
+          id: "<id>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-09-04T09:09:38.559Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getLatestDeployment:
+    speakeasy-default-get-latest-deployment:
+      responses:
+        "200":
+          application/json: {"deployment": {"created_at": "2025-09-22T00:37:56.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}, {"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listDeployments:
+    speakeasy-default-list-deployments:
+      responses:
+        "200":
+          application/json: {"items": [{"asset_count": 585740, "created_at": "2023-05-14T18:10:51.662Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}, {"asset_count": 585740, "created_at": "2023-05-14T18:10:51.662Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createEnvironment:
+    speakeasy-default-create-environment:
+      requestBody:
+        application/json: {"entries": [{"name": "<value>", "value": "<value>"}, {"name": "<value>", "value": "<value>"}], "name": "<value>", "organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-09-29T21:34:47.183Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-10-03T03:38:55.120Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteEnvironment:
+    speakeasy-default-delete-environment:
+      parameters:
+        query:
+          slug: "<value>"
+        header: {}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listEnvironments:
+    speakeasy-default-list-environments:
+      responses:
+        "200":
+          application/json: {"environments": [{"created_at": "2025-04-18T18:30:33.217Z", "entries": [{"created_at": "2024-12-20T22:13:28.537Z", "name": "<value>", "updated_at": "2023-11-30T19:28:16.551Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-08-24T11:04:59.746Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateEnvironment:
+    speakeasy-default-update-environment:
+      parameters:
+        query:
+          slug: "<value>"
+        header: {}
+      requestBody:
+        application/json: {"entries_to_remove": ["<value 1>", "<value 2>", "<value 3>"], "entries_to_update": [{"name": "<value>", "value": "<value>"}, {"name": "<value>", "value": "<value>"}]}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-09-27T10:34:23.044Z", "entries": [{"created_at": "2025-06-21T06:24:41.158Z", "name": "<value>", "updated_at": "2023-02-27T01:13:08.139Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-09-25T02:23:44.590Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getInstance:
+    speakeasy-default-get-instance:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"environment": {"created_at": "2023-08-31T15:38:03.493Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-07T20:57:22.146Z"}, "name": "<value>", "tools": [{"confirm": "<value>", "created_at": "2023-01-13T05:35:45.061Z", "deployment_id": "<id>", "description": "affiliate fog intellect where into lender", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/bin", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2023-01-27T13:39:38.730Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  integrations#get:
+    speakeasy-default-integrations#get:
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listIntegrations:
+    speakeasy-default-list-integrations:
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createAPIKey:
+    speakeasy-default-create-API-key:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-10-19T09:53:48.522Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>"], "token": "<value>", "updated_at": "2024-01-24T08:50:30.713Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAPIKeys:
+    speakeasy-default-list-API-keys:
+      responses:
+        "200":
+          application/json: {"keys": [{"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "token": "<value>", "updated_at": "2025-04-06T09:22:03.296Z"}, {"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "token": "<value>", "updated_at": "2025-04-06T09:22:03.296Z"}, {"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "token": "<value>", "updated_at": "2025-04-06T09:22:03.296Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  revokeAPIKey:
+    speakeasy-default-revoke-API-key:
+      parameters:
+        query:
+          id: "<id>"
+        header: {}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createPackage:
+    speakeasy-default-create-package:
+      requestBody:
+        application/json: {"name": "<value>", "summary": "<value>", "title": "<value>"}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2025-07-15T00:29:38.461Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-10-16T10:37:04.897Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listPackages:
     speakeasy-default-list-packages:
       responses:
         "200":
-          application/json: {"packages": [{"created_at": "2024-08-22T19:26:20.850Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2025-01-13T10:26:00.433Z"}, {"created_at": "2023-07-14T18:23:27.528Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2023-09-09T18:28:08.953Z"}, {"created_at": "2023-06-17T12:14:27.999Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-11-27T13:02:27.296Z"}]}
+          application/json: {"packages": [{"created_at": "2023-05-15T22:08:45.456Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-03-09T18:17:59.879Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listVersions:
+    speakeasy-default-list-versions:
+      parameters:
+        query:
+          name: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2025-03-01T15:19:20.880Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2025-10-18T07:30:06.298Z"}, "versions": [{"created_at": "2023-07-06T11:09:18.383Z", "deployment_id": "<id>", "id": "<id>", "package_id": "<id>", "semver": "<value>", "visibility": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  publish:
+    speakeasy-default-publish:
+      requestBody:
+        application/json: {"deployment_id": "<id>", "name": "<value>", "version": "<value>", "visibility": "public"}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2025-08-27T23:49:32.761Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-07-11T19:31:19.174Z"}, "version": {"created_at": "2024-08-01T15:02:01.776Z", "deployment_id": "<id>", "id": "<id>", "package_id": "<id>", "semver": "<value>", "visibility": "<value>"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updatePackage:
+    speakeasy-default-update-package:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"package": {"created_at": "2025-02-07T02:48:57.228Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "updated_at": "2024-07-06T12:00:03.232Z"}}
+        "304":
+          application/json: {"location": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createProject:
+    speakeasy-default-create-project:
+      requestBody:
+        application/json: {"name": "<value>", "organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"project": {"created_at": "2025-09-16T05:40:38.689Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2023-11-21T01:08:19.051Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listProjects:
+    speakeasy-default-list-projects:
+      parameters:
+        query:
+          organization_id: "<id>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}, {"id": "<id>", "name": "<value>", "slug": "<value>"}]}
+        "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-examplesVersion: 1.0.1
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listTools:
+    speakeasy-default-list-tools:
+      responses:
+        "200":
+          application/json: {"tools": [{"confirm": "<value>", "created_at": "2025-02-03T03:53:04.406Z", "deploymentId": "<id>", "description": "more incandescence wherever whoa boohoo toward", "httpMethod": "<value>", "id": "<id>", "name": "<value>", "openapiv3DocumentId": "<id>", "path": "/opt/sbin", "summary": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createToolset:
+    speakeasy-default-create-toolset:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-03-22T17:12:26.250Z", "http_tools": [{"confirm": "<value>", "created_at": "2024-02-29T01:58:33.962Z", "deployment_id": "<id>", "description": "raw yearly ha instead ferociously usefully", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/local/bin", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2025-05-02T12:45:41.606Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-03-27T13:39:53.066Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteToolset:
+    speakeasy-default-delete-toolset:
+      parameters:
+        query:
+          slug: "<value>"
+        header: {}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getToolset:
+    speakeasy-default-get-toolset:
+      parameters:
+        query:
+          slug: "<value>"
+        header: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}, {"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}, {"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-03-27T11:45:29.815Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listToolsets:
+    speakeasy-default-list-toolsets:
+      responses:
+        "200":
+          application/json: {"toolsets": [{"created_at": "2024-09-09T21:30:41.089Z", "http_tools": [{"confirm": "<value>", "created_at": "2023-01-03T06:34:11.738Z", "deployment_id": "<id>", "description": "bowed minister ah furiously yellow rot given", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/dev", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2025-12-27T17:05:58.816Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-13T07:44:41.736Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateToolset:
+    speakeasy-default-update-toolset:
+      parameters:
+        query:
+          slug: "<value>"
+        header: {}
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-08-15T11:40:59.388Z", "http_tools": [{"confirm": "<value>", "created_at": "2024-08-03T00:08:16.637Z", "deployment_id": "<id>", "description": "oily what live reservation boohoo buck louse massage ew inside", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/boot/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2024-10-18T20:18:38.751Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-03-17T22:27:22.375Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+examplesVersion: 1.0.2
 generatedTests: {}

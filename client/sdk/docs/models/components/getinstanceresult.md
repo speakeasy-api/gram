@@ -26,6 +26,7 @@ let value: GetInstanceResult = {
   name: "<value>",
   tools: [
     {
+      confirm: "<value>",
       createdAt: new Date("2023-08-05T21:57:17.116Z"),
       deploymentId: "<id>",
       description: "sheepishly like to fooey why",

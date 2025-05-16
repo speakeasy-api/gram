@@ -23,10 +23,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { groupTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  EnvironmentEntryInput,
-  ToolsetDetails,
-} from "@gram/client/models/components";
+import { EnvironmentEntryInput, Toolset } from "@gram/client/models/components";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
@@ -316,7 +313,7 @@ export const ToolsetHeader = ({
     slug: toolsetSlug,
   });
 
-  const updateToolset = async (changes: Partial<ToolsetDetails>) => {
+  const updateToolset = async (changes: Partial<Toolset>) => {
     if (!toolset) {
       return;
     }
@@ -434,7 +431,7 @@ export const ToolsetEnvironmentBadge = ({
   size = "md",
   variant = "default",
 }: {
-  toolset: ToolsetDetails | undefined;
+  toolset: Toolset | undefined;
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {

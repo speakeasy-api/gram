@@ -5,8 +5,10 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.serveImage({
-    id: "<id>",
+  const result = await gram.mcp.mcpNumberServe({
+    project: "<value>",
+    toolset: "<value>",
+    environment: "<value>",
   });
 
   // Handle the result

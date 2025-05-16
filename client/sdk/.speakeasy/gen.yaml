@@ -19,11 +19,13 @@ generation:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
 typescript:
-  version: 0.11.2
+  version: 0.11.3
   additionalDependencies:
     dependencies: {}
     devDependencies:
       '@tanstack/react-query': 'catalog:'
+      '@types/react': 'catalog:'
+      '@types/react-dom': 'catalog:'
     peerDependencies: {}
   additionalPackageJSON: {}
   author: Speakeasy

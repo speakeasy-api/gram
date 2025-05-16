@@ -107,8 +107,10 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.serveImage({
-    id: "<id>",
+  const result = await gram.mcp.mcpNumberServe({
+    project: "<value>",
+    toolset: "<value>",
+    environment: "<value>",
   });
 
   // Handle the result
@@ -176,6 +178,10 @@ run();
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 
+### [mcp](docs/sdks/mcp/README.md)
+
+* [mcpNumberServe](docs/sdks/mcp/README.md#mcpnumberserve) - serve mcp
+
 ### [packages](docs/sdks/packages/README.md)
 
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
@@ -188,6 +194,14 @@ run();
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
+
+### [slack](docs/sdks/slack/README.md)
+
+* [slackLogin](docs/sdks/slack/README.md#slacklogin) - login slack
+* [slackCallback](docs/sdks/slack/README.md#slackcallback) - callback slack
+* [deleteSlackConnection](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
+* [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
+* [updateSlackConnection](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 
 ### [tools](docs/sdks/tools/README.md)
 
@@ -244,6 +258,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`mcpMcpNumberServe`](docs/sdks/mcp/README.md#mcpnumberserve) - serve mcp
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -251,6 +266,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
+- [`slackDeleteSlackConnection`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
+- [`slackGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
+- [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
+- [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
+- [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
@@ -290,9 +310,11 @@ To learn about this feature and how to get started, check
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
+- [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
@@ -308,6 +330,7 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useMcpMcpNumberServeMutation`](docs/sdks/mcp/README.md#mcpnumberserve) - serve mcp
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
@@ -316,6 +339,7 @@ To learn about this feature and how to get started, check
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
+- [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
@@ -335,8 +359,10 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assets.serveImage({
-    id: "<id>",
+  const result = await gram.mcp.mcpNumberServe({
+    project: "<value>",
+    toolset: "<value>",
+    environment: "<value>",
   }, {
     retries: {
       strategy: "backoff",
@@ -376,8 +402,10 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.serveImage({
-    id: "<id>",
+  const result = await gram.mcp.mcpNumberServe({
+    project: "<value>",
+    toolset: "<value>",
+    environment: "<value>",
   });
 
   // Handle the result
@@ -392,12 +420,12 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `serveImage` method may throw the following errors:
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `mcpNumberServe` method may throw the following errors:
 
 | Error Type          | Status Code                       | Content Type     |
 | ------------------- | --------------------------------- | ---------------- |
 | errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
-| errors.ServiceError | 500                               | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
 | errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 If the method throws an error and it is not captured by the known errors, it will default to throwing a `APIError`.
@@ -411,8 +439,10 @@ const gram = new Gram();
 async function run() {
   let result;
   try {
-    result = await gram.assets.serveImage({
-      id: "<id>",
+    result = await gram.mcp.mcpNumberServe({
+      project: "<value>",
+      toolset: "<value>",
+      environment: "<value>",
     });
 
     // Handle the result
@@ -476,8 +506,10 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.assets.serveImage({
-    id: "<id>",
+  const result = await gram.mcp.mcpNumberServe({
+    project: "<value>",
+    toolset: "<value>",
+    environment: "<value>",
   });
 
   // Handle the result

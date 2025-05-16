@@ -20,7 +20,7 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { assetsServeImage } from "@gram/client/funcs/assetsServeImage.js";
+import { mcpMcpNumberServe } from "@gram/client/funcs/mcpMcpNumberServe.js";
 import { SDKValidationError } from "@gram/client/models/errors/sdkvalidationerror.js";
 
 // Use `GramCore` for best tree-shaking performance.
@@ -28,8 +28,10 @@ import { SDKValidationError } from "@gram/client/models/errors/sdkvalidationerro
 const gram = new GramCore();
 
 async function run() {
-  const res = await assetsServeImage(gram, {
-    id: "<id>",
+  const res = await mcpMcpNumberServe(gram, {
+    project: "<value>",
+    toolset: "<value>",
+    environment: "<value>",
   });
 
   switch (true) {

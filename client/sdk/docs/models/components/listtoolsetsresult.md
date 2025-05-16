@@ -11,6 +11,7 @@ let value: ListToolsetsResult = {
       createdAt: new Date("2025-09-20T12:21:57.178Z"),
       httpTools: [
         {
+          confirm: "<value>",
           createdAt: new Date("2025-10-23T12:10:12.732Z"),
           deploymentId: "<id>",
           description: "revoke aw blah upside-down gah greatly",
@@ -40,6 +41,6 @@ let value: ListToolsetsResult = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `toolsets`                                                               | [components.ToolsetDetails](../../models/components/toolsetdetails.md)[] | :heavy_check_mark:                                                       | The list of toolsets                                                     |
+| Field                                                      | Type                                                       | Required                                                   | Description                                                |
+| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `toolsets`                                                 | [components.Toolset](../../models/components/toolset.md)[] | :heavy_check_mark:                                         | The list of toolsets                                       |

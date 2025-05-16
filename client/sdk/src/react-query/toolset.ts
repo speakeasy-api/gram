@@ -26,7 +26,7 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type ToolsetQueryData = components.ToolsetDetails;
+export type ToolsetQueryData = components.Toolset;
 
 /**
  * getToolset toolsets

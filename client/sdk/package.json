@@ -1,6 +1,6 @@
 {
   "name": "@gram/client",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",
@@ -67,7 +67,8 @@
   "devDependencies": {
     "@eslint/js": "^9.19.0",
     "@tanstack/react-query": "catalog:",
-    "@types/react": "^18.3.12",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "eslint": "^9.19.0",
     "globals": "^15.14.0",
     "typescript": "^5.4.5",

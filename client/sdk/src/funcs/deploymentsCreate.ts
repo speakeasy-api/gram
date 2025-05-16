@@ -184,6 +184,7 @@ async function $do(
       "422",
       "4XX",
       "500",
+      "502",
       "5XX",
     ],
     retryConfig: context.retryConfig,
@@ -215,7 +216,7 @@ async function $do(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
     ),
-    M.jsonErr(500, errors.ServiceError$inboundSchema),
+    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, { extraFields: responseFields });

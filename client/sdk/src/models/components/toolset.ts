@@ -14,7 +14,7 @@ import {
   HTTPToolDefinition$outboundSchema,
 } from "./httptooldefinition.js";
 
-export type ToolsetDetails = {
+export type Toolset = {
   /**
    * When the toolset was created.
    */
@@ -62,36 +62,37 @@ export type ToolsetDetails = {
 };
 
 /** @internal */
-export const ToolsetDetails$inboundSchema: z.ZodType<
-  ToolsetDetails,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
-  default_environment_slug: z.string().optional(),
-  description: z.string().optional(),
-  http_tools: z.array(HTTPToolDefinition$inboundSchema),
-  id: z.string(),
-  name: z.string(),
-  organization_id: z.string(),
-  project_id: z.string(),
-  relevant_environment_variables: z.array(z.string()).optional(),
-  slug: z.string(),
-  updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
-}).transform((v) => {
-  return remap$(v, {
-    "created_at": "createdAt",
-    "default_environment_slug": "defaultEnvironmentSlug",
-    "http_tools": "httpTools",
-    "organization_id": "organizationId",
-    "project_id": "projectId",
-    "relevant_environment_variables": "relevantEnvironmentVariables",
-    "updated_at": "updatedAt",
+export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
+  z.object({
+    created_at: z.string().datetime({ offset: true }).transform(v =>
+      new Date(v)
+    ),
+    default_environment_slug: z.string().optional(),
+    description: z.string().optional(),
+    http_tools: z.array(HTTPToolDefinition$inboundSchema),
+    id: z.string(),
+    name: z.string(),
+    organization_id: z.string(),
+    project_id: z.string(),
+    relevant_environment_variables: z.array(z.string()).optional(),
+    slug: z.string(),
+    updated_at: z.string().datetime({ offset: true }).transform(v =>
+      new Date(v)
+    ),
+  }).transform((v) => {
+    return remap$(v, {
+      "created_at": "createdAt",
+      "default_environment_slug": "defaultEnvironmentSlug",
+      "http_tools": "httpTools",
+      "organization_id": "organizationId",
+      "project_id": "projectId",
+      "relevant_environment_variables": "relevantEnvironmentVariables",
+      "updated_at": "updatedAt",
+    });
   });
-});
 
 /** @internal */
-export type ToolsetDetails$Outbound = {
+export type Toolset$Outbound = {
   created_at: string;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
@@ -106,10 +107,10 @@ export type ToolsetDetails$Outbound = {
 };
 
 /** @internal */
-export const ToolsetDetails$outboundSchema: z.ZodType<
-  ToolsetDetails$Outbound,
+export const Toolset$outboundSchema: z.ZodType<
+  Toolset$Outbound,
   z.ZodTypeDef,
-  ToolsetDetails
+  Toolset
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
   defaultEnvironmentSlug: z.string().optional(),
@@ -138,25 +139,25 @@ export const ToolsetDetails$outboundSchema: z.ZodType<
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace ToolsetDetails$ {
-  /** @deprecated use `ToolsetDetails$inboundSchema` instead. */
-  export const inboundSchema = ToolsetDetails$inboundSchema;
-  /** @deprecated use `ToolsetDetails$outboundSchema` instead. */
-  export const outboundSchema = ToolsetDetails$outboundSchema;
-  /** @deprecated use `ToolsetDetails$Outbound` instead. */
-  export type Outbound = ToolsetDetails$Outbound;
+export namespace Toolset$ {
+  /** @deprecated use `Toolset$inboundSchema` instead. */
+  export const inboundSchema = Toolset$inboundSchema;
+  /** @deprecated use `Toolset$outboundSchema` instead. */
+  export const outboundSchema = Toolset$outboundSchema;
+  /** @deprecated use `Toolset$Outbound` instead. */
+  export type Outbound = Toolset$Outbound;
 }
 
-export function toolsetDetailsToJSON(toolsetDetails: ToolsetDetails): string {
-  return JSON.stringify(ToolsetDetails$outboundSchema.parse(toolsetDetails));
+export function toolsetToJSON(toolset: Toolset): string {
+  return JSON.stringify(Toolset$outboundSchema.parse(toolset));
 }
 
-export function toolsetDetailsFromJSON(
+export function toolsetFromJSON(
   jsonString: string,
-): SafeParseResult<ToolsetDetails, SDKValidationError> {
+): SafeParseResult<Toolset, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ToolsetDetails$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ToolsetDetails' from JSON`,
+    (x) => Toolset$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Toolset' from JSON`,
   );
 }

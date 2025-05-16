@@ -10,6 +10,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type HTTPToolDefinition = {
   /**
+   * Confirmation mode for the tool
+   */
+  confirm: string;
+  /**
+   * Prompt for the confirmation
+   */
+  confirmPrompt?: string | undefined;
+  /**
    * The creation date of the tool.
    */
   createdAt: Date;
@@ -81,6 +89,8 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  confirm: z.string(),
+  confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   deployment_id: z.string(),
   description: z.string(),
@@ -99,6 +109,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
   return remap$(v, {
+    "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
     "deployment_id": "deploymentId",
     "http_method": "httpMethod",
@@ -112,6 +123,8 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
 
 /** @internal */
 export type HTTPToolDefinition$Outbound = {
+  confirm: string;
+  confirm_prompt?: string | undefined;
   created_at: string;
   deployment_id: string;
   description: string;
@@ -136,6 +149,8 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   HTTPToolDefinition
 > = z.object({
+  confirm: z.string(),
+  confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
   deploymentId: z.string(),
   description: z.string(),
@@ -154,6 +169,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
+    confirmPrompt: "confirm_prompt",
     createdAt: "created_at",
     deploymentId: "deployment_id",
     httpMethod: "http_method",

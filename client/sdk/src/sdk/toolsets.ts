@@ -23,7 +23,7 @@ export class Toolsets extends ClientSDK {
     request: operations.CreateToolsetRequest,
     security?: operations.CreateToolsetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ToolsetDetails> {
+  ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsCreate(
       this,
       request,
@@ -61,7 +61,7 @@ export class Toolsets extends ClientSDK {
     request: operations.GetToolsetRequest,
     security?: operations.GetToolsetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ToolsetDetails> {
+  ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsGetBySlug(
       this,
       request,
@@ -99,7 +99,7 @@ export class Toolsets extends ClientSDK {
     request: operations.UpdateToolsetRequest,
     security?: operations.UpdateToolsetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ToolsetDetails> {
+  ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
       this,
       request,

@@ -1,4 +1,9 @@
-import { useOrganization, useProject, useSession } from "@/contexts/Auth.tsx";
+import {
+  useIsAdmin,
+  useOrganization,
+  useProject,
+  useSession,
+} from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils.ts";
 import { ProjectEntry } from "@gram/client/models/components";
@@ -15,6 +20,8 @@ import { Separator } from "./ui/separator.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
 import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { Type } from "./ui/type.tsx";
+import { Label } from "./ui/label.tsx";
+import { Input } from "./ui/input.tsx";
 
 // Generate colors from project label
 function getProjectColors(label: string): {
@@ -72,10 +79,13 @@ export function ProjectAvatar({
 }
 
 export function ProjectMenu() {
+  const overrideFieldId = React.useId();
   const session = useSession();
   const organization = useOrganization();
   const project = useProject();
   const client = useSdkClient();
+
+  const isAdmin = useIsAdmin();
 
   const [open, setOpen] = React.useState(false);
 
@@ -126,6 +136,47 @@ export function ProjectMenu() {
             </Type>
             <ThemeToggle />
           </Stack>
+          {isAdmin ? (
+            <>
+              <Separator className="my-2" />
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+
+                  const formData = new FormData(e.currentTarget);
+                  const val = formData.get("gram_admin_override");
+                  if (typeof val === "string") {
+                    document.cookie = `gram_admin_override=${val}; path=/; max-age=31536000;`;
+                  }
+                  await client.auth.logout();
+                  window.location.href = "/login";
+                  setOpen(false);
+                }}
+              >
+                <Stack gap={2}>
+                  <Label htmlFor={overrideFieldId}>Admin override</Label>
+                  <Input
+                    type="text"
+                    name="gram_admin_override"
+                    placeholder="Organization slug"
+                    id={overrideFieldId}
+                  />
+                </Stack>
+                <button className="sr-only" type="submit"></button>
+              </form>
+              <Button
+                onClick={async () => {
+                  document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+                  await client.auth.logout();
+                  window.location.href = "/login";
+                  setOpen(false);
+                }}
+              >
+                Clear override
+              </Button>
+              <Separator className="my-2" />
+            </>
+          ) : null}
           <NavButton
             title="Logout"
             Icon={() => <Icon name="log-out" />}

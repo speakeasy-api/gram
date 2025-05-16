@@ -111,7 +111,7 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## uploadImage
@@ -127,7 +127,7 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadImage({
-    contentLength: 461855,
+    contentLength: 768839,
   });
 
   // Handle the result
@@ -151,7 +151,7 @@ const gram = new GramCore();
 
 async function run() {
   const res = await assetsUploadImage(gram, {
-    contentLength: 461855,
+    contentLength: 768839,
   });
 
   if (!res.ok) {
@@ -203,7 +203,7 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## uploadOpenAPIv3
@@ -219,7 +219,7 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.assets.uploadOpenAPIv3({
-    contentLength: 342044,
+    contentLength: 513080,
   });
 
   // Handle the result
@@ -243,7 +243,7 @@ const gram = new GramCore();
 
 async function run() {
   const res = await assetsUploadOpenAPIv3(gram, {
-    contentLength: 342044,
+    contentLength: 513080,
   });
 
   if (!res.ok) {
@@ -295,5 +295,5 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |

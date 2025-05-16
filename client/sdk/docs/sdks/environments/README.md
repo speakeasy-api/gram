@@ -31,6 +31,10 @@ async function run() {
           name: "<value>",
           value: "<value>",
         },
+        {
+          name: "<value>",
+          value: "<value>",
+        },
       ],
       name: "<value>",
       organizationId: "<id>",
@@ -60,6 +64,10 @@ async function run() {
   const res = await environmentsCreate(gram, {
     createEnvironmentForm: {
       entries: [
+        {
+          name: "<value>",
+          value: "<value>",
+        },
         {
           name: "<value>",
           value: "<value>",
@@ -119,7 +127,7 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## deleteBySlug
@@ -209,7 +217,7 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## list
@@ -308,7 +316,7 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## updateBySlug
@@ -326,8 +334,21 @@ async function run() {
   const result = await gram.environments.updateBySlug({
     slug: "<value>",
     updateEnvironmentRequestBody: {
-      entriesToRemove: [],
-      entriesToUpdate: [],
+      entriesToRemove: [
+        "<value 1>",
+        "<value 2>",
+        "<value 3>",
+      ],
+      entriesToUpdate: [
+        {
+          name: "<value>",
+          value: "<value>",
+        },
+        {
+          name: "<value>",
+          value: "<value>",
+        },
+      ],
     },
   });
 
@@ -354,8 +375,21 @@ async function run() {
   const res = await environmentsUpdateBySlug(gram, {
     slug: "<value>",
     updateEnvironmentRequestBody: {
-      entriesToRemove: [],
-      entriesToUpdate: [],
+      entriesToRemove: [
+        "<value 1>",
+        "<value 2>",
+        "<value 3>",
+      ],
+      entriesToUpdate: [
+        {
+          name: "<value>",
+          value: "<value>",
+        },
+        {
+          name: "<value>",
+          value: "<value>",
+        },
+      ],
     },
   });
 
@@ -408,5 +442,5 @@ import {
 | Error Type                        | Status Code                       | Content Type                      |
 | --------------------------------- | --------------------------------- | --------------------------------- |
 | errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500                               | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |

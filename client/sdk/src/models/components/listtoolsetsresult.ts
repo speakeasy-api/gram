@@ -7,17 +7,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  ToolsetDetails,
-  ToolsetDetails$inboundSchema,
-  ToolsetDetails$Outbound,
-  ToolsetDetails$outboundSchema,
-} from "./toolsetdetails.js";
+  Toolset,
+  Toolset$inboundSchema,
+  Toolset$Outbound,
+  Toolset$outboundSchema,
+} from "./toolset.js";
 
 export type ListToolsetsResult = {
   /**
    * The list of toolsets
    */
-  toolsets: Array<ToolsetDetails>;
+  toolsets: Array<Toolset>;
 };
 
 /** @internal */
@@ -26,12 +26,12 @@ export const ListToolsetsResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  toolsets: z.array(ToolsetDetails$inboundSchema),
+  toolsets: z.array(Toolset$inboundSchema),
 });
 
 /** @internal */
 export type ListToolsetsResult$Outbound = {
-  toolsets: Array<ToolsetDetails$Outbound>;
+  toolsets: Array<Toolset$Outbound>;
 };
 
 /** @internal */
@@ -40,7 +40,7 @@ export const ListToolsetsResult$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListToolsetsResult
 > = z.object({
-  toolsets: z.array(ToolsetDetails$outboundSchema),
+  toolsets: z.array(Toolset$outboundSchema),
 });
 
 /**

@@ -1,28 +1,29 @@
-# ToolsetDetails
+# Toolset
 
 ## Example Usage
 
 ```typescript
-import { ToolsetDetails } from "@gram/client/models/components";
+import { Toolset } from "@gram/client/models/components";
 
-let value: ToolsetDetails = {
-  createdAt: new Date("2023-10-28T12:00:22.380Z"),
+let value: Toolset = {
+  createdAt: new Date("2025-09-03T11:41:50.334Z"),
   httpTools: [
     {
-      createdAt: new Date("2025-06-27T11:17:43.078Z"),
+      confirm: "<value>",
+      createdAt: new Date("2024-05-12T19:09:07.564Z"),
       deploymentId: "<id>",
-      description: "so pessimistic woefully gloom",
+      description: "stabilise mutate gadzooks wherever pantyhose vice",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/dev",
+      path: "/etc/defaults",
       projectId: "<id>",
       schema: "<value>",
       summary: "<value>",
       tags: [
         "<value>",
       ],
-      updatedAt: new Date("2025-02-28T16:45:40.183Z"),
+      updatedAt: new Date("2023-11-29T09:56:04.014Z"),
     },
   ],
   id: "<id>",
@@ -30,7 +31,7 @@ let value: ToolsetDetails = {
   organizationId: "<id>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2025-04-23T00:35:17.003Z"),
+  updatedAt: new Date("2025-10-01T20:02:31.731Z"),
 };
 ```
 

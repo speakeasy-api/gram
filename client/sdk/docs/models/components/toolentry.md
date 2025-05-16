@@ -6,6 +6,7 @@
 import { ToolEntry } from "@gram/client/models/components";
 
 let value: ToolEntry = {
+  confirm: "<value>",
   createdAt: new Date("2025-09-01T20:12:39.588Z"),
   deploymentId: "<id>",
   description:
@@ -23,6 +24,8 @@ let value: ToolEntry = {
 
 | Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `confirm`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The confirmation mode for the tool                                                            |
+| `confirmPrompt`                                                                               | *string*                                                                                      | :heavy_minus_sign:                                                                            | The confirmation prompt for the tool                                                          |
 | `createdAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The creation date of the tool.                                                                |
 | `deploymentId`                                                                                | *string*                                                                                      | :heavy_check_mark:                                                                            | The deployment ID                                                                             |
 | `description`                                                                                 | *string*                                                                                      | :heavy_check_mark:                                                                            | The tool description                                                                          |

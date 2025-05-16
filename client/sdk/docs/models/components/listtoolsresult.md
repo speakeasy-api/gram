@@ -8,6 +8,7 @@ import { ListToolsResult } from "@gram/client/models/components";
 let value: ListToolsResult = {
   tools: [
     {
+      confirm: "<value>",
       createdAt: new Date("2024-07-22T19:54:53.930Z"),
       deploymentId: "<id>",
       description: "ack shoddy soliloquy cleaner drag catalog",

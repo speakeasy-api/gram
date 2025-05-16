@@ -38,7 +38,7 @@ export function toolsetsCreate(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ToolsetDetails,
+    components.Toolset,
     | errors.ServiceError
     | errors.ServiceError
     | APIError
@@ -66,7 +66,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      components.ToolsetDetails,
+      components.Toolset,
       | errors.ServiceError
       | errors.ServiceError
       | APIError
@@ -163,6 +163,7 @@ async function $do(
       "422",
       "4XX",
       "500",
+      "502",
       "5XX",
     ],
     retryConfig: context.retryConfig,
@@ -178,7 +179,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ToolsetDetails,
+    components.Toolset,
     | errors.ServiceError
     | errors.ServiceError
     | APIError
@@ -189,12 +190,12 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.json(200, components.ToolsetDetails$inboundSchema),
+    M.json(200, components.Toolset$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
     ),
-    M.jsonErr(500, errors.ServiceError$inboundSchema),
+    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, { extraFields: responseFields });

@@ -10,6 +10,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ToolEntry = {
   /**
+   * The confirmation mode for the tool
+   */
+  confirm: string;
+  /**
+   * The confirmation prompt for the tool
+   */
+  confirmPrompt?: string | undefined;
+  /**
    * The creation date of the tool.
    */
   createdAt: Date;
@@ -57,6 +65,8 @@ export const ToolEntry$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  confirm: z.string(),
+  confirmPrompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   deploymentId: z.string(),
   description: z.string(),
@@ -75,6 +85,8 @@ export const ToolEntry$inboundSchema: z.ZodType<
 
 /** @internal */
 export type ToolEntry$Outbound = {
+  confirm: string;
+  confirmPrompt?: string | undefined;
   created_at: string;
   deploymentId: string;
   description: string;
@@ -93,6 +105,8 @@ export const ToolEntry$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ToolEntry
 > = z.object({
+  confirm: z.string(),
+  confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
   deploymentId: z.string(),
   description: z.string(),
