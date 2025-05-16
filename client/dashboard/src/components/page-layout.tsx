@@ -18,7 +18,7 @@ function PageBody({
     <div
       className={cn(
         "@container/main flex flex-col gap-4 p-8 pb-0 overflow-y-auto h-full",
-        className,
+        className
       )}
     >
       {children}

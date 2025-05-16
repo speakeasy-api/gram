@@ -9,6 +9,7 @@ junit-report.xml
 !.vscode/extensions.json
 .idea
 /server/goa*
+/server/gram
 /scratch
 .speakeasy/temp
 mprocs.log

@@ -4,6 +4,42 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@font-face {
+  font-family: "Diatype";
+  src: url("/fonts/diatype/ABCDiatype-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Diatype";
+  src: url("/fonts/diatype/ABCDiatype-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Diatype Mono";
+  src: url("/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Diatype Mono";
+  src: url("/fonts/diatype-mono/ABCDiatypeMono-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Tobias";
+  src: url("/fonts/tobias/Tobias-Thin.woff2") format("woff2");
+  font-weight: 100;
+  font-style: normal;
+  font-display: block;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -42,6 +78,34 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --header-height: 3rem;
   --sidebar-width: 16rem;
+
+  /* TO BE MOVED TO MOONSHINE IF YOU WANT TO USE THESE BE PREPARED TO REFACTOR */
+
+  /* Tech colors */
+  --color-bsmnt-brand-typescript: hsl(0, 0%, 0%);
+  --color-bsmnt-brand-go: hsl(220, 100%, 12%);
+  --color-bsmnt-brand-java: hsl(214, 69%, 50%);
+  --color-bsmnt-brand-python: hsl(216, 100%, 80%);
+  --color-bsmnt-brand-c: hsl(154, 100%, 7%);
+  --color-bsmnt-brand-terraform: hsl(108, 24%, 41%);
+  --color-bsmnt-brand-unity: hsl(68, 52%, 72%);
+  --color-bsmnt-brand-php: hsl(334, 54%, 13%);
+  --color-bsmnt-brand-swift: hsl(4, 67%, 47%);
+  --color-bsmnt-brand-ruby: hsl(23, 96%, 62%);
+  --color-bsmnt-brand-postman: hsl(0, 0%, 83%);
+
+  --gradient-bsmnt-brand-primary: linear-gradient(
+    90deg,
+    var(--color-bsmnt-brand-php) 0%,
+    var(--color-bsmnt-brand-swift) 12.56%,
+    var(--color-bsmnt-brand-ruby) 25.06%,
+    var(--color-bsmnt-brand-unity) 37.56%,
+    var(--color-bsmnt-brand-terraform) 50.06%,
+    var(--color-bsmnt-brand-c) 62.06%,
+    var(--color-bsmnt-brand-go) 74.06%,
+    var(--color-bsmnt-brand-java) 86.06%,
+    var(--color-bsmnt-brand-python) 97.06%
+  );
 }
 
 :root {
@@ -77,6 +141,12 @@
   --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
   --sidebar-border: oklch(0.923 0.003 48.717);
   --sidebar-ring: oklch(0.709 0.01 56.259);
+  --font-diatype: "Diatype", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-diatype-mono: "Diatype Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --font-tobias: "Tobias", "Cormorant", Georgia, Cambria, "Times New Roman",
+    Times, serif;
 }
 
 .dark {
@@ -119,6 +189,7 @@
   }
   body {
     @apply bg-sidebar text-foreground;
+    font-family: var(--font-diatype);
   }
   button {
     @apply cursor-pointer;
@@ -129,4 +200,34 @@
   transition-property: all;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@theme {
+  --font-sans: var(--font-diatype);
+  --font-mono: var(--font-diatype-mono);
+  --font-display: var(--font-tobias);
+}
+
+/* TO BE MOVED TO MOONSHINE IF YOU WANT TO USE THESE BE PREPARED TO REFACTOR */
+
+@utility bsmnt-text-display-xl {
+  font-size: 5.625rem;
+  font-weight: 100;
+  line-height: 1.1;
+  letter-spacing: -4%;
+  color: #09090b;
+  font-family: var(--font-tobias);
+}
+
+@utility bsmnt-text-body-lg {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.75;
+  letter-spacing: 0.25%;
+  color: #09090b;
+  font-family: var(--font-diatype);
+}
+
+@utility border-gradient-primary {
+  border-image: var(--gradient-bsmnt-brand-primary) 1;
 }

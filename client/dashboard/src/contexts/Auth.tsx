@@ -107,7 +107,7 @@ const ErrorFallback = ({ error }: { error: Error }) => {
 const FullScreenLoader = () => {
   return (
     <div className="flex justify-center items-center h-screen">
-      <GramLogo animate className="scale-125" />
+      <GramLogo />
     </div>
   );
 };

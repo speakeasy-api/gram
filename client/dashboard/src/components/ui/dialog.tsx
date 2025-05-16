@@ -102,10 +102,7 @@ function DialogTitle({
     // Pulls styles from <Heading variant="h3">
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn(
-        "text-xl leading-none font-light font-[Mona_Sans] capitalize",
-        className
-      )}
+      className={cn("text-xl leading-none capitalize", className)}
       {...props}
     >
       {children}

@@ -33,7 +33,7 @@ export function Heading({
 
   let base = null;
 
-  const baseClasses = cn("font-light font-[Mona_Sans] capitalize", className);
+  const baseClasses = cn("font-light capitalize", className);
 
   switch (variant) {
     case "h1":
