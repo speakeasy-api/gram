@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/repo"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
@@ -236,7 +237,7 @@ func (s *Service) UpdateSlackConnection(ctx context.Context, payload *gen.Update
 	sanitizedSlug := conv.ToLower(payload.DefaultToolsetSlug)
 
 	// Ensure the toolset exists for the given slug and project
-	if _, err := s.toolset.LoadToolsetDetails(ctx, sanitizedSlug, *authCtx.ProjectID); err != nil {
+	if _, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(sanitizedSlug)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
 	}
 

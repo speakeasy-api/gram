@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
@@ -75,7 +76,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	toolset, err := s.toolset.LoadToolsetDetails(ctx, conv.ToLower(payload.ToolsetSlug), *authCtx.ProjectID)
+	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
 	}

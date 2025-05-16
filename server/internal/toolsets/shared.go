@@ -4,13 +4,9 @@ import (
 	"context"
 	"maps"
 	"slices"
-	"strings"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/database"
 	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/tools/security"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
@@ -22,131 +18,11 @@ type Toolsets struct {
 	toolsRepo *toolsRepo.Queries
 }
 
-func NewToolsets(db *pgxpool.Pool) *Toolsets {
+func NewToolsets(tx database.DBTX) *Toolsets {
 	return &Toolsets{
-		repo:      repo.New(db),
-		toolsRepo: toolsRepo.New(db),
+		repo:      repo.New(tx),
+		toolsRepo: toolsRepo.New(tx),
 	}
-}
-
-func (t *Toolsets) LoadToolsetDetails(ctx context.Context, slug string, projectID uuid.UUID) (*types.Toolset, error) {
-	toolset, err := t.repo.GetToolset(ctx, repo.GetToolsetParams{
-		Slug:      strings.ToLower(slug),
-		ProjectID: projectID,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var httpTools []*types.HTTPToolDefinition
-	var relevantEnvVars []string
-	if len(toolset.HttpToolNames) > 0 {
-		definitions, err := t.toolsRepo.FindToolsByName(ctx, toolsRepo.FindToolsByNameParams{
-			ProjectID:    projectID,
-			Names:        toolset.HttpToolNames,
-			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		httpTools = make([]*types.HTTPToolDefinition, 0, len(definitions))
-		seen := make(map[string]bool, 0)
-		for _, def := range definitions {
-			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
-				continue
-			}
-			seen[def.HttpToolDefinition.ID.String()] = true
-
-			httpTools = append(httpTools, &types.HTTPToolDefinition{
-				ID:                  def.HttpToolDefinition.ID.String(),
-				ProjectID:           def.HttpToolDefinition.Description,
-				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
-				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
-				Name:                def.HttpToolDefinition.Name,
-				Summary:             def.HttpToolDefinition.Summary,
-				Description:         def.HttpToolDefinition.Description,
-				Confirm:             conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "always"),
-				ConfirmPrompt:       conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt),
-				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
-				Tags:                def.HttpToolDefinition.Tags,
-				Security:            conv.FromBytes(def.HttpToolDefinition.Security),
-				HTTPMethod:          def.HttpToolDefinition.HttpMethod,
-				Path:                def.HttpToolDefinition.Path,
-				SchemaVersion:       &def.HttpToolDefinition.SchemaVersion,
-				Schema:              string(def.HttpToolDefinition.Schema),
-				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
-			})
-		}
-		relevantEnvVars, err = t.GetRelevantEnvironmentVariables(ctx, definitions)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &types.Toolset{
-		ID:                           toolset.ID.String(),
-		OrganizationID:               toolset.OrganizationID,
-		ProjectID:                    toolset.ProjectID.String(),
-		Name:                         toolset.Name,
-		Slug:                         types.Slug(toolset.Slug),
-		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		RelevantEnvironmentVariables: relevantEnvVars,
-		Description:                  conv.FromPGText[string](toolset.Description),
-		HTTPTools:                    httpTools,
-		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
-}
-
-func (t *Toolsets) GetRelevantEnvironmentVariables(ctx context.Context, tools []toolsRepo.FindToolsByNameRow) ([]string, error) {
-	if len(tools) == 0 {
-		return []string{}, nil
-	}
-
-	relevantSecurityKeysMap := make(map[string]bool)
-	serverEnvVarsMap := make(map[string]bool)
-	for _, tool := range tools {
-		securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.HttpToolDefinition.Security)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, key := range securityKeys {
-			relevantSecurityKeysMap[key] = true
-		}
-
-		if tool.HttpToolDefinition.ServerEnvVar != "" {
-			serverEnvVarsMap[tool.HttpToolDefinition.ServerEnvVar] = true
-		}
-	}
-
-	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
-	for _, tool := range tools {
-		uniqueDeploymentIDs[tool.HttpToolDefinition.DeploymentID] = true
-	}
-
-	securityEntries, err := t.repo.GetHTTPSecurityDefinitions(ctx, repo.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys:  slices.Collect(maps.Keys(relevantSecurityKeysMap)),
-		DeploymentIds: slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	relevantEnvVarsMap := make(map[string]bool)
-	for _, entry := range securityEntries {
-		for _, envVar := range entry.EnvVariables {
-			relevantEnvVarsMap[envVar] = true
-		}
-	}
-
-	for key := range serverEnvVarsMap {
-		relevantEnvVarsMap[key] = true
-	}
-
-	return slices.Collect(maps.Keys(relevantEnvVarsMap)), nil
 }
 
 type HTTPToolExecutionInfo struct {
