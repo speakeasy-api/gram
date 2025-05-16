@@ -45,10 +45,9 @@ type ToolCallBody struct {
 	Body            json.RawMessage `json:"body"`
 }
 
-func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, r *http.Request, environmentEntries []environments_repo.EnvironmentEntry, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
+func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, environmentEntries []environments_repo.EnvironmentEntry, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
 	var toolCallBody ToolCallBody
-	if err := json.NewDecoder(r.Body).Decode(&toolCallBody); err != nil {
-		logger.ErrorContext(ctx, "invalid request body", slog.String("error", err.Error()))
+	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
 	}
 
@@ -118,7 +117,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		}
 		encoded := values.Encode()
 		req, err = http.NewRequestWithContext(
-			r.Context(),
+			ctx,
 			toolExecutionInfo.Tool.HttpMethod,
 			fullURL,
 			strings.NewReader(encoded),
@@ -129,7 +128,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		req.Header.Set("Content-Type", toolExecutionInfo.Tool.RequestContentType.String)
 	} else {
 		req, err = http.NewRequestWithContext(
-			r.Context(),
+			ctx,
 			toolExecutionInfo.Tool.HttpMethod,
 			fullURL,
 			bytes.NewReader(toolCallBody.Body),

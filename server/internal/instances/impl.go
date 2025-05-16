@@ -78,7 +78,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 
 	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
+		return nil, err
 	}
 
 	if toolset.DefaultEnvironmentSlug == nil && payload.EnvironmentSlug == nil {
@@ -223,7 +223,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, s.logger)
 	}
 
-	return InstanceToolProxy(ctx, s.tracer, s.logger, w, r, environmentEntries, executionInfo)
+	return InstanceToolProxy(ctx, s.tracer, s.logger, w, r.Body, environmentEntries, executionInfo)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
