@@ -28,7 +28,7 @@ func E(code Code, cause error, public string, args ...any) *ShareableError {
 	}
 
 	return &ShareableError{
-		code:    code,
+		Code:    code,
 		id:      goa.NewErrorID(),
 		cause:   cause,
 		private: "",
@@ -43,7 +43,7 @@ func EE(code Code, cause error, public string, private string) *ShareableError {
 	runtime.Callers(2, pc[:])
 
 	return &ShareableError{
-		code:    code,
+		Code:    code,
 		id:      goa.NewErrorID(),
 		cause:   cause,
 		public:  public,
@@ -58,7 +58,7 @@ func C(code Code) *ShareableError {
 	runtime.Callers(2, pc[:])
 
 	return &ShareableError{
-		code:    code,
+		Code:    code,
 		id:      goa.NewErrorID(),
 		cause:   nil,
 		private: "",
@@ -68,7 +68,7 @@ func C(code Code) *ShareableError {
 }
 
 type ShareableError struct {
-	code    Code
+	Code    Code
 	id      string
 	cause   error
 	public  string
@@ -123,20 +123,20 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 func (e *ShareableError) AsGoa() *goa.ServiceError {
 	var timeout, temporary, fault bool
 
-	switch e.code {
+	switch e.Code {
 	case CodeUnexpected, CodeInvariantViolation:
 		fault = true
 	default:
 		timeout, temporary, fault = false, false, false
 	}
 
-	goaErr := goa.NewServiceError(e, string(e.code), timeout, temporary, fault)
+	goaErr := goa.NewServiceError(e, string(e.Code), timeout, temporary, fault)
 	goaErr.ID = e.id
 	return goaErr
 }
 
 func (e *ShareableError) HTTPStatus() int {
-	return conv.Default(StatusCodes[e.code], http.StatusInternalServerError)
+	return conv.Default(StatusCodes[e.Code], http.StatusInternalServerError)
 }
 
 func funcForPC(pc uintptr) string {

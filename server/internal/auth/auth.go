@@ -68,7 +68,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	}
 
 	if projectSlug == "" {
-		return ctx, oops.E(oops.CodeBadRequest, nil, "empty projectslug")
+		return ctx, oops.E(oops.CodeBadRequest, nil, "empty project slug")
 	}
 
 	hasProjectAccess := false

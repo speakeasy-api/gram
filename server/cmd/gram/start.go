@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/integrations"
 	"github.com/speakeasy-api/gram/internal/keys"
+	"github.com/speakeasy-api/gram/internal/mcp"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/packages"
@@ -344,6 +345,7 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient))
+			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), db, sessionManager, encryptionClient))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 				GramServerURL:      serverURL,

@@ -18,3 +18,11 @@ var ProjectPayload = func() {
 var ProjectHeader = func() {
 	Header(fmt.Sprintf("project_slug_input:%s", auth.ProjectHeader), String, "project header")
 }
+
+var ProjectPayloadNamed = func(name string) {
+	APIKey(auth.ProjectSlugSecuritySchema, name, String)
+}
+
+var ProjectParam = func(name string) {
+	Param(name)
+}

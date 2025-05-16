@@ -7,6 +7,108 @@ servers:
     - url: http://localhost:80
       description: Default server for gram
 paths:
+    /mcp/{project}/{toolset}/{environment}:
+        post:
+            tags:
+                - mcp
+            summary: serve mcp
+            description: MCP server endpoint for a toolset.
+            operationId: mcp#serve
+            parameters:
+                - name: project
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: toolset
+                  in: path
+                  description: The toolset to access via MCP.
+                  required: true
+                  schema:
+                    type: string
+                    description: The toolset to access via MCP.
+                - name: environment
+                  in: path
+                  description: The environment to access via MCP.
+                  required: true
+                  schema:
+                    type: string
+                    description: The environment to access via MCP.
+            responses:
+                "200":
+                    description: OK response.
+                    headers:
+                        Content-Type:
+                            schema:
+                                type: string
+                    content:
+                        application/json:
+                            schema:
+                                type: string
+                                format: binary
+                "204":
+                    description: 'no_content: No Content response.'
+                    headers:
+                        NOOP:
+                            schema:
+                                type: boolean
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - apikey_header_Authorization: []
+                  project_slug_query_project: []
     /rpc/{project_slug}/slack.login:
         get:
             description: Proxies to auth login through speakeasy oidc.
@@ -5750,61 +5852,6 @@ components:
                 - http_tools
                 - created_at
                 - updated_at
-        ToolsetDetails:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: When the toolset was created.
-                    format: date-time
-                default_environment_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
-                    maxLength: 40
-                description:
-                    type: string
-                    description: Description of the toolset
-                http_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The HTTP tools in this toolset
-                id:
-                    type: string
-                    description: The ID of the toolset
-                name:
-                    type: string
-                    description: The name of the toolset
-                organization_id:
-                    type: string
-                    description: The organization ID this toolset belongs to
-                project_id:
-                    type: string
-                    description: The project ID this toolset belongs to
-                relevant_environment_variables:
-                    type: array
-                    items:
-                        type: string
-                    description: The environment variables that are relevant to the toolset
-                slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
-                    maxLength: 40
-                updated_at:
-                    type: string
-                    description: When the toolset was last updated.
-                    format: date-time
-            required:
-                - id
-                - project_id
-                - organization_id
-                - name
-                - slug
-                - http_tools
-                - created_at
-                - updated_at
         UpdateEnvironmentForm:
             type: object
             properties:
@@ -6017,6 +6064,11 @@ components:
             description: project slug header auth.
             name: Gram-Project
             in: header
+        project_slug_query_project:
+            type: apiKey
+            description: project slug header auth.
+            name: project
+            in: query
         project_slug_query_project_slug:
             type: apiKey
             description: project slug header auth.
@@ -6044,6 +6096,8 @@ tags:
       description: Explore third-party tools in Gram.
     - name: keys
       description: Managing system api keys.
+    - name: mcp
+      description: Model Context Protocol server hosting.
     - name: packages
       description: Manages packages in Gram.
     - name: projects
