@@ -83,6 +83,80 @@ type SlackPostMessageInput struct {
 	ThreadTS  *string
 }
 
+type SlackConversationInput struct {
+	ChannelID string
+	ThreadTS  string
+	Limit     *int
+}
+
+type SlackConversationRepliesResponse struct {
+	Messages []SlackMessageResponse `json:"messages"`
+}
+
+type SlackMessageResponse struct {
+	Type         string  `json:"type"`
+	User         string  `json:"user"`
+	Text         string  `json:"text"`
+	ThreadTS     string  `json:"thread_ts"`
+	ReplyCount   *int    `json:"reply_count,omitempty"`
+	Subscribed   *bool   `json:"subscribed,omitempty"`
+	LastRead     *string `json:"last_read,omitempty"`
+	UnreadCount  *int    `json:"unread_count,omitempty"`
+	TS           string  `json:"ts"`
+	ParentUserID *string `json:"parent_user_id,omitempty"`
+}
+
+func (s *SlackClient) GetConversationReplies(ctx context.Context, accessToken string, input SlackConversationInput) (*SlackConversationRepliesResponse, error) {
+	urlStr := slackServer + "/conversations.replies"
+
+	// Build form body
+	form := url.Values{}
+	form.Set("channel", input.ChannelID)
+	form.Set("ts", input.ThreadTS)
+	limit := 10 // default conversation context limit
+	if input.Limit != nil {
+		limit = *input.Limit
+	}
+	form.Set("limit", fmt.Sprintf("%d", limit))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get conversation replies: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request to Slack: %w", err)
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("failed to close response body: %v\n", cerr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("received non-200 response from Slack: %d, and failed to read body: %w", resp.StatusCode, err)
+		}
+		return nil, fmt.Errorf("received non-200 response from Slack: %d, body: %s", resp.StatusCode, string(respBody))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var result SlackConversationRepliesResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &result, nil
+}
+
 func (s *SlackClient) PostMessage(ctx context.Context, accessToken string, input SlackPostMessageInput) error {
 	urlStr := slackServer + "/chat.postMessage"
 

@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -34,24 +35,37 @@ func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackCli
 }
 
 func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionInput) (string, error) {
-	systemPrompt := `
-	You are a helpful assistant named "gram". Your responses will be later be posted to Slack, so format your final output nicely using Slack's rich text formatting rules. Some Reminders:
-	
-	- Use *asterisks* for bold text, _underscores_ for italic, and ~tildes~ for strikethrough.
-	- Use backticks for inline code.
-	- Use bullet points (- or •) for lists.
-	- Use Slack's timestamp formatting (e.g., <!date^1684252800^{date_short} at {time}|fallback>) for dates.
-	- Do NOT use Markdown syntax like **bold**, __underline__, or HTML tags.
-	- Do NOT use <t:...> — prefer Slack's date formatting with <!date^...|...>.
-	`
-
 	authInfo, err := s.slackClient.GetAppAuthInfo(ctx, input.Event.TeamID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
 	}
 
-	// TODO: Grab thread history and format into messages
-	// TODO: Do we have use chat history?
+	systemPrompt := `
+	You are a helpful assistant named "gram". Your responses will be later be posted to Slack, so format your final output nicely using Slack's rich text formatting rules. Remember this is not the same as Markdown formatting. Some Reminders on how you should format your output:
+	- Use *asterisks* for bold text, _underscores_ for italic, and ~tildes~ for strikethrough.
+	- Use backticks for inline code.
+	- Use bullet points (- or •) for lists.
+	- Do NOT use Markdown syntax like **bold**, __underline__, or HTML tags.
+	`
+
+	previousConversationContext := ""
+	if input.Event.Event.ThreadTs != "" {
+		if replies, err := s.slackClient.GetConversationReplies(ctx, authInfo.AccessToken, client.SlackConversationInput{
+			ChannelID: input.Event.Event.Channel,
+			ThreadTS:  input.Event.Event.EventTs,
+			Limit:     nil,
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "error getting conversation replies", slog.String("error", err.Error()))
+		} else {
+			for _, reply := range replies.Messages {
+				previousConversationContext += fmt.Sprintf("%s: %s\n\n", reply.User, reply.Text)
+			}
+		}
+	}
+
+	if previousConversationContext != "" {
+		systemPrompt += "\n\nHere is the previous conversation context for reference:\n" + previousConversationContext
+	}
 
 	currentDatetimeParams := map[string]any{
 		"type":       "object",
