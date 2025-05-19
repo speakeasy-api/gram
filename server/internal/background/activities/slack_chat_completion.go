@@ -41,7 +41,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 	}
 
 	systemPrompt := `
-	You are a helpful assistant named "gram". Your responses will be later be posted to Slack, so format your final output nicely using Slack's rich text formatting rules. Remember this is not the same as Markdown formatting. Some Reminders on how you should format your output:
+	You are a helpful assistant named "gram". Your responses will be later be posted to Slack, so format your final output nicely using Slack's rich text formatting rules. Remember this is not the same as Markdown syntax, YOU SHOULD NOT USE MARKDOWN SYNTAX. Some Reminders on how you should format your output:
 	- Use *asterisks* for bold text, _underscores_ for italic, and ~tildes~ for strikethrough.
 	- Use backticks for inline code.
 	- Use bullet points (- or •) for lists.
