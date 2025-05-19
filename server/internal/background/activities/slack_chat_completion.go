@@ -52,7 +52,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 	if input.Event.Event.ThreadTs != "" {
 		if replies, err := s.slackClient.GetConversationReplies(ctx, authInfo.AccessToken, client.SlackConversationInput{
 			ChannelID: input.Event.Event.Channel,
-			ThreadTS:  input.Event.Event.ThreadTS,
+			ThreadTS:  input.Event.Event.ThreadTs,
 			Limit:     nil,
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "error getting conversation replies", slog.String("error", err.Error()))
