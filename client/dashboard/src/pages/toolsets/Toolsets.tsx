@@ -5,10 +5,11 @@ import { Page } from "@/components/page-layout";
 import { ToolsBadge } from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { HumanizeDateTime } from "@/lib/dates";
+import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
 import {
@@ -17,9 +18,11 @@ import {
   useToolsetSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
+import { CheckCircle2, Copy } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { ToolsetEnvironmentBadge } from "./Toolset";
+import { useProject } from "@/contexts/Auth";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -130,6 +133,34 @@ export function CreateThingCard({
 
 function ToolsetCard({ toolset }: { toolset: Toolset }) {
   const routes = useRoutes();
+  const [mcpModalOpen, setMcpModalOpen] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const project = useProject();
+
+  // Example JSON snippet as a string for formatting
+  const mcpJson = `{
+    "mcpServers": {
+      "Gram${toolset.slug.replace(/-/g, "").replace(/^./, c => c.toUpperCase())}": {
+        "command": "npx",
+        "args": [
+          "mcp-remote",
+          "${getServerURL()}/mcp/${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug || "default"}",
+          "--allow-http",
+          "--header",
+          "Authorization:\${GRAM_KEY}"
+        ],
+        "env": {
+          "GRAM_KEY": "Bearer <your-key-here>"
+        }
+      }
+    }
+  }`;
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(mcpJson);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   return (
     <Card>
@@ -174,11 +205,47 @@ function ToolsetCard({ toolset }: { toolset: Toolset }) {
               </Button>
             </routes.playground.Link>
           </div>
-          <SimpleTooltip tooltip="Toolsets as a hosted MCP are coming soon!">
-            <Button variant="outline" className="group" disabled>
+          <div>
+            <Button
+              variant="outline"
+              className="group"
+              onClick={() => setMcpModalOpen(true)}
+            >
               MCP Server
             </Button>
-          </SimpleTooltip>
+            <Dialog open={mcpModalOpen} onOpenChange={setMcpModalOpen}>
+              <Dialog.Content className="!max-w-3xl !p-10">
+                <Dialog.Header>
+                  <Dialog.Title>MCP Server</Dialog.Title>
+                  <Dialog.Description>
+                    Every Gram toolset is represented as a streamable HTTP MCP
+                    server. Copy this snippet for an MCP config.
+                  </Dialog.Description>
+                </Dialog.Header>
+                <div className="relative bg-muted p-3 rounded-md my-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCopy}
+                    className="absolute top-3 right-3 z-10 bg-background shadow-md border border-border hover:bg-accent"
+                    style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+                  >
+                    {isCopied ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <Copy className="h-5 w-5" />
+                    )}
+                  </Button>
+                  <pre className="break-all whitespace-pre-wrap text-xs max-h-96 overflow-auto pr-10">
+                    {mcpJson}
+                  </pre>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={() => setMcpModalOpen(false)}>Close</Button>
+                </div>
+              </Dialog.Content>
+            </Dialog>
+          </div>
         </div>
       </Card.Content>
     </Card>
