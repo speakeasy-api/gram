@@ -17,7 +17,6 @@ type OpenAIChatRequest struct {
 	Messages    []OpenAIChatMessage `json:"messages"`
 	Stream      bool                `json:"stream"`
 	Tools       []Tool              `json:"tools,omitempty"`
-	ToolChoice  string              `json:"tool_choice,omitempty"` // e.g. "auto"
 	Temperature float32             `json:"temperature,omitempty"`
 }
 
@@ -69,6 +68,14 @@ type StreamingChunk struct {
 	Model             string        `json:"model"`
 	SystemFingerprint string        `json:"system_fingerprint"`
 	Choices           []ChunkChoice `json:"choices"`
+	Usage             *Usage        `json:"usage"`
+}
+
+// Tokens used in the completion
+type Usage struct {
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
 }
 
 // OpenAIChatResponse represents the response structure from OpenAI for non-streaming responses

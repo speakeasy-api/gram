@@ -129,7 +129,6 @@ func (c *ChatClient) AgentChat(
 			Messages:    messages,
 			Stream:      false,
 			Tools:       toolDefs,
-			ToolChoice:  "auto",
 			Temperature: 0.5,
 		}
 

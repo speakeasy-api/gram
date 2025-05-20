@@ -324,6 +324,7 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	// Most of the time, this just serves to store the new message the user just sent
 	if int(chatCount) < len(request.Messages) {
 		for _, msg := range request.Messages[int(chatCount):] {
+			//nolint:exhaustruct // Not all fields are relevant for user-supplied messages
 			_, err := s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{{
 				ChatID:       chatID,
 				Role:         msg.Role,
@@ -362,6 +363,7 @@ type responseCaptor struct {
 	repo                 *repo.Queries
 	toolCallID           string
 	accumulatedToolCalls map[int]ToolCall // Map of index to accumulated tool call data
+	usage                Usage
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -392,15 +394,18 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 
 		// TODO batch insert the messages
 		_, err := r.repo.CreateChatMessage(r.ctx, []repo.CreateChatMessageParams{{
-			ChatID:       r.chatID,
-			MessageID:    conv.ToPGText(r.messageID),
-			Role:         "assistant",
-			Model:        conv.ToPGText(r.model),
-			Content:      r.messageContent.String(),
-			ToolCallID:   conv.ToPGText(r.toolCallID),
-			ToolCalls:    toolCallsJSON,
-			FinishReason: conv.PtrToPGText(r.finishReason),
-			UserID:       conv.ToPGTextEmpty(""), // These are agent messages, not user messages
+			ChatID:           r.chatID,
+			MessageID:        conv.ToPGText(r.messageID),
+			Role:             "assistant",
+			Model:            conv.ToPGText(r.model),
+			Content:          r.messageContent.String(),
+			ToolCallID:       conv.ToPGText(r.toolCallID),
+			ToolCalls:        toolCallsJSON,
+			PromptTokens:     int64(r.usage.PromptTokens),
+			CompletionTokens: int64(r.usage.CompletionTokens),
+			TotalTokens:      int64(r.usage.TotalTokens),
+			FinishReason:     conv.PtrToPGText(r.finishReason),
+			UserID:           conv.ToPGTextEmpty(""), // These are agent messages, not user messages
 		}})
 		if err != nil {
 			r.logger.ErrorContext(r.ctx, "failed to store chat message", slog.String("error", err.Error()))
@@ -427,6 +432,10 @@ func (r *responseCaptor) processLine(line string) {
 		if err := json.Unmarshal([]byte(data), &chunk); err == nil {
 			r.messageID = chunk.ID
 			r.model = chunk.Model
+
+			if chunk.Usage != nil {
+				r.usage = *chunk.Usage
+			}
 
 			// Process each choice in the chunk
 			for _, choice := range chunk.Choices {

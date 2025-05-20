@@ -24,15 +24,18 @@ func (q *Queries) CountChatMessages(ctx context.Context, chatID uuid.UUID) (int6
 }
 
 type CreateChatMessageParams struct {
-	ChatID       uuid.UUID
-	Role         string
-	Content      string
-	Model        pgtype.Text
-	MessageID    pgtype.Text
-	ToolCallID   pgtype.Text
-	UserID       pgtype.Text
-	FinishReason pgtype.Text
-	ToolCalls    []byte
+	ChatID           uuid.UUID
+	Role             string
+	Content          string
+	Model            pgtype.Text
+	MessageID        pgtype.Text
+	ToolCallID       pgtype.Text
+	UserID           pgtype.Text
+	FinishReason     pgtype.Text
+	ToolCalls        []byte
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
 }
 
 const getChat = `-- name: GetChat :one
@@ -57,7 +60,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, chat_id, role, content, model, message_id, tool_call_id, user_id, finish_reason, tool_calls, created_at FROM chat_messages WHERE chat_id = $1
+SELECT id, chat_id, role, content, model, message_id, tool_call_id, user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, created_at FROM chat_messages WHERE chat_id = $1
 `
 
 func (q *Queries) ListChatMessages(ctx context.Context, chatID uuid.UUID) ([]ChatMessage, error) {
@@ -80,6 +83,9 @@ func (q *Queries) ListChatMessages(ctx context.Context, chatID uuid.UUID) ([]Cha
 			&i.UserID,
 			&i.FinishReason,
 			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -101,6 +107,12 @@ SELECT
             0
         )
     )::integer as num_messages 
+    , (
+        COALESCE(
+            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as total_tokens
 FROM chats c 
 WHERE c.project_id = $1
 `
@@ -116,6 +128,7 @@ type ListChatsRow struct {
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
 	NumMessages    int32
+	TotalTokens    int32
 }
 
 func (q *Queries) ListChats(ctx context.Context, projectID uuid.UUID) ([]ListChatsRow, error) {
@@ -138,6 +151,7 @@ func (q *Queries) ListChats(ctx context.Context, projectID uuid.UUID) ([]ListCha
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.NumMessages,
+			&i.TotalTokens,
 		); err != nil {
 			return nil, err
 		}

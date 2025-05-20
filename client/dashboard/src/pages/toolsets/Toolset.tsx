@@ -269,11 +269,17 @@ export function ToolsetView({
     />
   );
 
-  const toolsToDisplay = grouped
+  let toolsToDisplay: HTTPToolDefinition[] = grouped
     .filter(
       (group) => !selectedGroups.length || selectedGroups.includes(group.key)
     )
     .flatMap((group) => group.tools);
+
+  // If no tools are selected, show all tools
+  // Mostly a failsafe for if the filtering doesn't work as expected
+  if (toolsToDisplay.length === 0) {
+    toolsToDisplay = toolset?.httpTools || [];
+  }
 
   return (
     <Page.Body className={className}>

@@ -22,15 +22,18 @@ type Chat struct {
 }
 
 type ChatMessage struct {
-	ID           uuid.UUID
-	ChatID       uuid.UUID
-	Role         string
-	Content      string
-	Model        pgtype.Text
-	MessageID    pgtype.Text
-	ToolCallID   pgtype.Text
-	UserID       pgtype.Text
-	FinishReason pgtype.Text
-	ToolCalls    []byte
-	CreatedAt    pgtype.Timestamptz
+	ID               uuid.UUID
+	ChatID           uuid.UUID
+	Role             string
+	Content          string
+	Model            pgtype.Text
+	MessageID        pgtype.Text
+	ToolCallID       pgtype.Text
+	UserID           pgtype.Text
+	FinishReason     pgtype.Text
+	ToolCalls        []byte
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	CreatedAt        pgtype.Timestamptz
 }

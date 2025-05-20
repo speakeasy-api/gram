@@ -120,7 +120,9 @@ export default function Playground() {
     >
       <Stack direction="horizontal" gap={2} align="center">
         <Icon name="history" className="opacity-50" />
-        <Type variant="small">Chat History</Type>
+        <Type variant="small" className="font-medium">
+          Chat History
+        </Type>
       </Stack>
     </Combobox>
   );

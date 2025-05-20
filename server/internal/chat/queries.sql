@@ -33,8 +33,11 @@ INSERT INTO chat_messages (
   , user_id
   , finish_reason
   , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
 )
-VALUES (@chat_id, @role, @content, @model, @message_id, @tool_call_id, @user_id, @finish_reason, @tool_calls);
+VALUES (@chat_id, @role, @content, @model, @message_id, @tool_call_id, @user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
 
 -- name: ListChats :many
 SELECT 
@@ -45,6 +48,12 @@ SELECT
             0
         )
     )::integer as num_messages 
+    , (
+        COALESCE(
+            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as total_tokens
 FROM chats c 
 WHERE c.project_id = @project_id;
 

@@ -2,7 +2,7 @@
 
 export function GramLogo({ className }: { className?: string }) {
   return (
-    <span className={`bsmnt-text-display-xl ${className} dark:text-[#fafafa]`}>
+    <span className={`bsmnt-text-display-xl text-foreground ${className}`}>
       gram
     </span>
   );

@@ -407,6 +407,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   user_id TEXT,
   finish_reason TEXT,
   tool_calls JSONB,
+  prompt_tokens BIGINT NOT NULL DEFAULT 0,
+  completion_tokens BIGINT NOT NULL DEFAULT 0,
+  total_tokens BIGINT NOT NULL DEFAULT 0,
   
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   
@@ -415,6 +418,34 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
+
+-- Function to update the total_tokens in chats table
+CREATE OR REPLACE FUNCTION update_chat_total_tokens()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Update the total_tokens in the chats table
+  UPDATE chats
+  SET total_tokens = (
+    SELECT COALESCE(SUM(total_tokens), 0)
+    FROM chat_messages
+    WHERE chat_id = CASE
+      WHEN TG_OP = 'DELETE' THEN OLD.chat_id
+      ELSE NEW.chat_id
+    END
+  )
+  WHERE id = CASE
+    WHEN TG_OP = 'DELETE' THEN OLD.chat_id
+    ELSE NEW.chat_id
+  END;
+  
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update total_tokens when chat_messages are inserted, updated, or deleted
+CREATE TRIGGER update_chat_total_tokens_trigger
+AFTER INSERT OR UPDATE OR DELETE ON chat_messages
+FOR EACH ROW EXECUTE FUNCTION update_chat_total_tokens();
 
 CREATE TABLE IF NOT EXISTS slack_app_connections (
   organization_id TEXT NOT NULL,

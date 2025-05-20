@@ -60,7 +60,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
             >
               <routes.home.Link>
-                <GramLogo className="text-2xl" />
+                <GramLogo className="text-3xl" />
               </routes.home.Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

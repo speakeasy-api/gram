@@ -15,13 +15,13 @@ import { NavButton } from "./nav-menu.tsx";
 import { Button } from "./ui/button.tsx";
 import { Combobox } from "./ui/combobox.tsx";
 import { Heading } from "./ui/heading.tsx";
+import { Input } from "./ui/input.tsx";
+import { Label } from "./ui/label.tsx";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
 import { Separator } from "./ui/separator.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
 import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { Type } from "./ui/type.tsx";
-import { Label } from "./ui/label.tsx";
-import { Input } from "./ui/input.tsx";
 
 // Generate colors from project label
 function getProjectColors(label: string): {
@@ -89,6 +89,51 @@ export function ProjectMenu() {
 
   const [open, setOpen] = React.useState(false);
 
+  const adminOverride = isAdmin ? (
+    <>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+
+          const formData = new FormData(e.currentTarget);
+          const val = formData.get("gram_admin_override");
+          if (typeof val === "string") {
+            document.cookie = `gram_admin_override=${val}; path=/; max-age=31536000;`;
+          }
+          await client.auth.logout();
+          window.location.href = "/login";
+          setOpen(false);
+        }}
+      >
+        <Stack gap={2}>
+          <Label htmlFor={overrideFieldId} className="text-muted-foreground">
+            Override org (admin)
+          </Label>
+          <Input
+            type="text"
+            name="gram_admin_override"
+            placeholder="Organization slug"
+            id={overrideFieldId}
+          />
+        </Stack>
+        <button className="sr-only" type="submit"></button>
+      </form>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={async () => {
+          document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+          await client.auth.logout();
+          window.location.href = "/login";
+          setOpen(false);
+        }}
+      >
+        Clear override
+      </Button>
+      <Separator className="my-2" />
+    </>
+  ) : null;
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -114,6 +159,7 @@ export function ProjectMenu() {
       </PopoverTrigger>
       <PopoverContent className="w-[200px] p-0">
         <div className="flex flex-col gap-2 p-2">
+          {adminOverride}
           <Stack gap={1}>
             <Type variant="small" className="px-2">
               {organization?.slug}
@@ -136,47 +182,7 @@ export function ProjectMenu() {
             </Type>
             <ThemeToggle />
           </Stack>
-          {isAdmin ? (
-            <>
-              <Separator className="my-2" />
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
 
-                  const formData = new FormData(e.currentTarget);
-                  const val = formData.get("gram_admin_override");
-                  if (typeof val === "string") {
-                    document.cookie = `gram_admin_override=${val}; path=/; max-age=31536000;`;
-                  }
-                  await client.auth.logout();
-                  window.location.href = "/login";
-                  setOpen(false);
-                }}
-              >
-                <Stack gap={2}>
-                  <Label htmlFor={overrideFieldId}>Admin override</Label>
-                  <Input
-                    type="text"
-                    name="gram_admin_override"
-                    placeholder="Organization slug"
-                    id={overrideFieldId}
-                  />
-                </Stack>
-                <button className="sr-only" type="submit"></button>
-              </form>
-              <Button
-                onClick={async () => {
-                  document.cookie = `gram_admin_override=; path=/; max-age=0;`;
-                  await client.auth.logout();
-                  window.location.href = "/login";
-                  setOpen(false);
-                }}
-              >
-                Clear override
-              </Button>
-              <Separator className="my-2" />
-            </>
-          ) : null}
           <NavButton
             title="Logout"
             Icon={() => <Icon name="log-out" />}
