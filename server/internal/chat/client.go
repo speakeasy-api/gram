@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-cleanhttp"
@@ -60,6 +61,7 @@ type AgentChatOptions struct {
 	ToolsetSlug             *string
 	AdditionalTools         []AgentTool
 	AddedEnvironmentEntries map[string]string
+	AgentTimeout            *time.Duration
 }
 
 // AgentChat loops over tool calls until completion and returns the final message.
@@ -70,6 +72,12 @@ func (c *ChatClient) AgentChat(
 	prompt string,
 	opts AgentChatOptions,
 ) (string, error) {
+	if opts.AgentTimeout != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *opts.AgentTimeout)
+		defer cancel()
+	}
+
 	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
 	if err != nil {
 		return "", fmt.Errorf("provisioning OpenRouter key: %w", err)

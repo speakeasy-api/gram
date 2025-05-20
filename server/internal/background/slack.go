@@ -31,7 +31,7 @@ func ExecuteProcessSlackEventWorkflow(ctx context.Context, temporalClient client
 		TaskQueue:                string(TaskQueueMain),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		WorkflowRunTimeout:       time.Minute * 5,
+		WorkflowRunTimeout:       time.Minute * 3,
 	}, SlackEventWorkflow, params)
 }
 
@@ -42,7 +42,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 	logger.Info("received slack event", slog.Any("event", params.Event))
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts: 1,
 		},

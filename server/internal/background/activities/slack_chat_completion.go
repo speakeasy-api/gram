@@ -35,6 +35,7 @@ func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackCli
 }
 
 func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionInput) (string, error) {
+	slackChatCompletionTimeout := 60 * time.Second
 	authInfo, err := s.slackClient.GetAppAuthInfo(ctx, input.Event.TeamID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error getting app auth info").Log(ctx, s.logger)
@@ -98,6 +99,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		AddedEnvironmentEntries: map[string]string{
 			"SLACK_SLACK_BOT_TOKEN": authInfo.AccessToken,
 		},
+		AgentTimeout: &slackChatCompletionTimeout,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
