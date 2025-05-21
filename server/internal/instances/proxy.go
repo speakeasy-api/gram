@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -38,16 +39,22 @@ var proxiedHeaders = []string{
 }
 
 type ToolCallBody struct {
-	PathParameters  map[string]any  `json:"pathParameters"`
-	QueryParameters map[string]any  `json:"queryParameters"`
-	Headers         map[string]any  `json:"headers"`
-	Body            json.RawMessage `json:"body"`
+	PathParameters       map[string]any    `json:"pathParameters"`
+	QueryParameters      map[string]any    `json:"queryParameters"`
+	Headers              map[string]any    `json:"headers"`
+	Body                 json.RawMessage   `json:"body"`
+	EnvironmentVariables map[string]string `json:"environmentVariables"`
 }
 
 func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
+	}
+
+	// environment variable overrides on tool calls typically defined in the SDK
+	if toolCallBody.EnvironmentVariables != nil {
+		maps.Copy(envVars, toolCallBody.EnvironmentVariables)
 	}
 
 	// Handle path parameters
