@@ -448,11 +448,11 @@ AFTER INSERT OR UPDATE OR DELETE ON chat_messages
 FOR EACH ROW EXECUTE FUNCTION update_chat_total_tokens();
 
 CREATE TABLE IF NOT EXISTS slack_app_connections (
+  slack_team_id TEXT NOT NULL,
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   access_token TEXT NOT NULL,
   slack_team_name TEXT NOT NULL,
-  slack_team_id TEXT NOT NULL,
   default_toolset_slug TEXT CHECK (
     default_toolset_slug IS NULL OR (default_toolset_slug <> '' AND CHAR_LENGTH(default_toolset_slug) <= 40)
   ),
@@ -461,6 +461,6 @@ CREATE TABLE IF NOT EXISTS slack_app_connections (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT slack_auth_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT slack_auth_connections_slack_team_id_key UNIQUE (slack_team_id),
+  CONSTRAINT slack_auth_connections_slack_team_id_key PRIMARY KEY (slack_team_id),
   CONSTRAINT slack_auth_connections_organization_id_project_id_key UNIQUE (organization_id, project_id)
 );
