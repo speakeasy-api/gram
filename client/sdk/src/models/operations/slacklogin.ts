@@ -16,6 +16,10 @@ export type SlackLoginSecurity = {
 export type SlackLoginRequest = {
   projectSlug: string;
   /**
+   * The dashboard location to return too
+   */
+  returnUrl?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -99,10 +103,12 @@ export const SlackLoginRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   project_slug: z.string(),
+  return_url: z.string().optional(),
   "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "project_slug": "projectSlug",
+    "return_url": "returnUrl",
     "Gram-Session": "gramSession",
   });
 });
@@ -110,6 +116,7 @@ export const SlackLoginRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type SlackLoginRequest$Outbound = {
   project_slug: string;
+  return_url?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -120,10 +127,12 @@ export const SlackLoginRequest$outboundSchema: z.ZodType<
   SlackLoginRequest
 > = z.object({
   projectSlug: z.string(),
+  returnUrl: z.string().optional(),
   gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     projectSlug: "project_slug",
+    returnUrl: "return_url",
     gramSession: "Gram-Session",
   });
 });

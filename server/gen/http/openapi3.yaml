@@ -120,6 +120,13 @@ paths:
                   schema:
                     type: string
                 - allowEmptyValue: true
+                  description: The dashboard location to return too
+                  in: query
+                  name: return_url
+                  schema:
+                    description: The dashboard location to return too
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session

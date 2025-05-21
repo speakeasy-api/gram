@@ -288,6 +288,11 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		if p.ReturnURL != nil {
+			values.Add("return_url", *p.ReturnURL)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

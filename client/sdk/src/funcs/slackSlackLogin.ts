@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -99,6 +99,10 @@ async function $do(
 
   const path = pathToFunc("/rpc/{project_slug}/slack.login")(pathParams);
 
+  const query = encodeFormQuery({
+    "return_url": payload.return_url,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
@@ -142,6 +146,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);

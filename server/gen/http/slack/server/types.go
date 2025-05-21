@@ -1727,9 +1727,10 @@ func NewCallbackPayload(state string, code string) *slack.CallbackPayload {
 }
 
 // NewLoginPayload builds a slack service login endpoint payload.
-func NewLoginPayload(projectSlug string, sessionToken *string) *slack.LoginPayload {
+func NewLoginPayload(projectSlug string, returnURL *string, sessionToken *string) *slack.LoginPayload {
 	v := &slack.LoginPayload{}
 	v.ProjectSlug = &projectSlug
+	v.ReturnURL = returnURL
 	v.SessionToken = sessionToken
 
 	return v

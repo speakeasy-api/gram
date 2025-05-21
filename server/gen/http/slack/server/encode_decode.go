@@ -230,16 +230,21 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 	return func(r *http.Request) (any, error) {
 		var (
 			projectSlug  string
+			returnURL    *string
 			sessionToken *string
 
 			params = mux.Vars(r)
 		)
 		projectSlug = params["project_slug"]
+		returnURLRaw := r.URL.Query().Get("return_url")
+		if returnURLRaw != "" {
+			returnURL = &returnURLRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload := NewLoginPayload(projectSlug, sessionToken)
+		payload := NewLoginPayload(projectSlug, returnURL, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -97,6 +97,8 @@ type GetSlackConnectionResult struct {
 type LoginPayload struct {
 	SessionToken *string
 	ProjectSlug  *string
+	// The dashboard location to return too
+	ReturnURL *string
 }
 
 // LoginResult is the result type of the slack service login method.

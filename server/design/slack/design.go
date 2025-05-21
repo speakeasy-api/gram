@@ -51,6 +51,7 @@ var _ = Service("slack", func() {
 		Payload(func() {
 			security.SessionPayload()
 			APIKey(auth.ProjectSlugSecuritySchema, "project_slug", String)
+			Attribute("return_url", String, "The dashboard location to return too")
 		})
 
 		Result(func() {
@@ -61,6 +62,7 @@ var _ = Service("slack", func() {
 		HTTP(func() {
 			GET("/rpc/{project_slug}/slack.login")
 			Param("project_slug")
+			Param("return_url")
 			security.SessionHeader()
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {

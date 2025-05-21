@@ -12,7 +12,8 @@ let value: SlackLoginRequest = {
 
 ## Fields
 
-| Field              | Type               | Required           | Description        |
-| ------------------ | ------------------ | ------------------ | ------------------ |
-| `projectSlug`      | *string*           | :heavy_check_mark: | N/A                |
-| `gramSession`      | *string*           | :heavy_minus_sign: | Session header     |
+| Field                                | Type                                 | Required                             | Description                          |
+| ------------------------------------ | ------------------------------------ | ------------------------------------ | ------------------------------------ |
+| `projectSlug`                        | *string*                             | :heavy_check_mark:                   | N/A                                  |
+| `returnUrl`                          | *string*                             | :heavy_minus_sign:                   | The dashboard location to return too |
+| `gramSession`                        | *string*                             | :heavy_minus_sign:                   | Session header                       |

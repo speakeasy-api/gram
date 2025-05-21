@@ -34,10 +34,16 @@ func BuildCallbackPayload(slackCallbackState string, slackCallbackCode string) (
 
 // BuildLoginPayload builds the payload for the slack login endpoint from CLI
 // flags.
-func BuildLoginPayload(slackLoginProjectSlug string, slackLoginSessionToken string) (*slack.LoginPayload, error) {
+func BuildLoginPayload(slackLoginProjectSlug string, slackLoginReturnURL string, slackLoginSessionToken string) (*slack.LoginPayload, error) {
 	var projectSlug string
 	{
 		projectSlug = slackLoginProjectSlug
+	}
+	var returnURL *string
+	{
+		if slackLoginReturnURL != "" {
+			returnURL = &slackLoginReturnURL
+		}
 	}
 	var sessionToken *string
 	{
@@ -47,6 +53,7 @@ func BuildLoginPayload(slackLoginProjectSlug string, slackLoginSessionToken stri
 	}
 	v := &slack.LoginPayload{}
 	v.ProjectSlug = &projectSlug
+	v.ReturnURL = returnURL
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -82,7 +89,7 @@ func BuildUpdateSlackConnectionPayload(slackUpdateSlackConnectionBody string, sl
 	{
 		err = json.Unmarshal([]byte(slackUpdateSlackConnectionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_toolset_slug\": \"Architecto officia ipsam voluptate mollitia.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_toolset_slug\": \"Voluptatem rerum nam a perspiciatis sint.\"\n   }'")
 		}
 	}
 	var sessionToken *string

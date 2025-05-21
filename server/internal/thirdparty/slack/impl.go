@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -120,31 +121,36 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
-	redirectWithError := func(err error) (*gen.CallbackResult, error) {
+	returnURL := s.cfg.SignInRedirectURL
+	redirectWithError := func(returnURL string, err error) (*gen.CallbackResult, error) {
 		s.logger.ErrorContext(ctx, "slack auth error", slog.String("error", err.Error()))
 		return &gen.CallbackResult{
-			Location: fmt.Sprintf("%s?slack_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			Location: fmt.Sprintf("%s?slack_error=%s", returnURL, err.Error()),
 		}, nil
 	}
 	stateValues, err := url.ParseQuery(payload.State)
 	if err != nil {
-		return redirectWithError(err)
+		return redirectWithError(returnURL, err)
 	}
 
 	//TODO: Check organization and project relationship with exported utility
 	projectID := stateValues.Get("project_id")
 	organizationID := stateValues.Get("organization_id")
+	returnURL = stateValues.Get("return_url")
+	if returnURL == "" {
+		returnURL = s.cfg.SignInRedirectURL
+	}
 
 	initialRedirectURI := fmt.Sprintf("%s/rpc/slack.callback", s.cfg.GramServerURL)
 
 	response, err := s.client.OAuthV2Access(ctx, payload.Code, initialRedirectURI)
 	if err != nil {
-		return redirectWithError(err)
+		return redirectWithError(returnURL, err)
 	}
 
 	encrypedSlackToken, err := s.enc.Encrypt([]byte(response.AccessToken))
 	if err != nil {
-		return redirectWithError(err)
+		return redirectWithError(returnURL, err)
 	}
 
 	_, err = s.repo.CreateSlackAppConnection(ctx, repo.CreateSlackAppConnectionParams{
@@ -156,7 +162,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		DefaultToolsetSlug: conv.ToPGTextEmpty(""),
 	})
 	if err != nil {
-		return redirectWithError(err)
+		return redirectWithError(returnURL, errors.New("this slack workspace is already linked to a gram project"))
 	}
 
 	return &gen.CallbackResult{
@@ -173,6 +179,9 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	state := url.Values{}
 	state.Set("project_id", authCtx.ProjectID.String())
 	state.Set("organization_id", authCtx.ActiveOrganizationID)
+	if payload.ReturnURL != nil {
+		state.Set("return_url", *payload.ReturnURL)
+	}
 
 	installURL, err := url.Parse(s.cfg.SlackAppInstallURL)
 	if err != nil {
