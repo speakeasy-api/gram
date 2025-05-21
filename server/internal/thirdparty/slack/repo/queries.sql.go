@@ -28,7 +28,7 @@ INSERT INTO slack_app_connections (
   , $5
   , $6
 )
-RETURNING organization_id, project_id, access_token, slack_team_name, slack_team_id, default_toolset_slug, created_at, updated_at
+RETURNING slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
 `
 
 type CreateSlackAppConnectionParams struct {
@@ -51,11 +51,11 @@ func (q *Queries) CreateSlackAppConnection(ctx context.Context, arg CreateSlackA
 	)
 	var i SlackAppConnection
 	err := row.Scan(
+		&i.SlackTeamID,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.AccessToken,
 		&i.SlackTeamName,
-		&i.SlackTeamID,
 		&i.DefaultToolsetSlug,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -80,7 +80,7 @@ func (q *Queries) DeleteSlackAppConnection(ctx context.Context, arg DeleteSlackA
 }
 
 const getSlackAppConnection = `-- name: GetSlackAppConnection :one
-SELECT organization_id, project_id, access_token, slack_team_name, slack_team_id, default_toolset_slug, created_at, updated_at
+SELECT slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
 FROM slack_app_connections
 WHERE organization_id = $1
   AND project_id = $2
@@ -95,11 +95,11 @@ func (q *Queries) GetSlackAppConnection(ctx context.Context, arg GetSlackAppConn
 	row := q.db.QueryRow(ctx, getSlackAppConnection, arg.OrganizationID, arg.ProjectID)
 	var i SlackAppConnection
 	err := row.Scan(
+		&i.SlackTeamID,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.AccessToken,
 		&i.SlackTeamName,
-		&i.SlackTeamID,
 		&i.DefaultToolsetSlug,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -108,7 +108,7 @@ func (q *Queries) GetSlackAppConnection(ctx context.Context, arg GetSlackAppConn
 }
 
 const getSlackAppConnectionByTeamID = `-- name: GetSlackAppConnectionByTeamID :one
-SELECT organization_id, project_id, access_token, slack_team_name, slack_team_id, default_toolset_slug, created_at, updated_at
+SELECT slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
 FROM slack_app_connections
 WHERE slack_team_id = $1
 `
@@ -117,11 +117,11 @@ func (q *Queries) GetSlackAppConnectionByTeamID(ctx context.Context, slackTeamID
 	row := q.db.QueryRow(ctx, getSlackAppConnectionByTeamID, slackTeamID)
 	var i SlackAppConnection
 	err := row.Scan(
+		&i.SlackTeamID,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.AccessToken,
 		&i.SlackTeamName,
-		&i.SlackTeamID,
 		&i.DefaultToolsetSlug,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -136,7 +136,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND project_id = $3
-RETURNING organization_id, project_id, access_token, slack_team_name, slack_team_id, default_toolset_slug, created_at, updated_at
+RETURNING slack_team_id, organization_id, project_id, access_token, slack_team_name, default_toolset_slug, created_at, updated_at
 `
 
 type UpdateSlackAppConnectionParams struct {
@@ -149,11 +149,11 @@ func (q *Queries) UpdateSlackAppConnection(ctx context.Context, arg UpdateSlackA
 	row := q.db.QueryRow(ctx, updateSlackAppConnection, arg.DefaultToolsetSlug, arg.OrganizationID, arg.ProjectID)
 	var i SlackAppConnection
 	err := row.Scan(
+		&i.SlackTeamID,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.AccessToken,
 		&i.SlackTeamName,
-		&i.SlackTeamID,
 		&i.DefaultToolsetSlug,
 		&i.CreatedAt,
 		&i.UpdatedAt,

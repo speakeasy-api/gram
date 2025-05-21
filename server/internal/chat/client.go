@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
@@ -29,22 +27,20 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const DefaultChatModel = "openai/gpt-4o"
-
 type ChatClient struct {
 	logger     *slog.Logger
 	openRouter openrouter.Provisioner
-	chatClient *http.Client
+	chatClient *openrouter.ChatClient
 	db         *pgxpool.Pool
 	enc        *encryption.Encryption
 	tracer     trace.Tracer
 }
 
-func NewChatClient(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner, enc *encryption.Encryption) *ChatClient {
+func NewChatClient(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption) *ChatClient {
 	return &ChatClient{
 		logger:     logger,
 		openRouter: openRouter,
-		chatClient: cleanhttp.DefaultPooledClient(),
+		chatClient: chatClient,
 		db:         db,
 		enc:        enc,
 		tracer:     otel.Tracer("github.com/speakeasy-api/gram/internal/chat"),
@@ -52,7 +48,7 @@ func NewChatClient(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.
 }
 
 type AgentTool struct {
-	Definition Tool
+	Definition openrouter.Tool
 	Executor   func(ctx context.Context, rawArgs string) (string, error)
 }
 
@@ -78,16 +74,11 @@ func (c *ChatClient) AgentChat(
 		defer cancel()
 	}
 
-	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
-	if err != nil {
-		return "", fmt.Errorf("provisioning OpenRouter key: %w", err)
-	}
-
-	var messages []OpenAIChatMessage
+	var messages []openrouter.OpenAIChatMessage
 
 	// Optional system prompt
 	if opts.SystemPrompt != nil {
-		messages = append(messages, OpenAIChatMessage{
+		messages = append(messages, openrouter.OpenAIChatMessage{
 			Role:       "system",
 			Content:    *opts.SystemPrompt,
 			ToolCalls:  nil,
@@ -97,7 +88,7 @@ func (c *ChatClient) AgentChat(
 	}
 
 	// User message
-	messages = append(messages, OpenAIChatMessage{
+	messages = append(messages, openrouter.OpenAIChatMessage{
 		Role:       "user",
 		Content:    prompt,
 		ToolCalls:  nil,
@@ -114,7 +105,7 @@ func (c *ChatClient) AgentChat(
 		}
 		agentTools = append(agentTools, toolsetTools...)
 	}
-	toolDefs := make([]Tool, 0, len(agentTools))
+	toolDefs := make([]openrouter.Tool, 0, len(agentTools))
 	executors := make(map[string]func(context.Context, string) (string, error))
 	for _, t := range agentTools {
 		if t.Definition.Function != nil {
@@ -124,52 +115,12 @@ func (c *ChatClient) AgentChat(
 	}
 
 	for {
-		reqBody := OpenAIChatRequest{
-			Model:       DefaultChatModel,
-			Messages:    messages,
-			Stream:      false,
-			Tools:       toolDefs,
-			Temperature: 0.5,
-		}
-
-		data, err := json.Marshal(reqBody)
+		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, messages, toolDefs)
 		if err != nil {
-			return "", fmt.Errorf("marshal request error: %w", err)
+			return "", fmt.Errorf("failed to get completion: %w", err)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/v1/chat/completions", openrouter.OpenRouterBaseURL), bytes.NewReader(data))
-		if err != nil {
-			return "", fmt.Errorf("create request error: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+openrouterKey)
-
-		resp, err := c.chatClient.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("chat request failed: %w", err)
-		}
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				c.logger.ErrorContext(ctx, "failed to close response body", slog.String("error", err.Error()))
-			}
-		}()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("read response error: %w", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("OpenRouter API error: %s", strings.TrimSpace(string(body)))
-		}
-
-		var chatResp OpenAIChatResponse
-		if err := json.Unmarshal(body, &chatResp); err != nil {
-			return "", fmt.Errorf("unmarshal response error: %w", err)
-		}
-
-		msg := chatResp.Choices[0].Message
-		messages = append(messages, msg)
+		messages = append(messages, *msg)
 
 		// No tool calls = final assistant message
 		if len(msg.ToolCalls) == 0 {
@@ -196,7 +147,7 @@ func (c *ChatClient) AgentChat(
 				}
 			}
 
-			messages = append(messages, OpenAIChatMessage{
+			messages = append(messages, openrouter.OpenAIChatMessage{
 				Role:       "tool",
 				Content:    output,
 				Name:       tc.Function.Name,
@@ -326,9 +277,9 @@ func (c *ChatClient) LoadToolsetTools(
 		}
 
 		agentTools = append(agentTools, AgentTool{
-			Definition: Tool{
+			Definition: openrouter.Tool{
 				Type: "function",
-				Function: &FunctionDefinition{
+				Function: &openrouter.FunctionDefinition{
 					Name:        name,
 					Description: httpTool.Description,
 					Parameters:  schema,

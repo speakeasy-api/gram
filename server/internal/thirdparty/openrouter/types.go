@@ -1,4 +1,4 @@
-package chat
+package openrouter
 
 import "encoding/json"
 

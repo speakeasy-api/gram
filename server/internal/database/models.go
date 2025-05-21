@@ -245,11 +245,11 @@ type Project struct {
 }
 
 type SlackAppConnection struct {
+	SlackTeamID        string
 	OrganizationID     string
 	ProjectID          uuid.UUID
 	AccessToken        string
 	SlackTeamName      string
-	SlackTeamID        string
 	DefaultToolsetSlug pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz

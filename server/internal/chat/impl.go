@@ -217,7 +217,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// Create a new reader with the same content for the proxy
 	r.Body = io.NopCloser(strings.NewReader(string(reqBody)))
 
-	var chatRequest OpenAIChatRequest
+	var chatRequest openrouter.OpenAIChatRequest
 	if err := json.Unmarshal(reqBody, &chatRequest); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
 	}
@@ -245,7 +245,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			chatID:               chatID,
 			repo:                 s.repo,
 			messageContent:       &strings.Builder{},
-			accumulatedToolCalls: make(map[int]ToolCall),
+			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
 		}
 	}
 
@@ -290,7 +290,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, chatIDHeader string, request OpenAIChatRequest) (uuid.UUID, error) {
+func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid chat ID in header")
@@ -362,8 +362,8 @@ type responseCaptor struct {
 	finishReason         *string
 	repo                 *repo.Queries
 	toolCallID           string
-	accumulatedToolCalls map[int]ToolCall // Map of index to accumulated tool call data
-	usage                Usage
+	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
+	usage                openrouter.Usage
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -428,7 +428,7 @@ func (r *responseCaptor) processLine(line string) {
 		}
 
 		// Parse the chunk as JSON
-		var chunk StreamingChunk
+		var chunk openrouter.StreamingChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err == nil {
 			r.messageID = chunk.ID
 			r.model = chunk.Model
@@ -449,11 +449,11 @@ func (r *responseCaptor) processLine(line string) {
 						r.toolCallID = tc.ID // TODO: is there ever more than one tool call in a chunk?
 
 						if _, ok := r.accumulatedToolCalls[tc.Index]; !ok {
-							r.accumulatedToolCalls[tc.Index] = ToolCall{
+							r.accumulatedToolCalls[tc.Index] = openrouter.ToolCall{
 								Index: tc.Index,
 								ID:    tc.ID,
 								Type:  tc.Type,
-								Function: ToolCallFunction{
+								Function: openrouter.ToolCallFunction{
 									Name:      "",
 									Arguments: "",
 								},

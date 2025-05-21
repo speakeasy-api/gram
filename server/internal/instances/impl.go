@@ -1,7 +1,11 @@
 package instances
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -27,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
@@ -41,11 +46,14 @@ type Service struct {
 	toolset          *toolsets.Toolsets
 	environmentsRepo *environments_repo.Queries
 	entries          *environments.EnvironmentEntries
+	chatClient       *openrouter.ChatClient
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption) *Service {
+const SUMMARIZE_BREAKPOINT_BYTES = 4 * 25_000 // 4 bytes per token, 25k token limit
+
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
 	envRepo := environments_repo.New(db)
 	return &Service{
 		tracer:           otel.Tracer("github.com/speakeasy-api/gram/internal/instances"),
@@ -55,6 +63,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
 		entries:          environments.NewEnvironmentEntries(logger, envRepo, enc),
+		chatClient:       chatClient,
 	}
 }
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -168,6 +177,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
+
 	ctx, err := s.auth.Authorize(r.Context(), r.Header.Get(auth.SessionHeader), &sc)
 	if err != nil {
 		sc := security.APIKeyScheme{
@@ -180,11 +190,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
 		}
 	}
+
 	sc = security.APIKeyScheme{
 		Name:           auth.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
+
 	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
@@ -223,7 +235,113 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, s.logger)
 	}
 
-	return InstanceToolProxy(ctx, s.tracer, s.logger, w, r.Body, environmentEntries, executionInfo)
+	requestBody := r.Body
+	requestBodyBytes, err := io.ReadAll(requestBody)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "request body", slog.String("request_body", string(requestBodyBytes)))
+
+	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
+
+	// Use a response interceptor that completely captures the response
+	// This is so we can modify the response body before writing it to the original writer
+	// in the event summarization is needed
+	interceptor := newResponseInterceptor(w)
+
+	err = InstanceToolProxy(ctx, s.tracer, s.logger, interceptor, requestBody, environmentEntries, executionInfo)
+	if err != nil {
+		return err
+	}
+
+	// The original, unmodified response body
+	responseBody := interceptor.buffer.String()
+
+	// Summarize if the response is too large or if the "gram-request-summary" param is provided
+	shouldSummarize := len(responseBody) > SUMMARIZE_BREAKPOINT_BYTES
+	var requestSummary struct {
+		GramRequestSummary string `json:"gram-request-summary"`
+	}
+	err = json.Unmarshal(requestBodyBytes, &requestSummary)
+	if err == nil && requestSummary.GramRequestSummary != "" {
+		shouldSummarize = true
+	}
+
+	if shouldSummarize {
+		summarizedResponse, err := s.summarizeResponse(ctx, authCtx.ActiveOrganizationID, requestSummary.GramRequestSummary, responseBody)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to summarize response").Log(ctx, s.logger)
+		}
+
+		s.logger.InfoContext(ctx, "summarizing response",
+			slog.Int("original_length", len(responseBody)),
+			slog.Int("summarized_length", len(summarizedResponse)))
+
+		responseBody = summarizedResponse
+	}
+
+	// Write the modified response to the original response writer
+	w.WriteHeader(interceptor.statusCode)
+	for k, v := range interceptor.headers {
+		for _, val := range v {
+			w.Header().Add(k, val)
+		}
+	}
+
+	_, err = w.Write([]byte(responseBody))
+	return err
+}
+
+func (s *Service) summarizeResponse(ctx context.Context, orgID string, requestSummary, responseBody string) (string, error) {
+	systemPrompt := `
+	You are a helper tasked with reducing the size of the response of a tool based on a given request summary.
+	For example, if the request is to "List all usernames", the response may include a list of users with many additional fields not relevant to the request.
+	Your goal is to extract the information that is most relevant to the request summary and return it as a new response.
+	There's no need to over-summarize responses that are already concise. Prioritize reducing enormous responses to manageable sizes.
+	`
+	prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere is the response body:\n\n%s", requestSummary, responseBody)
+	chatResponse, err := s.chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
+		return "", err
+	}
+
+	return chatResponse.Content, nil
+}
+
+// ResponseInterceptor completely intercepts the response, allowing modifications before sending to client
+type responseInterceptor struct {
+	http.ResponseWriter
+	statusCode int
+	buffer     *bytes.Buffer
+	headers    http.Header
+}
+
+var _ http.ResponseWriter = (*responseInterceptor)(nil)
+
+func newResponseInterceptor(w http.ResponseWriter) *responseInterceptor {
+	return &responseInterceptor{
+		ResponseWriter: w,
+		statusCode:     http.StatusOK, // Default status code
+		buffer:         &bytes.Buffer{},
+		headers:        make(http.Header),
+	}
+}
+
+func (w *responseInterceptor) Header() http.Header {
+	return w.headers
+}
+
+func (w *responseInterceptor) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+	// Don't write the header to the underlying ResponseWriter yet
+	// We'll do that after we've modified the response
+}
+
+// TODO: if we support tool streaming, we will need to handle that here
+func (w *responseInterceptor) Write(b []byte) (int, error) {
+	return w.buffer.Write(b)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

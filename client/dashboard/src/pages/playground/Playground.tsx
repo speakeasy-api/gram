@@ -72,6 +72,7 @@ export default function Playground() {
     searchParams.get("environment") ?? null
   );
   const [dynamicToolset, setDynamicToolset] = useState(false);
+  const [summarizeResponse, setSummarizeResponse] = useState(false);
   const [chatId, setChatId] = useState<string>(
     searchParams.get("chatId") ?? uuidv7()
   );
@@ -162,6 +163,7 @@ export default function Playground() {
               configRef={chatConfigRef}
               chatId={chatId}
               dynamicToolset={dynamicToolset}
+              summarizeResponse={summarizeResponse}
             />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
@@ -171,6 +173,8 @@ export default function Playground() {
               setSelectedEnvironment={setSelectedEnvironment}
               dynamicToolset={dynamicToolset}
               setDynamicToolset={setDynamicToolset}
+              summarizeResponse={summarizeResponse}
+              setSummarizeResponse={setSummarizeResponse}
             />
           </ResizablePanel.Pane>
         </ResizablePanel>
@@ -223,12 +227,16 @@ export function ToolsetPanel({
   setSelectedEnvironment,
   dynamicToolset,
   setDynamicToolset,
+  summarizeResponse,
+  setSummarizeResponse,
 }: {
   configRef: ChatConfig;
   setSelectedToolset: (toolset: string) => void;
   setSelectedEnvironment: (environment: string) => void;
   dynamicToolset: boolean;
   setDynamicToolset: (dynamicToolset: boolean) => void;
+  summarizeResponse: boolean;
+  setSummarizeResponse: (summarizeResponse: boolean) => void;
 }) {
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();
@@ -326,18 +334,32 @@ export function ToolsetPanel({
             <Heading variant="h5">Active toolset: </Heading>
             {toolsetDropdown}
             {isAdmin && (
-              <Button
-                variant="ghost"
-                icon={dynamicToolset ? "sparkles" : "lock"}
-                onClick={() => setDynamicToolset(!dynamicToolset)}
-                tooltip={
-                  dynamicToolset
-                    ? "Make the toolset static (use every tool in the toolset)"
-                    : "Make the toolset dynamic (use only relevant tools)"
-                }
-              >
-                {dynamicToolset ? "Dynamic" : "Static"}
-              </Button>
+              <Stack direction="horizontal" align="center">
+                <Button
+                  variant="ghost"
+                  icon={dynamicToolset ? "sparkles" : "lock"}
+                  onClick={() => setDynamicToolset(!dynamicToolset)}
+                  tooltip={
+                    dynamicToolset
+                      ? "Make the toolset static (use every tool in the toolset)"
+                      : "Make the toolset dynamic (use only relevant tools)"
+                  }
+                >
+                  {dynamicToolset ? "Dynamic" : "Static"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  icon={summarizeResponse ? "sparkles" : "lock"}
+                  onClick={() => setSummarizeResponse(!summarizeResponse)}
+                  tooltip={
+                    summarizeResponse
+                      ? "Disable response summarization"
+                      : "Enable response summarization"
+                  }
+                >
+                  {summarizeResponse ? "Summarize" : "Don't summarize"}
+                </Button>
+              </Stack>
             )}
           </Stack>
           {environmentDropdownItems.length > 1 && (
@@ -361,10 +383,12 @@ export function ChatWindow({
   configRef,
   chatId,
   dynamicToolset,
+  summarizeResponse,
 }: {
   configRef: ChatConfig;
   chatId: string;
   dynamicToolset: boolean;
+  summarizeResponse: boolean;
 }) {
   const [model, setModel] = useState(availableModels[0]?.value ?? "");
   const chatKey = `chat-${model}`;
@@ -378,6 +402,7 @@ export function ChatWindow({
       configRef={configRef}
       chatId={chatId}
       dynamicToolset={dynamicToolset}
+      summarizeResponse={summarizeResponse}
     />
   );
 }
@@ -393,19 +418,22 @@ function ChatInner({
   configRef,
   chatId,
   dynamicToolset,
+  summarizeResponse,
 }: {
   model: string;
   setModel: (model: string) => void;
   configRef: ChatConfig;
   chatId: string;
   dynamicToolset: boolean;
+  summarizeResponse: boolean;
 }) {
   const session = useSession();
   const project = useProject();
   const { chatHistory, isLoading: isChatHistoryLoading } =
     useChatHistory(chatId);
+  const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
 
-  const selectedTools = useRef<Toolset>({});
+  const selectedTools = useRef<string[]>([]);
 
   const instance = useInstance(
     {
@@ -419,24 +447,59 @@ function ChatInner({
     }
   );
 
+  const appendDisplayOnlyMessage = useCallback(
+    (message: string) =>
+      setDisplayOnlyMessages((prev) => [
+        ...prev,
+        {
+          id: uuidv7(),
+          role: "system",
+          content: `unused`,
+          parts: [
+            {
+              type: "text",
+              text: message,
+            },
+          ],
+          createdAt: new Date(),
+        },
+      ]),
+    []
+  );
+
   const allTools: Toolset = useMemo(
     () =>
       Object.fromEntries(
         instance.data?.tools.map((tool) => {
+          const schema = tool.schema ? JSON.parse(tool.schema) : {};
+
+          if (summarizeResponse) {
+            const properties = schema.properties ?? {};
+            properties["gram-request-summary"] = {
+              type: "string",
+              description:
+                "REQUIRED: A summary of the chat history and what you are trying to accomplish by invoking this tool",
+            };
+
+            schema.properties = properties;
+
+            const required = schema.required ?? [];
+            required.push("gram-request-summary");
+            schema.required = required;
+          }
+
           return [
             tool.name,
             {
               id: tool.id,
               method: tool.httpMethod,
               path: tool.path,
-              parameters: jsonSchema(
-                tool.schema ? JSON.parse(tool.schema) : {}
-              ),
+              parameters: jsonSchema(schema),
             },
           ];
         }) ?? []
       ),
-    [instance.data?.tools]
+    [instance.data?.tools, summarizeResponse]
   );
 
   const openrouterChat = createOpenRouter({
@@ -471,12 +534,8 @@ function ChatInner({
     }),
   };
 
-  const updateSelectedTools = async (task: string): Promise<Toolset> => {
-    if (Object.keys(allTools).length === 0) return {};
-
-    if (!dynamicToolset) {
-      return allTools;
-    }
+  const updateSelectedTools = async (task: string) => {
+    if (!dynamicToolset || Object.keys(allTools).length === 0) return;
 
     const toolsString = Object.entries(allTools)
       .map(([tool, toolInfo]) => `${tool}: ${toolInfo.description}`)
@@ -496,38 +555,34 @@ function ChatInner({
       }),
     });
 
-    const filteredTools = Object.fromEntries(
-      Object.entries(allTools).filter(([toolName]) =>
-        result.object.tools.includes(toolName)
-      )
+    selectedTools.current = [...result.object.tools, updateToolsTool.name];
+
+    appendDisplayOnlyMessage(
+      `**Updated tool list:** *${result.object.tools.join(", ")}*`
     );
-
-    if (filteredTools[updateToolsTool.name]) {
-      throw new Error("update_tools tool already exists");
-    }
-
-    filteredTools[updateToolsTool.name] = updateToolsTool;
-
-    selectedTools.current = filteredTools;
-
-    return filteredTools;
   };
 
-  const updateSelectedToolsFromMessages = async (
-    messages: Message[]
-  ): Promise<Toolset> => {
+  const updateSelectedToolsFromMessages = async (messages: Message[]) => {
     const task = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
-    return updateSelectedTools(task);
+    await updateSelectedTools(task);
   };
 
   const openaiFetch: typeof globalThis.fetch = async (_, init) => {
     const messages = JSON.parse(init?.body as string).messages;
 
-    let tools = dynamicToolset ? selectedTools.current : allTools;
+    let tools = allTools;
 
     // On the first message, get the initial set of tools if we're using a dynamic toolset
-    if (dynamicToolset && Object.keys(tools).length === 0) {
-      tools = await updateSelectedToolsFromMessages(messages);
+    if (dynamicToolset && selectedTools.current.length === 0) {
+      await updateSelectedToolsFromMessages(messages);
+    }
+
+    if (dynamicToolset) {
+      tools = Object.fromEntries(
+        Object.entries(allTools).filter(([tool]) =>
+          selectedTools.current.includes(tool)
+        )
+      );
     }
 
     let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
@@ -568,8 +623,8 @@ function ChatInner({
     executeToolCall: async (toolCall) => {
       if (toolCall.toolName === updateToolsTool.name) {
         const args = updateToolsTool.parameters.parse(toolCall.args);
-        const result = await updateSelectedTools(JSON.stringify(args));
-        return `Updated tool list: ${Object.keys(result).join(", ")}`;
+        await updateSelectedTools(JSON.stringify(args));
+        return `Updated tool list: ${selectedTools.current.join(", ")}`;
       }
 
       const tool = allTools[toolCall.toolName];
@@ -591,7 +646,7 @@ function ChatInner({
         }
       );
 
-      const result = await response.json();
+      const result = await response.text();
 
       return result || `status code: ${response.status}`;
     },
@@ -613,6 +668,7 @@ function ChatInner({
     fetch: openaiFetch,
     onError: (error) => {
       console.error("Chat error:", error.message, error.stack);
+      appendDisplayOnlyMessage(`**Error:** *${error.message}*`);
     },
     maxSteps: 5,
     initialMessages,
@@ -630,14 +686,45 @@ function ChatInner({
   );
 
   const JsonDisplay = ({ json }: { json: string }) => {
+    let pretty = json;
+    // Particularly when loading chat history from the database, the JSON formatting needs to be restored
+    if (json.startsWith('"') && json.endsWith('"')) {
+      pretty = json.slice(1, -1);
+      pretty = pretty.replace(/\\"/g, '"');
+      pretty = pretty.replace(/\\n/g, "\n");
+    }
+    try {
+      pretty = JSON.stringify(JSON.parse(pretty), null, 2);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (e) {
+      // If its not JSON, that's ok, we'll just return the string
+    }
+
     return (
       <pre className="typography-body-xs max-h-48 overflow-auto rounded bg-neutral-900 p-2 break-all whitespace-pre-wrap text-neutral-300">
-        {json}
+        {pretty}
       </pre>
     );
   };
 
   const toolCallComponents = {
+    toolName: ({
+      toolName,
+      args,
+    }: {
+      toolName: string;
+      args: Record<string, unknown>;
+    }) => {
+      const hasSummary = JSON.stringify(args).includes("gram-request-summary");
+      return (
+        <Type variant="small" className="font-medium mr-auto">
+          {toolName}
+          {hasSummary ? (
+            <span className="text-muted-foreground"> (auto-summarize)</span>
+          ) : null}
+        </Type>
+      );
+    },
     input: (props: { toolName: string; args: string }) => {
       const tool = allTools[props.toolName];
       return (
@@ -649,12 +736,26 @@ function ChatInner({
         </Stack>
       );
     },
-    result: (props: { toolName: string; result: string }) => {
+    result: (props: {
+      toolName: string;
+      result: string;
+      args: Record<string, unknown>;
+    }) => {
       const tool = allTools[props.toolName];
+      const hasSummary = JSON.stringify(props.args).includes(
+        "gram-request-summary"
+      );
+
       return (
-        <Stack gap={2}>
+        <Stack gap={2} className="mt-4">
           <Type variant="small" className="font-medium text-muted-foreground">
             {tool?.method ? "Response Body" : "Result"}
+            {hasSummary ? (
+              <span className="text-muted-foreground/60">
+                {" "}
+                (auto-summarized)
+              </span>
+            ) : null}
           </Type>
           <JsonDisplay json={props.result} />
         </Stack>
@@ -662,9 +763,20 @@ function ChatInner({
     },
   };
 
+  const messagesToDisplay = [...displayOnlyMessages, ...chatMessages];
+  messagesToDisplay.sort((a, b) => {
+    if (a.createdAt && b.createdAt) {
+      if (a.createdAt.getTime() === b.createdAt.getTime()) {
+        return a.role === "system" ? -1 : 1;
+      }
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    }
+    return 0;
+  });
+
   // TODO: fix this
   /* eslint-disable  @typescript-eslint/no-explicit-any */
-  const m = chatMessages as any;
+  const m = messagesToDisplay as any;
 
   return (
     <AIChatContainer

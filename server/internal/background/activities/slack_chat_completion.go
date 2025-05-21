@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 
 	"github.com/speakeasy-api/gram/internal/chat"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
 )
 
@@ -82,9 +83,9 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 	}
 
 	currentDatetimeTool := chat.AgentTool{
-		Definition: chat.Tool{
+		Definition: openrouter.Tool{
 			Type: "function",
-			Function: &chat.FunctionDefinition{
+			Function: &openrouter.FunctionDefinition{
 				Name:        "get_current_datetime",
 				Description: "Returns the current date and time in ISO 8601 format.",
 				Parameters:  json.RawMessage(currentDatetimeParamsJSON),

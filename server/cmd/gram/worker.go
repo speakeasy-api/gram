@@ -201,7 +201,8 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
-			chatClient := chat.NewChatClient(logger, db, openRouter, encryptionClient)
+			baseChatClient := openrouter.NewChatClient(logger, openRouter)
+			chatClient := chat.NewChatClient(logger, db, openRouter, baseChatClient, encryptionClient)
 
 			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient, chatClient)
 
