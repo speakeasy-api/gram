@@ -33,6 +33,7 @@ import { CreateThingCard } from "../toolsets/Toolsets";
 
 function DeploymentCards() {
   const { data: deployment, refetch, isLoading } = useLatestDeployment();
+  const routes = useRoutes();
 
   const deploymentEmpty =
     !deployment?.deployment ||
@@ -44,13 +45,13 @@ function DeploymentCards() {
   }
 
   if (deploymentEmpty) {
-    return <OnboardingContent onOnboardingComplete={() => refetch()} />;
+    routes.playground.goTo();
   }
 
   return (
     <Suspense fallback={<Cards loading={true} />}>
       <DeploymentTools
-        deploymentId={deployment.deployment!.id}
+        deploymentId={deployment!.deployment!.id}
         onNewDeployment={refetch}
       />
     </Suspense>

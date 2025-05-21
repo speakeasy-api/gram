@@ -1,4 +1,3 @@
-import * as React from "react";
 import { NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -11,10 +10,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useRoutes } from "@/routes";
-import { ProjectMenu } from "./project-menu";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import { Stack } from "@speakeasy-api/moonshine";
+import * as React from "react";
 import { GramLogo } from "./gram-logo";
+import { ProjectMenu } from "./project-menu";
+import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
@@ -59,9 +61,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
             >
-              <routes.home.Link>
-                <GramLogo className="text-3xl" />
-              </routes.home.Link>
+              <Stack direction={"horizontal"} gap={2}>
+                <routes.home.Link>
+                  <GramLogo className="text-3xl" />
+                </routes.home.Link>
+                <Type variant="small" muted className="self-end">
+                  v0.3.1 (alpha)
+                </Type>
+              </Stack>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
