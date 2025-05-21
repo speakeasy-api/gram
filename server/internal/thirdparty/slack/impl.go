@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/repo"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
 	"github.com/speakeasy-api/gram/internal/toolsets"
+	toolset_repo "github.com/speakeasy-api/gram/internal/toolsets/repo"
 	"go.temporal.io/sdk/client"
 )
 
@@ -62,7 +63,7 @@ type Service struct {
 	enc                 *encryption.Encryption
 	repo                *repo.Queries
 	auth                *auth.Auth
-	toolset             *toolsets.Toolsets
+	toolset             *toolset_repo.Queries
 	cfg                 *Configurations
 	client              *slack_client.SlackClient
 	temporal            client.Client
@@ -98,7 +99,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		enc:                 enc,
 		repo:                repo.New(db),
 		auth:                auth.New(logger, db, sessions),
-		toolset:             toolsets.NewToolsets(db),
+		toolset:             toolset_repo.New(db),
 		cfg:                 &cfg,
 		client:              client,
 		temporal:            temporal,
@@ -148,6 +149,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(returnURL, err)
 	}
 
+	toolsets, err := s.toolset.ListToolsetsByProject(ctx, uuid.MustParse(projectID))
+	if err != nil {
+		return redirectWithError(returnURL, errors.New("invalid project"))
+	}
+
+	defaultToolsetSlug := ""
+	if len(toolsets) > 0 {
+		defaultToolsetSlug = toolsets[0].Slug
+	}
+
 	encrypedSlackToken, err := s.enc.Encrypt([]byte(response.AccessToken))
 	if err != nil {
 		return redirectWithError(returnURL, err)
@@ -159,7 +170,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SlackTeamID:        response.Team.ID,
 		SlackTeamName:      response.Team.Name,
 		AccessToken:        encrypedSlackToken,
-		DefaultToolsetSlug: conv.ToPGTextEmpty(""),
+		DefaultToolsetSlug: conv.ToPGTextEmpty(defaultToolsetSlug),
 	})
 	if err != nil {
 		return redirectWithError(returnURL, errors.New("this slack workspace is already linked to a gram project"))
