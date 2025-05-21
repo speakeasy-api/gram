@@ -250,7 +250,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// in the event summarization is needed
 	interceptor := newResponseInterceptor(w)
 
-	err = InstanceToolProxy(ctx, s.tracer, s.logger, interceptor, requestBody, environmentEntries, executionInfo)
+	// Transform environment entries into a map
+	envVars := make(map[string]string)
+	for _, entry := range environmentEntries {
+		envVars[entry.Name] = entry.Value
+	}
+
+	err = InstanceToolProxy(ctx, s.tracer, s.logger, interceptor, requestBody, envVars, executionInfo)
 	if err != nil {
 		return err
 	}

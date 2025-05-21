@@ -194,24 +194,6 @@ func (c *ChatClient) LoadToolsetTools(
 		return nil, fmt.Errorf("failed to load environment entries: %w", err)
 	}
 
-	for key, value := range addedEnvironmentEntries {
-		hasKey := false
-		for _, entry := range environmentEntries {
-			if entry.Name == key {
-				hasKey = true
-				break
-			}
-		}
-		if !hasKey {
-			//nolint:exhaustruct // We really don't need to set pg type timestamps here
-			environmentEntries = append(environmentEntries, env_repo.EnvironmentEntry{
-				Name:          key,
-				Value:         value,
-				EnvironmentID: envModel.ID,
-			})
-		}
-	}
-
 	agentTools := make([]AgentTool, 0, len(toolset.HTTPTools))
 	for _, httpTool := range toolset.HTTPTools {
 		if httpTool == nil {
@@ -247,7 +229,18 @@ func (c *ChatClient) LoadToolsetTools(
 				statusCode: http.StatusOK,
 			}
 
-			err = instances.InstanceToolProxy(ctx, c.tracer, c.logger, rw, bytes.NewBufferString(rawArgs), environmentEntries, executionPlan)
+			// Transform environment entries into a map
+			envVars := make(map[string]string)
+			for _, entry := range environmentEntries {
+				envVars[entry.Name] = entry.Value
+			}
+
+			// use environment overrides
+			for key, value := range addedEnvironmentEntries {
+				envVars[key] = value
+			}
+
+			err = instances.InstanceToolProxy(ctx, c.tracer, c.logger, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

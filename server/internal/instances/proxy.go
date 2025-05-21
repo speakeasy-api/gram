@@ -21,7 +21,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/serialization"
@@ -45,16 +44,10 @@ type ToolCallBody struct {
 	Body            json.RawMessage `json:"body"`
 }
 
-func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, environmentEntries []environments_repo.EnvironmentEntry, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
+func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
-	}
-
-	// Transform environment entries into a map
-	envVars := make(map[string]string)
-	for _, entry := range environmentEntries {
-		envVars[entry.Name] = entry.Value
 	}
 
 	// Handle path parameters

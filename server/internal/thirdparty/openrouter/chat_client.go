@@ -63,7 +63,6 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
 	}
 
-
 	reqBody := OpenAIChatRequest{
 		Model:       DefaultChatModel,
 		Messages:    messages,

@@ -99,7 +99,13 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		statusCode: http.StatusOK,
 	}
 
-	err = instances.InstanceToolProxy(ctx, tracer, logger, rw, bytes.NewBuffer(params.Arguments), environmentEntries, executionPlan)
+	// Transform environment entries into a map
+	envVars := make(map[string]string)
+	for _, entry := range environmentEntries {
+		envVars[entry.Name] = entry.Value
+	}
+
+	err = instances.InstanceToolProxy(ctx, tracer, logger, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan)
 	if err != nil {
 		return nil, err
 	}
