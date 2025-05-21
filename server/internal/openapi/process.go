@@ -441,7 +441,7 @@ type toolDescriptor struct {
 
 func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, op *v3.Operation) toolDescriptor {
 	gramExtNode, _ := op.Extensions.Get("x-gram")
-	name := tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, op.OperationId))
+	name := strcase.ToSnake(tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, op.OperationId)))
 	description := op.Description
 	summary := op.Summary
 
@@ -469,7 +469,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		return toolDesc
 	}
 
-	sanitizedName := tools.SanitizeName(conv.PtrValOr(ext.Name, ""))
+	sanitizedName := strcase.ToSnake(tools.SanitizeName(conv.PtrValOr(ext.Name, "")))
 
 	return toolDescriptor{
 		extensionFound:      true,
