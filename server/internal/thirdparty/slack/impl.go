@@ -166,7 +166,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	return &gen.CallbackResult{
-		Location: s.cfg.SignInRedirectURL,
+		Location: returnURL,
 	}, nil
 }
 

@@ -118,7 +118,7 @@ export default function SlackApp() {
         </div>
         {slackError && (
           <p className="text-red-600 text-left">
-            {decodeURIComponent(slackError)}
+            Error: {decodeURIComponent(slackError)}
           </p>
         )}
         {!installed && (
