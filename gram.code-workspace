@@ -1,10 +1,23 @@
 {
-  "folders": [
-    {
-      "path": "."
-    },
-    {
-      "path": "../moonshine"
-    }
-  ]
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../moonshine"
+		}
+	],
+	"settings": {
+		"typescript.tsdk": "node_modules/typescript/lib",
+		"debug.javascript.defaultRuntimeExecutable": {
+			"pwa-node": "/Users/robertcrumbaugh/.local/share/mise/shims/node"
+		},
+		"workbench.editorAssociations": {
+			"*.md": "default"
+		},
+		"go.goroot": "/Users/robertcrumbaugh/.local/share/mise/installs/go/1.24.3",
+		"go.alternateTools": {
+			"go": "/Users/robertcrumbaugh/.local/share/mise/shims/go"
+		}
+	}
 }

@@ -21,5 +21,6 @@ go.work.sum
 *.tfstate
 *.tfstate.*
 .terraform.tfstate.lock.info
+gram.code-workspace
 
 **/.claude/settings.local.json
