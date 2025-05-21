@@ -41,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/repo"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
-	"github.com/speakeasy-api/gram/internal/toolsets"
 	toolset_repo "github.com/speakeasy-api/gram/internal/toolsets/repo"
 	"go.temporal.io/sdk/client"
 )
