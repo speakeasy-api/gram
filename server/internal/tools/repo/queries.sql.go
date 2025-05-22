@@ -324,6 +324,7 @@ SELECT
   http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
   http_tool_definitions.created_at,
+  http_tool_definitions.tags,
   (CASE
     WHEN http_tool_definitions.project_id = $1 THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
@@ -356,6 +357,7 @@ type ListToolsRow struct {
 	Path                string
 	Openapiv3DocumentID uuid.NullUUID
 	CreatedAt           pgtype.Timestamptz
+	Tags                []string
 	PackageName         string
 }
 
@@ -380,6 +382,7 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 			&i.Path,
 			&i.Openapiv3DocumentID,
 			&i.CreatedAt,
+			&i.Tags,
 			&i.PackageName,
 		); err != nil {
 			return nil, err

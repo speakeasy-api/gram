@@ -18,6 +18,7 @@ import (
 	_ "github.com/speakeasy-api/gram/design/slack"
 	_ "github.com/speakeasy-api/gram/design/tools"
 	_ "github.com/speakeasy-api/gram/design/toolsets"
+	_ "github.com/speakeasy-api/gram/design/variations"
 )
 
 var _ = API("gram", func() {

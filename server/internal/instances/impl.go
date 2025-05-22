@@ -158,6 +158,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			Schema:              tool.Schema,
 			CreatedAt:           tool.CreatedAt,
 			UpdatedAt:           tool.UpdatedAt,
+			Canonical:           tool.Canonical,
 		}
 	}
 

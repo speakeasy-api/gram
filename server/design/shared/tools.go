@@ -32,7 +32,24 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 		Format(FormatDateTime)
 	})
 
+	Attribute("canonical", CanonicalToolAttributes)
+
 	Required("id", "project_id", "deployment_id", "name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "created_at", "updated_at")
+})
+
+var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {
+	Meta("struct:pkg:path", "types")
+	Description("The original details of a tool")
+
+	Required("variation_id", "name")
+
+	Attribute("variation_id", String, "The ID of the variation that was applied to the tool")
+	Attribute("name", String, "The name of the tool")
+	Attribute("summary", String, "Summary of the tool")
+	Attribute("description", String, "Description of the tool")
+	Attribute("confirm", String, "Confirmation mode for the tool")
+	Attribute("confirm_prompt", String, "Prompt for the confirmation")
+	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
 })
 
 var Environment = Type("Environment", func() {

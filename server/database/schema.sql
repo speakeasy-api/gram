@@ -464,3 +464,59 @@ CREATE TABLE IF NOT EXISTS slack_app_connections (
   CONSTRAINT slack_auth_connections_slack_team_id_key PRIMARY KEY (slack_team_id),
   CONSTRAINT slack_auth_connections_organization_id_project_id_key UNIQUE (organization_id, project_id)
 );
+
+CREATE TABLE IF NOT EXISTS tool_variations_groups (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
+  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tool_variations_groups_pkey PRIMARY KEY (id),
+  CONSTRAINT tool_variations_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_tool_variations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  group_id uuid NOT NULL,
+
+  CONSTRAINT project_tool_variations_pkey PRIMARY KEY (id),
+  CONSTRAINT project_tool_variations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT project_tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS project_tool_variations_project_id_key
+ON project_tool_variations (project_id);
+
+CREATE TABLE IF NOT EXISTS tool_variations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  group_id uuid NOT NULL,
+
+  src_tool_name TEXT NOT NULL,
+
+  confirm TEXT,
+  confirm_prompt TEXT,
+  name TEXT,
+  summary TEXT,
+  description TEXT,
+  tags TEXT[],
+  summarizer TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tool_variations_pkey PRIMARY KEY (id),
+  CONSTRAINT tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_name_key
+ON tool_variations (group_id, src_tool_name)
+WHERE deleted IS FALSE;

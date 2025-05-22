@@ -44,4 +44,5 @@ type HTTPToolDefinition struct {
 	CreatedAt string
 	// The last update date of the tool.
 	UpdatedAt string
+	Canonical *CanonicalToolAttributes
 }

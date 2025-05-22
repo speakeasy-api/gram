@@ -48,6 +48,7 @@ SELECT
   http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
   http_tool_definitions.created_at,
+  http_tool_definitions.tags,
   (CASE
     WHEN http_tool_definitions.project_id = @project_id THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name

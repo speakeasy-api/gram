@@ -294,6 +294,34 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 	} else {
 		res.Tags = []string{}
 	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+
+	return res
+}
+
+// marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody
+// builds a value of type *CanonicalToolAttributesResponseBody from a value of
+// type *types.CanonicalToolAttributes.
+func marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v *types.CanonicalToolAttributes) *CanonicalToolAttributesResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &CanonicalToolAttributesResponseBody{
+		VariationID:   v.VariationID,
+		Name:          v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
 
 	return res
 }

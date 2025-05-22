@@ -10,6 +10,7 @@ package tools
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -83,8 +84,11 @@ type ToolEntry struct {
 	HTTPMethod string
 	// The path
 	Path string
+	// The tags for the tool
+	Tags []string
 	// The creation date of the tool.
 	CreatedAt string
+	Canonical *types.CanonicalToolAttributes
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

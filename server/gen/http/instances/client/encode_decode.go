@@ -290,6 +290,34 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 	for i, val := range v.Tags {
 		res.Tags[i] = val
 	}
+	if v.Canonical != nil {
+		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
+	}
+
+	return res
+}
+
+// unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes
+// builds a value of type *types.CanonicalToolAttributes from a value of type
+// *CanonicalToolAttributesResponseBody.
+func unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v *CanonicalToolAttributesResponseBody) *types.CanonicalToolAttributes {
+	if v == nil {
+		return nil
+	}
+	res := &types.CanonicalToolAttributes{
+		VariationID:   *v.VariationID,
+		Name:          *v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
 
 	return res
 }

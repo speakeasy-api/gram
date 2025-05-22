@@ -18,6 +18,7 @@ import (
 	tr "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/tools/security"
 	tsr "github.com/speakeasy-api/gram/internal/toolsets/repo"
+	vr "github.com/speakeasy-api/gram/internal/variations/repo"
 )
 
 func DescribeToolset(
@@ -29,6 +30,7 @@ func DescribeToolset(
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	toolsRepo := tr.New(tx)
+	variationsRepo := vr.New(tx)
 	pid := uuid.UUID(projectID)
 
 	if err := inv.Check(
@@ -62,6 +64,37 @@ func DescribeToolset(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
 		}
 
+		names := make([]string, 0, len(definitions))
+		for _, def := range definitions {
+			names = append(names, def.HttpToolDefinition.Name)
+		}
+
+		allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
+			ProjectID: pid,
+			ToolNames: names,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
+		}
+
+		keyedVariations := make(map[string]types.ToolVariation, len(allVariations))
+		for _, variation := range allVariations {
+			keyedVariations[variation.SrcToolName] = types.ToolVariation{
+				ID:            variation.ID.String(),
+				GroupID:       variation.GroupID.String(),
+				SrcToolName:   variation.SrcToolName,
+				Confirm:       conv.FromPGText[string](variation.Confirm),
+				ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
+				Name:          conv.FromPGText[string](variation.Name),
+				Summary:       conv.FromPGText[string](variation.Summary),
+				Description:   conv.FromPGText[string](variation.Description),
+				Tags:          variation.Tags,
+				Summarizer:    conv.FromPGText[string](variation.Summarizer),
+				CreatedAt:     variation.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     variation.UpdatedAt.Time.Format(time.RFC3339),
+			}
+		}
+
 		httpTools = make([]*types.HTTPToolDefinition, 0, len(definitions))
 		seen := make(map[string]bool, 0)
 		for _, def := range definitions {
@@ -70,18 +103,47 @@ func DescribeToolset(
 			}
 			seen[def.HttpToolDefinition.ID.String()] = true
 
+			var canonical *types.CanonicalToolAttributes
+			name := def.HttpToolDefinition.Name
+			summary := def.HttpToolDefinition.Summary
+			description := def.HttpToolDefinition.Description
+			confirm := conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "always")
+			confirmPrompt := conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt)
+			tags := def.HttpToolDefinition.Tags
+			variations, ok := keyedVariations[def.HttpToolDefinition.Name]
+			if ok {
+				name = conv.PtrValOrEmpty(variations.Name, name)
+				summary = conv.PtrValOr(variations.Summary, summary)
+				description = conv.PtrValOr(variations.Description, description)
+				confirm = conv.PtrValOrEmpty(variations.Confirm, confirm)
+				confirmPrompt = conv.Default(variations.ConfirmPrompt, confirmPrompt)
+				if len(variations.Tags) > 0 {
+					tags = variations.Tags
+				}
+
+				canonical = &types.CanonicalToolAttributes{
+					VariationID:   variations.ID,
+					Name:          def.HttpToolDefinition.Name,
+					Summary:       conv.PtrEmpty(def.HttpToolDefinition.Summary),
+					Description:   conv.PtrEmpty(def.HttpToolDefinition.Description),
+					Tags:          def.HttpToolDefinition.Tags,
+					Confirm:       conv.FromPGText[string](def.HttpToolDefinition.Confirm),
+					ConfirmPrompt: conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt),
+				}
+			}
+
 			httpTools = append(httpTools, &types.HTTPToolDefinition{
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
 				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
-				Name:                def.HttpToolDefinition.Name,
-				Summary:             def.HttpToolDefinition.Summary,
-				Description:         def.HttpToolDefinition.Description,
-				Confirm:             conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "always"),
-				ConfirmPrompt:       conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt),
+				Name:                name,
+				Summary:             summary,
+				Description:         description,
+				Confirm:             confirm,
+				ConfirmPrompt:       confirmPrompt,
+				Tags:                tags,
 				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
-				Tags:                def.HttpToolDefinition.Tags,
 				Security:            conv.FromBytes(def.HttpToolDefinition.Security),
 				HTTPMethod:          def.HttpToolDefinition.HttpMethod,
 				Path:                def.HttpToolDefinition.Path,
@@ -89,6 +151,7 @@ func DescribeToolset(
 				Schema:              string(def.HttpToolDefinition.Schema),
 				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
+				Canonical:           canonical,
 			})
 		}
 

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	tools "github.com/speakeasy-api/gram/gen/tools"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -249,6 +250,40 @@ func marshalToolsToolEntryToToolEntryResponseBody(v *tools.ToolEntry) *ToolEntry
 		HTTPMethod:          v.HTTPMethod,
 		Path:                v.Path,
 		CreatedAt:           v.CreatedAt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+
+	return res
+}
+
+// marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody
+// builds a value of type *CanonicalToolAttributesResponseBody from a value of
+// type *types.CanonicalToolAttributes.
+func marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v *types.CanonicalToolAttributes) *CanonicalToolAttributesResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &CanonicalToolAttributesResponseBody{
+		VariationID:   v.VariationID,
+		Name:          v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
 	}
 
 	return res

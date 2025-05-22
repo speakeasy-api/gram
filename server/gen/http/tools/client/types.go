@@ -225,8 +225,30 @@ type ToolEntryResponseBody struct {
 	HTTPMethod *string `form:"httpMethod,omitempty" json:"httpMethod,omitempty" xml:"httpMethod,omitempty"`
 	// The path
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// The tags for the tool
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The creation date of the tool.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CreatedAt *string                              `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+}
+
+// CanonicalToolAttributesResponseBody is used to define fields on response
+// body types.
+type CanonicalToolAttributesResponseBody struct {
+	// The ID of the variation that was applied to the tool
+	VariationID *string `form:"variation_id,omitempty" json:"variation_id,omitempty" xml:"variation_id,omitempty"`
+	// The name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Summary of the tool
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// The tags list for this http tool
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
 // NewListToolsResultOK builds a "tools" service "listTools" endpoint result
@@ -683,6 +705,23 @@ func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.Canonical != nil {
+		if err2 := ValidateCanonicalToolAttributesResponseBody(body.Canonical); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateCanonicalToolAttributesResponseBody runs the validations defined on
+// CanonicalToolAttributesResponseBody
+func ValidateCanonicalToolAttributesResponseBody(body *CanonicalToolAttributesResponseBody) (err error) {
+	if body.VariationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("variation_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

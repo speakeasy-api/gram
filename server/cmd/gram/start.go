@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
+	"github.com/speakeasy-api/gram/internal/variations"
 )
 
 func newStartCommand() *cli.Command {
@@ -355,6 +356,7 @@ func newStartCommand() *cli.Command {
 				SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 				SlackSigningSecret: c.String("slack-signing-secret"),
 			}))
+			variations.Attach(mux, variations.NewService(logger.With(slog.String("component", "variations")), db, sessionManager))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

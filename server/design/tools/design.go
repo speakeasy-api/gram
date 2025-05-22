@@ -58,8 +58,10 @@ var ToolEntry = Type("ToolEntry", func() {
 	Attribute("packageName", String, "The package name")
 	Attribute("httpMethod", String, "The HTTP method")
 	Attribute("path", String, "The path")
+	Attribute("tags", ArrayOf(String), "The tags for the tool")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the tool.")
 		Format(FormatDateTime)
 	})
+	Attribute("canonical", shared.CanonicalToolAttributes)
 })

@@ -248,7 +248,27 @@ type HTTPToolDefinitionResponseBody struct {
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	UpdatedAt string                               `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+}
+
+// CanonicalToolAttributesResponseBody is used to define fields on response
+// body types.
+type CanonicalToolAttributesResponseBody struct {
+	// The ID of the variation that was applied to the tool
+	VariationID string `form:"variation_id" json:"variation_id" xml:"variation_id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+	// Summary of the tool
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// The tags list for this http tool
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
 // EnvironmentResponseBody is used to define fields on response body types.

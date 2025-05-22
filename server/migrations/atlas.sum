@@ -1,4 +1,4 @@
-h1:/0CU8bVC+QgfmsPNrmgm7l7Ejet3ASPkWC0/UNbHGn0=
+h1:+ChFIrGZhyzAHI9/kFN7pK2LsjGV+6NZoqmMW8Ownt8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -12,3 +12,4 @@ h1:/0CU8bVC+QgfmsPNrmgm7l7Ejet3ASPkWC0/UNbHGn0=
 20250514215536_slack-connections-table.sql h1:bQbsNHpNhuF/U8PMXXNpD++bQf4kIxi+JsGJKQoW4jg=
 20250519211808_add_token_counts.sql h1:++15uQEY1ZSmMx8nloY5+AQjCFs0ILrvonHbf20o8Pc=
 20250521181206_slack_app_connections_primary_key.sql h1:fYBcgz2QZZQ9s/B2EQHVsjTTUloyALOBuAcOXUuvnL0=
+20250522184110_tool-variations.sql h1:VqbRF9w82XBQbgpnjoS6UwnV+6DNoGAm6lSN/RMyQ6g=

@@ -244,6 +244,12 @@ type Project struct {
 	Deleted        bool
 }
 
+type ProjectToolVariation struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	GroupID   uuid.UUID
+}
+
 type SlackAppConnection struct {
 	SlackTeamID        string
 	OrganizationID     string
@@ -253,6 +259,34 @@ type SlackAppConnection struct {
 	DefaultToolsetSlug pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+}
+
+type ToolVariation struct {
+	ID            uuid.UUID
+	GroupID       uuid.UUID
+	SrcToolName   string
+	Confirm       pgtype.Text
+	ConfirmPrompt pgtype.Text
+	Name          pgtype.Text
+	Summary       pgtype.Text
+	Description   pgtype.Text
+	Tags          []string
+	Summarizer    pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
+type ToolVariationsGroup struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	Name        string
+	Description pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
 }
 
 type Toolset struct {

@@ -29,6 +29,14 @@ func PtrValOr[T any](ptr *T, def T) T {
 	return *ptr
 }
 
+func PtrValOrEmpty[T comparable](ptr *T, def T) T {
+	if ptr == nil {
+		return def
+	}
+
+	return Default(*ptr, def)
+}
+
 func Default[T comparable](val T, def T) T {
 	var zero T
 	if val == zero {
@@ -78,6 +86,15 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	}
 
 	return pgtype.Text{String: *t, Valid: *t != ""}
+}
+
+func FromPGBool[T ~bool](t pgtype.Bool) *T {
+	if !t.Valid {
+		return nil
+	}
+
+	val := T(t.Bool)
+	return &val
 }
 
 func FromBytes(b []byte) *string {

@@ -4288,6 +4288,314 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateToolset
+    /rpc/variations.deleteGlobal:
+        delete:
+            description: Create or update a globally defined tool variation.
+            operationId: deleteGlobalVariation
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the variation to delete
+                  in: query
+                  name: variation_id
+                  required: true
+                  schema:
+                    description: The ID of the variation to delete
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeleteGlobalToolVariationResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteGlobal variations
+            tags:
+                - variations
+            x-speakeasy-name-override: deleteGlobal
+            x-speakeasy-react-hook:
+                name: deleteGlobalVariation
+    /rpc/variations.listGlobal:
+        get:
+            description: List globally defined tool variations.
+            operationId: listGlobalVariations
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListVariationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listGlobal variations
+            tags:
+                - variations
+            x-speakeasy-name-override: listGlobal
+            x-speakeasy-react-hook:
+                name: GlobalVariations
+    /rpc/variations.upsertGlobal:
+        post:
+            description: Create or update a globally defined tool variation.
+            operationId: upsertGlobalVariation
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertGlobalToolVariationForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpsertGlobalToolVariationResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: upsertGlobal variations
+            tags:
+                - variations
+            x-speakeasy-name-override: upsertGlobal
+            x-speakeasy-react-hook:
+                name: UpsertGlobalVariation
 components:
     schemas:
         AddDeploymentPackageForm:
@@ -4391,6 +4699,36 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        CanonicalToolAttributes:
+            type: object
+            properties:
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
+                description:
+                    type: string
+                    description: Description of the tool
+                name:
+                    type: string
+                    description: The name of the tool
+                summary:
+                    type: string
+                    description: Summary of the tool
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: The tags list for this http tool
+                variation_id:
+                    type: string
+                    description: The ID of the variation that was applied to the tool
+            description: The original details of a tool
+            required:
+                - variation_id
+                - name
         Chat:
             type: object
             properties:
@@ -4723,6 +5061,22 @@ components:
                     description: The name of the toolset
             required:
                 - name
+        DeleteGlobalToolVariationForm:
+            type: object
+            properties:
+                variation_id:
+                    type: string
+                    description: The ID of the variation to delete
+            required:
+                - variation_id
+        DeleteGlobalToolVariationResult:
+            type: object
+            properties:
+                variation_id:
+                    type: string
+                    description: The ID of the variation that was deleted
+            required:
+                - variation_id
         Deployment:
             type: object
             properties:
@@ -5140,6 +5494,8 @@ components:
         HTTPToolDefinition:
             type: object
             properties:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
                 confirm:
                     type: string
                     description: Confirmation mode for the tool
@@ -5487,6 +5843,15 @@ components:
                     description: The list of toolsets
             required:
                 - toolsets
+        ListVariationsResult:
+            type: object
+            properties:
+                variations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolVariation'
+            required:
+                - variations
         ListVersionsForm:
             type: object
             properties:
@@ -5756,6 +6121,8 @@ components:
         ToolEntry:
             type: object
             properties:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
                 confirm:
                     type: string
                     description: The confirmation mode for the tool
@@ -5793,6 +6160,11 @@ components:
                 summary:
                     type: string
                     description: The tool summary
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: The tags for the tool
             required:
                 - id
                 - deploymentId
@@ -5804,6 +6176,53 @@ components:
                 - httpMethod
                 - path
                 - created_at
+        ToolVariation:
+            type: object
+            properties:
+                confirm:
+                    type: string
+                    description: The confirmation mode for the tool variation
+                confirm_prompt:
+                    type: string
+                    description: The confirmation prompt for the tool variation
+                created_at:
+                    type: string
+                    description: The creation date of the tool variation
+                description:
+                    type: string
+                    description: The description of the tool variation
+                group_id:
+                    type: string
+                    description: The ID of the tool variation group
+                id:
+                    type: string
+                    description: The ID of the tool variation
+                name:
+                    type: string
+                    description: The name of the tool variation
+                src_tool_name:
+                    type: string
+                    description: The name of the source tool
+                summarizer:
+                    type: string
+                    description: The summarizer of the tool variation
+                summary:
+                    type: string
+                    description: The summary of the tool variation
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: The tags of the tool variation
+                updated_at:
+                    type: string
+                    description: The last update date of the tool variation
+            required:
+                - id
+                - group_id
+                - src_tool_name
+                - created_at
+                - updated_at
         Toolset:
             type: object
             properties:
@@ -6055,6 +6474,47 @@ components:
                     $ref: '#/components/schemas/Asset'
             required:
                 - asset
+        UpsertGlobalToolVariationForm:
+            type: object
+            properties:
+                confirm:
+                    type: string
+                    description: The confirmation mode for the tool variation
+                    enum:
+                        - always
+                        - never
+                confirm_prompt:
+                    type: string
+                    description: The confirmation prompt for the tool variation
+                description:
+                    type: string
+                    description: The description of the tool variation
+                name:
+                    type: string
+                    description: The name of the tool variation
+                src_tool_name:
+                    type: string
+                    description: The name of the source tool
+                summarizer:
+                    type: string
+                    description: The summarizer of the tool variation
+                summary:
+                    type: string
+                    description: The summary of the tool variation
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: The tags of the tool variation
+            required:
+                - src_tool_name
+        UpsertGlobalToolVariationResult:
+            type: object
+            properties:
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            required:
+                - variation
     securitySchemes:
         apikey_header_Authorization:
             type: apiKey
@@ -6115,3 +6575,5 @@ tags:
       description: Dashboard API for interacting with tools.
     - name: toolsets
       description: Managed toolsets for gram AI consumers.
+    - name: variations
+      description: Manage variations of tools.
