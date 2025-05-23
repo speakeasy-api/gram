@@ -1134,8 +1134,8 @@ func ValidateUpsertGlobalRequestBody(body *UpsertGlobalRequestBody) (err error) 
 		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_name", "body"))
 	}
 	if body.Confirm != nil {
-		if !(*body.Confirm == "always" || *body.Confirm == "never") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirm", *body.Confirm, []any{"always", "never"}))
+		if !(*body.Confirm == "always" || *body.Confirm == "never" || *body.Confirm == "session") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirm", *body.Confirm, []any{"always", "never", "session"}))
 		}
 	}
 	return

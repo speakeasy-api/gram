@@ -119,3 +119,11 @@ func ToSlug(s string) string {
 func ToLower[T ~string](s T) string {
 	return strings.ToLower(string(s))
 }
+
+func AnySlice[T any](vals []T) []any {
+	anyVals := make([]any, len(vals))
+	for i, v := range vals {
+		anyVals[i] = v
+	}
+	return anyVals
+}

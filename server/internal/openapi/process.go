@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/inv"
+	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/orderedmap"
@@ -390,6 +391,11 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 
 	descriptor := parseToolDescriptor(ctx, logger, docInfo, op)
 
+	var confirm *string
+	if descriptor.confirm != nil {
+		confirm = conv.Ptr(string(*descriptor.confirm))
+	}
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
@@ -402,7 +408,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		Tags:                op.Tags,
 		Summary:             descriptor.summary,
 		Description:         descriptor.description,
-		Confirm:             conv.PtrToPGTextEmpty(descriptor.confirm),
+		Confirm:             conv.PtrToPGTextEmpty(confirm),
 		ConfirmPrompt:       conv.PtrToPGTextEmpty(descriptor.confirmPrompt),
 		OriginalName:        conv.PtrToPGTextEmpty(descriptor.originalName),
 		OriginalSummary:     conv.PtrToPGTextEmpty(descriptor.originalSummary),
@@ -432,7 +438,7 @@ type toolDescriptor struct {
 	name                string
 	summary             string
 	description         string
-	confirm             *string
+	confirm             *mv.Confirm
 	confirmPrompt       *string
 	originalName        *string
 	originalSummary     *string
@@ -447,7 +453,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 
 	toolDesc := toolDescriptor{
 		extensionFound:      false,
-		confirm:             conv.Ptr("always"),
+		confirm:             conv.Ptr(mv.ConfirmAlways),
 		confirmPrompt:       nil,
 		name:                name,
 		summary:             summary,
@@ -471,6 +477,13 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 
 	sanitizedName := strcase.ToSnake(tools.SanitizeName(conv.PtrValOr(ext.Name, "")))
 
+	confirm, valid := mv.SanitizeConfirmPtr(ext.Confirm)
+	if !valid {
+		msg := fmt.Sprintf("invalid tool confirmation mode: [%d:%d]: %v", gramExtNode.Line, gramExtNode.Column, ext.Confirm)
+		logger.WarnContext(ctx, msg)
+		confirm = mv.ConfirmAlways
+	}
+
 	return toolDescriptor{
 		extensionFound:      true,
 		name:                conv.Default(sanitizedName, name),
@@ -479,7 +492,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		originalName:        conv.PtrEmpty(name),
 		originalSummary:     conv.PtrEmpty(summary),
 		originalDescription: conv.PtrEmpty(description),
-		confirm:             conv.Ptr(conv.PtrValOr(ext.Confirm, "always")),
+		confirm:             conv.Ptr(confirm),
 		confirmPrompt:       ext.ConfirmPrompt,
 	}
 }

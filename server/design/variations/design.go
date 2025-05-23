@@ -3,6 +3,8 @@ package toolsets
 import (
 	"github.com/speakeasy-api/gram/design/security"
 	"github.com/speakeasy-api/gram/design/shared"
+	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/internal/mv"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -94,7 +96,7 @@ var UpsertGlobalToolVariationForm = Type("UpsertGlobalToolVariationForm", func()
 
 	Attribute("src_tool_name", String, "The name of the source tool")
 	Attribute("confirm", String, "The confirmation mode for the tool variation", func() {
-		Enum("always", "never")
+		Enum(conv.AnySlice(mv.ConfirmValues)...)
 	})
 	Attribute("confirm_prompt", String, "The confirmation prompt for the tool variation")
 	Attribute("name", String, "The name of the tool variation")

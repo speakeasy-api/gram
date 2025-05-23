@@ -6608,6 +6608,7 @@ components:
                     enum:
                         - always
                         - never
+                        - session
                 confirm_prompt:
                     type: string
                     description: The confirmation prompt for the tool variation

@@ -1972,7 +1972,7 @@ Create or update a globally defined tool variation.
 
 Example:
     %[1]s variations upsert-global --body '{
-      "confirm": "never",
+      "confirm": "always",
       "confirm_prompt": "Est quaerat facere eaque doloribus consequuntur nihil.",
       "description": "Ut error animi voluptate culpa.",
       "name": "Impedit enim repellat reprehenderit odit.",

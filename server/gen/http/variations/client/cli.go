@@ -23,11 +23,11 @@ func BuildUpsertGlobalPayload(variationsUpsertGlobalBody string, variationsUpser
 	{
 		err = json.Unmarshal([]byte(variationsUpsertGlobalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"Est quaerat facere eaque doloribus consequuntur nihil.\",\n      \"description\": \"Ut error animi voluptate culpa.\",\n      \"name\": \"Impedit enim repellat reprehenderit odit.\",\n      \"src_tool_name\": \"Aliquam ut corporis distinctio.\",\n      \"summarizer\": \"Qui sequi dolorem incidunt quas.\",\n      \"summary\": \"Voluptate a aliquam.\",\n      \"tags\": [\n         \"Quia omnis consequatur.\",\n         \"Cumque pariatur.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"always\",\n      \"confirm_prompt\": \"Est quaerat facere eaque doloribus consequuntur nihil.\",\n      \"description\": \"Ut error animi voluptate culpa.\",\n      \"name\": \"Impedit enim repellat reprehenderit odit.\",\n      \"src_tool_name\": \"Aliquam ut corporis distinctio.\",\n      \"summarizer\": \"Qui sequi dolorem incidunt quas.\",\n      \"summary\": \"Voluptate a aliquam.\",\n      \"tags\": [\n         \"Quia omnis consequatur.\",\n         \"Cumque pariatur.\"\n      ]\n   }'")
 		}
 		if body.Confirm != nil {
-			if !(*body.Confirm == "always" || *body.Confirm == "never") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirm", *body.Confirm, []any{"always", "never"}))
+			if !(*body.Confirm == "always" || *body.Confirm == "never" || *body.Confirm == "session") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirm", *body.Confirm, []any{"always", "never", "session"}))
 			}
 		}
 		if err != nil {

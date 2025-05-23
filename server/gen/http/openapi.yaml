@@ -28889,10 +28889,11 @@ definitions:
             confirm:
                 type: string
                 description: The confirmation mode for the tool variation
-                example: always
+                example: never
                 enum:
                     - always
                     - never
+                    - session
             confirm_prompt:
                 type: string
                 description: The confirmation prompt for the tool variation
@@ -28928,7 +28929,7 @@ definitions:
                     - Omnis vel dolorem et.
                     - Delectus quisquam quo.
         example:
-            confirm: never
+            confirm: always
             confirm_prompt: Veritatis velit fugit quaerat ea.
             description: Tenetur et similique est.
             name: Totam recusandae.

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/middleware"
+	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/tools/repo"
 	vr "github.com/speakeasy-api/gram/internal/variations/repo"
@@ -115,7 +116,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		name := tool.Name
 		summary := tool.Summary
 		description := tool.Description
-		confirm := conv.PtrValOr(conv.FromPGText[string](tool.Confirm), "always")
+		confirmRaw := conv.PtrValOr(conv.FromPGText[string](tool.Confirm), "")
 		confirmPrompt := conv.FromPGText[string](tool.ConfirmPrompt)
 		tags := tool.Tags
 		variations, ok := keyedVariations[tool.Name]
@@ -123,7 +124,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			name = conv.Default(variations.Name.String, name)
 			summary = conv.Default(variations.Summary.String, summary)
 			description = conv.Default(variations.Description.String, description)
-			confirm = conv.Default(variations.Confirm.String, confirm)
+			confirmRaw = conv.Default(variations.Confirm.String, confirmRaw)
 			confirmPrompt = conv.Default(conv.FromPGText[string](variations.ConfirmPrompt), confirmPrompt)
 			if len(variations.Tags) > 0 {
 				tags = variations.Tags
@@ -140,13 +141,15 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			}
 		}
 
+		confirm, _ := mv.SanitizeConfirm(confirmRaw)
+
 		result.Tools[i] = &gen.ToolEntry{
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
 			Name:                name,
 			Summary:             summary,
 			Description:         description,
-			Confirm:             confirm,
+			Confirm:             string(confirm),
 			ConfirmPrompt:       confirmPrompt,
 			HTTPMethod:          tool.HttpMethod,
 			Path:                tool.Path,
