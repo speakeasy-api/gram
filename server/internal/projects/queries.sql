@@ -15,7 +15,7 @@ SELECT *
 FROM projects
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
-ORDER BY id DESC;
+ORDER BY id ASC;
 
 -- name: GetProjectByID :one
 SELECT *
