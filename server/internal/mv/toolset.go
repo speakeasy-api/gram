@@ -171,6 +171,8 @@ func DescribeToolset(
 		RelevantEnvironmentVariables: relevantEnvVars,
 		Description:                  conv.FromPGText[string](toolset.Description),
 		HTTPTools:                    httpTools,
+		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
+		McpIsPublic:                  &toolset.McpIsPublic,
 		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil

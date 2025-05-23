@@ -16,6 +16,8 @@ var Toolset = Type("Toolset", func() {
 	Attribute("default_environment_slug", Slug, "The slug of the environment to use as the default for the toolset")
 	Attribute("relevant_environment_variables", ArrayOf(String), "The environment variables that are relevant to the toolset")
 	Attribute("http_tools", ArrayOf(HTTPToolDefinition), "The HTTP tools in this toolset")
+	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
+	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
 		Format(FormatDateTime)

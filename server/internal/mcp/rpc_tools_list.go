@@ -6,11 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	gen "github.com/speakeasy-api/gram/gen/mcp"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type toolsListResult struct {
@@ -23,15 +20,10 @@ type toolListEntry struct {
 	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
 }
 
-func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *gen.ServePayload, req *rawRequest) (json.RawMessage, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
+func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
+	projectID := mv.ProjectID(payload.projectID)
 
-	projectID := mv.ProjectID(*authCtx.ProjectID)
-
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(*payload.Toolset)))
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)))
 	if err != nil {
 		return nil, err
 	}

@@ -36,6 +36,14 @@ export type Toolset = {
    */
   id: string;
   /**
+   * Whether the toolset is public in MCP
+   */
+  mcpIsPublic?: boolean | undefined;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  mcpSlug?: string | undefined;
+  /**
    * The name of the toolset
    */
   name: string;
@@ -71,6 +79,8 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     description: z.string().optional(),
     http_tools: z.array(HTTPToolDefinition$inboundSchema),
     id: z.string(),
+    mcp_is_public: z.boolean().optional(),
+    mcp_slug: z.string().optional(),
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
@@ -84,6 +94,8 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "created_at": "createdAt",
       "default_environment_slug": "defaultEnvironmentSlug",
       "http_tools": "httpTools",
+      "mcp_is_public": "mcpIsPublic",
+      "mcp_slug": "mcpSlug",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "relevant_environment_variables": "relevantEnvironmentVariables",
@@ -98,6 +110,8 @@ export type Toolset$Outbound = {
   description?: string | undefined;
   http_tools: Array<HTTPToolDefinition$Outbound>;
   id: string;
+  mcp_is_public?: boolean | undefined;
+  mcp_slug?: string | undefined;
   name: string;
   organization_id: string;
   project_id: string;
@@ -117,6 +131,8 @@ export const Toolset$outboundSchema: z.ZodType<
   description: z.string().optional(),
   httpTools: z.array(HTTPToolDefinition$outboundSchema),
   id: z.string(),
+  mcpIsPublic: z.boolean().optional(),
+  mcpSlug: z.string().optional(),
   name: z.string(),
   organizationId: z.string(),
   projectId: z.string(),
@@ -128,6 +144,8 @@ export const Toolset$outboundSchema: z.ZodType<
     createdAt: "created_at",
     defaultEnvironmentSlug: "default_environment_slug",
     httpTools: "http_tools",
+    mcpIsPublic: "mcp_is_public",
+    mcpSlug: "mcp_slug",
     organizationId: "organization_id",
     projectId: "project_id",
     relevantEnvironmentVariables: "relevant_environment_variables",

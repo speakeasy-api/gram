@@ -4,6 +4,7 @@ excluded_rules = [
   "ban-concurrent-index-creation-in-transaction", # This is checked in .mise-tasks/lint/migrations.sh
   "prefer-robust-stmts",
   "ban-drop-not-null",
+  "constraint-missing-not-valid",
 ]
 [upload_to_github]
 fail_on_violations = true

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"mime"
 	"net/http"
 	"regexp"
@@ -16,9 +17,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	gen "github.com/speakeasy-api/gram/gen/mcp"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
 	er "github.com/speakeasy-api/gram/internal/environments/repo"
@@ -35,17 +33,7 @@ type toolsCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Encryption, payload *gen.ServePayload, req *rawRequest) (json.RawMessage, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	envSlug := conv.PtrValOr(payload.Environment, "")
-	if envSlug == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "environment parameter is required").Log(ctx, logger)
-	}
-
+func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, logger)
@@ -57,9 +45,11 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 
 	envRepo := er.New(db)
 	toolsRepo := tr.New(db)
-	projectID := mv.ProjectID(*authCtx.ProjectID)
+	projectID := mv.ProjectID(payload.projectID)
 	entries := environments.NewEnvironmentEntries(logger, envRepo, enc)
 	toolsetHelpers := toolsets.NewToolsets(db)
+
+	envSlug := payload.environment
 
 	toolID, err := toolsRepo.PokeHTTPToolDefinitionByName(ctx, tr.PokeHTTPToolDefinitionByNameParams{
 		ProjectID: uuid.UUID(projectID),
@@ -72,20 +62,38 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		return nil, oops.E(oops.CodeNotFound, err, "tool not found").Log(ctx, logger)
 	}
 
-	envModel, err := envRepo.GetEnvironmentBySlug(ctx, er.GetEnvironmentBySlugParams{
-		ProjectID: uuid.UUID(projectID),
-		Slug:      strings.ToLower(envSlug),
-	})
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+	// Transform environment entries into a map
+	envVars := make(map[string]string)
+	if envSlug != "" {
+		envModel, err := envRepo.GetEnvironmentBySlug(ctx, er.GetEnvironmentBySlugParams{
+			ProjectID: uuid.UUID(projectID),
+			Slug:      strings.ToLower(envSlug),
+		})
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+		}
+
+		environmentEntries, err := entries.ListEnvironmentEntries(ctx, envModel.ID, false)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, logger)
+		}
+
+		for _, entry := range environmentEntries {
+			envVars[entry.Name] = entry.Value
+		}
 	}
 
-	environmentEntries, err := entries.ListEnvironmentEntries(ctx, envModel.ID, false)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, logger)
+	if payload.environmentVariables != nil {
+		var userVars map[string]string
+		if err := json.Unmarshal(payload.environmentVariables, &userVars); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse user provided environment variables").Log(ctx, logger)
+		}
+
+		// apply user provided env variable overrides
+		maps.Copy(envVars, userVars)
 	}
 
 	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, toolID, uuid.UUID(projectID))
@@ -97,12 +105,6 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		headers:    make(http.Header),
 		body:       new(bytes.Buffer),
 		statusCode: http.StatusOK,
-	}
-
-	// Transform environment entries into a map
-	envVars := make(map[string]string)
-	for _, entry := range environmentEntries {
-		envVars[entry.Name] = entry.Value
 	}
 
 	err = instances.InstanceToolProxy(ctx, tracer, logger, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan)

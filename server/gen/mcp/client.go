@@ -16,18 +16,20 @@ import (
 
 // Client is the "mcp" service client.
 type Client struct {
-	ServeEndpoint goa.Endpoint
+	ServePublicEndpoint        goa.Endpoint
+	ServeAuthenticatedEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "mcp" service client given the endpoints.
-func NewClient(serve goa.Endpoint) *Client {
+func NewClient(servePublic, serveAuthenticated goa.Endpoint) *Client {
 	return &Client{
-		ServeEndpoint: serve,
+		ServePublicEndpoint:        servePublic,
+		ServeAuthenticatedEndpoint: serveAuthenticated,
 	}
 }
 
-// Serve calls the "serve" endpoint of the "mcp" service.
-// Serve may return the following errors:
+// ServePublic calls the "servePublic" endpoint of the "mcp" service.
+// ServePublic may return the following errors:
 //   - "no_content" (type *NoContent)
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
@@ -40,12 +42,37 @@ func NewClient(serve goa.Endpoint) *Client {
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) Serve(ctx context.Context, p *ServePayload, req io.ReadCloser) (res *ServeResult, resp io.ReadCloser, err error) {
+func (c *Client) ServePublic(ctx context.Context, p *ServePublicPayload, req io.ReadCloser) (res *ServePublicResult, resp io.ReadCloser, err error) {
 	var ires any
-	ires, err = c.ServeEndpoint(ctx, &ServeRequestData{Payload: p, Body: req})
+	ires, err = c.ServePublicEndpoint(ctx, &ServePublicRequestData{Payload: p, Body: req})
 	if err != nil {
 		return
 	}
-	o := ires.(*ServeResponseData)
+	o := ires.(*ServePublicResponseData)
+	return o.Result, o.Body, nil
+}
+
+// ServeAuthenticated calls the "serveAuthenticated" endpoint of the "mcp"
+// service.
+// ServeAuthenticated may return the following errors:
+//   - "no_content" (type *NoContent)
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ServeAuthenticated(ctx context.Context, p *ServeAuthenticatedPayload, req io.ReadCloser) (res *ServeAuthenticatedResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.ServeAuthenticatedEndpoint(ctx, &ServeAuthenticatedRequestData{Payload: p, Body: req})
+	if err != nil {
+		return
+	}
+	o := ires.(*ServeAuthenticatedResponseData)
 	return o.Result, o.Body, nil
 }

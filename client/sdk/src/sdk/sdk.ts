@@ -17,6 +17,7 @@ import { Projects } from "./projects.js";
 import { Slack } from "./slack.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
+import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
   private _mcp?: Mcp;
@@ -87,5 +88,10 @@ export class Gram extends ClientSDK {
   private _toolsets?: Toolsets;
   get toolsets(): Toolsets {
     return (this._toolsets ??= new Toolsets(this._options));
+  }
+
+  private _variations?: Variations;
+  get variations(): Variations {
+    return (this._variations ??= new Variations(this._options));
   }
 }

@@ -1189,12 +1189,17 @@ func marshalTypesToolsetToToolsetResponseBody(v *types.Toolset) *ToolsetResponse
 		Name:           v.Name,
 		Slug:           string(v.Slug),
 		Description:    v.Description,
+		McpIsPublic:    v.McpIsPublic,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
 	}
 	if v.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*v.DefaultEnvironmentSlug)
 		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if v.McpSlug != nil {
+		mcpSlug := string(*v.McpSlug)
+		res.McpSlug = &mcpSlug
 	}
 	if v.RelevantEnvironmentVariables != nil {
 		res.RelevantEnvironmentVariables = make([]string, len(v.RelevantEnvironmentVariables))

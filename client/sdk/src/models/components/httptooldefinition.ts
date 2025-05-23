@@ -7,8 +7,18 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  CanonicalToolAttributes,
+  CanonicalToolAttributes$inboundSchema,
+  CanonicalToolAttributes$Outbound,
+  CanonicalToolAttributes$outboundSchema,
+} from "./canonicaltoolattributes.js";
 
 export type HTTPToolDefinition = {
+  /**
+   * The original details of a tool
+   */
+  canonical?: CanonicalToolAttributes | undefined;
   /**
    * Confirmation mode for the tool
    */
@@ -89,6 +99,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  canonical: CanonicalToolAttributes$inboundSchema.optional(),
   confirm: z.string(),
   confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
@@ -123,6 +134,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
 
 /** @internal */
 export type HTTPToolDefinition$Outbound = {
+  canonical?: CanonicalToolAttributes$Outbound | undefined;
   confirm: string;
   confirm_prompt?: string | undefined;
   created_at: string;
@@ -149,6 +161,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   HTTPToolDefinition
 > = z.object({
+  canonical: CanonicalToolAttributes$outboundSchema.optional(),
   confirm: z.string(),
   confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),

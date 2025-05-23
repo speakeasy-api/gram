@@ -21,36 +21,26 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildServeRequest instantiates a HTTP request object with method and path
-// set to call the "mcp" service "serve" endpoint
-func (c *Client) BuildServeRequest(ctx context.Context, v any) (*http.Request, error) {
+// BuildServePublicRequest instantiates a HTTP request object with method and
+// path set to call the "mcp" service "servePublic" endpoint
+func (c *Client) BuildServePublicRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
-		project     string
-		toolset     string
-		environment string
-		body        io.Reader
+		mcpSlug string
+		body    io.Reader
 	)
 	{
-		rd, ok := v.(*mcp.ServeRequestData)
+		rd, ok := v.(*mcp.ServePublicRequestData)
 		if !ok {
-			return nil, goahttp.ErrInvalidType("mcp", "serve", "mcp.ServeRequestData", v)
+			return nil, goahttp.ErrInvalidType("mcp", "servePublic", "mcp.ServePublicRequestData", v)
 		}
 		p := rd.Payload
 		body = rd.Body
-		if p.Project != nil {
-			project = *p.Project
-		}
-		if p.Toolset != nil {
-			toolset = *p.Toolset
-		}
-		if p.Environment != nil {
-			environment = *p.Environment
-		}
+		mcpSlug = p.McpSlug
 	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServeMcpPath(project, toolset, environment)}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServePublicMcpPath(mcpSlug)}
 	req, err := http.NewRequest("POST", u.String(), body)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("mcp", "serve", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("mcp", "servePublic", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -59,15 +49,19 @@ func (c *Client) BuildServeRequest(ctx context.Context, v any) (*http.Request, e
 	return req, nil
 }
 
-// EncodeServeRequest returns an encoder for requests sent to the mcp serve
-// server.
-func EncodeServeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeServePublicRequest returns an encoder for requests sent to the mcp
+// servePublic server.
+func EncodeServePublicRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		data, ok := v.(*mcp.ServeRequestData)
+		data, ok := v.(*mcp.ServePublicRequestData)
 		if !ok {
-			return goahttp.ErrInvalidType("mcp", "serve", "*mcp.ServeRequestData", v)
+			return goahttp.ErrInvalidType("mcp", "servePublic", "*mcp.ServePublicRequestData", v)
 		}
 		p := data.Payload
+		if p.EnvironmentVariables != nil {
+			head := *p.EnvironmentVariables
+			req.Header.Set("MCP-Environment", head)
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Authorization", head)
@@ -76,10 +70,10 @@ func EncodeServeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 	}
 }
 
-// DecodeServeResponse returns a decoder for responses returned by the mcp
-// serve endpoint. restoreBody controls whether the response body should be
-// restored after having been read.
-// DecodeServeResponse may return the following errors:
+// DecodeServePublicResponse returns a decoder for responses returned by the
+// mcp servePublic endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeServePublicResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -92,7 +86,7 @@ func EncodeServeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "no_content" (type *mcp.NoContent): http.StatusNoContent
 //   - error: internal error
-func DecodeServeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeServePublicResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -116,157 +110,157 @@ func DecodeServeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 			}
 			contentType = contentTypeRaw
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			res := NewServeResultOK(contentType)
+			res := NewServePublicResultOK(contentType)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ServeUnauthorizedResponseBody
+				body ServePublicUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeUnauthorizedResponseBody(&body)
+			err = ValidateServePublicUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeUnauthorized(&body)
+			return nil, NewServePublicUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ServeForbiddenResponseBody
+				body ServePublicForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeForbiddenResponseBody(&body)
+			err = ValidateServePublicForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeForbidden(&body)
+			return nil, NewServePublicForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ServeBadRequestResponseBody
+				body ServePublicBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeBadRequestResponseBody(&body)
+			err = ValidateServePublicBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeBadRequest(&body)
+			return nil, NewServePublicBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ServeNotFoundResponseBody
+				body ServePublicNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeNotFoundResponseBody(&body)
+			err = ValidateServePublicNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeNotFound(&body)
+			return nil, NewServePublicNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ServeConflictResponseBody
+				body ServePublicConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeConflictResponseBody(&body)
+			err = ValidateServePublicConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeConflict(&body)
+			return nil, NewServePublicConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ServeUnsupportedMediaResponseBody
+				body ServePublicUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeUnsupportedMediaResponseBody(&body)
+			err = ValidateServePublicUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeUnsupportedMedia(&body)
+			return nil, NewServePublicUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ServeInvalidResponseBody
+				body ServePublicInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeInvalidResponseBody(&body)
+			err = ValidateServePublicInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeInvalid(&body)
+			return nil, NewServePublicInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ServeInvariantViolationResponseBody
+					body ServePublicInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+					return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 				}
-				err = ValidateServeInvariantViolationResponseBody(&body)
+				err = ValidateServePublicInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("mcp", "serve", err)
+					return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 				}
-				return nil, NewServeInvariantViolation(&body)
+				return nil, NewServePublicInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ServeUnexpectedResponseBody
+					body ServePublicUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+					return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 				}
-				err = ValidateServeUnexpectedResponseBody(&body)
+				err = ValidateServePublicUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("mcp", "serve", err)
+					return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 				}
-				return nil, NewServeUnexpected(&body)
+				return nil, NewServePublicUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("mcp", "serve", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("mcp", "servePublic", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ServeGatewayErrorResponseBody
+				body ServePublicGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcp", "serve", err)
+				return nil, goahttp.ErrDecodingError("mcp", "servePublic", err)
 			}
-			err = ValidateServeGatewayErrorResponseBody(&body)
+			err = ValidateServePublicGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeGatewayError(&body)
+			return nil, NewServePublicGatewayError(&body)
 		case http.StatusNoContent:
 			var (
 				ack bool
@@ -275,7 +269,7 @@ func DecodeServeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 			{
 				ackRaw := resp.Header.Get("Noop")
 				if ackRaw == "" {
-					return nil, goahttp.ErrValidationError("mcp", "serve", goa.MissingFieldError("ack", "header"))
+					return nil, goahttp.ErrValidationError("mcp", "servePublic", goa.MissingFieldError("ack", "header"))
 				}
 				v, err2 := strconv.ParseBool(ackRaw)
 				if err2 != nil {
@@ -284,25 +278,315 @@ func DecodeServeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 				ack = v
 			}
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mcp", "serve", err)
+				return nil, goahttp.ErrValidationError("mcp", "servePublic", err)
 			}
-			return nil, NewServeNoContent(ack)
+			return nil, NewServePublicNoContent(ack)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("mcp", "serve", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("mcp", "servePublic", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// // BuildServeStreamPayload creates a streaming endpoint request payload from
-// the method payload and the path to the file to be streamed
-func BuildServeStreamPayload(payload any, fpath string) (*mcp.ServeRequestData, error) {
+// // BuildServePublicStreamPayload creates a streaming endpoint request payload
+// from the method payload and the path to the file to be streamed
+func BuildServePublicStreamPayload(payload any, fpath string) (*mcp.ServePublicRequestData, error) {
 	f, err := os.Open(fpath)
 	if err != nil {
 		return nil, err
 	}
-	return &mcp.ServeRequestData{
-		Payload: payload.(*mcp.ServePayload),
+	return &mcp.ServePublicRequestData{
+		Payload: payload.(*mcp.ServePublicPayload),
+		Body:    f,
+	}, nil
+}
+
+// BuildServeAuthenticatedRequest instantiates a HTTP request object with
+// method and path set to call the "mcp" service "serveAuthenticated" endpoint
+func (c *Client) BuildServeAuthenticatedRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		project     string
+		toolset     string
+		environment string
+		body        io.Reader
+	)
+	{
+		rd, ok := v.(*mcp.ServeAuthenticatedRequestData)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("mcp", "serveAuthenticated", "mcp.ServeAuthenticatedRequestData", v)
+		}
+		p := rd.Payload
+		body = rd.Body
+		if p.Project != nil {
+			project = *p.Project
+		}
+		if p.Toolset != nil {
+			toolset = *p.Toolset
+		}
+		if p.Environment != nil {
+			environment = *p.Environment
+		}
+	}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServeAuthenticatedMcpPath(project, toolset, environment)}
+	req, err := http.NewRequest("POST", u.String(), body)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcp", "serveAuthenticated", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeServeAuthenticatedRequest returns an encoder for requests sent to the
+// mcp serveAuthenticated server.
+func EncodeServeAuthenticatedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		data, ok := v.(*mcp.ServeAuthenticatedRequestData)
+		if !ok {
+			return goahttp.ErrInvalidType("mcp", "serveAuthenticated", "*mcp.ServeAuthenticatedRequestData", v)
+		}
+		p := data.Payload
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Authorization", head)
+		}
+		if p.EnvironmentVariables != nil {
+			head := *p.EnvironmentVariables
+			req.Header.Set("MCP-Environment", head)
+		}
+		return nil
+	}
+}
+
+// DecodeServeAuthenticatedResponse returns a decoder for responses returned by
+// the mcp serveAuthenticated endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeServeAuthenticatedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "no_content" (type *mcp.NoContent): http.StatusNoContent
+//   - error: internal error
+func DecodeServeAuthenticatedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType string
+				err         error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("contentType", "header"))
+			}
+			contentType = contentTypeRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			res := NewServeAuthenticatedResultOK(contentType)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ServeAuthenticatedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ServeAuthenticatedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ServeAuthenticatedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ServeAuthenticatedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ServeAuthenticatedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ServeAuthenticatedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ServeAuthenticatedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ServeAuthenticatedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+				}
+				err = ValidateServeAuthenticatedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+				}
+				return nil, NewServeAuthenticatedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ServeAuthenticatedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+				}
+				err = ValidateServeAuthenticatedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+				}
+				return nil, NewServeAuthenticatedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcp", "serveAuthenticated", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ServeAuthenticatedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcp", "serveAuthenticated", err)
+			}
+			err = ValidateServeAuthenticatedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedGatewayError(&body)
+		case http.StatusNoContent:
+			var (
+				ack bool
+				err error
+			)
+			{
+				ackRaw := resp.Header.Get("Noop")
+				if ackRaw == "" {
+					return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", goa.MissingFieldError("ack", "header"))
+				}
+				v, err2 := strconv.ParseBool(ackRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("ack", ackRaw, "boolean"))
+				}
+				ack = v
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcp", "serveAuthenticated", err)
+			}
+			return nil, NewServeAuthenticatedNoContent(ack)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcp", "serveAuthenticated", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// // BuildServeAuthenticatedStreamPayload creates a streaming endpoint request
+// payload from the method payload and the path to the file to be streamed
+func BuildServeAuthenticatedStreamPayload(payload any, fpath string) (*mcp.ServeAuthenticatedRequestData, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.ServeAuthenticatedRequestData{
+		Payload: payload.(*mcp.ServeAuthenticatedPayload),
 		Body:    f,
 	}, nil
 }

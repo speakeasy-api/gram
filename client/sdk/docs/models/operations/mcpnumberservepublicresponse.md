@@ -1,9 +1,9 @@
-# McpNumberServeResponse
+# McpNumberServePublicResponse
 
 ## Example Usage
 
 ```typescript
-import { McpNumberServeResponse } from "@gram/client/models/operations";
+import { McpNumberServePublicResponse } from "@gram/client/models/operations";
 
 // No examples available for this model
 ```

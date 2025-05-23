@@ -22,6 +22,14 @@ export type UpdateToolsetRequestBody = {
    */
   httpToolNames?: Array<string> | undefined;
   /**
+   * Whether the toolset is public in MCP
+   */
+  mcpIsPublic?: boolean | undefined;
+  /**
+   * The slug of the MCP to use for the toolset
+   */
+  mcpSlug?: string | undefined;
+  /**
    * The new name of the toolset
    */
   name?: string | undefined;
@@ -36,11 +44,15 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
   http_tool_names: z.array(z.string()).optional(),
+  mcp_is_public: z.boolean().optional(),
+  mcp_slug: z.string().optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "default_environment_slug": "defaultEnvironmentSlug",
     "http_tool_names": "httpToolNames",
+    "mcp_is_public": "mcpIsPublic",
+    "mcp_slug": "mcpSlug",
   });
 });
 
@@ -49,6 +61,8 @@ export type UpdateToolsetRequestBody$Outbound = {
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   http_tool_names?: Array<string> | undefined;
+  mcp_is_public?: boolean | undefined;
+  mcp_slug?: string | undefined;
   name?: string | undefined;
 };
 
@@ -61,11 +75,15 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   httpToolNames: z.array(z.string()).optional(),
+  mcpIsPublic: z.boolean().optional(),
+  mcpSlug: z.string().optional(),
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     defaultEnvironmentSlug: "default_environment_slug",
     httpToolNames: "http_tool_names",
+    mcpIsPublic: "mcp_is_public",
+    mcpSlug: "mcp_slug",
   });
 });
 

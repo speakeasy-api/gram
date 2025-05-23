@@ -39,6 +39,10 @@ type UpdateToolsetRequestBody struct {
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// List of HTTP tool names to include
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 }
 
 // CreateToolsetResponseBody is the type of the "toolsets" service
@@ -62,6 +66,10 @@ type CreateToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -96,6 +104,10 @@ type UpdateToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -123,6 +135,10 @@ type GetToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -1119,6 +1135,10 @@ type ToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -1135,12 +1155,17 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		McpIsPublic:    res.McpIsPublic,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
@@ -1184,12 +1209,17 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		McpIsPublic:    res.McpIsPublic,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
@@ -1218,12 +1248,17 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
+		McpIsPublic:    res.McpIsPublic,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
@@ -1981,10 +2016,15 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 	v := &toolsets.UpdateToolsetPayload{
 		Name:        body.Name,
 		Description: body.Description,
+		McpIsPublic: body.McpIsPublic,
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpSlug != nil {
+		mcpSlug := types.Slug(*body.McpSlug)
+		v.McpSlug = &mcpSlug
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
@@ -2046,6 +2086,14 @@ func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
+	}
+	if body.McpSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.McpSlug != nil {
+		if utf8.RuneCountInString(*body.McpSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
 	return

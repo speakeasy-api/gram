@@ -12,9 +12,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// ServeUnauthorizedResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "unauthorized" error.
-type ServeUnauthorizedResponseBody struct {
+// ServePublicUnauthorizedResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "unauthorized" error.
+type ServePublicUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -30,9 +30,9 @@ type ServeUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeForbiddenResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "forbidden" error.
-type ServeForbiddenResponseBody struct {
+// ServePublicForbiddenResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "forbidden" error.
+type ServePublicForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -48,9 +48,9 @@ type ServeForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeBadRequestResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "bad_request" error.
-type ServeBadRequestResponseBody struct {
+// ServePublicBadRequestResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "bad_request" error.
+type ServePublicBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -66,9 +66,9 @@ type ServeBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeNotFoundResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "not_found" error.
-type ServeNotFoundResponseBody struct {
+// ServePublicNotFoundResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "not_found" error.
+type ServePublicNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -84,9 +84,9 @@ type ServeNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeConflictResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "conflict" error.
-type ServeConflictResponseBody struct {
+// ServePublicConflictResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "conflict" error.
+type ServePublicConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -102,9 +102,9 @@ type ServeConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeUnsupportedMediaResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "unsupported_media" error.
-type ServeUnsupportedMediaResponseBody struct {
+// ServePublicUnsupportedMediaResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "unsupported_media" error.
+type ServePublicUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -120,9 +120,9 @@ type ServeUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeInvalidResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "invalid" error.
-type ServeInvalidResponseBody struct {
+// ServePublicInvalidResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "invalid" error.
+type ServePublicInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -138,9 +138,10 @@ type ServeInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeInvariantViolationResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "invariant_violation" error.
-type ServeInvariantViolationResponseBody struct {
+// ServePublicInvariantViolationResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "invariant_violation"
+// error.
+type ServePublicInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -156,9 +157,9 @@ type ServeInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeUnexpectedResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "unexpected" error.
-type ServeUnexpectedResponseBody struct {
+// ServePublicUnexpectedResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "unexpected" error.
+type ServePublicUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -174,9 +175,9 @@ type ServeUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ServeGatewayErrorResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "gateway_error" error.
-type ServeGatewayErrorResponseBody struct {
+// ServePublicGatewayErrorResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "gateway_error" error.
+type ServePublicGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -192,17 +193,202 @@ type ServeGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// NewServeResultOK builds a "mcp" service "serve" endpoint result from a HTTP
-// "OK" response.
-func NewServeResultOK(contentType string) *mcp.ServeResult {
-	v := &mcp.ServeResult{}
+// ServeAuthenticatedUnauthorizedResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "unauthorized"
+// error.
+type ServeAuthenticatedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedForbiddenResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "forbidden" error.
+type ServeAuthenticatedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedBadRequestResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "bad_request" error.
+type ServeAuthenticatedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedNotFoundResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "not_found" error.
+type ServeAuthenticatedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedConflictResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "conflict" error.
+type ServeAuthenticatedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedUnsupportedMediaResponseBody is the type of the "mcp"
+// service "serveAuthenticated" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ServeAuthenticatedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedInvalidResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "invalid" error.
+type ServeAuthenticatedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedInvariantViolationResponseBody is the type of the "mcp"
+// service "serveAuthenticated" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ServeAuthenticatedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedUnexpectedResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "unexpected" error.
+type ServeAuthenticatedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeAuthenticatedGatewayErrorResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "gateway_error"
+// error.
+type ServeAuthenticatedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// NewServePublicResultOK builds a "mcp" service "servePublic" endpoint result
+// from a HTTP "OK" response.
+func NewServePublicResultOK(contentType string) *mcp.ServePublicResult {
+	v := &mcp.ServePublicResult{}
 	v.ContentType = contentType
 
 	return v
 }
 
-// NewServeUnauthorized builds a mcp service serve endpoint unauthorized error.
-func NewServeUnauthorized(body *ServeUnauthorizedResponseBody) *goa.ServiceError {
+// NewServePublicUnauthorized builds a mcp service servePublic endpoint
+// unauthorized error.
+func NewServePublicUnauthorized(body *ServePublicUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -215,8 +401,9 @@ func NewServeUnauthorized(body *ServeUnauthorizedResponseBody) *goa.ServiceError
 	return v
 }
 
-// NewServeForbidden builds a mcp service serve endpoint forbidden error.
-func NewServeForbidden(body *ServeForbiddenResponseBody) *goa.ServiceError {
+// NewServePublicForbidden builds a mcp service servePublic endpoint forbidden
+// error.
+func NewServePublicForbidden(body *ServePublicForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -229,8 +416,9 @@ func NewServeForbidden(body *ServeForbiddenResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewServeBadRequest builds a mcp service serve endpoint bad_request error.
-func NewServeBadRequest(body *ServeBadRequestResponseBody) *goa.ServiceError {
+// NewServePublicBadRequest builds a mcp service servePublic endpoint
+// bad_request error.
+func NewServePublicBadRequest(body *ServePublicBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -243,8 +431,9 @@ func NewServeBadRequest(body *ServeBadRequestResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewServeNotFound builds a mcp service serve endpoint not_found error.
-func NewServeNotFound(body *ServeNotFoundResponseBody) *goa.ServiceError {
+// NewServePublicNotFound builds a mcp service servePublic endpoint not_found
+// error.
+func NewServePublicNotFound(body *ServePublicNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -257,8 +446,9 @@ func NewServeNotFound(body *ServeNotFoundResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewServeConflict builds a mcp service serve endpoint conflict error.
-func NewServeConflict(body *ServeConflictResponseBody) *goa.ServiceError {
+// NewServePublicConflict builds a mcp service servePublic endpoint conflict
+// error.
+func NewServePublicConflict(body *ServePublicConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -271,9 +461,9 @@ func NewServeConflict(body *ServeConflictResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewServeUnsupportedMedia builds a mcp service serve endpoint
+// NewServePublicUnsupportedMedia builds a mcp service servePublic endpoint
 // unsupported_media error.
-func NewServeUnsupportedMedia(body *ServeUnsupportedMediaResponseBody) *goa.ServiceError {
+func NewServePublicUnsupportedMedia(body *ServePublicUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -286,8 +476,9 @@ func NewServeUnsupportedMedia(body *ServeUnsupportedMediaResponseBody) *goa.Serv
 	return v
 }
 
-// NewServeInvalid builds a mcp service serve endpoint invalid error.
-func NewServeInvalid(body *ServeInvalidResponseBody) *goa.ServiceError {
+// NewServePublicInvalid builds a mcp service servePublic endpoint invalid
+// error.
+func NewServePublicInvalid(body *ServePublicInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -300,9 +491,9 @@ func NewServeInvalid(body *ServeInvalidResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewServeInvariantViolation builds a mcp service serve endpoint
+// NewServePublicInvariantViolation builds a mcp service servePublic endpoint
 // invariant_violation error.
-func NewServeInvariantViolation(body *ServeInvariantViolationResponseBody) *goa.ServiceError {
+func NewServePublicInvariantViolation(body *ServePublicInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -315,8 +506,9 @@ func NewServeInvariantViolation(body *ServeInvariantViolationResponseBody) *goa.
 	return v
 }
 
-// NewServeUnexpected builds a mcp service serve endpoint unexpected error.
-func NewServeUnexpected(body *ServeUnexpectedResponseBody) *goa.ServiceError {
+// NewServePublicUnexpected builds a mcp service servePublic endpoint
+// unexpected error.
+func NewServePublicUnexpected(body *ServePublicUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -329,8 +521,9 @@ func NewServeUnexpected(body *ServeUnexpectedResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewServeGatewayError builds a mcp service serve endpoint gateway_error error.
-func NewServeGatewayError(body *ServeGatewayErrorResponseBody) *goa.ServiceError {
+// NewServePublicGatewayError builds a mcp service servePublic endpoint
+// gateway_error error.
+func NewServePublicGatewayError(body *ServePublicGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -343,17 +536,186 @@ func NewServeGatewayError(body *ServeGatewayErrorResponseBody) *goa.ServiceError
 	return v
 }
 
-// NewServeNoContent builds a mcp service serve endpoint no_content error.
-func NewServeNoContent(ack bool) *mcp.NoContent {
+// NewServePublicNoContent builds a mcp service servePublic endpoint no_content
+// error.
+func NewServePublicNoContent(ack bool) *mcp.NoContent {
 	v := &mcp.NoContent{}
 	v.Ack = ack
 
 	return v
 }
 
-// ValidateServeUnauthorizedResponseBody runs the validations defined on
-// serve_unauthorized_response_body
-func ValidateServeUnauthorizedResponseBody(body *ServeUnauthorizedResponseBody) (err error) {
+// NewServeAuthenticatedResultOK builds a "mcp" service "serveAuthenticated"
+// endpoint result from a HTTP "OK" response.
+func NewServeAuthenticatedResultOK(contentType string) *mcp.ServeAuthenticatedResult {
+	v := &mcp.ServeAuthenticatedResult{}
+	v.ContentType = contentType
+
+	return v
+}
+
+// NewServeAuthenticatedUnauthorized builds a mcp service serveAuthenticated
+// endpoint unauthorized error.
+func NewServeAuthenticatedUnauthorized(body *ServeAuthenticatedUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedForbidden builds a mcp service serveAuthenticated
+// endpoint forbidden error.
+func NewServeAuthenticatedForbidden(body *ServeAuthenticatedForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedBadRequest builds a mcp service serveAuthenticated
+// endpoint bad_request error.
+func NewServeAuthenticatedBadRequest(body *ServeAuthenticatedBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedNotFound builds a mcp service serveAuthenticated
+// endpoint not_found error.
+func NewServeAuthenticatedNotFound(body *ServeAuthenticatedNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedConflict builds a mcp service serveAuthenticated
+// endpoint conflict error.
+func NewServeAuthenticatedConflict(body *ServeAuthenticatedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedUnsupportedMedia builds a mcp service
+// serveAuthenticated endpoint unsupported_media error.
+func NewServeAuthenticatedUnsupportedMedia(body *ServeAuthenticatedUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedInvalid builds a mcp service serveAuthenticated
+// endpoint invalid error.
+func NewServeAuthenticatedInvalid(body *ServeAuthenticatedInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedInvariantViolation builds a mcp service
+// serveAuthenticated endpoint invariant_violation error.
+func NewServeAuthenticatedInvariantViolation(body *ServeAuthenticatedInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedUnexpected builds a mcp service serveAuthenticated
+// endpoint unexpected error.
+func NewServeAuthenticatedUnexpected(body *ServeAuthenticatedUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedGatewayError builds a mcp service serveAuthenticated
+// endpoint gateway_error error.
+func NewServeAuthenticatedGatewayError(body *ServeAuthenticatedGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewServeAuthenticatedNoContent builds a mcp service serveAuthenticated
+// endpoint no_content error.
+func NewServeAuthenticatedNoContent(ack bool) *mcp.NoContent {
+	v := &mcp.NoContent{}
+	v.Ack = ack
+
+	return v
+}
+
+// ValidateServePublicUnauthorizedResponseBody runs the validations defined on
+// servePublic_unauthorized_response_body
+func ValidateServePublicUnauthorizedResponseBody(body *ServePublicUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -375,9 +737,9 @@ func ValidateServeUnauthorizedResponseBody(body *ServeUnauthorizedResponseBody) 
 	return
 }
 
-// ValidateServeForbiddenResponseBody runs the validations defined on
-// serve_forbidden_response_body
-func ValidateServeForbiddenResponseBody(body *ServeForbiddenResponseBody) (err error) {
+// ValidateServePublicForbiddenResponseBody runs the validations defined on
+// servePublic_forbidden_response_body
+func ValidateServePublicForbiddenResponseBody(body *ServePublicForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -399,9 +761,9 @@ func ValidateServeForbiddenResponseBody(body *ServeForbiddenResponseBody) (err e
 	return
 }
 
-// ValidateServeBadRequestResponseBody runs the validations defined on
-// serve_bad_request_response_body
-func ValidateServeBadRequestResponseBody(body *ServeBadRequestResponseBody) (err error) {
+// ValidateServePublicBadRequestResponseBody runs the validations defined on
+// servePublic_bad_request_response_body
+func ValidateServePublicBadRequestResponseBody(body *ServePublicBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -423,9 +785,9 @@ func ValidateServeBadRequestResponseBody(body *ServeBadRequestResponseBody) (err
 	return
 }
 
-// ValidateServeNotFoundResponseBody runs the validations defined on
-// serve_not_found_response_body
-func ValidateServeNotFoundResponseBody(body *ServeNotFoundResponseBody) (err error) {
+// ValidateServePublicNotFoundResponseBody runs the validations defined on
+// servePublic_not_found_response_body
+func ValidateServePublicNotFoundResponseBody(body *ServePublicNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -447,9 +809,9 @@ func ValidateServeNotFoundResponseBody(body *ServeNotFoundResponseBody) (err err
 	return
 }
 
-// ValidateServeConflictResponseBody runs the validations defined on
-// serve_conflict_response_body
-func ValidateServeConflictResponseBody(body *ServeConflictResponseBody) (err error) {
+// ValidateServePublicConflictResponseBody runs the validations defined on
+// servePublic_conflict_response_body
+func ValidateServePublicConflictResponseBody(body *ServePublicConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -471,9 +833,9 @@ func ValidateServeConflictResponseBody(body *ServeConflictResponseBody) (err err
 	return
 }
 
-// ValidateServeUnsupportedMediaResponseBody runs the validations defined on
-// serve_unsupported_media_response_body
-func ValidateServeUnsupportedMediaResponseBody(body *ServeUnsupportedMediaResponseBody) (err error) {
+// ValidateServePublicUnsupportedMediaResponseBody runs the validations defined
+// on servePublic_unsupported_media_response_body
+func ValidateServePublicUnsupportedMediaResponseBody(body *ServePublicUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -495,9 +857,9 @@ func ValidateServeUnsupportedMediaResponseBody(body *ServeUnsupportedMediaRespon
 	return
 }
 
-// ValidateServeInvalidResponseBody runs the validations defined on
-// serve_invalid_response_body
-func ValidateServeInvalidResponseBody(body *ServeInvalidResponseBody) (err error) {
+// ValidateServePublicInvalidResponseBody runs the validations defined on
+// servePublic_invalid_response_body
+func ValidateServePublicInvalidResponseBody(body *ServePublicInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -519,9 +881,9 @@ func ValidateServeInvalidResponseBody(body *ServeInvalidResponseBody) (err error
 	return
 }
 
-// ValidateServeInvariantViolationResponseBody runs the validations defined on
-// serve_invariant_violation_response_body
-func ValidateServeInvariantViolationResponseBody(body *ServeInvariantViolationResponseBody) (err error) {
+// ValidateServePublicInvariantViolationResponseBody runs the validations
+// defined on servePublic_invariant_violation_response_body
+func ValidateServePublicInvariantViolationResponseBody(body *ServePublicInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -543,9 +905,9 @@ func ValidateServeInvariantViolationResponseBody(body *ServeInvariantViolationRe
 	return
 }
 
-// ValidateServeUnexpectedResponseBody runs the validations defined on
-// serve_unexpected_response_body
-func ValidateServeUnexpectedResponseBody(body *ServeUnexpectedResponseBody) (err error) {
+// ValidateServePublicUnexpectedResponseBody runs the validations defined on
+// servePublic_unexpected_response_body
+func ValidateServePublicUnexpectedResponseBody(body *ServePublicUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -567,9 +929,249 @@ func ValidateServeUnexpectedResponseBody(body *ServeUnexpectedResponseBody) (err
 	return
 }
 
-// ValidateServeGatewayErrorResponseBody runs the validations defined on
-// serve_gateway_error_response_body
-func ValidateServeGatewayErrorResponseBody(body *ServeGatewayErrorResponseBody) (err error) {
+// ValidateServePublicGatewayErrorResponseBody runs the validations defined on
+// servePublic_gateway_error_response_body
+func ValidateServePublicGatewayErrorResponseBody(body *ServePublicGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedUnauthorizedResponseBody runs the validations
+// defined on serveAuthenticated_unauthorized_response_body
+func ValidateServeAuthenticatedUnauthorizedResponseBody(body *ServeAuthenticatedUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedForbiddenResponseBody runs the validations defined
+// on serveAuthenticated_forbidden_response_body
+func ValidateServeAuthenticatedForbiddenResponseBody(body *ServeAuthenticatedForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedBadRequestResponseBody runs the validations
+// defined on serveAuthenticated_bad_request_response_body
+func ValidateServeAuthenticatedBadRequestResponseBody(body *ServeAuthenticatedBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedNotFoundResponseBody runs the validations defined
+// on serveAuthenticated_not_found_response_body
+func ValidateServeAuthenticatedNotFoundResponseBody(body *ServeAuthenticatedNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedConflictResponseBody runs the validations defined
+// on serveAuthenticated_conflict_response_body
+func ValidateServeAuthenticatedConflictResponseBody(body *ServeAuthenticatedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedUnsupportedMediaResponseBody runs the validations
+// defined on serveAuthenticated_unsupported_media_response_body
+func ValidateServeAuthenticatedUnsupportedMediaResponseBody(body *ServeAuthenticatedUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedInvalidResponseBody runs the validations defined
+// on serveAuthenticated_invalid_response_body
+func ValidateServeAuthenticatedInvalidResponseBody(body *ServeAuthenticatedInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedInvariantViolationResponseBody runs the
+// validations defined on serveAuthenticated_invariant_violation_response_body
+func ValidateServeAuthenticatedInvariantViolationResponseBody(body *ServeAuthenticatedInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedUnexpectedResponseBody runs the validations
+// defined on serveAuthenticated_unexpected_response_body
+func ValidateServeAuthenticatedUnexpectedResponseBody(body *ServeAuthenticatedUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeAuthenticatedGatewayErrorResponseBody runs the validations
+// defined on serveAuthenticated_gateway_error_response_body
+func ValidateServeAuthenticatedGatewayErrorResponseBody(body *ServeAuthenticatedGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

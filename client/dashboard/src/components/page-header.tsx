@@ -70,7 +70,13 @@ function PageHeaderBreadcrumbs() {
     .map((segment, index, segments) => {
       const url = "/" + segments.slice(0, index + 1).join("/");
       const isCurrentPage = location.pathname.endsWith(url);
-      const title = segment.toLowerCase() === "sdk" ? "SDK" : segment.replace("-", " ");
+      let title = segment.replace("-", " ");
+      if (title.toLowerCase() === "sdk") {
+        title = "SDK";
+      }
+      if (title.toLowerCase() === "mcp") {
+        title = "MCP";
+      }
 
       return {
         url,

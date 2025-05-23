@@ -82,7 +82,7 @@ export default function SlackApp() {
       </Page.Header>
       <Page.Body>
         <div className="flex items-start justify-between mb-1">
-          <div className="text-lg font-medium flex items-center gap-2">
+          <h2>
             Perform agent tasks with Gram toolsets using the Gram Slack App
             {installed && (
               <Tooltip>
@@ -100,7 +100,7 @@ export default function SlackApp() {
                 </TooltipContent>
               </Tooltip>
             )}
-          </div>
+          </h2>
           {!installed && (
             <Button
               onClick={() => {

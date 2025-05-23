@@ -166,6 +166,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		DefaultEnvironmentSlug: existingToolset.DefaultEnvironmentSlug,
 		ProjectID:              *authCtx.ProjectID,
 		HttpToolNames:          existingToolset.HttpToolNames,
+		McpSlug:                existingToolset.McpSlug,
+		McpIsPublic:            existingToolset.McpIsPublic,
 	}
 	if payload.Name != nil {
 		updateParams.Name = *payload.Name
@@ -183,6 +185,22 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
 		}
 		updateParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
+	}
+
+	if payload.McpSlug != nil && *payload.McpSlug != "" {
+		mcpToolset, err := s.repo.GetToolsetByMcpSlug(ctx, updateParams.McpSlug)
+		if err == nil && mcpToolset.ID != existingToolset.ID {
+			return nil, oops.E(oops.CodeConflict, nil, "this slug is already ta")
+		}
+		updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
+	}
+
+	if payload.McpIsPublic != nil {
+		if *payload.McpIsPublic && !existingToolset.McpSlug.Valid && (payload.McpSlug == nil || *payload.McpSlug == "") {
+			// sanity check this should not be able to happens
+			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug is required to set mcp is public")
+		}
+		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
 	// Convert set back to slice

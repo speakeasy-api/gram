@@ -19,11 +19,11 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeServeResponse returns an encoder for responses returned by the mcp
-// serve endpoint.
-func EncodeServeResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeServePublicResponse returns an encoder for responses returned by the
+// mcp servePublic endpoint.
+func EncodeServePublicResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcp.ServeResult)
+		res, _ := v.(*mcp.ServePublicResult)
 		ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
 		w.Header().Set("Content-Type", res.ContentType)
 		w.WriteHeader(http.StatusOK)
@@ -31,41 +31,35 @@ func EncodeServeResponse(encoder func(context.Context, http.ResponseWriter) goah
 	}
 }
 
-// DecodeServeRequest returns a decoder for requests sent to the mcp serve
-// endpoint.
-func DecodeServeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+// DecodeServePublicRequest returns a decoder for requests sent to the mcp
+// servePublic endpoint.
+func DecodeServePublicRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			project     string
-			toolset     string
-			environment string
-			apikeyToken *string
+			mcpSlug              string
+			environmentVariables *string
+			apikeyToken          *string
 
 			params = mux.Vars(r)
 		)
-		project = params["project"]
-		toolset = params["toolset"]
-		environment = params["environment"]
+		mcpSlug = params["mcpSlug"]
+		environmentVariablesRaw := r.Header.Get("MCP-Environment")
+		if environmentVariablesRaw != "" {
+			environmentVariables = &environmentVariablesRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Authorization")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		payload := NewServePayload(project, toolset, environment, apikeyToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload := NewServePublicPayload(mcpSlug, environmentVariables, apikeyToken)
 
 		return payload, nil
 	}
 }
 
-// EncodeServeError returns an encoder for errors returned by the serve mcp
-// endpoint.
-func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeServePublicError returns an encoder for errors returned by the
+// servePublic mcp endpoint.
+func EncodeServePublicError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -82,7 +76,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeUnauthorizedResponseBody(res)
+				body = NewServePublicUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -96,7 +90,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeForbiddenResponseBody(res)
+				body = NewServePublicForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -110,7 +104,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeBadRequestResponseBody(res)
+				body = NewServePublicBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -124,7 +118,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeNotFoundResponseBody(res)
+				body = NewServePublicNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -138,7 +132,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeConflictResponseBody(res)
+				body = NewServePublicConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -152,7 +146,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeUnsupportedMediaResponseBody(res)
+				body = NewServePublicUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -166,7 +160,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeInvalidResponseBody(res)
+				body = NewServePublicInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -180,7 +174,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeInvariantViolationResponseBody(res)
+				body = NewServePublicInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -194,7 +188,7 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeUnexpectedResponseBody(res)
+				body = NewServePublicUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -208,7 +202,223 @@ func EncodeServeError(encoder func(context.Context, http.ResponseWriter) goahttp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewServeGatewayErrorResponseBody(res)
+				body = NewServePublicGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "no_content":
+			var res *mcp.NoContent
+			errors.As(v, &res)
+			{
+				val := res.Ack
+				acks := strconv.FormatBool(val)
+				w.Header().Set("Noop", acks)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeServeAuthenticatedResponse returns an encoder for responses returned
+// by the mcp serveAuthenticated endpoint.
+func EncodeServeAuthenticatedResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*mcp.ServeAuthenticatedResult)
+		ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+		w.Header().Set("Content-Type", res.ContentType)
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+}
+
+// DecodeServeAuthenticatedRequest returns a decoder for requests sent to the
+// mcp serveAuthenticated endpoint.
+func DecodeServeAuthenticatedRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
+	return func(r *http.Request) (any, error) {
+		var (
+			project              string
+			toolset              string
+			environment          string
+			apikeyToken          *string
+			environmentVariables *string
+
+			params = mux.Vars(r)
+		)
+		project = params["project"]
+		toolset = params["toolset"]
+		environment = params["environment"]
+		apikeyTokenRaw := r.Header.Get("Authorization")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		environmentVariablesRaw := r.Header.Get("MCP-Environment")
+		if environmentVariablesRaw != "" {
+			environmentVariables = &environmentVariablesRaw
+		}
+		payload := NewServeAuthenticatedPayload(project, toolset, environment, apikeyToken, environmentVariables)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeServeAuthenticatedError returns an encoder for errors returned by the
+// serveAuthenticated mcp endpoint.
+func EncodeServeAuthenticatedError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewServeAuthenticatedGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

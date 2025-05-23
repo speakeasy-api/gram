@@ -27,6 +27,10 @@ type Toolset struct {
 	RelevantEnvironmentVariables []string
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinition
+	// The slug of the MCP to use for the toolset
+	McpSlug *Slug
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

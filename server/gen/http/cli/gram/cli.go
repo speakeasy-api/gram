@@ -44,7 +44,7 @@ environments (create-environment|list-environments|update-environment|delete-env
 instances get-instance
 integrations (get|list)
 keys (create-key|list-keys|revoke-key)
-mcp serve
+mcp (serve-public|serve-authenticated)
 packages (create-package|update-package|list-packages|list-versions|publish)
 projects (create-project|list-projects)
 slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)
@@ -56,9 +56,9 @@ variations (upsert-global|delete-global|list-global)
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets serve-image --id "Dolores dolores voluptatibus alias iusto et." --session-token "Occaecati quae voluptatum fugiat labore."` + "\n" +
-		os.Args[0] + ` auth callback --id-token "Possimus praesentium nam."` + "\n" +
-		os.Args[0] + ` chat list-chats --session-token "Sed reiciendis." --project-slug-input "Voluptatem distinctio."` + "\n" +
+	return os.Args[0] + ` assets serve-image --id "Esse et qui fugit quos." --session-token "Doloremque dolores dolores voluptatibus alias iusto."` + "\n" +
+		os.Args[0] + ` auth callback --id-token "Veniam molestiae magni."` + "\n" +
+		os.Args[0] + ` chat list-chats --session-token "Tempora iure sed reiciendis corporis voluptatem distinctio." --project-slug-input "Culpa temporibus eos atque."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Temporibus et." --apikey-token "Necessitatibus amet enim." --session-token "Saepe sint magni." --project-slug-input "Ab assumenda."` + "\n" +
 		os.Args[0] + ` environments create-environment --body '{
       "description": "Recusandae libero nulla similique doloremque.",
@@ -234,12 +234,19 @@ func ParseEndpoint(
 
 		mcpFlags = flag.NewFlagSet("mcp", flag.ContinueOnError)
 
-		mcpServeFlags           = flag.NewFlagSet("serve", flag.ExitOnError)
-		mcpServeProjectFlag     = mcpServeFlags.String("project", "REQUIRED", "")
-		mcpServeToolsetFlag     = mcpServeFlags.String("toolset", "REQUIRED", "The toolset to access via MCP.")
-		mcpServeEnvironmentFlag = mcpServeFlags.String("environment", "REQUIRED", "The environment to access via MCP.")
-		mcpServeApikeyTokenFlag = mcpServeFlags.String("apikey-token", "", "")
-		mcpServeStreamFlag      = mcpServeFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+		mcpServePublicFlags                    = flag.NewFlagSet("serve-public", flag.ExitOnError)
+		mcpServePublicMcpSlugFlag              = mcpServePublicFlags.String("mcp-slug", "REQUIRED", "The unique slug of the mcp server.")
+		mcpServePublicEnvironmentVariablesFlag = mcpServePublicFlags.String("environment-variables", "", "")
+		mcpServePublicApikeyTokenFlag          = mcpServePublicFlags.String("apikey-token", "", "")
+		mcpServePublicStreamFlag               = mcpServePublicFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
+		mcpServeAuthenticatedFlags                    = flag.NewFlagSet("serve-authenticated", flag.ExitOnError)
+		mcpServeAuthenticatedProjectFlag              = mcpServeAuthenticatedFlags.String("project", "REQUIRED", "")
+		mcpServeAuthenticatedToolsetFlag              = mcpServeAuthenticatedFlags.String("toolset", "REQUIRED", "The toolset to access via MCP.")
+		mcpServeAuthenticatedEnvironmentFlag          = mcpServeAuthenticatedFlags.String("environment", "REQUIRED", "The environment to access via MCP.")
+		mcpServeAuthenticatedApikeyTokenFlag          = mcpServeAuthenticatedFlags.String("apikey-token", "", "")
+		mcpServeAuthenticatedEnvironmentVariablesFlag = mcpServeAuthenticatedFlags.String("environment-variables", "", "")
+		mcpServeAuthenticatedStreamFlag               = mcpServeAuthenticatedFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		packagesFlags = flag.NewFlagSet("packages", flag.ContinueOnError)
 
@@ -404,7 +411,8 @@ func ParseEndpoint(
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 
 	mcpFlags.Usage = mcpUsage
-	mcpServeFlags.Usage = mcpServeUsage
+	mcpServePublicFlags.Usage = mcpServePublicUsage
+	mcpServeAuthenticatedFlags.Usage = mcpServeAuthenticatedUsage
 
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
@@ -608,8 +616,11 @@ func ParseEndpoint(
 
 		case "mcp":
 			switch epn {
-			case "serve":
-				epf = mcpServeFlags
+			case "serve-public":
+				epf = mcpServePublicFlags
+
+			case "serve-authenticated":
+				epf = mcpServeAuthenticatedFlags
 
 			}
 
@@ -835,11 +846,17 @@ func ParseEndpoint(
 		case "mcp":
 			c := mcpc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "serve":
-				endpoint = c.Serve()
-				data, err = mcpc.BuildServePayload(*mcpServeProjectFlag, *mcpServeToolsetFlag, *mcpServeEnvironmentFlag, *mcpServeApikeyTokenFlag)
+			case "serve-public":
+				endpoint = c.ServePublic()
+				data, err = mcpc.BuildServePublicPayload(*mcpServePublicMcpSlugFlag, *mcpServePublicEnvironmentVariablesFlag, *mcpServePublicApikeyTokenFlag)
 				if err == nil {
-					data, err = mcpc.BuildServeStreamPayload(data, *mcpServeStreamFlag)
+					data, err = mcpc.BuildServePublicStreamPayload(data, *mcpServePublicStreamFlag)
+				}
+			case "serve-authenticated":
+				endpoint = c.ServeAuthenticated()
+				data, err = mcpc.BuildServeAuthenticatedPayload(*mcpServeAuthenticatedProjectFlag, *mcpServeAuthenticatedToolsetFlag, *mcpServeAuthenticatedEnvironmentFlag, *mcpServeAuthenticatedApikeyTokenFlag, *mcpServeAuthenticatedEnvironmentVariablesFlag)
+				if err == nil {
+					data, err = mcpc.BuildServeAuthenticatedStreamPayload(data, *mcpServeAuthenticatedStreamFlag)
 				}
 			}
 		case "packages":
@@ -961,7 +978,7 @@ Serve an image from Gram.
     -session-token STRING: 
 
 Example:
-    %[1]s assets serve-image --id "Dolores dolores voluptatibus alias iusto et." --session-token "Occaecati quae voluptatum fugiat labore."
+    %[1]s assets serve-image --id "Esse et qui fugit quos." --session-token "Doloremque dolores dolores voluptatibus alias iusto."
 `, os.Args[0])
 }
 
@@ -977,7 +994,7 @@ Upload an image to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-image --content-type "Odit ut molestiae accusamus aut dignissimos." --content-length 9185938119758551791 --apikey-token "Totam in sed quae." --project-slug-input "Tempore itaque corporis qui." --session-token "Reprehenderit et voluptates voluptas nihil id." --stream "goa.png"
+    %[1]s assets upload-image --content-type "Consectetur optio explicabo occaecati ea ut." --content-length 3252139540053069047 --apikey-token "Ut molestiae accusamus aut." --project-slug-input "Aliquam enim totam in." --session-token "Quae qui tempore." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -993,7 +1010,7 @@ Upload an OpenAPI v3 document to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Pariatur rerum." --content-length 3870511192486667936 --apikey-token "Cum ex." --project-slug-input "Eum temporibus veniam eos fugit nisi." --session-token "Quasi ut quia consequatur beatae." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Molestias quo quia dolorem." --content-length 159561422047676832 --apikey-token "Consequatur ratione autem." --project-slug-input "Pariatur rerum." --session-token "Non cum." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -1021,7 +1038,7 @@ Handles the authentication callback.
     -id-token STRING: 
 
 Example:
-    %[1]s auth callback --id-token "Possimus praesentium nam."
+    %[1]s auth callback --id-token "Veniam molestiae magni."
 `, os.Args[0])
 }
 
@@ -1044,7 +1061,7 @@ Switches the authentication scope to a different organization.
     -session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Delectus dolorem officiis quaerat voluptatem recusandae." --project-id "Similique dolor dolorum." --session-token "Praesentium nemo in quos quasi."
+    %[1]s auth switch-scopes --organization-id "Nostrum non voluptate voluptas quo vitae." --project-id "Voluptatum illum aut delectus dolorem officiis." --session-token "Voluptatem recusandae ut similique dolor dolorum."
 `, os.Args[0])
 }
 
@@ -1055,7 +1072,7 @@ Logs out the current user by clearing their session.
     -session-token STRING: 
 
 Example:
-    %[1]s auth logout --session-token "Ducimus et voluptatem et aut ut."
+    %[1]s auth logout --session-token "Quo quam officiis ducimus et voluptatem."
 `, os.Args[0])
 }
 
@@ -1066,7 +1083,7 @@ Provides information about the current authentication status.
     -session-token STRING: 
 
 Example:
-    %[1]s auth info --session-token "Vel expedita."
+    %[1]s auth info --session-token "Quis ea."
 `, os.Args[0])
 }
 
@@ -1092,7 +1109,7 @@ List all chats for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s chat list-chats --session-token "Sed reiciendis." --project-slug-input "Voluptatem distinctio."
+    %[1]s chat list-chats --session-token "Tempora iure sed reiciendis corporis voluptatem distinctio." --project-slug-input "Culpa temporibus eos atque."
 `, os.Args[0])
 }
 
@@ -1105,7 +1122,7 @@ Load a chat by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s chat load-chat --id "Reprehenderit blanditiis ratione praesentium." --session-token "Officiis nostrum earum non qui consequuntur aut." --project-slug-input "Praesentium voluptates reprehenderit vel sed."
+    %[1]s chat load-chat --id "Dolor officiis." --session-token "Earum non." --project-slug-input "Consequuntur aut in praesentium voluptates reprehenderit vel."
 `, os.Args[0])
 }
 
@@ -1523,24 +1540,40 @@ Usage:
     %[1]s [globalflags] mcp COMMAND [flags]
 
 COMMAND:
-    serve: MCP server endpoint for a toolset.
+    serve-public: MCP server endpoint for a toolset (public, no environment param).
+    serve-authenticated: MCP server endpoint for a toolset (environment as path param, authenticated).
 
 Additional help:
     %[1]s mcp COMMAND --help
 `, os.Args[0])
 }
-func mcpServeUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] mcp serve -project STRING -toolset STRING -environment STRING -apikey-token STRING -stream STRING
+func mcpServePublicUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] mcp serve-public -mcp-slug STRING -environment-variables STRING -apikey-token STRING -stream STRING
 
-MCP server endpoint for a toolset.
-    -project STRING: 
-    -toolset STRING: The toolset to access via MCP.
-    -environment STRING: The environment to access via MCP.
+MCP server endpoint for a toolset (public, no environment param).
+    -mcp-slug STRING: The unique slug of the mcp server.
+    -environment-variables STRING: 
     -apikey-token STRING: 
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s mcp serve --project "Inventore voluptatem laboriosam neque." --toolset "Et asperiores." --environment "Quibusdam molestias molestiae laboriosam accusamus." --apikey-token "Quia quae et sit laborum officiis consectetur." --stream "goa.png"
+    %[1]s mcp serve-public --mcp-slug "Sunt tempora qui." --environment-variables "Aliquam nam ipsam asperiores minima." --apikey-token "Inventore voluptatem laboriosam neque." --stream "goa.png"
+`, os.Args[0])
+}
+
+func mcpServeAuthenticatedUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] mcp serve-authenticated -project STRING -toolset STRING -environment STRING -apikey-token STRING -environment-variables STRING -stream STRING
+
+MCP server endpoint for a toolset (environment as path param, authenticated).
+    -project STRING: 
+    -toolset STRING: The toolset to access via MCP.
+    -environment STRING: The environment to access via MCP.
+    -apikey-token STRING: 
+    -environment-variables STRING: 
+    -stream STRING: path to file containing the streamed request body
+
+Example:
+    %[1]s mcp serve-authenticated --project "Dolor ad ut." --toolset "Magnam rerum." --environment "Et est molestiae non possimus modi." --apikey-token "Iusto corrupti officia." --environment-variables "Et beatae vel autem voluptatem aliquid." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -1572,18 +1605,18 @@ Create a new package for a project.
 
 Example:
     %[1]s packages create-package --body '{
-      "description": "2kb",
-      "image_asset_id": "4d8",
+      "description": "24t",
+      "image_asset_id": "gic",
       "keywords": [
-         "Labore nemo soluta ipsam provident.",
-         "Vitae in dolorem.",
-         "Tempore quisquam."
+         "Dolorem soluta est quo ea voluptatem.",
+         "Ea porro reprehenderit est.",
+         "Voluptates impedit ea accusantium similique."
       ],
-      "name": "j3p",
-      "summary": "ue1",
-      "title": "d6a",
-      "url": "fqd"
-   }' --apikey-token "Culpa quae qui dolore." --session-token "Et aut corporis eligendi." --project-slug-input "Ut ut voluptate qui nihil dolorum."
+      "name": "wcs",
+      "summary": "ymo",
+      "title": "3yi",
+      "url": "tqq"
+   }' --apikey-token "In unde esse sequi." --session-token "Minima voluptatem aliquam." --project-slug-input "Beatae quia repellat dolor non veritatis."
 `, os.Args[0])
 }
 
@@ -1598,18 +1631,18 @@ Update package details.
 
 Example:
     %[1]s packages update-package --body '{
-      "description": "pxb",
-      "id": "bn4",
-      "image_asset_id": "79m",
+      "description": "fyp",
+      "id": "o72",
+      "image_asset_id": "ozy",
       "keywords": [
-         "Et est aut cumque.",
-         "Qui et.",
-         "Et nesciunt et minima libero omnis voluptatem."
+         "Exercitationem est expedita.",
+         "Odit laudantium eligendi.",
+         "Sed molestiae."
       ],
-      "summary": "nmh",
-      "title": "ks9",
-      "url": "ki2"
-   }' --apikey-token "Doloremque nobis." --session-token "Omnis ad cumque qui." --project-slug-input "Vel omnis."
+      "summary": "mj6",
+      "title": "doc",
+      "url": "t24"
+   }' --apikey-token "Nisi rerum aut distinctio quo sunt." --session-token "Aut minima." --project-slug-input "Harum dignissimos aspernatur."
 `, os.Args[0])
 }
 
@@ -1622,7 +1655,7 @@ List all packages for a project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-packages --apikey-token "Numquam sint quam." --session-token "Nisi rerum aut distinctio quo sunt." --project-slug-input "Aut minima."
+    %[1]s packages list-packages --apikey-token "At repellendus est." --session-token "Accusantium est dolor sit." --project-slug-input "Consequuntur error suscipit optio sunt eum."
 `, os.Args[0])
 }
 
@@ -1636,7 +1669,7 @@ List published versions of a package.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-versions --name "Non quaerat consequuntur quam exercitationem molestiae maiores." --apikey-token "At cum vel aliquid." --session-token "At repellendus est." --project-slug-input "Accusantium est dolor sit."
+    %[1]s packages list-versions --name "Dolor minima qui enim aliquam quia." --apikey-token "Odio ex velit animi." --session-token "Nihil error quia aut et sit possimus." --project-slug-input "Et assumenda ea quia neque id amet."
 `, os.Args[0])
 }
 
@@ -1651,11 +1684,11 @@ Publish a new version of a package.
 
 Example:
     %[1]s packages publish --body '{
-      "deployment_id": "Aliquam id.",
-      "name": "Velit sunt iusto.",
-      "version": "Vitae sed doloremque et perspiciatis.",
-      "visibility": "public"
-   }' --apikey-token "Accusantium nisi est enim." --session-token "Quidem sint illum ut blanditiis." --project-slug-input "Itaque facilis."
+      "deployment_id": "Voluptatem alias in suscipit voluptates unde similique.",
+      "name": "Tenetur rem sunt.",
+      "version": "Debitis laboriosam.",
+      "visibility": "private"
+   }' --apikey-token "Totam et." --session-token "Quidem ullam sint omnis reprehenderit cum." --project-slug-input "Rerum dignissimos veritatis quaerat."
 `, os.Args[0])
 }
 
@@ -1683,9 +1716,9 @@ Create a new project.
 
 Example:
     %[1]s projects create-project --body '{
-      "name": "5kn",
-      "organization_id": "Totam non aliquam maxime eum."
-   }' --apikey-token "Qui animi quia consequatur recusandae non tenetur." --session-token "Sunt dolores."
+      "name": "dhk",
+      "organization_id": "Ducimus ut."
+   }' --apikey-token "Cumque molestiae voluptate ut nostrum." --session-token "Modi voluptatem itaque inventore distinctio."
 `, os.Args[0])
 }
 
@@ -1698,7 +1731,7 @@ List all projects for an organization.
     -apikey-token STRING: 
 
 Example:
-    %[1]s projects list-projects --organization-id "Aperiam voluptatem qui rerum voluptatem qui necessitatibus." --session-token "Iure sed eos saepe." --apikey-token "Quae aut voluptatem."
+    %[1]s projects list-projects --organization-id "Nam a perspiciatis sint et ducimus." --session-token "Eaque pariatur et rerum qui officia." --apikey-token "Doloribus autem in facilis excepturi sint est."
 `, os.Args[0])
 }
 
@@ -1727,7 +1760,7 @@ Handles the authentication callback.
     -code STRING: 
 
 Example:
-    %[1]s slack callback --state "Quia in quaerat maiores quae." --code "Est quaerat adipisci enim sed et repellendus."
+    %[1]s slack callback --state "Beatae voluptatem tenetur sed sit." --code "Sint omnis enim ullam odit."
 `, os.Args[0])
 }
 
@@ -1740,7 +1773,7 @@ Proxies to auth login through speakeasy oidc.
     -session-token STRING: 
 
 Example:
-    %[1]s slack login --project-slug "Culpa quo." --return-url "Qui reprehenderit omnis sed." --session-token "Ea molestiae voluptatem tenetur."
+    %[1]s slack login --project-slug "Soluta eum quia sint repudiandae." --return-url "Quibusdam dicta eius." --session-token "Saepe officiis repudiandae placeat molestiae qui."
 `, os.Args[0])
 }
 
@@ -1752,7 +1785,7 @@ get slack connection for an organization and project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s slack get-slack-connection --session-token "Ut itaque totam ut aut." --project-slug-input "Et voluptate dolores odio."
+    %[1]s slack get-slack-connection --session-token "Adipisci dolor autem est sequi." --project-slug-input "In et voluptatem nulla dicta."
 `, os.Args[0])
 }
 
@@ -1766,8 +1799,8 @@ update slack connection for an organization and project.
 
 Example:
     %[1]s slack update-slack-connection --body '{
-      "default_toolset_slug": "Temporibus omnis sequi voluptas quam."
-   }' --session-token "Qui amet ipsam." --project-slug-input "Id voluptatem sed voluptatum aspernatur voluptatem."
+      "default_toolset_slug": "Fuga explicabo."
+   }' --session-token "Omnis cumque." --project-slug-input "Perferendis temporibus."
 `, os.Args[0])
 }
 
@@ -1779,7 +1812,7 @@ delete slack connection for an organization and project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s slack delete-slack-connection --session-token "Quis voluptatem asperiores cum facere commodi." --project-slug-input "Sed illo."
+    %[1]s slack delete-slack-connection --session-token "Quisquam nam dolorum." --project-slug-input "Dolorem incidunt voluptatibus sunt."
 `, os.Args[0])
 }
 
@@ -1806,7 +1839,7 @@ List all tools for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s tools list-tools --cursor "Deserunt voluptatem quas natus sunt harum consequuntur." --deployment-id "Non amet." --session-token "Doloribus dolor rerum ducimus eveniet tempore neque." --project-slug-input "Recusandae qui itaque nihil sunt."
+    %[1]s tools list-tools --cursor "Adipisci nobis." --deployment-id "Consequuntur ea dolor reiciendis culpa." --session-token "Eaque quaerat vel accusantium beatae." --project-slug-input "Sed nemo iure animi perspiciatis soluta qui."
 `, os.Args[0])
 }
 
@@ -1837,14 +1870,14 @@ Create a new toolset with associated tools
 
 Example:
     %[1]s toolsets create-toolset --body '{
-      "default_environment_slug": "ubr",
-      "description": "Et quaerat minima.",
+      "default_environment_slug": "qci",
+      "description": "Aut accusantium ut tempora necessitatibus atque.",
       "http_tool_names": [
-         "Velit hic molestiae.",
-         "Reprehenderit qui."
+         "Voluptatibus neque quaerat et.",
+         "Explicabo aliquam est."
       ],
-      "name": "Molestias quidem error minima autem."
-   }' --session-token "In dolor." --project-slug-input "Et earum."
+      "name": "Sit porro sit voluptate."
+   }' --session-token "Voluptatem dolorem libero quaerat facilis iusto." --project-slug-input "Maxime ad quia similique facere illum."
 `, os.Args[0])
 }
 
@@ -1856,7 +1889,7 @@ List all toolsets for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Officia quis incidunt." --project-slug-input "Sint quod nostrum similique doloribus dolores harum."
+    %[1]s toolsets list-toolsets --session-token "Voluptatum natus sit cum sed." --project-slug-input "Minima deleniti optio."
 `, os.Args[0])
 }
 
@@ -1871,15 +1904,18 @@ Update a toolset's properties including name, description, and HTTP tools
 
 Example:
     %[1]s toolsets update-toolset --body '{
-      "default_environment_slug": "5bt",
-      "description": "Iste minus.",
+      "default_environment_slug": "njw",
+      "description": "Quis voluptate et nihil molestias.",
       "http_tool_names": [
-         "Magnam sunt perferendis aut.",
-         "Omnis rerum aut recusandae.",
-         "Minus voluptate nisi velit voluptas doloremque."
+         "Similique magnam ducimus.",
+         "Voluptatem molestias sed.",
+         "Exercitationem laborum quia quas hic.",
+         "Quos possimus."
       ],
-      "name": "Ipsum laborum maxime officia quia sit."
-   }' --slug "s3h" --session-token "Voluptas quisquam sit nemo quo suscipit nostrum." --project-slug-input "Voluptatem omnis aut."
+      "mcp_is_public": true,
+      "mcp_slug": "ht3",
+      "name": "Voluptatum eius enim sunt non."
+   }' --slug "yhg" --session-token "Saepe nulla dolorem ab rerum modi." --project-slug-input "Itaque id nihil quaerat voluptatem molestiae dicta."
 `, os.Args[0])
 }
 
@@ -1892,7 +1928,7 @@ Delete a toolset by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "dxn" --session-token "Voluptatem sint deleniti voluptas dolorem." --project-slug-input "Exercitationem unde placeat temporibus."
+    %[1]s toolsets delete-toolset --slug "ykf" --session-token "Maiores enim ut et quis nesciunt." --project-slug-input "Deserunt laudantium excepturi quia omnis."
 `, os.Args[0])
 }
 
@@ -1905,7 +1941,7 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset --slug "cnp" --session-token "Distinctio omnis laboriosam enim nam." --project-slug-input "Consequatur et sit."
+    %[1]s toolsets get-toolset --slug "jf3" --session-token "Iusto sit eveniet in ullam." --project-slug-input "Quia sed sint quo tempore."
 `, os.Args[0])
 }
 
@@ -1936,20 +1972,18 @@ Create or update a globally defined tool variation.
 
 Example:
     %[1]s variations upsert-global --body '{
-      "confirm": "always",
-      "confirm_prompt": "Repellat distinctio et laborum quasi et.",
-      "description": "Eos et consequatur.",
-      "name": "Numquam sed maxime blanditiis itaque vel dolorum.",
-      "src_tool_name": "Unde alias vel quas non.",
-      "summarizer": "Ad dolore temporibus molestias.",
-      "summary": "Eum eaque aut deleniti earum exercitationem quis.",
+      "confirm": "never",
+      "confirm_prompt": "Est quaerat facere eaque doloribus consequuntur nihil.",
+      "description": "Ut error animi voluptate culpa.",
+      "name": "Impedit enim repellat reprehenderit odit.",
+      "src_tool_name": "Aliquam ut corporis distinctio.",
+      "summarizer": "Qui sequi dolorem incidunt quas.",
+      "summary": "Voluptate a aliquam.",
       "tags": [
-         "Vitae est.",
-         "Sed ut quasi laboriosam eum.",
-         "Quam blanditiis dicta illum non deserunt in.",
-         "Animi iure."
+         "Quia omnis consequatur.",
+         "Cumque pariatur."
       ]
-   }' --session-token "Est recusandae laudantium quas qui quis." --apikey-token "Alias quis." --project-slug-input "Debitis deserunt sint molestias molestias consequuntur."
+   }' --session-token "Voluptatem et eius." --apikey-token "Ea optio tempora quam." --project-slug-input "Asperiores id."
 `, os.Args[0])
 }
 
@@ -1963,7 +1997,7 @@ Create or update a globally defined tool variation.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations delete-global --variation-id "Id consequuntur et." --session-token "Beatae ea blanditiis maiores aut voluptatibus." --apikey-token "Blanditiis rerum voluptatem veritatis cumque rerum." --project-slug-input "Dolore accusamus."
+    %[1]s variations delete-global --variation-id "Et dolores cupiditate vel molestiae ut." --session-token "Sapiente sed." --apikey-token "Aut quis sed aut." --project-slug-input "Voluptatem voluptatem tempore cupiditate cumque eos consequatur."
 `, os.Args[0])
 }
 
@@ -1976,6 +2010,6 @@ List globally defined tool variations.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations list-global --session-token "Minima nihil facilis dolorem voluptatum aut debitis." --apikey-token "Aut adipisci iure nihil omnis." --project-slug-input "Et veniam."
+    %[1]s variations list-global --session-token "Ut consectetur ut repudiandae." --apikey-token "Perferendis enim." --project-slug-input "Perferendis voluptatem earum et similique."
 `, os.Args[0])
 }

@@ -21,8 +21,9 @@ import (
 
 // Server lists the mcp service endpoint HTTP handlers.
 type Server struct {
-	Mounts []*MountPoint
-	Serve  http.Handler
+	Mounts             []*MountPoint
+	ServePublic        http.Handler
+	ServeAuthenticated http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,9 +53,11 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"Serve", "POST", "/mcp/{project}/{toolset}/{environment}"},
+			{"ServePublic", "POST", "/mcp/{mcpSlug}"},
+			{"ServeAuthenticated", "POST", "/mcp/{project}/{toolset}/{environment}"},
 		},
-		Serve: NewServeHandler(e.Serve, mux, decoder, encoder, errhandler, formatter),
+		ServePublic:        NewServePublicHandler(e.ServePublic, mux, decoder, encoder, errhandler, formatter),
+		ServeAuthenticated: NewServeAuthenticatedHandler(e.ServeAuthenticated, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -63,7 +66,8 @@ func (s *Server) Service() string { return "mcp" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.Serve = m(s.Serve)
+	s.ServePublic = m(s.ServePublic)
+	s.ServeAuthenticated = m(s.ServeAuthenticated)
 }
 
 // MethodNames returns the methods served.
@@ -71,7 +75,8 @@ func (s *Server) MethodNames() []string { return mcp.MethodNames[:] }
 
 // Mount configures the mux to serve the mcp endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountServeHandler(mux, h.Serve)
+	MountServePublicHandler(mux, h.ServePublic)
+	MountServeAuthenticatedHandler(mux, h.ServeAuthenticated)
 }
 
 // Mount configures the mux to serve the mcp endpoints.
@@ -79,9 +84,98 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountServeHandler configures the mux to serve the "mcp" service "serve"
-// endpoint.
-func MountServeHandler(mux goahttp.Muxer, h http.Handler) {
+// MountServePublicHandler configures the mux to serve the "mcp" service
+// "servePublic" endpoint.
+func MountServePublicHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/mcp/{mcpSlug}", otelhttp.WithRouteTag("/mcp/{mcpSlug}", f).ServeHTTP)
+}
+
+// NewServePublicHandler creates a HTTP handler which loads the HTTP request
+// and calls the "mcp" service "servePublic" endpoint.
+func NewServePublicHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeServePublicRequest(mux, decoder)
+		encodeResponse = EncodeServePublicResponse(encoder)
+		encodeError    = EncodeServePublicError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "servePublic")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		data := &mcp.ServePublicRequestData{Payload: payload.(*mcp.ServePublicPayload), Body: r.Body}
+		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*mcp.ServePublicResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				errhandler(ctx, w, err)
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+					}
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			errhandler(ctx, w, err)
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountServeAuthenticatedHandler configures the mux to serve the "mcp" service
+// "serveAuthenticated" endpoint.
+func MountServeAuthenticatedHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +185,9 @@ func MountServeHandler(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("POST", "/mcp/{project}/{toolset}/{environment}", otelhttp.WithRouteTag("/mcp/{project}/{toolset}/{environment}", f).ServeHTTP)
 }
 
-// NewServeHandler creates a HTTP handler which loads the HTTP request and
-// calls the "mcp" service "serve" endpoint.
-func NewServeHandler(
+// NewServeAuthenticatedHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcp" service "serveAuthenticated" endpoint.
+func NewServeAuthenticatedHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -102,13 +196,13 @@ func NewServeHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeServeRequest(mux, decoder)
-		encodeResponse = EncodeServeResponse(encoder)
-		encodeError    = EncodeServeError(encoder, formatter)
+		decodeRequest  = DecodeServeAuthenticatedRequest(mux, decoder)
+		encodeResponse = EncodeServeAuthenticatedResponse(encoder)
+		encodeError    = EncodeServeAuthenticatedError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "serve")
+		ctx = context.WithValue(ctx, goa.MethodKey, "serveAuthenticated")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcp")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -117,7 +211,7 @@ func NewServeHandler(
 			}
 			return
 		}
-		data := &mcp.ServeRequestData{Payload: payload.(*mcp.ServePayload), Body: r.Body}
+		data := &mcp.ServeAuthenticatedRequestData{Payload: payload.(*mcp.ServeAuthenticatedPayload), Body: r.Body}
 		res, err := endpoint(ctx, data)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil {
@@ -125,7 +219,7 @@ func NewServeHandler(
 			}
 			return
 		}
-		o := res.(*mcp.ServeResponseData)
+		o := res.(*mcp.ServeAuthenticatedResponseData)
 		defer o.Body.Close()
 		if wt, ok := o.Body.(io.WriterTo); ok {
 			if err := encodeResponse(ctx, w, o.Result); err != nil {

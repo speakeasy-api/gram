@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"ubr\",\n      \"description\": \"Et quaerat minima.\",\n      \"http_tool_names\": [\n         \"Velit hic molestiae.\",\n         \"Reprehenderit qui.\"\n      ],\n      \"name\": \"Molestias quidem error minima autem.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"qci\",\n      \"description\": \"Aut accusantium ut tempora necessitatibus atque.\",\n      \"http_tool_names\": [\n         \"Voluptatibus neque quaerat et.\",\n         \"Explicabo aliquam est.\"\n      ],\n      \"name\": \"Sit porro sit voluptate.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
@@ -101,7 +101,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"5bt\",\n      \"description\": \"Iste minus.\",\n      \"http_tool_names\": [\n         \"Magnam sunt perferendis aut.\",\n         \"Omnis rerum aut recusandae.\",\n         \"Minus voluptate nisi velit voluptas doloremque.\"\n      ],\n      \"name\": \"Ipsum laborum maxime officia quia sit.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"njw\",\n      \"description\": \"Quis voluptate et nihil molestias.\",\n      \"http_tool_names\": [\n         \"Similique magnam ducimus.\",\n         \"Voluptatem molestias sed.\",\n         \"Exercitationem laborum quia quas hic.\",\n         \"Quos possimus.\"\n      ],\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"ht3\",\n      \"name\": \"Voluptatum eius enim sunt non.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
@@ -109,6 +109,14 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		if body.DefaultEnvironmentSlug != nil {
 			if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+			}
+		}
+		if body.McpSlug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		}
+		if body.McpSlug != nil {
+			if utf8.RuneCountInString(*body.McpSlug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 			}
 		}
 		if err != nil {
@@ -141,10 +149,15 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	v := &toolsets.UpdateToolsetPayload{
 		Name:        body.Name,
 		Description: body.Description,
+		McpIsPublic: body.McpIsPublic,
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpSlug != nil {
+		mcpSlug := types.Slug(*body.McpSlug)
+		v.McpSlug = &mcpSlug
 	}
 	if body.HTTPToolNames != nil {
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))

@@ -26,11 +26,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.integrations,
     routes.toolsets,
     routes.environments,
+    routes.mcp,
+    routes.sdk,
+    routes.slackApp,
   ];
 
   const secondaryNavItems = [
-    routes.sdk,
-    routes.slackApp,
     routes.settings,
     routes.docs,
   ];

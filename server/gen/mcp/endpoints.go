@@ -17,23 +17,42 @@ import (
 
 // Endpoints wraps the "mcp" service endpoints.
 type Endpoints struct {
-	Serve goa.Endpoint
+	ServePublic        goa.Endpoint
+	ServeAuthenticated goa.Endpoint
 }
 
-// ServeRequestData holds both the payload and the HTTP request body reader of
-// the "serve" method.
-type ServeRequestData struct {
+// ServePublicRequestData holds both the payload and the HTTP request body
+// reader of the "servePublic" method.
+type ServePublicRequestData struct {
 	// Payload is the method payload.
-	Payload *ServePayload
+	Payload *ServePublicPayload
 	// Body streams the HTTP request body.
 	Body io.ReadCloser
 }
 
-// ServeResponseData holds both the result and the HTTP response body reader of
-// the "serve" method.
-type ServeResponseData struct {
+// ServePublicResponseData holds both the result and the HTTP response body
+// reader of the "servePublic" method.
+type ServePublicResponseData struct {
 	// Result is the method result.
-	Result *ServeResult
+	Result *ServePublicResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
+// ServeAuthenticatedRequestData holds both the payload and the HTTP request
+// body reader of the "serveAuthenticated" method.
+type ServeAuthenticatedRequestData struct {
+	// Payload is the method payload.
+	Payload *ServeAuthenticatedPayload
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
+}
+
+// ServeAuthenticatedResponseData holds both the result and the HTTP response
+// body reader of the "serveAuthenticated" method.
+type ServeAuthenticatedResponseData struct {
+	// Result is the method result.
+	Result *ServeAuthenticatedResult
 	// Body streams the HTTP response body.
 	Body io.ReadCloser
 }
@@ -43,20 +62,35 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Serve: NewServeEndpoint(s, a.APIKeyAuth),
+		ServePublic:        NewServePublicEndpoint(s),
+		ServeAuthenticated: NewServeAuthenticatedEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "mcp" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.Serve = m(e.Serve)
+	e.ServePublic = m(e.ServePublic)
+	e.ServeAuthenticated = m(e.ServeAuthenticated)
 }
 
-// NewServeEndpoint returns an endpoint function that calls the method "serve"
-// of service "mcp".
-func NewServeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewServePublicEndpoint returns an endpoint function that calls the method
+// "servePublic" of service "mcp".
+func NewServePublicEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		ep := req.(*ServeRequestData)
+		ep := req.(*ServePublicRequestData)
+		res, body, err := s.ServePublic(ctx, ep.Payload, ep.Body)
+		if err != nil {
+			return nil, err
+		}
+		return &ServePublicResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewServeAuthenticatedEndpoint returns an endpoint function that calls the
+// method "serveAuthenticated" of service "mcp".
+func NewServeAuthenticatedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*ServeAuthenticatedRequestData)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -83,10 +117,10 @@ func NewServeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpo
 		if err != nil {
 			return nil, err
 		}
-		res, body, err := s.Serve(ctx, ep.Payload, ep.Body)
+		res, body, err := s.ServeAuthenticated(ctx, ep.Payload, ep.Body)
 		if err != nil {
 			return nil, err
 		}
-		return &ServeResponseData{Result: res, Body: body}, nil
+		return &ServeAuthenticatedResponseData{Result: res, Body: body}, nil
 	}
 }

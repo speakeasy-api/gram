@@ -107,7 +107,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServe({
+  const result = await gram.mcp.mcpNumberServeAuthenticated({
     project: "<value>",
     toolset: "<value>",
     environment: "<value>",
@@ -180,7 +180,8 @@ run();
 
 ### [mcp](docs/sdks/mcp/README.md)
 
-* [mcpNumberServe](docs/sdks/mcp/README.md#mcpnumberserve) - serve mcp
+* [mcpNumberServeAuthenticated](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
+* [mcpNumberServePublic](docs/sdks/mcp/README.md#mcpnumberservepublic) - servePublic mcp
 
 ### [packages](docs/sdks/packages/README.md)
 
@@ -214,6 +215,12 @@ run();
 * [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+
+### [variations](docs/sdks/variations/README.md)
+
+* [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
+* [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+* [upsertGlobal](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
 <!-- End Available Resources and Operations [operations] -->
@@ -258,7 +265,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
-- [`mcpMcpNumberServe`](docs/sdks/mcp/README.md#mcpnumberserve) - serve mcp
+- [`mcpMcpNumberServeAuthenticated`](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
+- [`mcpMcpNumberServePublic`](docs/sdks/mcp/README.md#mcpnumberservepublic) - servePublic mcp
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -277,6 +285,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
+- [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
+- [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
 <!-- End Standalone functions [standalone-funcs] -->
@@ -310,11 +321,13 @@ To learn about this feature and how to get started, check
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
+- [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
@@ -330,7 +343,8 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
-- [`useMcpMcpNumberServeMutation`](docs/sdks/mcp/README.md#mcpnumberserve) - serve mcp
+- [`useMcpMcpNumberServeAuthenticatedMutation`](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
+- [`useMcpMcpNumberServePublicMutation`](docs/sdks/mcp/README.md#mcpnumberservepublic) - servePublic mcp
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
@@ -343,6 +357,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+- [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->
@@ -359,7 +374,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServe({
+  const result = await gram.mcp.mcpNumberServeAuthenticated({
     project: "<value>",
     toolset: "<value>",
     environment: "<value>",
@@ -402,7 +417,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServe({
+  const result = await gram.mcp.mcpNumberServeAuthenticated({
     project: "<value>",
     toolset: "<value>",
     environment: "<value>",
@@ -420,7 +435,7 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `mcpNumberServe` method may throw the following errors:
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `mcpNumberServeAuthenticated` method may throw the following errors:
 
 | Error Type          | Status Code                       | Content Type     |
 | ------------------- | --------------------------------- | ---------------- |
@@ -439,7 +454,7 @@ const gram = new Gram();
 async function run() {
   let result;
   try {
-    result = await gram.mcp.mcpNumberServe({
+    result = await gram.mcp.mcpNumberServeAuthenticated({
       project: "<value>",
       toolset: "<value>",
       environment: "<value>",
@@ -506,7 +521,7 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServe({
+  const result = await gram.mcp.mcpNumberServeAuthenticated({
     project: "<value>",
     toolset: "<value>",
     environment: "<value>",

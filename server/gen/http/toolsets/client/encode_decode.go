@@ -1262,12 +1262,17 @@ func unmarshalToolsetResponseBodyToTypesToolset(v *ToolsetResponseBody) *types.T
 		Name:           *v.Name,
 		Slug:           types.Slug(*v.Slug),
 		Description:    v.Description,
+		McpIsPublic:    v.McpIsPublic,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
 	if v.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*v.DefaultEnvironmentSlug)
 		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if v.McpSlug != nil {
+		mcpSlug := types.Slug(*v.McpSlug)
+		res.McpSlug = &mcpSlug
 	}
 	if v.RelevantEnvironmentVariables != nil {
 		res.RelevantEnvironmentVariables = make([]string, len(v.RelevantEnvironmentVariables))

@@ -7,13 +7,107 @@ servers:
     - url: http://localhost:80
       description: Default server for gram
 paths:
+    /mcp/{mcpSlug}:
+        post:
+            tags:
+                - mcp
+            summary: servePublic mcp
+            description: MCP server endpoint for a toolset (public, no environment param).
+            operationId: mcp#servePublic
+            parameters:
+                - name: mcpSlug
+                  in: path
+                  description: The unique slug of the mcp server.
+                  required: true
+                  schema:
+                    type: string
+                    description: The unique slug of the mcp server.
+                - name: MCP-Environment
+                  in: header
+                  description: The environment variables passed by user to MCP server (JSON Structured).
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The environment variables passed by user to MCP server (JSON Structured).
+            responses:
+                "200":
+                    description: OK response.
+                    headers:
+                        Content-Type:
+                            schema:
+                                type: string
+                    content:
+                        application/json:
+                            schema:
+                                type: string
+                                format: binary
+                "204":
+                    description: 'no_content: No Content response.'
+                    headers:
+                        NOOP:
+                            schema:
+                                type: boolean
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
     /mcp/{project}/{toolset}/{environment}:
         post:
             tags:
                 - mcp
-            summary: serve mcp
-            description: MCP server endpoint for a toolset.
-            operationId: mcp#serve
+            summary: serveAuthenticated mcp
+            description: MCP server endpoint for a toolset (environment as path param, authenticated).
+            operationId: mcp#serveAuthenticated
             parameters:
                 - name: project
                   in: path
@@ -34,6 +128,13 @@ paths:
                   schema:
                     type: string
                     description: The environment to access via MCP.
+                - name: MCP-Environment
+                  in: header
+                  description: The environment variables passed by user to MCP server (JSON Structured).
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The environment variables passed by user to MCP server (JSON Structured).
             responses:
                 "200":
                     description: OK response.
@@ -6246,6 +6347,14 @@ components:
                 id:
                     type: string
                     description: The ID of the toolset
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 name:
                     type: string
                     description: The name of the toolset
@@ -6395,6 +6504,14 @@ components:
                     items:
                         type: string
                     description: List of HTTP tool names to include
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 name:
                     type: string
                     description: The new name of the toolset
@@ -6423,6 +6540,14 @@ components:
                     items:
                         type: string
                     description: List of HTTP tool names to include
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: The slug of the MCP to use for the toolset
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 name:
                     type: string
                     description: The new name of the toolset

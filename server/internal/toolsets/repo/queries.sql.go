@@ -30,7 +30,7 @@ INSERT INTO toolsets (
   , COALESCE($6::text[], '{}'::text[])
   , $7
 )
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateToolsetParams struct {
@@ -63,6 +63,8 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		&i.Description,
 		&i.DefaultEnvironmentSlug,
 		&i.HttpToolNames,
+		&i.McpSlug,
+		&i.McpIsPublic,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -134,7 +136,7 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 }
 
 const getToolset = `-- name: GetToolset :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -156,6 +158,37 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 		&i.Description,
 		&i.DefaultEnvironmentSlug,
 		&i.HttpToolNames,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getToolsetByMcpSlug = `-- name: GetToolsetByMcpSlug :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE mcp_slug = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {
+	row := q.db.QueryRow(ctx, getToolsetByMcpSlug, mcpSlug)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.HttpToolNames,
+		&i.McpSlug,
+		&i.McpIsPublic,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -165,7 +198,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 }
 
 const listToolsetsByProject = `-- name: ListToolsetsByProject :many
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -190,6 +223,8 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.Description,
 			&i.DefaultEnvironmentSlug,
 			&i.HttpToolNames,
+			&i.McpSlug,
+			&i.McpIsPublic,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -212,9 +247,11 @@ SET
   , description = COALESCE($2, description)
   , http_tool_names = COALESCE($3::text[], http_tool_names)
   , default_environment_slug = COALESCE($4, default_environment_slug)
+  , mcp_slug = COALESCE($5, mcp_slug)
+  , mcp_is_public = COALESCE($6, mcp_is_public)
   , updated_at = clock_timestamp()
-WHERE slug = $5 AND project_id = $6
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, created_at, updated_at, deleted_at, deleted
+WHERE slug = $7 AND project_id = $8
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetParams struct {
@@ -222,6 +259,8 @@ type UpdateToolsetParams struct {
 	Description            pgtype.Text
 	HttpToolNames          []string
 	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
 	Slug                   string
 	ProjectID              uuid.UUID
 }
@@ -232,6 +271,8 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		arg.Description,
 		arg.HttpToolNames,
 		arg.DefaultEnvironmentSlug,
+		arg.McpSlug,
+		arg.McpIsPublic,
 		arg.Slug,
 		arg.ProjectID,
 	)
@@ -245,6 +286,8 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		&i.Description,
 		&i.DefaultEnvironmentSlug,
 		&i.HttpToolNames,
+		&i.McpSlug,
+		&i.McpIsPublic,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

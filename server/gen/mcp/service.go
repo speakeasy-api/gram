@@ -17,12 +17,18 @@ import (
 
 // Model Context Protocol server hosting.
 type Service interface {
-	// MCP server endpoint for a toolset.
+	// MCP server endpoint for a toolset (public, no environment param).
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
-	Serve(context.Context, *ServePayload, io.ReadCloser) (res *ServeResult, body io.ReadCloser, err error)
+	ServePublic(context.Context, *ServePublicPayload, io.ReadCloser) (res *ServePublicResult, body io.ReadCloser, err error)
+	// MCP server endpoint for a toolset (environment as path param, authenticated).
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeAuthenticated(context.Context, *ServeAuthenticatedPayload, io.ReadCloser) (res *ServeAuthenticatedResult, body io.ReadCloser, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,20 +51,39 @@ const ServiceName = "mcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"serve"}
+var MethodNames = [2]string{"servePublic", "serveAuthenticated"}
 
-// ServePayload is the payload type of the mcp service serve method.
-type ServePayload struct {
+// ServeAuthenticatedPayload is the payload type of the mcp service
+// serveAuthenticated method.
+type ServeAuthenticatedPayload struct {
 	ApikeyToken *string
 	Project     *string
 	// The toolset to access via MCP.
 	Toolset *string
 	// The environment to access via MCP.
 	Environment *string
+	// The environment variables passed by user to MCP server (JSON Structured).
+	EnvironmentVariables *string
 }
 
-// ServeResult is the result type of the mcp service serve method.
-type ServeResult struct {
+// ServeAuthenticatedResult is the result type of the mcp service
+// serveAuthenticated method.
+type ServeAuthenticatedResult struct {
+	ContentType string
+}
+
+// ServePublicPayload is the payload type of the mcp service servePublic method.
+type ServePublicPayload struct {
+	// The unique slug of the mcp server.
+	McpSlug string
+	// The environment variables passed by user to MCP server (JSON Structured).
+	EnvironmentVariables *string
+	// The API key token (OPTIONAL).
+	ApikeyToken *string
+}
+
+// ServePublicResult is the result type of the mcp service servePublic method.
+type ServePublicResult struct {
 	ContentType string
 }
 

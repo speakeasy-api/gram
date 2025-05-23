@@ -298,6 +298,8 @@ type Toolset struct {
 	Description            pgtype.Text
 	DefaultEnvironmentSlug pgtype.Text
 	HttpToolNames          []string
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

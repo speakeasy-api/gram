@@ -11,32 +11,66 @@ import (
 	mcp "github.com/speakeasy-api/gram/gen/mcp"
 )
 
-// BuildServePayload builds the payload for the mcp serve endpoint from CLI
-// flags.
-func BuildServePayload(mcpServeProject string, mcpServeToolset string, mcpServeEnvironment string, mcpServeApikeyToken string) (*mcp.ServePayload, error) {
-	var project string
+// BuildServePublicPayload builds the payload for the mcp servePublic endpoint
+// from CLI flags.
+func BuildServePublicPayload(mcpServePublicMcpSlug string, mcpServePublicEnvironmentVariables string, mcpServePublicApikeyToken string) (*mcp.ServePublicPayload, error) {
+	var mcpSlug string
 	{
-		project = mcpServeProject
+		mcpSlug = mcpServePublicMcpSlug
 	}
-	var toolset string
+	var environmentVariables *string
 	{
-		toolset = mcpServeToolset
-	}
-	var environment string
-	{
-		environment = mcpServeEnvironment
+		if mcpServePublicEnvironmentVariables != "" {
+			environmentVariables = &mcpServePublicEnvironmentVariables
+		}
 	}
 	var apikeyToken *string
 	{
-		if mcpServeApikeyToken != "" {
-			apikeyToken = &mcpServeApikeyToken
+		if mcpServePublicApikeyToken != "" {
+			apikeyToken = &mcpServePublicApikeyToken
 		}
 	}
-	v := &mcp.ServePayload{}
+	v := &mcp.ServePublicPayload{}
+	v.McpSlug = mcpSlug
+	v.EnvironmentVariables = environmentVariables
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildServeAuthenticatedPayload builds the payload for the mcp
+// serveAuthenticated endpoint from CLI flags.
+func BuildServeAuthenticatedPayload(mcpServeAuthenticatedProject string, mcpServeAuthenticatedToolset string, mcpServeAuthenticatedEnvironment string, mcpServeAuthenticatedApikeyToken string, mcpServeAuthenticatedEnvironmentVariables string) (*mcp.ServeAuthenticatedPayload, error) {
+	var project string
+	{
+		project = mcpServeAuthenticatedProject
+	}
+	var toolset string
+	{
+		toolset = mcpServeAuthenticatedToolset
+	}
+	var environment string
+	{
+		environment = mcpServeAuthenticatedEnvironment
+	}
+	var apikeyToken *string
+	{
+		if mcpServeAuthenticatedApikeyToken != "" {
+			apikeyToken = &mcpServeAuthenticatedApikeyToken
+		}
+	}
+	var environmentVariables *string
+	{
+		if mcpServeAuthenticatedEnvironmentVariables != "" {
+			environmentVariables = &mcpServeAuthenticatedEnvironmentVariables
+		}
+	}
+	v := &mcp.ServeAuthenticatedPayload{}
 	v.Project = &project
 	v.Toolset = &toolset
 	v.Environment = &environment
 	v.ApikeyToken = apikeyToken
+	v.EnvironmentVariables = environmentVariables
 
 	return v, nil
 }

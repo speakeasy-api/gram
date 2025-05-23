@@ -326,6 +326,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
   default_environment_slug TEXT CHECK (default_environment_slug <> '' AND CHAR_LENGTH(default_environment_slug) <= 40),
   http_tool_names TEXT[] DEFAULT ARRAY[]::TEXT[] CHECK (array_length(http_tool_names, 1) <= 100),
+  mcp_slug TEXT CHECK (
+    mcp_slug IS NULL OR (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 40)
+  ),
+  mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -339,6 +343,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_key
+ON toolsets (mcp_slug)
+WHERE mcp_slug IS NOT NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS http_security (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

@@ -7,6 +7,8 @@ package repo
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const createProject = `-- name: CreateProject :one
@@ -30,6 +32,29 @@ type CreateProjectParams struct {
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
 	row := q.db.QueryRow(ctx, createProject, arg.Name, arg.Slug, arg.OrganizationID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getProjectByID = `-- name: GetProjectByID :one
+SELECT id, name, slug, organization_id, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByID, id)
 	var i Project
 	err := row.Scan(
 		&i.ID,

@@ -12,9 +12,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// ServeUnauthorizedResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "unauthorized" error.
-type ServeUnauthorizedResponseBody struct {
+// ServePublicUnauthorizedResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "unauthorized" error.
+type ServePublicUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -30,9 +30,9 @@ type ServeUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeForbiddenResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "forbidden" error.
-type ServeForbiddenResponseBody struct {
+// ServePublicForbiddenResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "forbidden" error.
+type ServePublicForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -48,9 +48,9 @@ type ServeForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeBadRequestResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "bad_request" error.
-type ServeBadRequestResponseBody struct {
+// ServePublicBadRequestResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "bad_request" error.
+type ServePublicBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -66,9 +66,9 @@ type ServeBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeNotFoundResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "not_found" error.
-type ServeNotFoundResponseBody struct {
+// ServePublicNotFoundResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "not_found" error.
+type ServePublicNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -84,9 +84,9 @@ type ServeNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeConflictResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "conflict" error.
-type ServeConflictResponseBody struct {
+// ServePublicConflictResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "conflict" error.
+type ServePublicConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -102,9 +102,9 @@ type ServeConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeUnsupportedMediaResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "unsupported_media" error.
-type ServeUnsupportedMediaResponseBody struct {
+// ServePublicUnsupportedMediaResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "unsupported_media" error.
+type ServePublicUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -120,9 +120,9 @@ type ServeUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeInvalidResponseBody is the type of the "mcp" service "serve" endpoint
-// HTTP response body for the "invalid" error.
-type ServeInvalidResponseBody struct {
+// ServePublicInvalidResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "invalid" error.
+type ServePublicInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -138,9 +138,10 @@ type ServeInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeInvariantViolationResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "invariant_violation" error.
-type ServeInvariantViolationResponseBody struct {
+// ServePublicInvariantViolationResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "invariant_violation"
+// error.
+type ServePublicInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -156,9 +157,9 @@ type ServeInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeUnexpectedResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "unexpected" error.
-type ServeUnexpectedResponseBody struct {
+// ServePublicUnexpectedResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "unexpected" error.
+type ServePublicUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -174,9 +175,9 @@ type ServeUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeGatewayErrorResponseBody is the type of the "mcp" service "serve"
-// endpoint HTTP response body for the "gateway_error" error.
-type ServeGatewayErrorResponseBody struct {
+// ServePublicGatewayErrorResponseBody is the type of the "mcp" service
+// "servePublic" endpoint HTTP response body for the "gateway_error" error.
+type ServePublicGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -192,10 +193,194 @@ type ServeGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// NewServeUnauthorizedResponseBody builds the HTTP response body from the
-// result of the "serve" endpoint of the "mcp" service.
-func NewServeUnauthorizedResponseBody(res *goa.ServiceError) *ServeUnauthorizedResponseBody {
-	body := &ServeUnauthorizedResponseBody{
+// ServeAuthenticatedUnauthorizedResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "unauthorized"
+// error.
+type ServeAuthenticatedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedForbiddenResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "forbidden" error.
+type ServeAuthenticatedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedBadRequestResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "bad_request" error.
+type ServeAuthenticatedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedNotFoundResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "not_found" error.
+type ServeAuthenticatedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedConflictResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "conflict" error.
+type ServeAuthenticatedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedUnsupportedMediaResponseBody is the type of the "mcp"
+// service "serveAuthenticated" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ServeAuthenticatedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedInvalidResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "invalid" error.
+type ServeAuthenticatedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedInvariantViolationResponseBody is the type of the "mcp"
+// service "serveAuthenticated" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ServeAuthenticatedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedUnexpectedResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "unexpected" error.
+type ServeAuthenticatedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeAuthenticatedGatewayErrorResponseBody is the type of the "mcp" service
+// "serveAuthenticated" endpoint HTTP response body for the "gateway_error"
+// error.
+type ServeAuthenticatedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// NewServePublicUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicUnauthorizedResponseBody(res *goa.ServiceError) *ServePublicUnauthorizedResponseBody {
+	body := &ServePublicUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -206,10 +391,10 @@ func NewServeUnauthorizedResponseBody(res *goa.ServiceError) *ServeUnauthorizedR
 	return body
 }
 
-// NewServeForbiddenResponseBody builds the HTTP response body from the result
-// of the "serve" endpoint of the "mcp" service.
-func NewServeForbiddenResponseBody(res *goa.ServiceError) *ServeForbiddenResponseBody {
-	body := &ServeForbiddenResponseBody{
+// NewServePublicForbiddenResponseBody builds the HTTP response body from the
+// result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicForbiddenResponseBody(res *goa.ServiceError) *ServePublicForbiddenResponseBody {
+	body := &ServePublicForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -220,10 +405,10 @@ func NewServeForbiddenResponseBody(res *goa.ServiceError) *ServeForbiddenRespons
 	return body
 }
 
-// NewServeBadRequestResponseBody builds the HTTP response body from the result
-// of the "serve" endpoint of the "mcp" service.
-func NewServeBadRequestResponseBody(res *goa.ServiceError) *ServeBadRequestResponseBody {
-	body := &ServeBadRequestResponseBody{
+// NewServePublicBadRequestResponseBody builds the HTTP response body from the
+// result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicBadRequestResponseBody(res *goa.ServiceError) *ServePublicBadRequestResponseBody {
+	body := &ServePublicBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -234,10 +419,10 @@ func NewServeBadRequestResponseBody(res *goa.ServiceError) *ServeBadRequestRespo
 	return body
 }
 
-// NewServeNotFoundResponseBody builds the HTTP response body from the result
-// of the "serve" endpoint of the "mcp" service.
-func NewServeNotFoundResponseBody(res *goa.ServiceError) *ServeNotFoundResponseBody {
-	body := &ServeNotFoundResponseBody{
+// NewServePublicNotFoundResponseBody builds the HTTP response body from the
+// result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicNotFoundResponseBody(res *goa.ServiceError) *ServePublicNotFoundResponseBody {
+	body := &ServePublicNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -248,10 +433,10 @@ func NewServeNotFoundResponseBody(res *goa.ServiceError) *ServeNotFoundResponseB
 	return body
 }
 
-// NewServeConflictResponseBody builds the HTTP response body from the result
-// of the "serve" endpoint of the "mcp" service.
-func NewServeConflictResponseBody(res *goa.ServiceError) *ServeConflictResponseBody {
-	body := &ServeConflictResponseBody{
+// NewServePublicConflictResponseBody builds the HTTP response body from the
+// result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicConflictResponseBody(res *goa.ServiceError) *ServePublicConflictResponseBody {
+	body := &ServePublicConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -262,10 +447,10 @@ func NewServeConflictResponseBody(res *goa.ServiceError) *ServeConflictResponseB
 	return body
 }
 
-// NewServeUnsupportedMediaResponseBody builds the HTTP response body from the
-// result of the "serve" endpoint of the "mcp" service.
-func NewServeUnsupportedMediaResponseBody(res *goa.ServiceError) *ServeUnsupportedMediaResponseBody {
-	body := &ServeUnsupportedMediaResponseBody{
+// NewServePublicUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicUnsupportedMediaResponseBody(res *goa.ServiceError) *ServePublicUnsupportedMediaResponseBody {
+	body := &ServePublicUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -276,10 +461,10 @@ func NewServeUnsupportedMediaResponseBody(res *goa.ServiceError) *ServeUnsupport
 	return body
 }
 
-// NewServeInvalidResponseBody builds the HTTP response body from the result of
-// the "serve" endpoint of the "mcp" service.
-func NewServeInvalidResponseBody(res *goa.ServiceError) *ServeInvalidResponseBody {
-	body := &ServeInvalidResponseBody{
+// NewServePublicInvalidResponseBody builds the HTTP response body from the
+// result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicInvalidResponseBody(res *goa.ServiceError) *ServePublicInvalidResponseBody {
+	body := &ServePublicInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -290,10 +475,10 @@ func NewServeInvalidResponseBody(res *goa.ServiceError) *ServeInvalidResponseBod
 	return body
 }
 
-// NewServeInvariantViolationResponseBody builds the HTTP response body from
-// the result of the "serve" endpoint of the "mcp" service.
-func NewServeInvariantViolationResponseBody(res *goa.ServiceError) *ServeInvariantViolationResponseBody {
-	body := &ServeInvariantViolationResponseBody{
+// NewServePublicInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicInvariantViolationResponseBody(res *goa.ServiceError) *ServePublicInvariantViolationResponseBody {
+	body := &ServePublicInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -304,10 +489,10 @@ func NewServeInvariantViolationResponseBody(res *goa.ServiceError) *ServeInvaria
 	return body
 }
 
-// NewServeUnexpectedResponseBody builds the HTTP response body from the result
-// of the "serve" endpoint of the "mcp" service.
-func NewServeUnexpectedResponseBody(res *goa.ServiceError) *ServeUnexpectedResponseBody {
-	body := &ServeUnexpectedResponseBody{
+// NewServePublicUnexpectedResponseBody builds the HTTP response body from the
+// result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicUnexpectedResponseBody(res *goa.ServiceError) *ServePublicUnexpectedResponseBody {
+	body := &ServePublicUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -318,10 +503,10 @@ func NewServeUnexpectedResponseBody(res *goa.ServiceError) *ServeUnexpectedRespo
 	return body
 }
 
-// NewServeGatewayErrorResponseBody builds the HTTP response body from the
-// result of the "serve" endpoint of the "mcp" service.
-func NewServeGatewayErrorResponseBody(res *goa.ServiceError) *ServeGatewayErrorResponseBody {
-	body := &ServeGatewayErrorResponseBody{
+// NewServePublicGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "servePublic" endpoint of the "mcp" service.
+func NewServePublicGatewayErrorResponseBody(res *goa.ServiceError) *ServePublicGatewayErrorResponseBody {
+	body := &ServePublicGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -332,13 +517,167 @@ func NewServeGatewayErrorResponseBody(res *goa.ServiceError) *ServeGatewayErrorR
 	return body
 }
 
-// NewServePayload builds a mcp service serve endpoint payload.
-func NewServePayload(project string, toolset string, environment string, apikeyToken *string) *mcp.ServePayload {
-	v := &mcp.ServePayload{}
+// NewServeAuthenticatedUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedUnauthorizedResponseBody(res *goa.ServiceError) *ServeAuthenticatedUnauthorizedResponseBody {
+	body := &ServeAuthenticatedUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedForbiddenResponseBody builds the HTTP response body
+// from the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedForbiddenResponseBody(res *goa.ServiceError) *ServeAuthenticatedForbiddenResponseBody {
+	body := &ServeAuthenticatedForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedBadRequestResponseBody builds the HTTP response body
+// from the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedBadRequestResponseBody(res *goa.ServiceError) *ServeAuthenticatedBadRequestResponseBody {
+	body := &ServeAuthenticatedBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedNotFoundResponseBody builds the HTTP response body from
+// the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedNotFoundResponseBody(res *goa.ServiceError) *ServeAuthenticatedNotFoundResponseBody {
+	body := &ServeAuthenticatedNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedConflictResponseBody builds the HTTP response body from
+// the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedConflictResponseBody(res *goa.ServiceError) *ServeAuthenticatedConflictResponseBody {
+	body := &ServeAuthenticatedConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "serveAuthenticated" endpoint of the "mcp"
+// service.
+func NewServeAuthenticatedUnsupportedMediaResponseBody(res *goa.ServiceError) *ServeAuthenticatedUnsupportedMediaResponseBody {
+	body := &ServeAuthenticatedUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedInvalidResponseBody builds the HTTP response body from
+// the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedInvalidResponseBody(res *goa.ServiceError) *ServeAuthenticatedInvalidResponseBody {
+	body := &ServeAuthenticatedInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "serveAuthenticated" endpoint of the "mcp"
+// service.
+func NewServeAuthenticatedInvariantViolationResponseBody(res *goa.ServiceError) *ServeAuthenticatedInvariantViolationResponseBody {
+	body := &ServeAuthenticatedInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedUnexpectedResponseBody builds the HTTP response body
+// from the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedUnexpectedResponseBody(res *goa.ServiceError) *ServeAuthenticatedUnexpectedResponseBody {
+	body := &ServeAuthenticatedUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeAuthenticatedGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "serveAuthenticated" endpoint of the "mcp" service.
+func NewServeAuthenticatedGatewayErrorResponseBody(res *goa.ServiceError) *ServeAuthenticatedGatewayErrorResponseBody {
+	body := &ServeAuthenticatedGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServePublicPayload builds a mcp service servePublic endpoint payload.
+func NewServePublicPayload(mcpSlug string, environmentVariables *string, apikeyToken *string) *mcp.ServePublicPayload {
+	v := &mcp.ServePublicPayload{}
+	v.McpSlug = mcpSlug
+	v.EnvironmentVariables = environmentVariables
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewServeAuthenticatedPayload builds a mcp service serveAuthenticated
+// endpoint payload.
+func NewServeAuthenticatedPayload(project string, toolset string, environment string, apikeyToken *string, environmentVariables *string) *mcp.ServeAuthenticatedPayload {
+	v := &mcp.ServeAuthenticatedPayload{}
 	v.Project = &project
 	v.Toolset = &toolset
 	v.Environment = &environment
 	v.ApikeyToken = apikeyToken
+	v.EnvironmentVariables = environmentVariables
 
 	return v
 }

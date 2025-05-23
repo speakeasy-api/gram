@@ -16,6 +16,7 @@ import { useMemo } from "react";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import SlackApp from "./pages/slackapp/SlackApp";
+import MCP from "./pages/mcp/MCP";
 
 type AppRouteBasic = {
   title: string;
@@ -93,6 +94,12 @@ const ROUTE_STRUCTURE = {
         },
       },
     },
+  },
+  mcp: {
+    title: "MCP",
+    url: "mcp",
+    icon: "network" as IconName,
+    component: MCP,
   },
   environments: {
     title: "Environments",

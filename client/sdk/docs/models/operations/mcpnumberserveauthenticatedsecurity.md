@@ -1,11 +1,11 @@
-# McpNumberServeSecurity
+# McpNumberServeAuthenticatedSecurity
 
 ## Example Usage
 
 ```typescript
-import { McpNumberServeSecurity } from "@gram/client/models/operations";
+import { McpNumberServeAuthenticatedSecurity } from "@gram/client/models/operations";
 
-let value: McpNumberServeSecurity = {};
+let value: McpNumberServeAuthenticatedSecurity = {};
 ```
 
 ## Fields

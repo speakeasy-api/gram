@@ -11,7 +11,12 @@ import (
 	"fmt"
 )
 
-// ServeMcpPath returns the URL path to the mcp service serve HTTP endpoint.
-func ServeMcpPath(project string, toolset string, environment string) string {
+// ServePublicMcpPath returns the URL path to the mcp service servePublic HTTP endpoint.
+func ServePublicMcpPath(mcpSlug string) string {
+	return fmt.Sprintf("/mcp/%v", mcpSlug)
+}
+
+// ServeAuthenticatedMcpPath returns the URL path to the mcp service serveAuthenticated HTTP endpoint.
+func ServeAuthenticatedMcpPath(project string, toolset string, environment string) string {
 	return fmt.Sprintf("/mcp/%v/%v/%v", project, toolset, environment)
 }

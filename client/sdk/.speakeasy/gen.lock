@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: b772f95ee797bc31d3325e379500ce75
+  docChecksum: beadeaee93883db7941d9037b08ea416
   docVersion: 0.0.1
-  speakeasyVersion: 1.548.3
-  generationVersion: 2.605.6
-  releaseVersion: 0.11.4
-  configChecksum: d33aa6d708e7d6f2a83a24dff522f85d
+  speakeasyVersion: 1.550.0
+  generationVersion: 2.610.0
+  releaseVersion: 0.11.6
+  configChecksum: d118ef71ae801c58d00f6488e1bb9b7d
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -40,9 +40,11 @@ generatedFiles:
   - docs/models/components/addopenapiv3deploymentassetform.md
   - docs/models/components/addpackageform.md
   - docs/models/components/asset.md
+  - docs/models/components/canonicaltoolattributes.md
   - docs/models/components/chat.md
   - docs/models/components/chatmessage.md
   - docs/models/components/chatoverview.md
+  - docs/models/components/confirm.md
   - docs/models/components/createdeploymentrequestbody.md
   - docs/models/components/createdeploymentresult.md
   - docs/models/components/createenvironmentform.md
@@ -52,6 +54,7 @@ generatedFiles:
   - docs/models/components/createprojectrequestbody.md
   - docs/models/components/createprojectresult.md
   - docs/models/components/createtoolsetrequestbody.md
+  - docs/models/components/deleteglobaltoolvariationresult.md
   - docs/models/components/deployment.md
   - docs/models/components/deploymentpackage.md
   - docs/models/components/deploymentsummary.md
@@ -81,6 +84,7 @@ generatedFiles:
   - docs/models/components/listprojectsresult.md
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
+  - docs/models/components/listvariationsresult.md
   - docs/models/components/listversionsresult.md
   - docs/models/components/notmodified.md
   - docs/models/components/openapiv3deploymentasset.md
@@ -93,6 +97,7 @@ generatedFiles:
   - docs/models/components/publishpackageresult.md
   - docs/models/components/toolentry.md
   - docs/models/components/toolset.md
+  - docs/models/components/toolvariation.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatepackageform.md
   - docs/models/components/updatepackageresult.md
@@ -100,6 +105,8 @@ generatedFiles:
   - docs/models/components/updatetoolsetrequestbody.md
   - docs/models/components/uploadimageresult.md
   - docs/models/components/uploadopenapiv3result.md
+  - docs/models/components/upsertglobaltoolvariationform.md
+  - docs/models/components/upsertglobaltoolvariationresult.md
   - docs/models/components/visibility.md
   - docs/models/errors/serviceerror.md
   - docs/models/operations/authcallbackrequest.md
@@ -123,6 +130,10 @@ generatedFiles:
   - docs/models/operations/createtoolsetsecurity.md
   - docs/models/operations/deleteenvironmentrequest.md
   - docs/models/operations/deleteenvironmentsecurity.md
+  - docs/models/operations/deleteglobalvariationrequest.md
+  - docs/models/operations/deleteglobalvariationsecurity.md
+  - docs/models/operations/deleteglobalvariationsecurityoption1.md
+  - docs/models/operations/deleteglobalvariationsecurityoption2.md
   - docs/models/operations/deleteslackconnectionrequest.md
   - docs/models/operations/deleteslackconnectionsecurity.md
   - docs/models/operations/deletetoolsetrequest.md
@@ -159,6 +170,10 @@ generatedFiles:
   - docs/models/operations/listdeploymentssecurityoption2.md
   - docs/models/operations/listenvironmentsrequest.md
   - docs/models/operations/listenvironmentssecurity.md
+  - docs/models/operations/listglobalvariationsrequest.md
+  - docs/models/operations/listglobalvariationssecurity.md
+  - docs/models/operations/listglobalvariationssecurityoption1.md
+  - docs/models/operations/listglobalvariationssecurityoption2.md
   - docs/models/operations/listintegrationsrequest.md
   - docs/models/operations/listintegrationssecurity.md
   - docs/models/operations/listpackagesrequest.md
@@ -180,9 +195,11 @@ generatedFiles:
   - docs/models/operations/logoutrequest.md
   - docs/models/operations/logoutresponse.md
   - docs/models/operations/logoutsecurity.md
-  - docs/models/operations/mcpnumberserverequest.md
-  - docs/models/operations/mcpnumberserveresponse.md
-  - docs/models/operations/mcpnumberservesecurity.md
+  - docs/models/operations/mcpnumberserveauthenticatedrequest.md
+  - docs/models/operations/mcpnumberserveauthenticatedresponse.md
+  - docs/models/operations/mcpnumberserveauthenticatedsecurity.md
+  - docs/models/operations/mcpnumberservepublicrequest.md
+  - docs/models/operations/mcpnumberservepublicresponse.md
   - docs/models/operations/publishrequest.md
   - docs/models/operations/publishsecurity.md
   - docs/models/operations/publishsecurityoption1.md
@@ -222,6 +239,10 @@ generatedFiles:
   - docs/models/operations/uploadopenapiv3assetsecurity.md
   - docs/models/operations/uploadopenapiv3assetsecurityoption1.md
   - docs/models/operations/uploadopenapiv3assetsecurityoption2.md
+  - docs/models/operations/upsertglobalvariationrequest.md
+  - docs/models/operations/upsertglobalvariationsecurity.md
+  - docs/models/operations/upsertglobalvariationsecurityoption1.md
+  - docs/models/operations/upsertglobalvariationsecurityoption2.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
   - docs/sdks/chat/README.md
@@ -237,6 +258,7 @@ generatedFiles:
   - docs/sdks/slack/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
+  - docs/sdks/variations/README.md
   - eslint.config.mjs
   - jsr.json
   - package.json
@@ -266,7 +288,8 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
-  - src/funcs/mcpMcpNumberServe.ts
+  - src/funcs/mcpMcpNumberServeAuthenticated.ts
+  - src/funcs/mcpMcpNumberServePublic.ts
   - src/funcs/packagesCreate.ts
   - src/funcs/packagesList.ts
   - src/funcs/packagesListVersions.ts
@@ -285,6 +308,9 @@ generatedFiles:
   - src/funcs/toolsetsGetBySlug.ts
   - src/funcs/toolsetsList.ts
   - src/funcs/toolsetsUpdateBySlug.ts
+  - src/funcs/variationsDeleteGlobal.ts
+  - src/funcs/variationsListGlobal.ts
+  - src/funcs/variationsUpsertGlobal.ts
   - src/hooks/hooks.ts
   - src/hooks/index.ts
   - src/hooks/types.ts
@@ -309,6 +335,7 @@ generatedFiles:
   - src/models/components/addopenapiv3deploymentassetform.ts
   - src/models/components/addpackageform.ts
   - src/models/components/asset.ts
+  - src/models/components/canonicaltoolattributes.ts
   - src/models/components/chat.ts
   - src/models/components/chatmessage.ts
   - src/models/components/chatoverview.ts
@@ -321,6 +348,7 @@ generatedFiles:
   - src/models/components/createprojectrequestbody.ts
   - src/models/components/createprojectresult.ts
   - src/models/components/createtoolsetrequestbody.ts
+  - src/models/components/deleteglobaltoolvariationresult.ts
   - src/models/components/deployment.ts
   - src/models/components/deploymentpackage.ts
   - src/models/components/deploymentsummary.ts
@@ -350,6 +378,7 @@ generatedFiles:
   - src/models/components/listprojectsresult.ts
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
+  - src/models/components/listvariationsresult.ts
   - src/models/components/listversionsresult.ts
   - src/models/components/notmodified.ts
   - src/models/components/openapiv3deploymentasset.ts
@@ -362,6 +391,7 @@ generatedFiles:
   - src/models/components/publishpackageresult.ts
   - src/models/components/toolentry.ts
   - src/models/components/toolset.ts
+  - src/models/components/toolvariation.ts
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatepackageform.ts
   - src/models/components/updatepackageresult.ts
@@ -369,6 +399,8 @@ generatedFiles:
   - src/models/components/updatetoolsetrequestbody.ts
   - src/models/components/uploadimageresult.ts
   - src/models/components/uploadopenapiv3result.ts
+  - src/models/components/upsertglobaltoolvariationform.ts
+  - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/errors/apierror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
@@ -383,6 +415,7 @@ generatedFiles:
   - src/models/operations/createproject.ts
   - src/models/operations/createtoolset.ts
   - src/models/operations/deleteenvironment.ts
+  - src/models/operations/deleteglobalvariation.ts
   - src/models/operations/deleteslackconnection.ts
   - src/models/operations/deletetoolset.ts
   - src/models/operations/evolvedeployment.ts
@@ -397,6 +430,7 @@ generatedFiles:
   - src/models/operations/listchats.ts
   - src/models/operations/listdeployments.ts
   - src/models/operations/listenvironments.ts
+  - src/models/operations/listglobalvariations.ts
   - src/models/operations/listintegrations.ts
   - src/models/operations/listpackages.ts
   - src/models/operations/listprojects.ts
@@ -405,7 +439,8 @@ generatedFiles:
   - src/models/operations/listversions.ts
   - src/models/operations/loadchat.ts
   - src/models/operations/logout.ts
-  - src/models/operations/mcpnumberserve.ts
+  - src/models/operations/mcpnumberserveauthenticated.ts
+  - src/models/operations/mcpnumberservepublic.ts
   - src/models/operations/publish.ts
   - src/models/operations/revokeapikey.ts
   - src/models/operations/serveimage.ts
@@ -419,6 +454,7 @@ generatedFiles:
   - src/models/operations/updatetoolset.ts
   - src/models/operations/uploadimage.ts
   - src/models/operations/uploadopenapiv3asset.ts
+  - src/models/operations/upsertglobalvariation.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
   - src/react-query/createAPIKey.ts
@@ -428,11 +464,13 @@ generatedFiles:
   - src/react-query/createProject.ts
   - src/react-query/createToolset.ts
   - src/react-query/deleteEnvironment.ts
+  - src/react-query/deleteGlobalVariation.ts
   - src/react-query/deleteSlackConnection.ts
   - src/react-query/deleteToolset.ts
   - src/react-query/deployment.ts
   - src/react-query/evolveDeployment.ts
   - src/react-query/getSlackConnection.ts
+  - src/react-query/globalVariations.ts
   - src/react-query/index.ts
   - src/react-query/instance.ts
   - src/react-query/integrationsIntegrationsNumberGet.ts
@@ -449,7 +487,8 @@ generatedFiles:
   - src/react-query/listVersions.ts
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
-  - src/react-query/mcpMcpNumberServe.ts
+  - src/react-query/mcpMcpNumberServeAuthenticated.ts
+  - src/react-query/mcpMcpNumberServePublic.ts
   - src/react-query/publishPackage.ts
   - src/react-query/revokeAPIKey.ts
   - src/react-query/serveImage.ts
@@ -462,6 +501,7 @@ generatedFiles:
   - src/react-query/updateToolset.ts
   - src/react-query/uploadImage.ts
   - src/react-query/uploadOpenAPIv3.ts
+  - src/react-query/upsertGlobalVariation.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
   - src/sdk/chat.ts
@@ -478,6 +518,7 @@ generatedFiles:
   - src/sdk/slack.ts
   - src/sdk/tools.ts
   - src/sdk/toolsets.ts
+  - src/sdk/variations.ts
   - src/types/async.ts
   - src/types/blobs.ts
   - src/types/constdatetime.ts
@@ -964,5 +1005,64 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  mcp#serveAuthenticated:
+    speakeasy-default-mcp#serve-authenticated:
+      parameters:
+        path:
+          project: "<value>"
+          toolset: "<value>"
+          environment: "<value>"
+      responses:
+        "200":
+          application/json: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  mcp#servePublic:
+    speakeasy-default-mcp#serve-public:
+      parameters:
+        path:
+          projectID: "<id>"
+          toolset: "<value>"
+      responses:
+        "200":
+          application/json: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteGlobalVariation:
+    speakeasy-default-delete-global-variation:
+      parameters:
+        query:
+          variation_id: "<id>"
+      responses:
+        "200":
+          application/json: {"variation_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listGlobalVariations:
+    speakeasy-default-list-global-variations:
+      responses:
+        "200":
+          application/json: {"variations": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  upsertGlobalVariation:
+    speakeasy-default-upsert-global-variation:
+      requestBody:
+        application/json: {"src_tool_name": "<value>"}
+      responses:
+        "200":
+          application/json: {"variation": {"created_at": "1727504584138", "group_id": "<id>", "id": "<id>", "src_tool_name": "<value>", "updated_at": "1735639497584"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

@@ -18,8 +18,13 @@ import (
 
 // Client lists the mcp service endpoint HTTP clients.
 type Client struct {
-	// Serve Doer is the HTTP client used to make requests to the serve endpoint.
-	ServeDoer goahttp.Doer
+	// ServePublic Doer is the HTTP client used to make requests to the servePublic
+	// endpoint.
+	ServePublicDoer goahttp.Doer
+
+	// ServeAuthenticated Doer is the HTTP client used to make requests to the
+	// serveAuthenticated endpoint.
+	ServeAuthenticatedDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -41,24 +46,25 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ServeDoer:           doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ServePublicDoer:        doer,
+		ServeAuthenticatedDoer: doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
-// Serve returns an endpoint that makes HTTP requests to the mcp service serve
-// server.
-func (c *Client) Serve() goa.Endpoint {
+// ServePublic returns an endpoint that makes HTTP requests to the mcp service
+// servePublic server.
+func (c *Client) ServePublic() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeServeRequest(c.encoder)
-		decodeResponse = DecodeServeResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeServePublicRequest(c.encoder)
+		decodeResponse = DecodeServePublicResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildServeRequest(ctx, v)
+		req, err := c.BuildServePublicRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -66,15 +72,44 @@ func (c *Client) Serve() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ServeDoer.Do(req)
+		resp, err := c.ServePublicDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("mcp", "serve", err)
+			return nil, goahttp.ErrRequestError("mcp", "servePublic", err)
 		}
 		res, err := decodeResponse(resp)
 		if err != nil {
 			resp.Body.Close()
 			return nil, err
 		}
-		return &mcp.ServeResponseData{Result: res.(*mcp.ServeResult), Body: resp.Body}, nil
+		return &mcp.ServePublicResponseData{Result: res.(*mcp.ServePublicResult), Body: resp.Body}, nil
+	}
+}
+
+// ServeAuthenticated returns an endpoint that makes HTTP requests to the mcp
+// service serveAuthenticated server.
+func (c *Client) ServeAuthenticated() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeServeAuthenticatedRequest(c.encoder)
+		decodeResponse = DecodeServeAuthenticatedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildServeAuthenticatedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ServeAuthenticatedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcp", "serveAuthenticated", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &mcp.ServeAuthenticatedResponseData{Result: res.(*mcp.ServeAuthenticatedResult), Body: resp.Body}, nil
 	}
 }

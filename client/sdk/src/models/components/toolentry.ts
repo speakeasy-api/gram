@@ -7,8 +7,18 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  CanonicalToolAttributes,
+  CanonicalToolAttributes$inboundSchema,
+  CanonicalToolAttributes$Outbound,
+  CanonicalToolAttributes$outboundSchema,
+} from "./canonicaltoolattributes.js";
 
 export type ToolEntry = {
+  /**
+   * The original details of a tool
+   */
+  canonical?: CanonicalToolAttributes | undefined;
   /**
    * The confirmation mode for the tool
    */
@@ -57,6 +67,10 @@ export type ToolEntry = {
    * The tool summary
    */
   summary: string;
+  /**
+   * The tags for the tool
+   */
+  tags?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -65,6 +79,7 @@ export const ToolEntry$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  canonical: CanonicalToolAttributes$inboundSchema.optional(),
   confirm: z.string(),
   confirmPrompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
@@ -77,6 +92,7 @@ export const ToolEntry$inboundSchema: z.ZodType<
   packageName: z.string().optional(),
   path: z.string(),
   summary: z.string(),
+  tags: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
@@ -85,6 +101,7 @@ export const ToolEntry$inboundSchema: z.ZodType<
 
 /** @internal */
 export type ToolEntry$Outbound = {
+  canonical?: CanonicalToolAttributes$Outbound | undefined;
   confirm: string;
   confirmPrompt?: string | undefined;
   created_at: string;
@@ -97,6 +114,7 @@ export type ToolEntry$Outbound = {
   packageName?: string | undefined;
   path: string;
   summary: string;
+  tags?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -105,6 +123,7 @@ export const ToolEntry$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ToolEntry
 > = z.object({
+  canonical: CanonicalToolAttributes$outboundSchema.optional(),
   confirm: z.string(),
   confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
@@ -117,6 +136,7 @@ export const ToolEntry$outboundSchema: z.ZodType<
   packageName: z.string().optional(),
   path: z.string(),
   summary: z.string(),
+  tags: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",

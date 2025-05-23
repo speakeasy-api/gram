@@ -25,19 +25,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * serve mcp
+ * serveAuthenticated mcp
  *
  * @remarks
- * MCP server endpoint for a toolset.
+ * MCP server endpoint for a toolset (environment as path param, authenticated).
  */
-export function mcpMcpNumberServe(
+export function mcpMcpNumberServeAuthenticated(
   client: GramCore,
-  request: operations.McpNumberServeRequest,
-  security?: operations.McpNumberServeSecurity | undefined,
+  request: operations.McpNumberServeAuthenticatedRequest,
+  security?: operations.McpNumberServeAuthenticatedSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.McpNumberServeResponse | undefined,
+    operations.McpNumberServeAuthenticatedResponse | undefined,
     | errors.ServiceError
     | errors.ServiceError
     | APIError
@@ -59,13 +59,13 @@ export function mcpMcpNumberServe(
 
 async function $do(
   client: GramCore,
-  request: operations.McpNumberServeRequest,
-  security?: operations.McpNumberServeSecurity | undefined,
+  request: operations.McpNumberServeAuthenticatedRequest,
+  security?: operations.McpNumberServeAuthenticatedSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.McpNumberServeResponse | undefined,
+      operations.McpNumberServeAuthenticatedResponse | undefined,
       | errors.ServiceError
       | errors.ServiceError
       | APIError
@@ -81,7 +81,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.McpNumberServeRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.McpNumberServeAuthenticatedRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -109,6 +110,11 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    " MCP-Environment": encodeSimple(
+      " MCP-Environment",
+      payload[" MCP-Environment"],
+      { explode: false, charEncoding: "none" },
+    ),
   }));
 
   const requestSecurity = resolveSecurity(
@@ -128,7 +134,7 @@ async function $do(
 
   const context = {
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "mcp#serve",
+    operationID: "mcp#serveAuthenticated",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -182,7 +188,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.McpNumberServeResponse | undefined,
+    operations.McpNumberServeAuthenticatedResponse | undefined,
     | errors.ServiceError
     | errors.ServiceError
     | APIError
@@ -193,14 +199,16 @@ async function $do(
     | RequestTimeoutError
     | ConnectionError
   >(
-    M.stream(200, operations.McpNumberServeResponse$inboundSchema.optional(), {
-      ctype: "application/json",
-      hdrs: true,
-      key: "Result",
-    }),
-    M.nil(204, operations.McpNumberServeResponse$inboundSchema.optional(), {
-      hdrs: true,
-    }),
+    M.stream(
+      200,
+      operations.McpNumberServeAuthenticatedResponse$inboundSchema.optional(),
+      { ctype: "application/json", hdrs: true, key: "Result" },
+    ),
+    M.nil(
+      204,
+      operations.McpNumberServeAuthenticatedResponse$inboundSchema.optional(),
+      { hdrs: true },
+    ),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

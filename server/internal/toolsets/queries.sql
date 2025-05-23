@@ -37,6 +37,8 @@ SET
   , description = COALESCE(@description, description)
   , http_tool_names = COALESCE(@http_tool_names::text[], http_tool_names)
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
+  , mcp_slug = COALESCE(@mcp_slug, mcp_slug)
+  , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
@@ -51,3 +53,9 @@ WHERE slug = @slug
 SELECT *
 FROM http_security
 WHERE key = ANY(@security_keys::TEXT[]) AND deployment_id = ANY(@deployment_ids::UUID[]);
+
+-- name: GetToolsetByMcpSlug :one 
+SELECT *
+FROM toolsets
+WHERE mcp_slug = @mcp_slug
+  AND deleted IS FALSE;

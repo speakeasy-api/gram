@@ -8,68 +8,68 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { mcpMcpNumberServe } from "../funcs/mcpMcpNumberServe.js";
+import { variationsUpsertGlobal } from "../funcs/variationsUpsertGlobal.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type McpMcpNumberServeMutationVariables = {
-  request: operations.McpNumberServeRequest;
-  security?: operations.McpNumberServeSecurity | undefined;
+export type UpsertGlobalVariationMutationVariables = {
+  request: operations.UpsertGlobalVariationRequest;
+  security?: operations.UpsertGlobalVariationSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type McpMcpNumberServeMutationData =
-  | operations.McpNumberServeResponse
-  | undefined;
+export type UpsertGlobalVariationMutationData =
+  components.UpsertGlobalToolVariationResult;
 
 /**
- * serve mcp
+ * upsertGlobal variations
  *
  * @remarks
- * MCP server endpoint for a toolset.
+ * Create or update a globally defined tool variation.
  */
-export function useMcpMcpNumberServeMutation(
+export function useUpsertGlobalVariationMutation(
   options?: MutationHookOptions<
-    McpMcpNumberServeMutationData,
+    UpsertGlobalVariationMutationData,
     Error,
-    McpMcpNumberServeMutationVariables
+    UpsertGlobalVariationMutationVariables
   >,
 ): UseMutationResult<
-  McpMcpNumberServeMutationData,
+  UpsertGlobalVariationMutationData,
   Error,
-  McpMcpNumberServeMutationVariables
+  UpsertGlobalVariationMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildMcpMcpNumberServeMutation(client, options),
+    ...buildUpsertGlobalVariationMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyMcpMcpNumberServe(): MutationKey {
-  return ["@gram/client", "mcp", "mcpNumberServe"];
+export function mutationKeyUpsertGlobalVariation(): MutationKey {
+  return ["@gram/client", "variations", "upsertGlobal"];
 }
 
-export function buildMcpMcpNumberServeMutation(
+export function buildUpsertGlobalVariationMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: McpMcpNumberServeMutationVariables,
-  ) => Promise<McpMcpNumberServeMutationData>;
+    variables: UpsertGlobalVariationMutationVariables,
+  ) => Promise<UpsertGlobalVariationMutationData>;
 } {
   return {
-    mutationKey: mutationKeyMcpMcpNumberServe(),
-    mutationFn: function mcpMcpNumberServeMutationFn({
+    mutationKey: mutationKeyUpsertGlobalVariation(),
+    mutationFn: function upsertGlobalVariationMutationFn({
       request,
       security,
       options,
-    }): Promise<McpMcpNumberServeMutationData> {
+    }): Promise<UpsertGlobalVariationMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -82,7 +82,7 @@ export function buildMcpMcpNumberServeMutation(
           ),
         },
       };
-      return unwrapAsync(mcpMcpNumberServe(
+      return unwrapAsync(variationsUpsertGlobal(
         client$,
         request,
         security,
