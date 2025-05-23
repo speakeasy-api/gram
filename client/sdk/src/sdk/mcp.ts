@@ -10,6 +10,23 @@ import { unwrapAsync } from "../types/fp.js";
 
 export class Mcp extends ClientSDK {
   /**
+   * servePublic mcp
+   *
+   * @remarks
+   * MCP server endpoint for a toolset (public, no environment param).
+   */
+  async mcpNumberServePublic(
+    request: operations.McpNumberServePublicRequest,
+    options?: RequestOptions,
+  ): Promise<operations.McpNumberServePublicResponse | undefined> {
+    return unwrapAsync(mcpMcpNumberServePublic(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * serveAuthenticated mcp
    *
    * @remarks
@@ -24,23 +41,6 @@ export class Mcp extends ClientSDK {
       this,
       request,
       security,
-      options,
-    ));
-  }
-
-  /**
-   * servePublic mcp
-   *
-   * @remarks
-   * MCP server endpoint for a toolset (public, no environment param).
-   */
-  async mcpNumberServePublic(
-    request: operations.McpNumberServePublicRequest,
-    options?: RequestOptions,
-  ): Promise<operations.McpNumberServePublicResponse | undefined> {
-    return unwrapAsync(mcpMcpNumberServePublic(
-      this,
-      request,
       options,
     ));
   }

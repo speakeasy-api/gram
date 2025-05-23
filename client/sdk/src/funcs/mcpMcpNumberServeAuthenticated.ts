@@ -110,9 +110,9 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    " MCP-Environment": encodeSimple(
-      " MCP-Environment",
-      payload[" MCP-Environment"],
+    "MCP-Environment": encodeSimple(
+      "MCP-Environment",
+      payload["MCP-Environment"],
       { explode: false, charEncoding: "none" },
     ),
   }));

@@ -9,12 +9,16 @@ export function Type({
   children,
   skeleton = "word",
   className,
+  italic,
+  mono,
 }: {
   variant?: "subheading" | "body" | "small";
-  muted?: boolean;
-  children: React.ReactNode;
   className?: string;
+  muted?: boolean;
+  italic?: boolean;
+  mono?: boolean;
   skeleton?: "word" | "phrase" | "line" | "paragraph";
+  children: React.ReactNode;
 }) {
   if (children === undefined) {
     const variantHeight = {
@@ -47,7 +51,7 @@ export function Type({
               key={index}
               className={cn(
                 variantHeight,
-                index !== lines - 1 ? "w-full" : "w-[200px]",
+                index !== lines - 1 ? "w-full" : "w-[200px]"
               )}
             />
           ))}
@@ -58,36 +62,28 @@ export function Type({
     return <Skeleton className={cn(variantWidth, variantHeight)} />;
   }
 
+  let baseClass = "font-light";
+
+  if (mono) {
+    baseClass += " font-mono";
+  }
+
+  if (italic) {
+    baseClass += " italic";
+  }
+
+  if (muted) {
+    baseClass += " text-muted-foreground";
+  }
+
   switch (variant) {
     case "subheading":
-      return (
-        <p
-          className={`text-md font-light ${
-            muted ? "text-muted-foreground" : "text-foreground"
-          } ${className}`}
-        >
-          {children}
-        </p>
-      );
+      return <p className={`text-md ${baseClass} ${className}`}>{children}</p>;
     case "body":
       return (
-        <p
-          className={`text-base font-light ${
-            muted ? "text-muted-foreground" : "text-foreground"
-          } ${className}`}
-        >
-          {children}
-        </p>
+        <p className={`text-base ${baseClass} ${className}`}>{children}</p>
       );
     case "small":
-      return (
-        <p
-          className={`text-sm font-light ${
-            muted ? "text-muted-foreground" : "text-foreground"
-          } ${className}`}
-        >
-          {children}
-        </p>
-      );
+      return <p className={`text-sm ${baseClass} ${className}`}>{children}</p>;
   }
 }

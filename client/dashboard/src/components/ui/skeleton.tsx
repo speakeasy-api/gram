@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -39,6 +39,17 @@ export function SkeletonTable() {
       rowKey={(row) => row.a}
       hideHeader
     />
+  );
+}
+
+export function SkeletonParagraph({ lines = 3 }: { lines?: number }) {
+  return (
+    <Stack gap={2}>
+      {Array.from({ length: lines - 1 }).map((_, i) => (
+        <Skeleton key={i} className="h-4 w-full" />
+      ))}
+      <Skeleton className="h-4 w-[200px]" />
+    </Stack>
   );
 }
 

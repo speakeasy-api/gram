@@ -5,10 +5,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServeAuthenticated({
-    project: "<value>",
-    toolset: "<value>",
-    environment: "<value>",
+  const result = await gram.mcp.mcpNumberServePublic({
+    mcpSlug: "<value>",
   });
 
   // Handle the result

@@ -13,5 +13,5 @@ let value: Confirm = "always";
 ## Values
 
 ```typescript
-"always" | "never"
+"always" | "never" | "session"
 ```

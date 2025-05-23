@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
-import { ReactNode, useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
-import { InputDialog } from "./input-dialog";
 import { Stack } from "@speakeasy-api/moonshine";
+import { Pencil } from "lucide-react";
+import { ReactNode, useEffect, useState } from "react";
+import { InputDialog } from "./input-dialog";
 
 interface EditableTextProps {
   label: string;
@@ -39,7 +39,6 @@ export function EditableText({
     if (!editedValue) {
       setEditedValue(value);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   return (

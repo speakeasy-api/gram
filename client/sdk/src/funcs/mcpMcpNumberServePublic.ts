@@ -88,23 +88,19 @@ async function $do(
   const body = null;
 
   const pathParams = {
-    projectID: encodeSimple("projectID", payload.projectID, {
-      explode: false,
-      charEncoding: "percent",
-    }),
-    toolset: encodeSimple("toolset", payload.toolset, {
+    mcpSlug: encodeSimple("mcpSlug", payload.mcpSlug, {
       explode: false,
       charEncoding: "percent",
     }),
   };
 
-  const path = pathToFunc("/mcp/{projectID}/{toolset}")(pathParams);
+  const path = pathToFunc("/mcp/{mcpSlug}")(pathParams);
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    " MCP-Environment": encodeSimple(
-      " MCP-Environment",
-      payload[" MCP-Environment"],
+    "MCP-Environment": encodeSimple(
+      "MCP-Environment",
+      payload["MCP-Environment"],
       { explode: false, charEncoding: "none" },
     ),
   }));

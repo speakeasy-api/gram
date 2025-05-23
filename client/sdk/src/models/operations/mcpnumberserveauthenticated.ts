@@ -115,10 +115,10 @@ export const McpNumberServeAuthenticatedRequest$inboundSchema: z.ZodType<
   project: z.string(),
   toolset: z.string(),
   environment: z.string(),
-  " MCP-Environment": z.string().optional(),
+  "MCP-Environment": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    " MCP-Environment": "mcpEnvironment",
+    "MCP-Environment": "mcpEnvironment",
   });
 });
 
@@ -127,7 +127,7 @@ export type McpNumberServeAuthenticatedRequest$Outbound = {
   project: string;
   toolset: string;
   environment: string;
-  " MCP-Environment"?: string | undefined;
+  "MCP-Environment"?: string | undefined;
 };
 
 /** @internal */
@@ -142,7 +142,7 @@ export const McpNumberServeAuthenticatedRequest$outboundSchema: z.ZodType<
   mcpEnvironment: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    mcpEnvironment: " MCP-Environment",
+    mcpEnvironment: "MCP-Environment",
   });
 });
 

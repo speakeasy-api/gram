@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: beadeaee93883db7941d9037b08ea416
+  docChecksum: 7be94956661f82051461d847586a3a20
   docVersion: 0.0.1
   speakeasyVersion: 1.550.0
   generationVersion: 2.610.0
-  releaseVersion: 0.11.6
-  configChecksum: d118ef71ae801c58d00f6488e1bb9b7d
+  releaseVersion: 0.11.7
+  configChecksum: d6a4021391ee416ccbca1dcace896af4
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -1025,6 +1025,7 @@ examples:
         path:
           projectID: "<id>"
           toolset: "<value>"
+          mcpSlug: "<value>"
       responses:
         "200":
           application/json: "x-file: example.file"

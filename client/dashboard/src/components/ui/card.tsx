@@ -2,8 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { Heading } from "./heading";
-import { Skeleton } from "./skeleton";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Skeleton, SkeletonParagraph } from "./skeleton";
 
 const CardComponent = ({
   className,
@@ -158,11 +157,7 @@ export function CardSkeleton() {
         </Card.Description>
       </Card.Header>
       <Card.Content>
-        <Stack gap={2}>
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-[200px]" />
-        </Stack>
+        <SkeletonParagraph />
       </Card.Content>
     </Card>
   );

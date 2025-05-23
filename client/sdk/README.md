@@ -107,10 +107,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServeAuthenticated({
-    project: "<value>",
-    toolset: "<value>",
-    environment: "<value>",
+  const result = await gram.mcp.mcpNumberServePublic({
+    mcpSlug: "<value>",
   });
 
   // Handle the result
@@ -180,8 +178,8 @@ run();
 
 ### [mcp](docs/sdks/mcp/README.md)
 
-* [mcpNumberServeAuthenticated](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
 * [mcpNumberServePublic](docs/sdks/mcp/README.md#mcpnumberservepublic) - servePublic mcp
+* [mcpNumberServeAuthenticated](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
 
 ### [packages](docs/sdks/packages/README.md)
 
@@ -374,10 +372,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServeAuthenticated({
-    project: "<value>",
-    toolset: "<value>",
-    environment: "<value>",
+  const result = await gram.mcp.mcpNumberServePublic({
+    mcpSlug: "<value>",
   }, {
     retries: {
       strategy: "backoff",
@@ -417,10 +413,8 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServeAuthenticated({
-    project: "<value>",
-    toolset: "<value>",
-    environment: "<value>",
+  const result = await gram.mcp.mcpNumberServePublic({
+    mcpSlug: "<value>",
   });
 
   // Handle the result
@@ -435,7 +429,7 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `mcpNumberServeAuthenticated` method may throw the following errors:
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `mcpNumberServePublic` method may throw the following errors:
 
 | Error Type          | Status Code                       | Content Type     |
 | ------------------- | --------------------------------- | ---------------- |
@@ -454,10 +448,8 @@ const gram = new Gram();
 async function run() {
   let result;
   try {
-    result = await gram.mcp.mcpNumberServeAuthenticated({
-      project: "<value>",
-      toolset: "<value>",
-      environment: "<value>",
+    result = await gram.mcp.mcpNumberServePublic({
+      mcpSlug: "<value>",
     });
 
     // Handle the result
@@ -521,10 +513,8 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServeAuthenticated({
-    project: "<value>",
-    toolset: "<value>",
-    environment: "<value>",
+  const result = await gram.mcp.mcpNumberServePublic({
+    mcpSlug: "<value>",
   });
 
   // Handle the result

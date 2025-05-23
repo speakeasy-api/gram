@@ -1,6 +1,10 @@
 import { Page } from "@/components/page-layout";
-import { useState } from "react";
+import { Combobox } from "@/components/ui/combobox";
+import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
+import { capitalize } from "@/lib/utils";
 import { CodeSnippet } from "@speakeasy-api/moonshine";
+import { useState } from "react";
 
 const VERCEL_AI_SDK = "Vercel AI SDK" as const;
 const LANGCHAIN = "LangChain" as const;
@@ -15,9 +19,13 @@ const FRAMEWORKS = {
 type Language = keyof typeof FRAMEWORKS;
 type Framework = (typeof FRAMEWORKS)[keyof typeof FRAMEWORKS][number];
 
-const CODE_SAMPLES = {
+export const CODE_SAMPLES = {
   typescript: {
-    [VERCEL_AI_SDK]: `import { generateText } from 'ai';
+    [VERCEL_AI_SDK]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import { generateText } from 'ai';
 import { VercelAdapter } from "@gram-ai/sdk/vercel";
 import { createOpenAI } from "@ai-sdk/openai";
 
@@ -29,9 +37,9 @@ const openai = createOpenAI({
 });
 
 const tools = await vercelAdapter.tools({
-    project: "default",
-    toolset: "my-toolset",
-    environment: "default"
+    project: ${project},
+    toolset: ${toolset},
+    environment: ${environment}
 });
 
 const result = await generateText({
@@ -42,7 +50,11 @@ const result = await generateText({
 });
 
 console.log(result.text);`,
-    [LANGCHAIN]: `import { LangchainAdapter } from "@gram-ai/sdk/langchain";
+    [LANGCHAIN]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import { LangchainAdapter } from "@gram-ai/sdk/langchain";
 import { ChatOpenAI } from "@langchain/openai";
 import { createOpenAIFunctionsAgent, AgentExecutor } from "langchain/agents";
 import { pull } from "langchain/hub";
@@ -58,9 +70,9 @@ const llm = new ChatOpenAI({
 });
 
 const tools = await langchainAdapter.tools({
-  project: "default",
-  toolset: "my-toolset",
-  environment: "default",
+  project: ${project},
+  toolset: ${toolset},
+  environment: ${environment},
 });
 
 const prompt = await pull<ChatPromptTemplate>(
@@ -84,7 +96,11 @@ const result = await executor.invoke({
 });
 
 console.log(result.output);`,
-    [FUNCTION_CALLING]: `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
+    [FUNCTION_CALLING]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
 
 const key = process.env.GRAM_API_KEY ?? "";
 
@@ -92,9 +108,9 @@ const key = process.env.GRAM_API_KEY ?? "";
 const functionCallingAdapter = new FunctionCallingAdapter(key);
 
 const tools = await functionCallingAdapter.tools({
-  project: "default",
-  toolset: "my-toolset",
-  environment: "default",
+  project: ${project},
+  toolset: ${toolset},
+  environment: ${environment},
 });
 
 // exposes name, description, parameters, and an execute and aexcute (async) function
@@ -104,7 +120,11 @@ console.log(tools[0].parameters)
 console.log(tools[0].execute)`,
   },
   python: {
-    [OPENAI_AGENTS_SDK]: `import asyncio
+    [OPENAI_AGENTS_SDK]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import asyncio
 import os
 from agents import Agent, Runner, set_default_openai_key
 from gram_ai.openai_agents import GramOpenAIAgents
@@ -120,9 +140,9 @@ set_default_openai_key(os.getenv("OPENAI_API_KEY"))
 agent = Agent(
     name="Assistant",
     tools=gram.tools(
-        project="default",
-        toolset="my-toolset",
-        environment="default",
+        project=${project},
+        toolset=${toolset},
+        environment=${environment},
     ),
 )
 
@@ -137,7 +157,11 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())`,
-    [LANGCHAIN]: `import asyncio
+    [LANGCHAIN]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import asyncio
 import os
 from langchain import hub
 from langchain_openai import ChatOpenAI
@@ -155,9 +179,9 @@ llm = ChatOpenAI(
 )
 
 tools = gram.tools(
-    project="default",
-    toolset="my-toolset",
-    environment="default",
+    project=${project},
+    toolset=${toolset},
+    environment=${environment},
 )
 
 prompt = hub.pull("hwchase17/openai-functions-agent")
@@ -174,7 +198,11 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())`,
-    [FUNCTION_CALLING]: `import os
+    [FUNCTION_CALLING]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import os
 from gram_ai.function_calling import GramFunctionCalling
 
 key = "<GRAM_API_KEY>"
@@ -183,9 +211,9 @@ key = "<GRAM_API_KEY>"
 gram = GramFunctionCalling(api_key=key)
 
 tools = gram.tools(
-    project="default",
-    toolset="my-toolset",
-    environment="default",
+    project=${project},
+    toolset=${toolset},
+    environment=${environment},
 )
 
 # exposes name, description, parameters, and an execute and aexecute (async) function
@@ -198,17 +226,47 @@ print(tools[0].aexecute)`,
 } as const;
 
 export default function SDK() {
-  const [language, setLanguage] = useState<Language>("python");
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <SdkContent />
+      </Page.Body>
+    </Page>
+  );
+}
+
+export const SdkContent = ({
+  projectSlug,
+  toolset = "my-toolset",
+  environment = "default",
+  codeOverride,
+  codeOverrideLanguage,
+}: {
+  projectSlug?: string;
+  toolset?: string;
+  environment?: string;
+  codeOverride?: string;
+  codeOverrideLanguage?: Language;
+}) => {
+  const project = useProject();
+
+  const [lang, setLang] = useState<Language>("python");
   const [framework, setFramework] = useState<Framework>(OPENAI_AGENTS_SDK);
 
   const getCodeSample = () => {
-    return CODE_SAMPLES[language][
-      framework as keyof (typeof CODE_SAMPLES)[typeof language]
-    ];
+    return (
+      codeOverride ??
+      CODE_SAMPLES[lang][
+        framework as keyof (typeof CODE_SAMPLES)[typeof lang]
+      ](projectSlug ?? project.slug, toolset, environment)
+    );
   };
 
   const handleLanguageChange = (newLanguage: Language) => {
-    setLanguage(newLanguage);
+    setLang(newLanguage);
     // If the current framework exists in the new language, keep it
     if (FRAMEWORKS[newLanguage].some((f) => f === framework)) {
       return;
@@ -217,55 +275,66 @@ export default function SDK() {
     setFramework(FRAMEWORKS[newLanguage][0]);
   };
 
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <div className="flex justify-between items-center mb-2">
-          <h2>
-            Use Gram toolsets to build agentic workflows in many popular
-            frameworks
-          </h2>
+  const languageDropdownItems =
+    Object.keys(FRAMEWORKS).map((lang) => ({
+      label: capitalize(lang),
+      value: lang,
+    })) ?? [];
 
-          <div className="flex gap-2">
-            <select
-              className="px-4 py-2 rounded border"
-              value={language}
-              onChange={(e) => handleLanguageChange(e.target.value as Language)}
-            >
-              {Object.keys(FRAMEWORKS).map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="px-4 py-2 rounded border min-w-[200px]"
-              value={framework}
-              onChange={(e) => setFramework(e.target.value as Framework)}
-            >
-              {FRAMEWORKS[language].map((fw) => (
-                <option key={fw} value={fw}>
-                  {fw}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="rounded border">
-          <CodeSnippet
-            code={getCodeSample()}
-            language={language}
-            copyable
-            fontSize="medium"
-            showLineNumbers
-          />
-        </div>
-      </Page.Body>
-    </Page>
+  const languageDropdown = (
+    <Combobox
+      items={languageDropdownItems}
+      selected={lang}
+      onSelectionChange={(value) =>
+        handleLanguageChange(value.value as Language)
+      }
+      className="max-w-fit"
+    >
+      <Type variant="small" className="capitalize">
+        {lang}
+      </Type>
+    </Combobox>
   );
-}
+
+  const frameworkDropdownItems =
+    FRAMEWORKS[lang].map((fw) => ({
+      label: fw,
+      value: fw,
+    })) ?? [];
+
+  const frameworkDropdown = (
+    <Combobox
+      items={frameworkDropdownItems}
+      selected={framework}
+      onSelectionChange={(value) => setFramework(value.value as Framework)}
+      className="max-w-fit"
+    >
+      <Type variant="small">{framework}</Type>
+    </Combobox>
+  );
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-2">
+        <h2>
+          Use Gram toolsets to build agentic workflows in many popular
+          frameworks
+        </h2>
+
+        <div className="flex gap-2">
+          {languageDropdown}
+          {frameworkDropdown}
+        </div>
+      </div>
+
+      <CodeSnippet
+        code={getCodeSample()}
+        language={codeOverrideLanguage ?? lang}
+        copyable
+        fontSize="medium"
+        showLineNumbers
+        className="border-border"
+      />
+    </div>
+  );
+};

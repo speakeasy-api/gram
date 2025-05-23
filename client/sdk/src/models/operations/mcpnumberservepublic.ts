@@ -10,13 +10,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type McpNumberServePublicRequest = {
   /**
-   * The project ID.
+   * The unique slug of the mcp server.
    */
-  projectID: string;
-  /**
-   * The toolset to access via MCP.
-   */
-  toolset: string;
+  mcpSlug: string;
   /**
    * The environment variables passed by user to MCP server (JSON Structured).
    */
@@ -34,20 +30,18 @@ export const McpNumberServePublicRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  projectID: z.string(),
-  toolset: z.string(),
-  " MCP-Environment": z.string().optional(),
+  mcpSlug: z.string(),
+  "MCP-Environment": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    " MCP-Environment": "mcpEnvironment",
+    "MCP-Environment": "mcpEnvironment",
   });
 });
 
 /** @internal */
 export type McpNumberServePublicRequest$Outbound = {
-  projectID: string;
-  toolset: string;
-  " MCP-Environment"?: string | undefined;
+  mcpSlug: string;
+  "MCP-Environment"?: string | undefined;
 };
 
 /** @internal */
@@ -56,12 +50,11 @@ export const McpNumberServePublicRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   McpNumberServePublicRequest
 > = z.object({
-  projectID: z.string(),
-  toolset: z.string(),
+  mcpSlug: z.string(),
   mcpEnvironment: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    mcpEnvironment: " MCP-Environment",
+    mcpEnvironment: "MCP-Environment",
   });
 });
 

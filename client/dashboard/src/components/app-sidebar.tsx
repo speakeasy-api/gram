@@ -5,6 +5,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -21,20 +22,16 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
 
-  const topNavItems = [
-    routes.home,
-    routes.integrations,
-    routes.toolsets,
-    routes.environments,
-    routes.mcp,
-    routes.sdk,
-    routes.slackApp,
-  ];
-
-  const secondaryNavItems = [
-    routes.settings,
-    routes.docs,
-  ];
+  const navGroups = {
+    configure: [
+      routes.home,
+      routes.integrations,
+      routes.toolsets,
+      routes.environments,
+    ],
+    connect: [routes.mcp, routes.sdk, routes.slackApp],
+    manage: [routes.settings, routes.docs],
+  };
 
   const playgroundCTA = (
     <SidebarMenuButton
@@ -67,7 +64,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <GramLogo className="text-3xl" />
                 </routes.home.Link>
                 <Type variant="small" muted className="self-end">
-                  v0.3.1 (alpha)
+                  v0.4.0 (alpha)
                 </Type>
               </Stack>
             </SidebarMenuButton>
@@ -76,18 +73,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupContent className="flex flex-col gap-6">
+          <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem className="flex items-center gap-2">
                 {playgroundCTA}
               </SidebarMenuItem>
             </SidebarMenu>
-            <NavMenu items={topNavItems} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Configure</SidebarGroupLabel>
+          <SidebarGroupContent className="flex flex-col gap-6">
+            <NavMenu items={navGroups.configure} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Connect</SidebarGroupLabel>
+          <SidebarGroupContent className="flex flex-col gap-6">
+            <NavMenu items={navGroups.connect} />
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup className="mt-auto">
           <SidebarGroupContent>
-            <NavMenu items={secondaryNavItems} />
+            <NavMenu items={navGroups.manage} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

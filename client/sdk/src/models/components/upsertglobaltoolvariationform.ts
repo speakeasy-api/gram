@@ -15,6 +15,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const Confirm = {
   Always: "always",
   Never: "never",
+  Session: "session",
 } as const;
 /**
  * The confirmation mode for the tool variation
