@@ -118,14 +118,6 @@ export default function Playground() {
           direction="horizontal"
           className="h-full [&>[role='separator']]:border-border"
         >
-          <ResizablePanel.Pane minSize={35}>
-            <ChatWindow
-              configRef={chatConfigRef}
-              chatId={chatId}
-              dynamicToolset={dynamicToolset}
-              summarizeResponse={summarizeResponse}
-            />
-          </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
             <ToolsetPanel
               configRef={chatConfigRef}
@@ -135,6 +127,14 @@ export default function Playground() {
               setDynamicToolset={setDynamicToolset}
               summarizeResponse={summarizeResponse}
               setSummarizeResponse={setSummarizeResponse}
+            />
+          </ResizablePanel.Pane>
+          <ResizablePanel.Pane minSize={35}>
+            <ChatWindow
+              configRef={chatConfigRef}
+              chatId={chatId}
+              dynamicToolset={dynamicToolset}
+              summarizeResponse={summarizeResponse}
             />
           </ResizablePanel.Pane>
         </ResizablePanel>
@@ -288,10 +288,10 @@ export function ToolsetPanel({
 
   return (
     <div className="max-h-full overflow-scroll relative">
-      <PanelHeader side="right">
+      <PanelHeader side="left">
         <Stack direction="horizontal" gap={2} justify="space-between">
           <Stack direction="horizontal" gap={2} align="center">
-            <Heading variant="h5">Active toolset: </Heading>
+            <Heading variant="h5" className="font-medium">Toolset: </Heading>
             {toolsetDropdown}
             {isAdmin && (
               <Stack direction="horizontal" align="center">

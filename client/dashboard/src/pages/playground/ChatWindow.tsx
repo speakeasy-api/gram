@@ -472,7 +472,7 @@ function ChatInner({
       }
       className="h-full relative"
     >
-      <PanelHeader side="left">
+      <PanelHeader side="right">
         <Stack direction="horizontal" gap={2} align="center">
           <Type className="font-medium">Use with: </Type>
           <TabsList className="bg-stone-200 dark:bg-stone-800">
