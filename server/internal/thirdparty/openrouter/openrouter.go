@@ -131,8 +131,8 @@ type createKeyRequest struct {
 
 type keyResponse struct {
 	Data struct {
-		Limit string `json:"limit"`
-		Hash  string `json:"hash"`
+		Limit float64 `json:"limit"`
+		Hash  string  `json:"hash"`
 	} `json:"data"`
 	Key *string `json:"key,omitempty"` // will be empty outside of createKey
 }

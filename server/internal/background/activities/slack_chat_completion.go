@@ -101,7 +101,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		ToolsetSlug:     &input.ToolsetSlug,
 		AdditionalTools: []chat.AgentTool{currentDatetimeTool},
 		AddedEnvironmentEntries: map[string]string{
-			"SLACK_SLACK_BOT_TOKEN": authInfo.AccessToken,
+			"SLACK_TOKEN": authInfo.AccessToken,
 		},
 		AgentTimeout: &slackChatCompletionTimeout,
 	})
