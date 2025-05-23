@@ -3,10 +3,12 @@ INSERT INTO openrouter_api_keys (
     organization_id
   , key
   , key_hash
+  , monthly_credits
 ) VALUES (
     @organization_id
   , @key
   , @key_hash
+  , @monthly_credits
 )
 RETURNING *;
 

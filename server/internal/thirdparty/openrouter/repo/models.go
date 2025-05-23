@@ -12,6 +12,7 @@ type OpenrouterApiKey struct {
 	OrganizationID string
 	Key            string
 	KeyHash        string
+	MonthlyCredits int64
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

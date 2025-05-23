@@ -20,6 +20,9 @@ import (
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+// We may eventually set this by account type
+const DefaultMonthlyCredits = 50
+
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 }
@@ -48,7 +51,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows), key.Key == "":
-		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID)
+		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, DefaultMonthlyCredits)
 		if err != nil {
 			return "", err
 		}
@@ -57,6 +60,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			OrganizationID: orgID,
 			Key:            keyResponse.Key,
 			KeyHash:        keyResponse.Data.Hash,
+			MonthlyCredits: DefaultMonthlyCredits,
 		})
 		if err != nil {
 			return "", err
@@ -92,8 +96,9 @@ type createKeyResponse struct {
 	Key string `json:"key"`
 }
 
-func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string) (*createKeyResponse, error) {
-	requestBody := createKeyRequest{Name: fmt.Sprintf("gram-%s-%s", o.env, orgID), Label: fmt.Sprintf("%s (%s environment)", orgID, o.env), Limit: nil}
+func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, keyLimit int) (*createKeyResponse, error) {
+	creditLimit := int64(keyLimit)
+	requestBody := createKeyRequest{Name: fmt.Sprintf("gram-%s-%s", o.env, orgID), Label: fmt.Sprintf("%s (%s environment)", orgID, o.env), Limit: &creditLimit}
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {

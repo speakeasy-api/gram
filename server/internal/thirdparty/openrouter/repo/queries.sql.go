@@ -14,27 +14,36 @@ INSERT INTO openrouter_api_keys (
     organization_id
   , key
   , key_hash
+  , monthly_credits
 ) VALUES (
     $1
   , $2
   , $3
+  , $4
 )
-RETURNING organization_id, key, key_hash, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key, key_hash, monthly_credits, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
 	OrganizationID string
 	Key            string
 	KeyHash        string
+	MonthlyCredits int64
 }
 
 func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRouterAPIKeyParams) (OpenrouterApiKey, error) {
-	row := q.db.QueryRow(ctx, createOpenRouterAPIKey, arg.OrganizationID, arg.Key, arg.KeyHash)
+	row := q.db.QueryRow(ctx, createOpenRouterAPIKey,
+		arg.OrganizationID,
+		arg.Key,
+		arg.KeyHash,
+		arg.MonthlyCredits,
+	)
 	var i OpenrouterApiKey
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.Key,
 		&i.KeyHash,
+		&i.MonthlyCredits,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -44,7 +53,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key, key_hash, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key, key_hash, monthly_credits, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -57,6 +66,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, organizationID string
 		&i.OrganizationID,
 		&i.Key,
 		&i.KeyHash,
+		&i.MonthlyCredits,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
