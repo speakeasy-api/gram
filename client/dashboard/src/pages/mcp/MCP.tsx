@@ -293,7 +293,7 @@ export function McpToolsetCard({
             </Card.Title>
             <Card.Description>
               <Stack direction="horizontal" className="group" align="center">
-                <Type muted mono variant="small">
+                <Type muted mono variant="small" className="break-all">
                   {mcpUrl}
                 </Type>
                 <Button
