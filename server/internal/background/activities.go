@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/background/activities"
 	"github.com/speakeasy-api/gram/internal/chat"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
 )
@@ -20,15 +21,17 @@ type Activities struct {
 	getSlackProjectContext *activities.GetSlackProjectContext
 	postSlackMessage       *activities.PostSlackMessage
 	slackChatCompletion    *activities.SlackChatCompletion
+	refreshOpenRouterKey   *activities.RefreshOpenRouterKey
 }
 
-func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient) *Activities {
+func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner) *Activities {
 	return &Activities{
 		processDeployment:      activities.NewProcessDeployment(logger, db, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
 		getSlackProjectContext: activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:       activities.NewPostSlackMessageActivity(logger, slackClient),
 		slackChatCompletion:    activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
+		refreshOpenRouterKey:   activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 	}
 }
 
@@ -50,4 +53,8 @@ func (a *Activities) PostSlackMessage(ctx context.Context, input activities.Post
 
 func (a *Activities) SlackChatCompletion(ctx context.Context, input activities.SlackChatCompletionInput) (string, error) {
 	return a.slackChatCompletion.Do(ctx, input)
+}
+
+func (a *Activities) RefreshOpenRouterKey(ctx context.Context, orgID string) error {
+	return a.refreshOpenRouterKey.Do(ctx, activities.RefreshOpenRouterKeyArgs{OrgID: orgID})
 }

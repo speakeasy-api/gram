@@ -21,7 +21,7 @@ INSERT INTO openrouter_api_keys (
   , $3
   , $4
 )
-RETURNING organization_id, key, key_hash, monthly_credits, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
@@ -44,6 +44,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 		&i.Key,
 		&i.KeyHash,
 		&i.MonthlyCredits,
+		&i.Disabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -53,7 +54,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key, key_hash, monthly_credits, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -67,6 +68,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, organizationID string
 		&i.Key,
 		&i.KeyHash,
 		&i.MonthlyCredits,
+		&i.Disabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

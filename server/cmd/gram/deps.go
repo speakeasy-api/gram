@@ -18,6 +18,7 @@ import (
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/chat"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -178,7 +179,7 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 	}, nil
 }
 
-func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient) worker.Worker {
+func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openRouter openrouter.Provisioner) worker.Worker {
 	temporalWorker := worker.New(client, string(background.TaskQueueMain), worker.Options{
 		Interceptors: []interceptor.WorkerInterceptor{
 			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
@@ -187,15 +188,17 @@ func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Po
 		},
 	})
 
-	activities := background.NewActivities(logger, db, assetStorage, slackClient, chatClient)
+	activities := background.NewActivities(logger, db, assetStorage, slackClient, chatClient, openRouter)
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
 	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
 	temporalWorker.RegisterActivity(activities.PostSlackMessage)
 	temporalWorker.RegisterActivity(activities.SlackChatCompletion)
+	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 
 	temporalWorker.RegisterWorkflow(background.ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(background.SlackEventWorkflow)
+	temporalWorker.RegisterWorkflow(background.OpenrouterKeyRefreshWorkflow)
 
 	return temporalWorker
 }

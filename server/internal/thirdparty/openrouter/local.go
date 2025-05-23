@@ -15,3 +15,7 @@ func NewDevelopment(apiKey string) *Development {
 func (o *Development) ProvisionAPIKey(context.Context, string) (string, error) {
 	return o.apiKey, nil
 }
+
+func (o *Development) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error) {
+	return 0, nil
+}

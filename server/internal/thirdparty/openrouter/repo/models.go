@@ -13,6 +13,7 @@ type OpenrouterApiKey struct {
 	Key            string
 	KeyHash        string
 	MonthlyCredits int64
+	Disabled       bool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

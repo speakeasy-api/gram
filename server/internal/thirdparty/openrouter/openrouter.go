@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter/repo"
 )
 
@@ -25,6 +26,11 @@ const DefaultMonthlyCredits = 50
 
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
+	RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error)
+}
+
+type KeyRefresher interface {
+	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error
 }
 
 type OpenRouter struct {
@@ -33,15 +39,17 @@ type OpenRouter struct {
 	logger          *slog.Logger
 	repo            *repo.Queries
 	orClient        *http.Client
+	refresher       KeyRefresher
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string) *OpenRouter {
+func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher) *OpenRouter {
 	return &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
 		logger:          logger,
 		repo:            repo.New(db),
 		orClient:        cleanhttp.DefaultPooledClient(),
+		refresher:       refresher,
 	}
 }
 
@@ -58,7 +66,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 
 		_, err = o.repo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 			OrganizationID: orgID,
-			Key:            keyResponse.Key,
+			Key:            *keyResponse.Key,
 			KeyHash:        keyResponse.Data.Hash,
 			MonthlyCredits: DefaultMonthlyCredits,
 		})
@@ -66,7 +74,13 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			return "", err
 		}
 
-		openrouterKey = keyResponse.Key
+		if o.refresher != nil {
+			if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID); err != nil {
+				return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").Log(ctx, o.logger)
+			}
+		}
+
+		openrouterKey = *keyResponse.Key
 
 	case err != nil:
 		return "", err
@@ -82,22 +96,49 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 	return openrouterKey, nil
 }
 
-type createKeyRequest struct {
-	Name  string `json:"name"`
-	Label string `json:"label"`
-	Limit *int64 `json:"limit,omitempty"`
+func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error) {
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	if err != nil {
+		return 0, err
+	}
+
+	if key.MonthlyCredits == 0 && !key.Disabled {
+		return 0, errors.New("cannot make an update to monthly credirs of 0")
+	}
+
+	limit := float64(key.MonthlyCredits)
+	err = o.updateOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
+		Limit:    &limit,
+		Disabled: nil,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return int(key.MonthlyCredits), nil
 }
 
-type createKeyResponse struct {
+type updateKeyRequest struct {
+	Disabled *bool    `json:"disabled,omitempty"`
+	Limit    *float64 `json:"limit,omitempty"`
+}
+
+type createKeyRequest struct {
+	Name  string   `json:"name"`
+	Label string   `json:"label"`
+	Limit *float64 `json:"limit,omitempty"`
+}
+
+type keyResponse struct {
 	Data struct {
 		Limit string `json:"limit"`
 		Hash  string `json:"hash"`
 	} `json:"data"`
-	Key string `json:"key"`
+	Key *string `json:"key,omitempty"` // will be empty outside of createKey
 }
 
-func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, keyLimit int) (*createKeyResponse, error) {
-	creditLimit := int64(keyLimit)
+func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, keyLimit int) (*keyResponse, error) {
+	creditLimit := float64(keyLimit)
 	requestBody := createKeyRequest{Name: fmt.Sprintf("gram-%s-%s", o.env, orgID), Label: fmt.Sprintf("%s (%s environment)", orgID, o.env), Limit: &creditLimit}
 
 	bodyBytes, err := json.Marshal(requestBody)
@@ -129,16 +170,49 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, k
 		return nil, errors.New("failed to create OpenRouter API key: " + resp.Status)
 	}
 
-	var response createKeyResponse
+	var response keyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		o.logger.ErrorContext(ctx, "failed to decode create openrouter key response body", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	if response.Key == "" {
+	if response.Key == nil {
 		o.logger.ErrorContext(ctx, "missing key in OpenRouter response")
 		return nil, errors.New("missing key in OpenRouter response")
 	}
 
 	return &response, nil
+}
+
+func (o *OpenRouter) updateOpenRouterAPIKey(ctx context.Context, keyHash string, request updateKeyRequest) error {
+	bodyBytes, err := json.Marshal(request)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to marshal update openrouter key request body", slog.String("error", err.Error()))
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PATCH", OpenRouterBaseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", slog.String("error", err.Error()))
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := o.orClient.Do(req)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
+		return err
+	}
+
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return errors.New("failed to update OpenRouter API key: " + resp.Status)
+	}
+
+	return nil
 }

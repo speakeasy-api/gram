@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
+	"github.com/speakeasy-api/gram/internal/background"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -245,13 +246,6 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			var openRouter openrouter.Provisioner
-			if c.String("environment") == "local" {
-				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
-			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"))
-			}
-
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
@@ -285,6 +279,13 @@ func newStartCommand() *cli.Command {
 				logger.WarnContext(ctx, "temporal disabled")
 			} else {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+
+			var openRouter openrouter.Provisioner
+			if c.String("environment") == "local" {
+				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+			} else {
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient})
 			}
 
 			{
@@ -379,7 +380,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient, chatClient)
+					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient, chatClient, openRouter)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", slog.String("error", err.Error()))
 					}
