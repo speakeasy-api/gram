@@ -3,11 +3,13 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -84,6 +86,8 @@ func (s *Service) ServePublic(ctx context.Context, payload *gen.ServePublicPaylo
 		return r.Close()
 	})
 
+	fmt.Println("payload", payload)
+
 	if payload.ApikeyToken != nil {
 		var err error
 		sc := security.APIKeyScheme{
@@ -91,7 +95,10 @@ func (s *Service) ServePublic(ctx context.Context, payload *gen.ServePublicPaylo
 			RequiredScopes: []string{"consumer"},
 			Scopes:         []string{},
 		}
-		ctx, err = s.auth.Authorize(ctx, *payload.ApikeyToken, &sc)
+		token := *payload.ApikeyToken
+		token = strings.TrimPrefix(token, "Bearer ")
+		token = strings.TrimPrefix(token, "bearer ")
+		ctx, err = s.auth.Authorize(ctx, token, &sc)
 		if err != nil {
 			return nil, nil, oops.C(oops.CodeUnauthorized)
 		}
@@ -108,16 +115,37 @@ func (s *Service) ServePublic(ctx context.Context, payload *gen.ServePublicPaylo
 	}
 	var defaultEnvironment string
 	var authenticated bool
-	if !toolset.McpIsPublic {
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
+		projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, nil, oops.E(oops.CodeForbidden, nil, "no projects found")
+		case err != nil:
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, slog.String("org_id", authCtx.ActiveOrganizationID))
+		}
+
+		projectInOrg := false
+		for _, project := range projects {
+			if project.ID == toolset.ProjectID {
+				projectInOrg = true
+				break
+			}
+		}
+
+		if !projectInOrg {
 			return nil, nil, oops.C(oops.CodeUnauthorized)
 		}
-		// we'll only use a default environment if the mcp is authenticated
+
 		authenticated = true
-		defaultEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
 	}
 
+	if !toolset.McpIsPublic && !authenticated {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if authenticated {
+		defaultEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
+	}
 	var batch batchedRawRequest
 	err = json.NewDecoder(r).Decode(&batch)
 	switch {
