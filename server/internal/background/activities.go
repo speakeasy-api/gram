@@ -55,6 +55,6 @@ func (a *Activities) SlackChatCompletion(ctx context.Context, input activities.S
 	return a.slackChatCompletion.Do(ctx, input)
 }
 
-func (a *Activities) RefreshOpenRouterKey(ctx context.Context, orgID string) error {
-	return a.refreshOpenRouterKey.Do(ctx, activities.RefreshOpenRouterKeyArgs{OrgID: orgID})
+func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.RefreshOpenRouterKeyArgs) error {
+	return a.refreshOpenRouterKey.Do(ctx, input)
 }
