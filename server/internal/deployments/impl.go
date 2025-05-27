@@ -117,6 +117,65 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}, nil
 }
 
+func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeploymentLogsPayload) (res *gen.GetDeploymentLogsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	id, err := uuid.Parse(form.DeploymentID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "bad deployment id").Log(ctx, s.logger)
+	}
+
+	var cursor uuid.NullUUID
+	if form.Cursor != nil {
+		c, err := uuid.Parse(*form.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		}
+
+		cursor = uuid.NullUUID{UUID: c, Valid: true}
+	}
+
+	rows, err := s.repo.GetDeploymentLogs(ctx, repo.GetDeploymentLogsParams{
+		DeploymentID: id,
+		ProjectID:    *authCtx.ProjectID,
+		Cursor:       cursor,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	status := "unknown"
+	if len(rows) > 0 {
+		status = rows[0].Status
+	}
+
+	items := make([]*gen.DeploymentLogEvent, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, &gen.DeploymentLogEvent{
+			ID:        r.ID.String(),
+			Event:     r.Event,
+			Message:   r.Message,
+			CreatedAt: r.CreatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
+	var nextCursor *string
+	limit := 50
+	if len(items) >= limit+1 {
+		nextCursor = conv.Ptr(items[limit].ID)
+		items = items[:limit]
+	}
+
+	return &gen.GetDeploymentLogsResult{
+		Events:     items,
+		Status:     status,
+		NextCursor: nextCursor,
+	}, nil
+}
+
 func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeploymentPayload) (res *gen.GetLatestDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

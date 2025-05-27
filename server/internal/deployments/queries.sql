@@ -29,6 +29,35 @@ GROUP BY d.id
 ORDER BY d.id DESC
 LIMIT 51;
 
+-- name: GetDeploymentLogs :many
+WITH latest_status as (
+    SELECT s.status
+    FROM deployment_statuses s
+    WHERE s.deployment_id = @deployment_id
+    ORDER BY s.seq DESC
+    LIMIT 1
+)
+SELECT
+  coalesce((select status from latest_status), 'unknown')::text as status,
+  log.id,
+  log.event,
+  log.message,
+  log.created_at
+FROM deployment_logs log
+WHERE
+  log.deployment_id = @deployment_id AND log.project_id = @project_id
+  AND log.id >= CASE 
+    WHEN sqlc.narg(cursor)::uuid IS NOT NULL THEN sqlc.narg(cursor)::uuid
+    ELSE (
+      SELECT dl.id
+      FROM deployment_logs dl
+      WHERE dl.deployment_id = @deployment_id AND dl.project_id = @project_id
+      ORDER BY dl.id ASC LIMIT 1
+    )
+  END
+ORDER BY log.id ASC
+LIMIT 51;
+
 -- name: GetDeploymentWithAssets :many
 WITH latest_status as (
     SELECT deployment_id, status

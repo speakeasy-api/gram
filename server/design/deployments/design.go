@@ -142,6 +142,33 @@ var _ = Service("deployments", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDeployments"}`)
 	})
+
+	Method("getDeploymentLogs", func() {
+		Description("Get logs for a deployment.")
+
+		Payload(func() {
+			Extend(GetDeploymentLogsForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetDeploymentLogsResult)
+
+		HTTP(func() {
+			GET("/rpc/deployments.logs")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("deployment_id")
+			Param("cursor")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDeploymentLogs")
+		Meta("openapi:extension:x-speakeasy-name-override", "logs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeploymentLogs"}`)
+	})
 })
 
 var DeploymentSummary = Type("DeploymentSummary", func() {
@@ -290,4 +317,26 @@ var EvolveResult = Type("EvolveResult", func() {
 		Description("A deployment that was successfully created.")
 		Meta("openapi:example", "false")
 	})
+})
+
+var GetDeploymentLogsForm = Type("GetDeploymentLogsForm", func() {
+	Required("deployment_id")
+	Attribute("deployment_id", String, "The ID of the deployment")
+	Attribute("cursor", String, "The cursor to fetch results from")
+})
+
+var GetDeploymentLogsResult = Type("GetDeploymentLogsResult", func() {
+	Required("events", "status")
+	Attribute("next_cursor", String, "The cursor to fetch results from")
+	Attribute("status", String, "The status of the deployment")
+	Attribute("events", ArrayOf(DeploymentLogEvent), "The logs for the deployment")
+})
+
+var DeploymentLogEvent = Type("DeploymentLogEvent", func() {
+	Required("id", "created_at", "event", "message")
+
+	Attribute("id", String, "The ID of the log event")
+	Attribute("created_at", String, "The creation date of the log event")
+	Attribute("event", String, "The type of event that occurred")
+	Attribute("message", String, "The message of the log event")
 })

@@ -25,6 +25,7 @@ type Server struct {
 	CreateDeployment    http.Handler
 	Evolve              http.Handler
 	ListDeployments     http.Handler
+	GetDeploymentLogs   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -59,12 +60,14 @@ func New(
 			{"CreateDeployment", "POST", "/rpc/deployments.create"},
 			{"Evolve", "POST", "/rpc/deployments.evolve"},
 			{"ListDeployments", "GET", "/rpc/deployments.list"},
+			{"GetDeploymentLogs", "GET", "/rpc/deployments.logs"},
 		},
 		GetDeployment:       NewGetDeploymentHandler(e.GetDeployment, mux, decoder, encoder, errhandler, formatter),
 		GetLatestDeployment: NewGetLatestDeploymentHandler(e.GetLatestDeployment, mux, decoder, encoder, errhandler, formatter),
 		CreateDeployment:    NewCreateDeploymentHandler(e.CreateDeployment, mux, decoder, encoder, errhandler, formatter),
 		Evolve:              NewEvolveHandler(e.Evolve, mux, decoder, encoder, errhandler, formatter),
 		ListDeployments:     NewListDeploymentsHandler(e.ListDeployments, mux, decoder, encoder, errhandler, formatter),
+		GetDeploymentLogs:   NewGetDeploymentLogsHandler(e.GetDeploymentLogs, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -78,6 +81,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateDeployment = m(s.CreateDeployment)
 	s.Evolve = m(s.Evolve)
 	s.ListDeployments = m(s.ListDeployments)
+	s.GetDeploymentLogs = m(s.GetDeploymentLogs)
 }
 
 // MethodNames returns the methods served.
@@ -90,6 +94,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateDeploymentHandler(mux, h.CreateDeployment)
 	MountEvolveHandler(mux, h.Evolve)
 	MountListDeploymentsHandler(mux, h.ListDeployments)
+	MountGetDeploymentLogsHandler(mux, h.GetDeploymentLogs)
 }
 
 // Mount configures the mux to serve the deployments endpoints.
@@ -331,6 +336,57 @@ func NewListDeploymentsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listDeployments")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "deployments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
+// MountGetDeploymentLogsHandler configures the mux to serve the "deployments"
+// service "getDeploymentLogs" endpoint.
+func MountGetDeploymentLogsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/deployments.logs", otelhttp.WithRouteTag("/rpc/deployments.logs", f).ServeHTTP)
+}
+
+// NewGetDeploymentLogsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "deployments" service "getDeploymentLogs" endpoint.
+func NewGetDeploymentLogsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetDeploymentLogsRequest(mux, decoder)
+		encodeResponse = EncodeGetDeploymentLogsResponse(encoder)
+		encodeError    = EncodeGetDeploymentLogsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getDeploymentLogs")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "deployments")
 		payload, err := decodeRequest(r)
 		if err != nil {

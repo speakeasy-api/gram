@@ -27,6 +27,8 @@ type Service interface {
 	Evolve(context.Context, *EvolvePayload) (res *EvolveResult, err error)
 	// List all deployments in descending order of creation.
 	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
+	// Get logs for a deployment.
+	GetDeploymentLogs(context.Context, *GetDeploymentLogsPayload) (res *GetDeploymentLogsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -49,7 +51,7 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"getDeployment", "getLatestDeployment", "createDeployment", "evolve", "listDeployments"}
+var MethodNames = [6]string{"getDeployment", "getLatestDeployment", "createDeployment", "evolve", "listDeployments", "getDeploymentLogs"}
 
 type AddDeploymentPackageForm struct {
 	// The name of the package.
@@ -106,6 +108,17 @@ type CreateDeploymentResult struct {
 	Deployment *types.Deployment
 }
 
+type DeploymentLogEvent struct {
+	// The ID of the log event
+	ID string
+	// The creation date of the log event
+	CreatedAt string
+	// The type of event that occurred
+	Event string
+	// The message of the log event
+	Message string
+}
+
 type DeploymentSummary struct {
 	// The ID to of the deployment.
 	ID string
@@ -141,6 +154,29 @@ type EvolvePayload struct {
 type EvolveResult struct {
 	// A deployment that was successfully created.
 	Deployment *types.Deployment
+}
+
+// GetDeploymentLogsPayload is the payload type of the deployments service
+// getDeploymentLogs method.
+type GetDeploymentLogsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the deployment
+	DeploymentID string
+	// The cursor to fetch results from
+	Cursor *string
+}
+
+// GetDeploymentLogsResult is the result type of the deployments service
+// getDeploymentLogs method.
+type GetDeploymentLogsResult struct {
+	// The cursor to fetch results from
+	NextCursor *string
+	// The status of the deployment
+	Status string
+	// The logs for the deployment
+	Events []*DeploymentLogEvent
 }
 
 // GetDeploymentPayload is the payload type of the deployments service

@@ -117,6 +117,17 @@ type ListDeploymentsResponseBody struct {
 	Items []*DeploymentSummaryResponseBody `form:"items" json:"items" xml:"items"`
 }
 
+// GetDeploymentLogsResponseBody is the type of the "deployments" service
+// "getDeploymentLogs" endpoint HTTP response body.
+type GetDeploymentLogsResponseBody struct {
+	// The cursor to fetch results from
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// The status of the deployment
+	Status string `form:"status" json:"status" xml:"status"`
+	// The logs for the deployment
+	Events []*DeploymentLogEventResponseBody `form:"events" json:"events" xml:"events"`
+}
+
 // GetDeploymentUnauthorizedResponseBody is the type of the "deployments"
 // service "getDeployment" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1048,6 +1059,196 @@ type ListDeploymentsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetDeploymentLogsUnauthorizedResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetDeploymentLogsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsForbiddenResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the "forbidden"
+// error.
+type GetDeploymentLogsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsBadRequestResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the
+// "bad_request" error.
+type GetDeploymentLogsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsNotFoundResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the "not_found"
+// error.
+type GetDeploymentLogsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsConflictResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the "conflict"
+// error.
+type GetDeploymentLogsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsUnsupportedMediaResponseBody is the type of the
+// "deployments" service "getDeploymentLogs" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetDeploymentLogsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsInvalidResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the "invalid"
+// error.
+type GetDeploymentLogsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsInvariantViolationResponseBody is the type of the
+// "deployments" service "getDeploymentLogs" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetDeploymentLogsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsUnexpectedResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the "unexpected"
+// error.
+type GetDeploymentLogsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentLogsGatewayErrorResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDeploymentLogsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // OpenAPIv3DeploymentAssetResponseBody is used to define fields on response
 // body types.
 type OpenAPIv3DeploymentAssetResponseBody struct {
@@ -1118,6 +1319,19 @@ type DeploymentSummaryResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The number of upstream assets.
 	AssetCount int64 `form:"asset_count" json:"asset_count" xml:"asset_count"`
+}
+
+// DeploymentLogEventResponseBody is used to define fields on response body
+// types.
+type DeploymentLogEventResponseBody struct {
+	// The ID of the log event
+	ID string `form:"id" json:"id" xml:"id"`
+	// The creation date of the log event
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The type of event that occurred
+	Event string `form:"event" json:"event" xml:"event"`
+	// The message of the log event
+	Message string `form:"message" json:"message" xml:"message"`
 }
 
 // AddOpenAPIv3DeploymentAssetFormRequestBody is used to define fields on
@@ -1228,6 +1442,24 @@ func NewListDeploymentsResponseBody(res *deployments.ListDeploymentResult) *List
 		}
 	} else {
 		body.Items = []*DeploymentSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewGetDeploymentLogsResponseBody builds the HTTP response body from the
+// result of the "getDeploymentLogs" endpoint of the "deployments" service.
+func NewGetDeploymentLogsResponseBody(res *deployments.GetDeploymentLogsResult) *GetDeploymentLogsResponseBody {
+	body := &GetDeploymentLogsResponseBody{
+		NextCursor: res.NextCursor,
+		Status:     res.Status,
+	}
+	if res.Events != nil {
+		body.Events = make([]*DeploymentLogEventResponseBody, len(res.Events))
+		for i, val := range res.Events {
+			body.Events[i] = marshalDeploymentsDeploymentLogEventToDeploymentLogEventResponseBody(val)
+		}
+	} else {
+		body.Events = []*DeploymentLogEventResponseBody{}
 	}
 	return body
 }
@@ -1950,6 +2182,152 @@ func NewListDeploymentsGatewayErrorResponseBody(res *goa.ServiceError) *ListDepl
 	return body
 }
 
+// NewGetDeploymentLogsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getDeploymentLogs" endpoint of the "deployments"
+// service.
+func NewGetDeploymentLogsUnauthorizedResponseBody(res *goa.ServiceError) *GetDeploymentLogsUnauthorizedResponseBody {
+	body := &GetDeploymentLogsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getDeploymentLogs" endpoint of the "deployments" service.
+func NewGetDeploymentLogsForbiddenResponseBody(res *goa.ServiceError) *GetDeploymentLogsForbiddenResponseBody {
+	body := &GetDeploymentLogsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsBadRequestResponseBody builds the HTTP response body
+// from the result of the "getDeploymentLogs" endpoint of the "deployments"
+// service.
+func NewGetDeploymentLogsBadRequestResponseBody(res *goa.ServiceError) *GetDeploymentLogsBadRequestResponseBody {
+	body := &GetDeploymentLogsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsNotFoundResponseBody builds the HTTP response body from
+// the result of the "getDeploymentLogs" endpoint of the "deployments" service.
+func NewGetDeploymentLogsNotFoundResponseBody(res *goa.ServiceError) *GetDeploymentLogsNotFoundResponseBody {
+	body := &GetDeploymentLogsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsConflictResponseBody builds the HTTP response body from
+// the result of the "getDeploymentLogs" endpoint of the "deployments" service.
+func NewGetDeploymentLogsConflictResponseBody(res *goa.ServiceError) *GetDeploymentLogsConflictResponseBody {
+	body := &GetDeploymentLogsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getDeploymentLogs" endpoint of the
+// "deployments" service.
+func NewGetDeploymentLogsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetDeploymentLogsUnsupportedMediaResponseBody {
+	body := &GetDeploymentLogsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsInvalidResponseBody builds the HTTP response body from
+// the result of the "getDeploymentLogs" endpoint of the "deployments" service.
+func NewGetDeploymentLogsInvalidResponseBody(res *goa.ServiceError) *GetDeploymentLogsInvalidResponseBody {
+	body := &GetDeploymentLogsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getDeploymentLogs" endpoint of the
+// "deployments" service.
+func NewGetDeploymentLogsInvariantViolationResponseBody(res *goa.ServiceError) *GetDeploymentLogsInvariantViolationResponseBody {
+	body := &GetDeploymentLogsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getDeploymentLogs" endpoint of the "deployments"
+// service.
+func NewGetDeploymentLogsUnexpectedResponseBody(res *goa.ServiceError) *GetDeploymentLogsUnexpectedResponseBody {
+	body := &GetDeploymentLogsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentLogsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getDeploymentLogs" endpoint of the "deployments"
+// service.
+func NewGetDeploymentLogsGatewayErrorResponseBody(res *goa.ServiceError) *GetDeploymentLogsGatewayErrorResponseBody {
+	body := &GetDeploymentLogsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
 func NewGetDeploymentPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentPayload {
@@ -2043,6 +2421,19 @@ func NewEvolvePayload(body *EvolveRequestBody, apikeyToken *string, sessionToken
 // endpoint payload.
 func NewListDeploymentsPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
+	v.Cursor = cursor
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetDeploymentLogsPayload builds a deployments service getDeploymentLogs
+// endpoint payload.
+func NewGetDeploymentLogsPayload(deploymentID string, cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentLogsPayload {
+	v := &deployments.GetDeploymentLogsPayload{}
+	v.DeploymentID = deploymentID
 	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

@@ -560,6 +560,76 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 	return i, err
 }
 
+const getDeploymentLogs = `-- name: GetDeploymentLogs :many
+WITH latest_status as (
+    SELECT s.status
+    FROM deployment_statuses s
+    WHERE s.deployment_id = $1
+    ORDER BY s.seq DESC
+    LIMIT 1
+)
+SELECT
+  coalesce((select status from latest_status), 'unknown')::text as status,
+  log.id,
+  log.event,
+  log.message,
+  log.created_at
+FROM deployment_logs log
+WHERE
+  log.deployment_id = $1 AND log.project_id = $2
+  AND log.id >= CASE 
+    WHEN $3::uuid IS NOT NULL THEN $3::uuid
+    ELSE (
+      SELECT dl.id
+      FROM deployment_logs dl
+      WHERE dl.deployment_id = $1 AND dl.project_id = $2
+      ORDER BY dl.id ASC LIMIT 1
+    )
+  END
+ORDER BY log.id ASC
+LIMIT 51
+`
+
+type GetDeploymentLogsParams struct {
+	DeploymentID uuid.UUID
+	ProjectID    uuid.UUID
+	Cursor       uuid.NullUUID
+}
+
+type GetDeploymentLogsRow struct {
+	Status    string
+	ID        uuid.UUID
+	Event     string
+	Message   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetDeploymentLogs(ctx context.Context, arg GetDeploymentLogsParams) ([]GetDeploymentLogsRow, error) {
+	rows, err := q.db.Query(ctx, getDeploymentLogs, arg.DeploymentID, arg.ProjectID, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDeploymentLogsRow
+	for rows.Next() {
+		var i GetDeploymentLogsRow
+		if err := rows.Scan(
+			&i.Status,
+			&i.ID,
+			&i.Event,
+			&i.Message,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDeploymentOpenAPIv3 = `-- name: GetDeploymentOpenAPIv3 :many
 SELECT id, deployment_id, asset_id, name, slug
 FROM deployments_openapiv3_assets

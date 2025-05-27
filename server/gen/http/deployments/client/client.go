@@ -36,6 +36,10 @@ type Client struct {
 	// listDeployments endpoint.
 	ListDeploymentsDoer goahttp.Doer
 
+	// GetDeploymentLogs Doer is the HTTP client used to make requests to the
+	// getDeploymentLogs endpoint.
+	GetDeploymentLogsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -61,6 +65,7 @@ func NewClient(
 		CreateDeploymentDoer:    doer,
 		EvolveDoer:              doer,
 		ListDeploymentsDoer:     doer,
+		GetDeploymentLogsDoer:   doer,
 		RestoreResponseBody:     restoreBody,
 		scheme:                  scheme,
 		host:                    host,
@@ -184,6 +189,30 @@ func (c *Client) ListDeployments() goa.Endpoint {
 		resp, err := c.ListDeploymentsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deployments", "listDeployments", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDeploymentLogs returns an endpoint that makes HTTP requests to the
+// deployments service getDeploymentLogs server.
+func (c *Client) GetDeploymentLogs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDeploymentLogsRequest(c.encoder)
+		decodeResponse = DecodeGetDeploymentLogsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDeploymentLogsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDeploymentLogsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "getDeploymentLogs", err)
 		}
 		return decodeResponse(resp)
 	}

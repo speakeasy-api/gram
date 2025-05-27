@@ -31,3 +31,8 @@ func EvolveDeploymentsPath() string {
 func ListDeploymentsDeploymentsPath() string {
 	return "/rpc/deployments.list"
 }
+
+// GetDeploymentLogsDeploymentsPath returns the URL path to the deployments service getDeploymentLogs HTTP endpoint.
+func GetDeploymentLogsDeploymentsPath() string {
+	return "/rpc/deployments.logs"
+}

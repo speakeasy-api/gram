@@ -21,6 +21,7 @@ type Endpoints struct {
 	CreateDeployment    goa.Endpoint
 	Evolve              goa.Endpoint
 	ListDeployments     goa.Endpoint
+	GetDeploymentLogs   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "deployments" service with endpoints.
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateDeployment:    NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
 		Evolve:              NewEvolveEndpoint(s, a.APIKeyAuth),
 		ListDeployments:     NewListDeploymentsEndpoint(s, a.APIKeyAuth),
+		GetDeploymentLogs:   NewGetDeploymentLogsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateDeployment = m(e.CreateDeployment)
 	e.Evolve = m(e.Evolve)
 	e.ListDeployments = m(e.ListDeployments)
+	e.GetDeploymentLogs = m(e.GetDeploymentLogs)
 }
 
 // NewGetDeploymentEndpoint returns an endpoint function that calls the method
@@ -337,5 +340,64 @@ func NewListDeploymentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.ListDeployments(ctx, p)
+	}
+}
+
+// NewGetDeploymentLogsEndpoint returns an endpoint function that calls the
+// method "getDeploymentLogs" of service "deployments".
+func NewGetDeploymentLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetDeploymentLogsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetDeploymentLogs(ctx, p)
 	}
 }

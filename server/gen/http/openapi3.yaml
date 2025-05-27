@@ -1784,6 +1784,119 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListDeployments
+    /rpc/deployments.logs:
+        get:
+            description: Get logs for a deployment.
+            operationId: getDeploymentLogs
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the deployment
+                  in: query
+                  name: deployment_id
+                  required: true
+                  schema:
+                    description: The ID of the deployment
+                    type: string
+                - allowEmptyValue: true
+                  description: The cursor to fetch results from
+                  in: query
+                  name: cursor
+                  schema:
+                    description: The cursor to fetch results from
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetDeploymentLogsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getDeploymentLogs deployments
+            tags:
+                - deployments
+            x-speakeasy-name-override: logs
+            x-speakeasy-react-hook:
+                name: DeploymentLogs
     /rpc/environments.create:
         post:
             description: Create a new environment
@@ -5243,6 +5356,26 @@ components:
                 - openapiv3_assets
                 - status
                 - packages
+        DeploymentLogEvent:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the log event
+                event:
+                    type: string
+                    description: The type of event that occurred
+                id:
+                    type: string
+                    description: The ID of the log event
+                message:
+                    type: string
+                    description: The message of the log event
+            required:
+                - id
+                - created_at
+                - event
+                - message
         DeploymentPackage:
             type: object
             properties:
@@ -5435,6 +5568,34 @@ components:
                     description: The ID of the deployment
             required:
                 - id
+        GetDeploymentLogsForm:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: The cursor to fetch results from
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment
+            required:
+                - deployment_id
+        GetDeploymentLogsResult:
+            type: object
+            properties:
+                events:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentLogEvent'
+                    description: The logs for the deployment
+                next_cursor:
+                    type: string
+                    description: The cursor to fetch results from
+                status:
+                    type: string
+                    description: The status of the deployment
+            required:
+                - events
+                - status
         GetDeploymentResult:
             type: object
             properties:
