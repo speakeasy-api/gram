@@ -27,11 +27,8 @@ jobs:
         env:
           SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
         run: speakeasy run -s Gram-Public
-  tag:
-    needs: speakeasy-cli
-    uses: speakeasy-api/sdk-generation-action/.github/workflows/tag.yaml@v15
-    with:
-      registry_tags: main
-    secrets:
-      github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      speakeasy_api_key: ${{ secrets.SPEAKEASY_API_KEY }}
+  
+      - name: Promote
+        env:
+          SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
+        run: speakeasy tag promote --sources=Gram-Public --tags=main

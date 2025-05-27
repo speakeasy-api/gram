@@ -1,4 +1,4 @@
-speakeasyVersion: 1.551.0
+speakeasyVersion: 1.552.0
 sources:
     Gram Internal:
         sourceNamespace: gram-api-description
@@ -11,6 +11,13 @@ sources:
         sourceNamespace: gram-api-description
         sourceRevisionDigest: sha256:15a775466b3a2c655bfd14cf60c57c450c3ee844c5ba9a2d0b3cc0ae1cc8b156
         sourceBlobDigest: sha256:a8f2439e40d93cc7c37070da27b69a8f5f85985e9b778d57176c9c9c9c8f435b
+        tags:
+            - latest
+            - 0.0.1
+    Gram-Public:
+        sourceNamespace: gram-public-api-description
+        sourceRevisionDigest: sha256:55a54d2b99d44dcb5643b378a7dc5b6b0794a9be7467d2d12bc72a8a3e88e524
+        sourceBlobDigest: sha256:1b058ba767a76f6e046ac38884d85df1342814af8f86b9142281349a93a6cc48
         tags:
             - latest
             - 0.0.1
@@ -40,52 +47,26 @@ workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest
     sources:
-        Gram Internal:
+        Gram-Internal:
             inputs:
                 - location: server/gen/http/openapi3.yaml
             overlays:
                 - location: overlays/goa.yaml
             registry:
                 location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
-        Gram Public:
+        Gram-Public:
             inputs:
                 - location: server/gen/http/openapi3.yaml
             overlays:
                 - location: overlays/goa.yaml
                 - location: overlays/public-sdk.yaml
             registry:
-                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
+                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-public-api-description
     targets:
         gram-internal:
             target: typescript
-            source: Gram Internal
+            source: Gram-Internal
             output: client/sdk
-            codeSamples:
-                registry:
-                    location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
-                labelOverride:
-                    fixedValue: Typescript (SDK)
-                blocking: false
-        gram-public-py:
-            target: python
-            source: Gram Public
-            output: sdks/python
-            publish:
-                pypi:
-                    token: $pypi_token
-            codeSamples:
-                registry:
-                    location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-python-code-samples
-                labelOverride:
-                    fixedValue: Python (SDK)
-                blocking: false
-        gram-public-ts:
-            target: typescript
-            source: Gram Public
-            output: sdks/typescript
-            publish:
-                npm:
-                    token: $npm_token
             codeSamples:
                 registry:
                     location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
