@@ -204,7 +204,7 @@ jobs:
   ts-sdk-build-lint:
     strategy:
       matrix:
-        target: ["sdks/typescript", "client/sdk"]
+        target: ["client/sdk"]
     runs-on: ubicloud-standard-4
     needs: changes
     if: ${{ needs.changes.outputs.client == 'true' || needs.changes.outputs.typescript_sdk == 'true' }}
@@ -240,35 +240,3 @@ jobs:
         run: pnpm store prune
       - name: Check for dirty files
         run: mise run git:porcelain
-
-  py-sdk-build-lint:
-    strategy:
-      matrix:
-        target:
-          - path: sdks/python
-            package: src/gram_ai
-    runs-on: ubicloud-standard-4
-    needs: changes
-    if: ${{ needs.changes.outputs.python_sdk == 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Setup Mise
-        uses: jdx/mise-action@c94f0bf9e520b150e34c017db785461f7e71c5fb # v2.2.2
-        with:
-          install: true
-          cache: true
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-      - name: Install dependencies
-        run: poetry install --with=dev
-        working-directory: ${{ matrix.target.path }}
-      - name: Build
-        run: poetry run python -m compileall -q .
-        working-directory: ${{ matrix.target.path }}
-      - name: Run pylint
-        run: poetry run pylint -j=0 ${{ matrix.target.package }}
-        working-directory: ${{ matrix.target.path }}
-      - name: Run mypy
-        run: poetry run mypy ${{ matrix.target.package }}
-        working-directory: ${{ matrix.target.path }}
