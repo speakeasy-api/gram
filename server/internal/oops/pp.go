@@ -3,6 +3,7 @@ package oops
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -123,11 +124,16 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 func (e *ShareableError) AsGoa() *goa.ServiceError {
 	var timeout, temporary, fault bool
 
+	var re *retryError
+	if errors.As(e.cause, &re) {
+		temporary = !re.permanent
+	}
+
 	switch e.Code {
 	case CodeUnexpected, CodeInvariantViolation:
 		fault = true
 	default:
-		timeout, temporary, fault = false, false, false
+		fault = false
 	}
 
 	goaErr := goa.NewServiceError(e, string(e.Code), timeout, temporary, fault)

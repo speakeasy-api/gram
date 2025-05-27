@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,23 +14,30 @@ import (
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 )
 
+type logBuffer struct {
+	msgs []repo.BatchLogEventsParams
+}
+
 type LogHandler struct {
 	mut              *sync.Mutex
 	attrDeploymentID uuid.UUID
 	attrProjectID    uuid.UUID
 	attrEvent        string
-	msgs             []repo.BatchLogEventsParams
+	buffer           *logBuffer
 	level            slog.Leveler
 }
 
 func NewLogHandler() *LogHandler {
+	ptr := &atomic.Pointer[[]repo.BatchLogEventsParams]{}
+	ptr.Store(&[]repo.BatchLogEventsParams{})
+
 	return &LogHandler{
 		mut:              &sync.Mutex{},
 		level:            slog.LevelInfo,
 		attrDeploymentID: uuid.Nil,
 		attrProjectID:    uuid.Nil,
 		attrEvent:        "",
-		msgs:             []repo.BatchLogEventsParams{},
+		buffer:           &logBuffer{msgs: []repo.BatchLogEventsParams{}},
 	}
 
 }
@@ -71,7 +79,7 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	}
 
 	l.mut.Lock()
-	l.msgs = append(l.msgs, repo.BatchLogEventsParams{
+	l.buffer.msgs = append(l.buffer.msgs, repo.BatchLogEventsParams{
 		DeploymentID: deploymentID,
 		ProjectID:    projectID,
 		Event:        event,
@@ -84,22 +92,14 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 
 func (l *LogHandler) clone() *LogHandler {
 	clone := *l
-
-	l.mut.Lock()
-	clone.msgs = make([]repo.BatchLogEventsParams, len(l.msgs))
-	copy(clone.msgs, l.msgs)
-	l.mut.Unlock()
-
 	return &clone
 }
 
 func (l *LogHandler) Flush(ctx context.Context, db *pgxpool.Pool) (int64, error) {
-	var msgs []repo.BatchLogEventsParams
-
 	l.mut.Lock()
-	msgs = make([]repo.BatchLogEventsParams, len(l.msgs))
-	copy(msgs, l.msgs)
-	l.msgs = []repo.BatchLogEventsParams{}
+	msgs := make([]repo.BatchLogEventsParams, len(l.buffer.msgs))
+	copy(msgs, l.buffer.msgs)
+	l.buffer.msgs = []repo.BatchLogEventsParams{}
 	l.mut.Unlock()
 
 	return repo.New(db).BatchLogEvents(ctx, msgs)

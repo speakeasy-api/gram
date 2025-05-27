@@ -82,7 +82,7 @@ func (p *ToolExtractor) Do(
 		"openapi doc id set", openapiDocID != uuid.Nil,
 		"doc info set", docInfo != nil && docInfo.Name != "" && docInfo.Slug != "",
 	); err != nil {
-		return err
+		return oops.E(oops.CodeInvariantViolation, oops.Perm(err), "unable to process openapi document").Log(ctx, p.logger)
 	}
 
 	dbtx, err := p.db.Begin(ctx)
@@ -138,17 +138,25 @@ func (p *ToolExtractor) Do(
 		ExcludeExtensionRefs:  true,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error opening openapi document").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
 	}
 
 	v3Model, errs := document.BuildV3Model()
 	if len(errs) > 0 {
-		return fmt.Errorf("OpenAPI v3 document '%s' had %d errors: %w", docInfo.Name, len(errs), errors.Join(errs...))
+		for _, err := range errs {
+			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s", docInfo.Name, err.Error()), slog.String("event", "openapi:error"))
+		}
+
+		return oops.E(
+			oops.CodeBadRequest,
+			oops.Perm(errors.Join(errs...)),
+			"openapi v3 document '%s' had %d errors", docInfo.Name, len(errs),
+		).Log(ctx, logger, slog.String("event", "openapi:error"))
 	}
 
 	globalSecurity, err := serializeSecurity(v3Model.Model.Security)
 	if err != nil {
-		return fmt.Errorf("error serializing global security: %w", err)
+		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
 	}
 
 	securitySchemesParams, errs := extractSecuritySchemes(v3Model.Model, task)
@@ -164,7 +172,7 @@ func (p *ToolExtractor) Do(
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "%s: error parsing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error parsing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
@@ -216,11 +224,12 @@ func (p *ToolExtractor) Do(
 	}
 
 	if writeErrCount > 0 {
-		return fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr)
+		err := oops.Perm(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
+		return oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error saving processed deployment").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error saving processed deployment").Log(ctx, logger)
 	}
 
 	return nil

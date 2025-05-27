@@ -2,13 +2,16 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/url"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/internal/assets/repo"
@@ -42,14 +45,12 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		return err
 	}
 
-	logger := p.logger.With(
-		slog.String("deployment_id", deployment.ID),
-		slog.String("project_id", deployment.ProjectID),
-	)
-
 	workers := pool.New().WithErrors().WithMaxGoroutines(2)
+	perm := &atomic.Bool{}
 	for _, docInfo := range deployment.Openapiv3Assets {
-		logger = p.logger.With(
+		logger := p.logger.With(
+			slog.String("deployment_id", deployment.ID),
+			slog.String("project_id", deployment.ProjectID),
 			slog.String("openapi_id", docInfo.ID),
 			slog.String("asset_id", docInfo.AssetID),
 		)
@@ -93,12 +94,23 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 			}
 
 			if processErr != nil {
-				return oops.E(oops.CodeUnexpected, processErr, "openapiv3 document was not processed successfully").Log(ctx, logger)
+				var se *oops.ShareableError
+				if errors.As(processErr, &se) && !se.AsGoa().Temporary {
+					perm.Store(true)
+				}
 			}
 
-			return nil
+			return processErr
 		})
 	}
 
-	return workers.Wait()
+	err = workers.Wait()
+	if perm.Load() {
+		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Cause:        err,
+		})
+	}
+
+	return err
 }
