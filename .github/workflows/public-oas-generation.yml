@@ -1,0 +1,37 @@
+name: Public OAS Update
+permissions:
+  checks: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - server/gen/http/openapi3.yaml
+  workflow_dispatch: {}
+
+jobs:
+  speakeasy-update-public-spec:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Speakeasy CLI
+        run: curl -fsSL https://go.speakeasy.com/cli-install.sh | sh
+
+      - name: Run Speakeasy
+        env:
+          SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
+        run: speakeasy run -s Gram-Public
+  tag:
+    needs: speakeasy-cli
+    uses: speakeasy-api/sdk-generation-action/.github/workflows/tag.yaml@v15
+    with:
+      registry_tags: main
+    secrets:
+      github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      speakeasy_api_key: ${{ secrets.SPEAKEASY_API_KEY }}
