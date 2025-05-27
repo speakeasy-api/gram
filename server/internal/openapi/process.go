@@ -132,10 +132,12 @@ func (p *ToolExtractor) Do(
 	}
 
 	document, err := libopenapi.NewDocumentWithConfiguration(doc, &datamodel.DocumentConfiguration{
-		AllowFileReferences:   false,
-		AllowRemoteReferences: false,
-		BundleInlineRefs:      true,
-		ExcludeExtensionRefs:  true,
+		AllowFileReferences:                 false,
+		AllowRemoteReferences:               false,
+		BundleInlineRefs:                    false,
+		ExcludeExtensionRefs:                true,
+		IgnorePolymorphicCircularReferences: true,
+		IgnoreArrayCircularReferences:       true,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
@@ -405,6 +407,11 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		confirm = conv.Ptr(string(*descriptor.confirm))
 	}
 
+	tags := op.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
@@ -414,7 +421,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		HttpMethod:          strings.ToUpper(method),
 		Openapiv3Operation:  conv.ToPGText(op.OperationId),
 		Name:                descriptor.name,
-		Tags:                op.Tags,
+		Tags:                tags,
 		Summary:             descriptor.summary,
 		Description:         descriptor.description,
 		Confirm:             conv.PtrToPGTextEmpty(confirm),
