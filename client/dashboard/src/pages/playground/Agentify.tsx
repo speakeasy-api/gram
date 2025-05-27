@@ -124,7 +124,7 @@ export const Agentify = ({
   const agentifyAvailable = messages.length > 0;
   const agentifyButton = (
     <Button
-      variant={"outline"}
+      variant={"ghost"}
       size={"sm"}
       icon="wand-sparkles"
       tooltip={

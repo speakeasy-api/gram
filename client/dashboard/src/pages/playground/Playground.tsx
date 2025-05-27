@@ -118,7 +118,7 @@ export default function Playground() {
           direction="horizontal"
           className="h-full [&>[role='separator']]:border-border"
         >
-          <ResizablePanel.Pane minSize={35} order={0}>
+          <ResizablePanel.Pane minSize={35}>
             <ToolsetPanel
               configRef={chatConfigRef}
               setSelectedToolset={setSelectedToolset}
@@ -129,7 +129,7 @@ export default function Playground() {
               setSummarizeResponse={setSummarizeResponse}
             />
           </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={35}>
+          <ResizablePanel.Pane minSize={35} order={0}>
             <ChatWindow
               configRef={chatConfigRef}
               chatId={chatId}

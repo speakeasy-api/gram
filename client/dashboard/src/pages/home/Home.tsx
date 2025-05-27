@@ -46,6 +46,7 @@ function DeploymentCards() {
 
   if (deploymentEmpty) {
     routes.playground.goTo();
+    return null;
   }
 
   return (
@@ -269,7 +270,7 @@ function DeploymentCard({
         <Type muted variant="body" className="italic line-clamp-2">
           {tools
             .map((tool) => tool.name.replace(asset.slug + "_", ""))
-            .join(", ")}
+            .join(", ") || "No tools"}
         </Type>
       </Card.Content>
       <Card.Footer>
