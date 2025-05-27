@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import FileUpload from "@/components/upload";
 import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
@@ -12,12 +12,19 @@ import { useNavigate } from "react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  useDeploymentLogs,
   useLatestDeployment,
   useListTools,
 } from "@gram/client/react-query/index.js";
 import { Input } from "@/components/ui/input";
 import { Stepper, StepProps } from "@/components/stepper";
-import { getServerURL } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -201,7 +208,22 @@ export function OnboardingContent({
           Gram is generating tools for your API. This may take a few seconds.
         </Type>
       ),
-      displayComplete: <Type>✓ Created {numTools} tools</Type>,
+      displayComplete: (
+        <div>
+          {deployment ? (
+            <Accordion type="single" collapsible>
+              <AccordionItem value="logs">
+                <AccordionTrigger className="text-base">
+                  ✓ Created {numTools} tools
+                </AccordionTrigger>
+                <AccordionContent>
+                  <DeploymentLogs deploymentId={deployment?.id} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          ) : null}
+        </div>
+      ),
       isComplete: !!deployment,
     },
   ];
@@ -214,4 +236,43 @@ export function OnboardingContent({
       />
     </Page.Body>
   );
+}
+
+function DeploymentLogs(props: { deploymentId: string }) {
+  const { data, status, error } = useDeploymentLogs({
+    deploymentId: props.deploymentId,
+  });
+
+  if (status === "pending") {
+    return <Type>Loading deployment logs...</Type>;
+  }
+
+  if (status === "error") {
+    return (
+      <div>
+        <Type>Error loading deployment logs</Type>
+        <CodeSnippet code={error.toString()} language="text" />
+      </div>
+    );
+  }
+
+  if (data == null) {
+    return null;
+  }
+
+  const lines = data.events.map((e) => {
+    return (
+      <p
+        key={e.id}
+        className={cn(
+          e.event.includes("error") && "text-destructive",
+          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100"
+        )}
+      >
+        {e.message}
+      </p>
+    );
+  });
+
+  return <div className="font-mono text-sm">{lines}</div>;
 }

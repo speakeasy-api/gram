@@ -16,6 +16,7 @@ export * from "./deleteGlobalVariation.js";
 export * from "./deleteSlackConnection.js";
 export * from "./deleteToolset.js";
 export * from "./deployment.js";
+export * from "./deploymentLogs.js";
 export * from "./evolveDeployment.js";
 export * from "./getSlackConnection.js";
 export * from "./globalVariations.js";

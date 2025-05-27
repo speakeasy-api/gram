@@ -7,6 +7,7 @@ import { deploymentsEvolveDeployment } from "../funcs/deploymentsEvolveDeploymen
 import { deploymentsGetById } from "../funcs/deploymentsGetById.js";
 import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
 import { deploymentsList } from "../funcs/deploymentsList.js";
+import { deploymentsLogs } from "../funcs/deploymentsLogs.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -101,6 +102,25 @@ export class Deployments extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListDeploymentResult> {
     return unwrapAsync(deploymentsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getDeploymentLogs deployments
+   *
+   * @remarks
+   * Get logs for a deployment.
+   */
+  async logs(
+    request: operations.GetDeploymentLogsRequest,
+    security?: operations.GetDeploymentLogsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetDeploymentLogsResult> {
+    return unwrapAsync(deploymentsLogs(
       this,
       request,
       security,

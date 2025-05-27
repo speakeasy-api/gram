@@ -152,6 +152,7 @@ run();
 * [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 * [latest](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 * [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
+* [logs](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 
 ### [environments](docs/sdks/environments/README.md)
 
@@ -253,6 +254,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`deploymentsLatest`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
+- [`deploymentsLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
@@ -323,6 +325,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
+- [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations

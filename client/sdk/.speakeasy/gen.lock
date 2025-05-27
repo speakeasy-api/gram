@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 7be94956661f82051461d847586a3a20
+  docChecksum: e4337c688667924de53b4d055074b7b9
   docVersion: 0.0.1
-  speakeasyVersion: 1.550.0
+  speakeasyVersion: 1.551.0
   generationVersion: 2.610.0
-  releaseVersion: 0.11.7
-  configChecksum: d6a4021391ee416ccbca1dcace896af4
+  releaseVersion: 0.11.8
+  configChecksum: 9e7713ea75eaf2e65e40c6dfdaef1ec0
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -56,6 +56,7 @@ generatedFiles:
   - docs/models/components/createtoolsetrequestbody.md
   - docs/models/components/deleteglobaltoolvariationresult.md
   - docs/models/components/deployment.md
+  - docs/models/components/deploymentlogevent.md
   - docs/models/components/deploymentpackage.md
   - docs/models/components/deploymentsummary.md
   - docs/models/components/environment.md
@@ -63,6 +64,7 @@ generatedFiles:
   - docs/models/components/environmententryinput.md
   - docs/models/components/evolveform.md
   - docs/models/components/evolveresult.md
+  - docs/models/components/getdeploymentlogsresult.md
   - docs/models/components/getdeploymentresult.md
   - docs/models/components/getinstanceresult.md
   - docs/models/components/getintegrationresult.md
@@ -142,6 +144,10 @@ generatedFiles:
   - docs/models/operations/evolvedeploymentsecurity.md
   - docs/models/operations/evolvedeploymentsecurityoption1.md
   - docs/models/operations/evolvedeploymentsecurityoption2.md
+  - docs/models/operations/getdeploymentlogsrequest.md
+  - docs/models/operations/getdeploymentlogssecurity.md
+  - docs/models/operations/getdeploymentlogssecurityoption1.md
+  - docs/models/operations/getdeploymentlogssecurityoption2.md
   - docs/models/operations/getdeploymentrequest.md
   - docs/models/operations/getdeploymentsecurity.md
   - docs/models/operations/getdeploymentsecurityoption1.md
@@ -278,6 +284,7 @@ generatedFiles:
   - src/funcs/deploymentsGetById.ts
   - src/funcs/deploymentsLatest.ts
   - src/funcs/deploymentsList.ts
+  - src/funcs/deploymentsLogs.ts
   - src/funcs/environmentsCreate.ts
   - src/funcs/environmentsDeleteBySlug.ts
   - src/funcs/environmentsList.ts
@@ -350,6 +357,7 @@ generatedFiles:
   - src/models/components/createtoolsetrequestbody.ts
   - src/models/components/deleteglobaltoolvariationresult.ts
   - src/models/components/deployment.ts
+  - src/models/components/deploymentlogevent.ts
   - src/models/components/deploymentpackage.ts
   - src/models/components/deploymentsummary.ts
   - src/models/components/environment.ts
@@ -357,6 +365,7 @@ generatedFiles:
   - src/models/components/environmententryinput.ts
   - src/models/components/evolveform.ts
   - src/models/components/evolveresult.ts
+  - src/models/components/getdeploymentlogsresult.ts
   - src/models/components/getdeploymentresult.ts
   - src/models/components/getinstanceresult.ts
   - src/models/components/getintegrationresult.ts
@@ -420,6 +429,7 @@ generatedFiles:
   - src/models/operations/deletetoolset.ts
   - src/models/operations/evolvedeployment.ts
   - src/models/operations/getdeployment.ts
+  - src/models/operations/getdeploymentlogs.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
   - src/models/operations/getslackconnection.ts
@@ -468,6 +478,7 @@ generatedFiles:
   - src/react-query/deleteSlackConnection.ts
   - src/react-query/deleteToolset.ts
   - src/react-query/deployment.ts
+  - src/react-query/deploymentLogs.ts
   - src/react-query/evolveDeployment.ts
   - src/react-query/getSlackConnection.ts
   - src/react-query/globalVariations.ts
@@ -1065,5 +1076,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getDeploymentLogs:
+    speakeasy-default-get-deployment-logs:
+      parameters:
+        query:
+          deployment_id: "<id>"
+      responses:
+        "200":
+          application/json: {"events": [{"created_at": "1717618565642", "event": "<value>", "id": "<id>", "message": "<value>"}, {"created_at": "1717618565642", "event": "<value>", "id": "<id>", "message": "<value>"}], "status": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

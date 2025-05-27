@@ -16,6 +16,7 @@ export * from "./deleteslackconnection.js";
 export * from "./deletetoolset.js";
 export * from "./evolvedeployment.js";
 export * from "./getdeployment.js";
+export * from "./getdeploymentlogs.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";
 export * from "./getslackconnection.js";
