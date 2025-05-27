@@ -12,7 +12,6 @@ import (
 	_ "github.com/speakeasy-api/gram/design/instances"
 	_ "github.com/speakeasy-api/gram/design/integrations"
 	_ "github.com/speakeasy-api/gram/design/keys"
-	_ "github.com/speakeasy-api/gram/design/mcp"
 	_ "github.com/speakeasy-api/gram/design/packages"
 	_ "github.com/speakeasy-api/gram/design/projects"
 	_ "github.com/speakeasy-api/gram/design/slack"

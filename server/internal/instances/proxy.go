@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -46,7 +45,28 @@ type ToolCallBody struct {
 	EnvironmentVariables map[string]string `json:"environmentVariables"`
 }
 
+type caseInsensitiveEnv struct {
+	data map[string]string
+}
+
+func newCaseInsensitiveEnv(m map[string]string) *caseInsensitiveEnv {
+	ci := &caseInsensitiveEnv{data: make(map[string]string, len(m))}
+	for k, v := range m {
+		ci.data[strings.ToLower(k)] = v
+	}
+	return ci
+}
+
+func (c *caseInsensitiveEnv) Get(key string) string {
+	return c.data[strings.ToLower(key)]
+}
+
+func (c *caseInsensitiveEnv) Set(key, value string) {
+	c.data[strings.ToLower(key)] = value
+}
+
 func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
+	ciEnv := newCaseInsensitiveEnv(envVars)
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
@@ -54,7 +74,9 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 
 	// environment variable overrides on tool calls typically defined in the SDK
 	if toolCallBody.EnvironmentVariables != nil {
-		maps.Copy(envVars, toolCallBody.EnvironmentVariables)
+		for k, v := range toolCallBody.EnvironmentVariables {
+			ciEnv.Set(k, v)
+		}
 	}
 
 	// Handle path parameters
@@ -92,7 +114,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		serverURL = toolExecutionInfo.Tool.DefaultServerUrl.String
 	}
 
-	if envServerURL := processServerEnvVars(ctx, logger, toolExecutionInfo, envVars); envServerURL != "" {
+	if envServerURL := processServerEnvVars(ctx, logger, toolExecutionInfo, ciEnv); envServerURL != "" {
 		serverURL = envServerURL
 	}
 
@@ -188,7 +210,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		}
 	}
 
-	processSecurity(ctx, logger, req, toolExecutionInfo, envVars)
+	processSecurity(ctx, logger, req, toolExecutionInfo, ciEnv)
 
 	if err := protectSSRF(ctx, logger, req.URL); err != nil {
 		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
@@ -334,9 +356,9 @@ func protectSSRF(ctx context.Context, logger *slog.Logger, parsed *url.URL) erro
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars map[string]string) string {
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars *caseInsensitiveEnv) string {
 	if toolExecutionInfo.Tool.ServerEnvVar != "" {
-		envVar := envVars[toolExecutionInfo.Tool.ServerEnvVar]
+		envVar := envVars.Get(toolExecutionInfo.Tool.ServerEnvVar)
 		if envVar != "" {
 			return envVar
 		} else {
@@ -346,7 +368,7 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutio
 	return ""
 }
 
-func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars map[string]string) {
+func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars *caseInsensitiveEnv) {
 	for _, security := range toolExecutionInfo.Security {
 		if !security.Type.Valid {
 			logger.ErrorContext(ctx, "invalid security type in tool definition", slog.String("tool", toolExecutionInfo.Tool.Name))
@@ -357,7 +379,7 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 		case "apiKey":
 			if len(security.EnvVariables) == 0 {
 				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.String))
-			} else if envVars[security.EnvVariables[0]] == "" {
+			} else if envVars.Get(security.EnvVariables[0]) == "" {
 				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
 			} else if !security.Name.Valid || security.Name.String == "" {
 				logger.ErrorContext(ctx, "no name provided for api key auth", slog.String("scheme", security.Scheme.String))
@@ -365,10 +387,10 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 				key := security.EnvVariables[0]
 				switch security.InPlacement.String {
 				case "header":
-					req.Header.Set(security.Name.String, envVars[key])
+					req.Header.Set(security.Name.String, envVars.Get(key))
 				case "query":
 					values := req.URL.Query()
-					values.Set(security.Name.String, envVars[key])
+					values.Set(security.Name.String, envVars.Get(key))
 					req.URL.RawQuery = values.Encode()
 				default:
 					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.InPlacement.String))
@@ -379,10 +401,10 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 			case "bearer":
 				if len(security.EnvVariables) == 0 {
 					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", slog.String("scheme", security.Scheme.String))
-				} else if envVars[security.EnvVariables[0]] == "" {
+				} else if envVars.Get(security.EnvVariables[0]) == "" {
 					logger.ErrorContext(ctx, "token value is empty for bearer auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
 				} else {
-					token := envVars[security.EnvVariables[0]]
+					token := envVars.Get(security.EnvVariables[0])
 					if !strings.HasPrefix(strings.ToLower(token), "bearer ") {
 						token = "Bearer " + token
 					}
@@ -395,9 +417,9 @@ func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request
 					var username, password string
 					for _, envVar := range security.EnvVariables {
 						if strings.Contains(envVar, "USERNAME") {
-							username = envVars[envVar]
+							username = envVars.Get(envVar)
 						} else if strings.Contains(envVar, "PASSWORD") {
-							password = envVars[envVar]
+							password = envVars.Get(envVar)
 						}
 					}
 

@@ -86,14 +86,9 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		}
 	}
 
-	if payload.environmentVariables != nil {
-		var userVars map[string]string
-		if err := json.Unmarshal(payload.environmentVariables, &userVars); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse user provided environment variables").Log(ctx, logger)
-		}
-
+	if len(payload.mcpEnvVariables) > 0 {
 		// apply user provided env variable overrides
-		maps.Copy(envVars, userVars)
+		maps.Copy(envVars, payload.mcpEnvVariables)
 	}
 
 	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, toolID, uuid.UUID(projectID))

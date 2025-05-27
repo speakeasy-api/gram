@@ -100,38 +100,36 @@ export function McpToolsetCard({
   }, [publishModalOpen, toolset, organization, project]);
 
   let mcpJsonPublic: string | undefined = undefined;
-  const headerObj =
-    toolset.relevantEnvironmentVariables &&
-    toolset.relevantEnvironmentVariables.length > 0
-      ? Object.fromEntries(
-          toolset.relevantEnvironmentVariables
-            .filter((v) => !v.toLowerCase().includes("server_url"))
-            .map((v) => [v, "VALUE"])
-        )
-      : {};
-  const headerJson = JSON.stringify(headerObj).replace(/"/g, '\\"');
+  const envHeaders = toolset.relevantEnvironmentVariables?.filter(
+    (v) => !v.toLowerCase().includes("server_url")
+  ) ?? [];
 
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
   const mcpUrl = `${getServerURL()}/mcp/${urlSuffix}`;
 
+  // Build the args array for public MCP config
+  const mcpJsonPublicArgs = [
+    "mcp-remote",
+    mcpUrl,
+    "--allow-http",
+    "--header",
+    ...envHeaders.map(header => `MCP-${header}:${"${VALUE}"}`),
+  ];
+  // Indent each line of the header args array by 8 spaces for alignment
+  const INDENT = ' '.repeat(8);
+  const argsStringIndented = JSON.stringify(mcpJsonPublicArgs, null, 2)
+    .split('\n')
+    .map((line, idx) => idx === 0 ? line : INDENT + line)
+    .join('\n');
   mcpJsonPublic = `{
     "mcpServers": {
       "Gram${toolset.slug
         .replace(/-/g, "")
         .replace(/^./, (c) => c.toUpperCase())}": {
         "command": "npx",
-        "args": [
-          "mcp-remote",
-          "${mcpUrl}",
-          "--allow-http",
-          "--header",
-          "MCP-Environment:${"${MCP_ENVIRONMENT}"}"
-        ],
-        "env": {
-          "MCP_ENVIRONMENT": "${headerJson}"
-        }
+        "args": ${argsStringIndented}
       }
     }
   }`;

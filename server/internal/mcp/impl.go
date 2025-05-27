@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -9,7 +8,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"slices"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,15 +21,12 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	srv "github.com/speakeasy-api/gram/gen/http/mcp/server"
-	gen "github.com/speakeasy-api/gram/gen/mcp"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/internal/projects/repo"
@@ -45,14 +45,12 @@ type Service struct {
 }
 
 type mcpInputs struct {
-	projectID            uuid.UUID
-	toolset              string
-	environment          string
-	environmentVariables json.RawMessage
-	authenticated        bool
+	projectID       uuid.UUID
+	toolset         string
+	environment     string
+	mcpEnvVariables map[string]string
+	authenticated   bool
 }
-
-var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption) *Service {
 	return &Service{
@@ -68,50 +66,49 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
-	endpoints := gen.NewEndpoints(service)
-	endpoints.Use(middleware.MapErrors())
-	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	mux.Handle("POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
+	})
+	mux.Handle("POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP(w, r)
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) ServePublic(ctx context.Context, payload *gen.ServePublicPayload, r io.ReadCloser) (*gen.ServePublicResult, io.ReadCloser, error) {
+func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Close()
+		return r.Body.Close()
 	})
 
-	fmt.Println("payload", payload)
-
-	if payload.ApikeyToken != nil {
+	token := r.Header.Get("Authorization")
+	if token != "" {
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           auth.KeySecurityScheme,
 			RequiredScopes: []string{"consumer"},
 			Scopes:         []string{},
 		}
-		token := *payload.ApikeyToken
 		token = strings.TrimPrefix(token, "Bearer ")
 		token = strings.TrimPrefix(token, "bearer ")
 		ctx, err = s.auth.Authorize(ctx, token, &sc)
 		if err != nil {
-			return nil, nil, oops.C(oops.CodeUnauthorized)
+			return oops.C(oops.CodeUnauthorized)
 		}
 	}
 
-	if payload.McpSlug == "" {
-		return nil, nil, oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 
-	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(payload.McpSlug))
+	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get toolset for MCP server slug", slog.String("error", err.Error()))
-		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 	var defaultEnvironment string
 	var authenticated bool
@@ -119,9 +116,9 @@ func (s *Service) ServePublic(ctx context.Context, payload *gen.ServePublicPaylo
 		projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return nil, nil, oops.E(oops.CodeForbidden, nil, "no projects found")
+			return oops.E(oops.CodeForbidden, nil, "no projects found")
 		case err != nil:
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, slog.String("org_id", authCtx.ActiveOrganizationID))
+			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, slog.String("org_id", authCtx.ActiveOrganizationID))
 		}
 
 		projectInOrg := false
@@ -133,115 +130,157 @@ func (s *Service) ServePublic(ctx context.Context, payload *gen.ServePublicPaylo
 		}
 
 		if !projectInOrg {
-			return nil, nil, oops.C(oops.CodeUnauthorized)
+			return oops.C(oops.CodeUnauthorized)
 		}
 
 		authenticated = true
 	}
 
 	if !toolset.McpIsPublic && !authenticated {
-		return nil, nil, oops.C(oops.CodeUnauthorized)
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	if authenticated {
 		defaultEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
 	}
 	var batch batchedRawRequest
-	err = json.NewDecoder(r).Decode(&batch)
+	err = json.NewDecoder(r.Body).Decode(&batch)
 	switch {
 	case errors.Is(err, io.EOF):
-		return nil, nil, nil
+		return nil
 	case err != nil:
-		return nil, nil, err
+		return err
 	}
 
 	if len(batch) == 0 {
-		return nil, nil, &gen.NoContent{Ack: true}
+		return respondWithNoContent(true, w)
 	}
 
 	mcpInputs := &mcpInputs{
-		projectID:            toolset.ProjectID,
-		toolset:              toolset.Slug,
-		environment:          defaultEnvironment,
-		environmentVariables: nil,
-		authenticated:        authenticated,
-	}
-	if payload.EnvironmentVariables != nil {
-		mcpInputs.environmentVariables = json.RawMessage(*payload.EnvironmentVariables)
+		projectID:       toolset.ProjectID,
+		toolset:         toolset.Slug,
+		environment:     defaultEnvironment,
+		mcpEnvVariables: parseMcpEnvVariables(r),
+		authenticated:   authenticated,
 	}
 
-	var noContent *gen.NoContent
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
 	switch {
-	case errors.As(err, &noContent):
-		return nil, nil, err
+	case body == nil && err == nil:
+		return respondWithNoContent(true, w)
 	case err != nil:
-		return nil, nil, NewErrorFromCause(batch[0].ID, err)
+		return NewErrorFromCause(batch[0].ID, err)
 	}
 
-	return &gen.ServePublicResult{
-		ContentType: "application/json",
-	}, io.NopCloser(bytes.NewReader(body)), nil
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, writeErr := w.Write(body)
+	if writeErr != nil {
+		s.logger.ErrorContext(ctx, "failed to write response body", slog.String("error", writeErr.Error()))
+		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
+	}
+	return nil
 }
 
-func (s *Service) ServeAuthenticated(ctx context.Context, payload *gen.ServeAuthenticatedPayload, r io.ReadCloser) (*gen.ServeAuthenticatedResult, io.ReadCloser, error) {
+func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	var err error
+
+	projectSlug := chi.URLParam(r, "project")
+	if projectSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "a project slug must be provided")
+	}
+
+	toolsetSlug := chi.URLParam(r, "toolset")
+	if toolsetSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "a toolset slug must be provided")
+	}
+
+	environmentSlug := chi.URLParam(r, "environment")
+	if environmentSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an environment slug must be provided")
+	}
+
+	sc := security.APIKeyScheme{
+		Name:           auth.KeySecurityScheme,
+		Scopes:         []string{"consumer"},
+		RequiredScopes: []string{},
+	}
+	token := r.Header.Get("Authorization")
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	ctx, err = s.auth.Authorize(ctx, token, &sc)
+	if err != nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Authorize with project
+	sc = security.APIKeyScheme{
+		Name:           auth.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	}
+	ctx, err = s.auth.Authorize(ctx, projectSlug, &sc)
+	if err != nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
 	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Close()
+		return r.Body.Close()
 	})
 
 	// authorization check
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, nil, oops.C(oops.CodeUnauthorized)
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	var batch batchedRawRequest
-	err := json.NewDecoder(r).Decode(&batch)
+	err = json.NewDecoder(r.Body).Decode(&batch)
 	switch {
 	case errors.Is(err, io.EOF):
-		return nil, nil, nil
+		return nil
 	case err != nil:
-		return nil, nil, err
+		return err
 	}
 
 	if len(batch) == 0 {
-		return nil, nil, &gen.NoContent{Ack: true}
+		return respondWithNoContent(true, w)
 	}
 
 	mcpInputs := &mcpInputs{
-		projectID:            *authCtx.ProjectID,
-		toolset:              *payload.Toolset,
-		environment:          *payload.Environment,
-		environmentVariables: nil,
-		authenticated:        true,
-	}
-	if payload.EnvironmentVariables != nil {
-		mcpInputs.environmentVariables = json.RawMessage(*payload.EnvironmentVariables)
+		projectID:       *authCtx.ProjectID,
+		toolset:         toolsetSlug,
+		environment:     environmentSlug,
+		mcpEnvVariables: parseMcpEnvVariables(r),
+		authenticated:   true,
 	}
 
-	var noContent *gen.NoContent
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
 	switch {
-	case errors.As(err, &noContent):
-		return nil, nil, err
+	case body == nil && err == nil:
+		return respondWithNoContent(true, w)
 	case err != nil:
-		return nil, nil, NewErrorFromCause(batch[0].ID, err)
+		return NewErrorFromCause(batch[0].ID, err)
 	}
 
-	return &gen.ServeAuthenticatedResult{
-		ContentType: "application/json",
-	}, io.NopCloser(bytes.NewReader(body)), nil
-
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, writeErr := w.Write(body)
+	if writeErr != nil {
+		s.logger.ErrorContext(ctx, "failed to write response body", slog.String("error", writeErr.Error()))
+		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
+	}
+	return nil
 }
 
 func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch batchedRawRequest) (json.RawMessage, error) {
 	results := make([]json.RawMessage, 0, len(batch))
 	for _, req := range batch {
 		result, err := s.handleRequest(ctx, payload, req)
-		var noContent *gen.NoContent
 		switch {
-		case errors.As(err, &noContent):
-			return nil, err
+		case result == nil && err == nil:
+			return nil, nil
 		case err != nil:
 			bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
 			if merr != nil {
@@ -266,6 +305,24 @@ func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch bat
 	}
 }
 
+// parseMcpEnvVariables: Map potential user provided mcp variables into inputs
+// Only inputs that match up with a security or server env var in the proxy will be used in the proxy
+func parseMcpEnvVariables(r *http.Request) map[string]string {
+	ignoredHeaders := []string{
+		"mcp-session-id",
+	}
+	envVars := map[string]string{}
+	for k := range r.Header {
+		keySanitized := strings.ToLower(k)
+		if strings.HasPrefix(keySanitized, "mcp-") && !slices.Contains(ignoredHeaders, keySanitized) {
+			envVars[strings.TrimPrefix(keySanitized, "mcp-")] = r.Header.Get(k)
+		}
+
+	}
+
+	return envVars
+}
+
 func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
 	switch req.Method {
 	case "ping":
@@ -273,7 +330,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "initialize":
 		return handleInitialize(req)
 	case "notifications/initialized", "notifications/cancelled":
-		return nil, &gen.NoContent{Ack: true}
+		return nil, nil
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req)
 	case "tools/call":

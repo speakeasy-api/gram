@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 
 	"github.com/speakeasy-api/gram/internal/oops"
 )
@@ -216,4 +218,11 @@ func (e *rpcError) MarshalJSON() ([]byte, error) {
 			"data":    e.Data,
 		},
 	})
+}
+
+func respondWithNoContent(ack bool, w http.ResponseWriter) error {
+	acks := strconv.FormatBool(ack)
+	w.Header().Set("Noop", acks)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
