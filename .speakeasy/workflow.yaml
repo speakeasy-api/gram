@@ -1,52 +1,26 @@
 workflowVersion: 1.0.0
 speakeasyVersion: latest
 sources:
-    Gram Internal:
+    Gram-Internal:
         inputs:
             - location: server/gen/http/openapi3.yaml
         overlays:
             - location: overlays/goa.yaml
         registry:
             location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
-    Gram Public:
+    Gram-Public:
         inputs:
             - location: server/gen/http/openapi3.yaml
         overlays:
             - location: overlays/goa.yaml
             - location: overlays/public-sdk.yaml
         registry:
-            location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
+            location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-public-api-description
 targets:
     gram-internal:
         target: typescript
-        source: Gram Internal
+        source: Gram-Internal
         output: client/sdk
-        codeSamples:
-            registry:
-                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
-            labelOverride:
-                fixedValue: Typescript (SDK)
-            blocking: false
-    gram-public-py:
-        target: python
-        source: Gram Public
-        output: sdks/python
-        publish:
-            pypi:
-                token: $pypi_token
-        codeSamples:
-            registry:
-                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-python-code-samples
-            labelOverride:
-                fixedValue: Python (SDK)
-            blocking: false
-    gram-public-ts:
-        target: typescript
-        source: Gram Public
-        output: sdks/typescript
-        publish:
-            npm:
-                token: $npm_token
         codeSamples:
             registry:
                 location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
