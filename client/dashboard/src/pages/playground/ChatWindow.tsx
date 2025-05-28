@@ -5,7 +5,7 @@ import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
-import { getServerURL } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
 import {
   useInstance,
@@ -17,7 +17,15 @@ import {
   Stack,
   useToolCallApproval,
 } from "@speakeasy-api/moonshine";
-import { generateObject, jsonSchema, smoothStream, streamText, Tool } from "ai";
+import {
+  generateObject,
+  jsonSchema,
+  smoothStream,
+  streamText,
+  Tool,
+  ToolCall,
+} from "ai";
+import Ajv from "ajv";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
@@ -26,6 +34,9 @@ import { SdkContent } from "../sdk/SDK";
 import { Agentify } from "./Agentify";
 import { useChatHistory } from "./ChatHistory";
 import { PanelHeader } from "./Playground";
+
+// Ignore int32 format instead of erroring out
+const ajv = new Ajv({ formats: { int32: true } });
 
 const availableModels = [
   { label: "GPT-4o", value: "openai/gpt-4o" },
@@ -234,6 +245,7 @@ function ChatInner({
     }
 
     let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
+        When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
         The current date is ${new Date().toISOString()}`;
 
     if (dynamicToolset) {
@@ -307,6 +319,19 @@ function ChatInner({
     },
   });
 
+  const validateArgs = (toolCall: ToolCall<string, unknown>) => {
+    const tool = allTools[toolCall.toolName];
+    if (!tool) {
+      throw new Error(`Tool ${toolCall.toolName} not found`);
+    }
+
+    const validate = ajv.compile(tool.parameters.jsonSchema);
+    if (!validate(toolCall.args)) {
+      return "Schema validation error: " + JSON.stringify(validate.errors);
+    }
+    return null;
+  };
+
   const {
     messages: chatMessages,
     status,
@@ -320,7 +345,13 @@ function ChatInner({
     },
     maxSteps: 5,
     initialMessages,
-    onToolCall: toolCallApproval.toolCallFn,
+    onToolCall: (toolCall) => {
+      const validationError = validateArgs(toolCall.toolCall);
+      if (validationError) {
+        return validationError;
+      }
+      return toolCallApproval.toolCallFn(toolCall);
+    },
   });
 
   const handleSend = useCallback(
@@ -358,12 +389,18 @@ function ChatInner({
   const toolCallComponents = {
     toolName: ({
       toolName,
+      result,
       args,
     }: {
       toolName: string;
+      result?: unknown;
       args: Record<string, unknown>;
     }) => {
       const hasSummary = JSON.stringify(args).includes("gram-request-summary");
+      const validationError =
+        typeof result === "string" &&
+        result.includes("Schema validation error");
+
       return (
         <Stack
           direction="horizontal"
@@ -371,9 +408,20 @@ function ChatInner({
           align="center"
           className="mr-auto"
         >
-          <Type variant="small" className="font-medium">
+          <Type
+            variant="small"
+            className={cn(
+              "font-medium",
+              validationError && "line-through text-muted-foreground"
+            )}
+          >
             {toolName}
           </Type>
+          {validationError && (
+            <Type variant="small" muted>
+              (invalid args)
+            </Type>
+          )}
           {hasSummary && <AutoSummarizeBadge />}
         </Stack>
       );

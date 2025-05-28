@@ -376,7 +376,7 @@ func (s *Service) getToolSchema(ctx context.Context, tool *types.HTTPToolDefinit
 
 		properties["gram-request-summary"] = map[string]interface{}{
 			"type":        "string",
-			"description": "A summary of the request to the tool",
+			"description": "REQUIRED: A summary of the request to the tool. Distill the user's intention in order to ensure the response contains all the necessary information, without unnecessary details.",
 		}
 
 		jsonSchema["properties"] = properties

@@ -32,6 +32,7 @@ import {
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
+  useInstance,
   useToolset,
   useUpdateEnvironmentMutation,
   useUpdateToolsetMutation,
@@ -126,6 +127,12 @@ export function ToolsetView({
     slug: toolsetSlug,
   });
 
+  // Refetch any loaded instances of this toolset on update (primarily for the playground)
+  const { refetch: refetchInstance } = useInstance({
+    toolsetSlug: toolsetSlug,
+    environmentSlug: environmentSlug,
+  });
+
   const environment = useEnvironment(
     environmentSlug || toolset?.defaultEnvironmentSlug
   );
@@ -133,16 +140,17 @@ export function ToolsetView({
   const [envVarsDialogOpen, setEnvVarsDialogOpen] = useState(false);
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
 
+  const onUpdate = () => {
+    refetch?.();
+    refetchInstance();
+  };
+
   const updateToolsetMutation = useUpdateToolsetMutation({
-    onSuccess: () => {
-      refetch?.();
-    },
+    onSuccess: onUpdate,
   });
 
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
-    onSuccess: () => {
-      environment?.refetch();
-    },
+    onSuccess: onUpdate,
   });
 
   const removeToolFromToolset = (toolName: string) => {
@@ -299,7 +307,7 @@ export function ToolsetView({
               key={tool.id}
               tool={tool}
               onRemove={() => removeToolFromToolset(tool.name)}
-              onUpdate={() => refetch()}
+              onUpdate={onUpdate}
             />
           ))}
           <CreateThingCard
