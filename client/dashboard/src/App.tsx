@@ -21,6 +21,22 @@ export default function App() {
     setTheme(theme);
   };
 
+  // Top-level redirect from getgram.ai and www.getgram.ai to app.getgram.ai
+  useEffect(() => {
+    if (
+      window.location.hostname === "getgram.ai" ||
+      window.location.hostname === "www.getgram.ai"
+    ) {
+      const newUrl =
+        window.location.protocol +
+        "//app.getgram.ai" +
+        window.location.pathname +
+        window.location.search +
+        window.location.hash;
+      window.location.replace(newUrl);
+    }
+  }, []);
+
   useEffect(() => {
     const prefersDark = window.matchMedia(
       "(prefers-color-scheme: dark)"
@@ -54,17 +70,20 @@ const RouteProvider = () => {
     (route) => !route.unauthenticated
   );
 
-  const routeElements = useMemo(() => (
-    <Routes>
-      {/* Register these unauthenticated paths outside of root layout */}
-      {routesWithSubroutes(unauthenticatedRoutes)}
-      <Route path="/" element={<AppLayout />}>
-        <Route path=":orgSlug/:projectSlug">
-          {routesWithSubroutes(authenticatedRoutes)}
+  const routeElements = useMemo(
+    () => (
+      <Routes>
+        {/* Register these unauthenticated paths outside of root layout */}
+        {routesWithSubroutes(unauthenticatedRoutes)}
+        <Route path="/" element={<AppLayout />}>
+          <Route path=":orgSlug/:projectSlug">
+            {routesWithSubroutes(authenticatedRoutes)}
+          </Route>
         </Route>
-      </Route>
-    </Routes>
-  ), [routes]);
+      </Routes>
+    ),
+    [routes]
+  );
 
   return routeElements;
 };
