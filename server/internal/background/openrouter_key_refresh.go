@@ -13,7 +13,7 @@ import (
 )
 
 // TODO: This will be 30 just setting to a lower value initially to test
-const OpenRouterKeyRefreshWindow = 1
+const OpenRouterKeyRefreshWindow = 30
 
 type OpenRouterKeyRefreshParams struct {
 	OrgID string
