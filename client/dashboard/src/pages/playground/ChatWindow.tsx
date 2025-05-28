@@ -365,7 +365,12 @@ function ChatInner({
     }) => {
       const hasSummary = JSON.stringify(args).includes("gram-request-summary");
       return (
-        <Stack direction="horizontal" gap={2} align="center" className="mr-auto">
+        <Stack
+          direction="horizontal"
+          gap={2}
+          align="center"
+          className="mr-auto"
+        >
           <Type variant="small" className="font-medium">
             {toolName}
           </Type>

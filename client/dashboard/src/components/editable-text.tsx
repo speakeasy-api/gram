@@ -36,17 +36,23 @@ export function EditableText({
   };
 
   useEffect(() => {
-    if (!editedValue) {
+    setEditedValue(value);
+  }, [value]);
+
+  const handleOpenChange = (open: boolean) => {
+    // When the dialog is closed, reset the edited value to the original value
+    if (!open) {
       setEditedValue(value);
     }
-  }, [value]);
+    setIsEditing(open);
+  };
 
   return (
     <>
-      <Editable onClick={() => setIsEditing(true)}>{children}</Editable>
+      <Editable onClick={() => handleOpenChange(true)}>{children}</Editable>
       <InputDialog
         open={isEditing}
-        onOpenChange={setIsEditing}
+        onOpenChange={handleOpenChange}
         title={`Edit ${label}`}
         description={description}
         submitButtonText="Update"

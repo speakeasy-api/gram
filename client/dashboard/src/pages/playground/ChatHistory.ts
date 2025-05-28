@@ -18,10 +18,14 @@ export const useChatHistory = (chatId: string) => {
   const chatHistory: Message[] = [];
   const messages = loadedChat?.messages ?? [];
 
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
+  const toolInvocations = messages.filter((m) => m.role === "tool");
+  const getToolInvocation = (id: string) => {
+    return toolInvocations.find((t) => t.toolCallId === id);
+  };
+
+  for (const message of messages) {
     if (!message) continue;
-    if (message.role === "system") continue;
+    if (message.role === "system" || message.role === "tool") continue;
 
     const base = {
       id: message.id,
@@ -30,8 +34,7 @@ export const useChatHistory = (chatId: string) => {
     };
 
     if (message.toolCalls) {
-      // The next message is the tool call result
-      const nextMessage = messages[i + 1];
+      // Find the tool invocation for the tool call and add it to the parts
       chatHistory.push({
         ...base,
         parts: JSON.parse(message.toolCalls).map(
@@ -43,13 +46,11 @@ export const useChatHistory = (chatId: string) => {
               args: toolCall.function.arguments,
               toolCallId: toolCall.id,
               toolName: toolCall.function.name,
-              result: nextMessage?.content ?? "",
+              result: getToolInvocation(toolCall.id)?.content ?? "",
             },
           })
         ),
       });
-      // Skip the next message since we used it as the tool result
-      i++;
     } else {
       chatHistory.push(base);
     }
