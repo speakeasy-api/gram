@@ -277,6 +277,7 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 		Description:         *v.Description,
 		Confirm:             *v.Confirm,
 		ConfirmPrompt:       v.ConfirmPrompt,
+		Summarizer:          v.Summarizer,
 		Openapiv3Operation:  v.Openapiv3Operation,
 		Security:            v.Security,
 		HTTPMethod:          *v.HTTPMethod,
@@ -311,6 +312,7 @@ func unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(
 		Description:   v.Description,
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

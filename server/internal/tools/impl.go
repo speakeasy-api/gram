@@ -138,6 +138,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Tags:          tool.Tags,
 				Confirm:       conv.FromPGText[string](tool.Confirm),
 				ConfirmPrompt: conv.FromPGText[string](tool.ConfirmPrompt),
+				Summarizer:    conv.FromPGText[string](tool.Summarizer),
 			}
 		}
 

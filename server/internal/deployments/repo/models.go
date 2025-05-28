@@ -57,6 +57,7 @@ type HttpToolDefinition struct {
 	Openapiv3DocumentID uuid.NullUUID
 	Confirm             pgtype.Text
 	ConfirmPrompt       pgtype.Text
+	Summarizer          pgtype.Text
 	Name                string
 	Summary             string
 	Description         string

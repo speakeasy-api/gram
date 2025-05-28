@@ -29,6 +29,10 @@ export type CanonicalToolAttributes = {
    */
   name: string;
   /**
+   * Summarizer for the tool
+   */
+  summarizer?: string | undefined;
+  /**
    * Summary of the tool
    */
   summary?: string | undefined;
@@ -52,6 +56,7 @@ export const CanonicalToolAttributes$inboundSchema: z.ZodType<
   confirm_prompt: z.string().optional(),
   description: z.string().optional(),
   name: z.string(),
+  summarizer: z.string().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
   variation_id: z.string(),
@@ -68,6 +73,7 @@ export type CanonicalToolAttributes$Outbound = {
   confirm_prompt?: string | undefined;
   description?: string | undefined;
   name: string;
+  summarizer?: string | undefined;
   summary?: string | undefined;
   tags?: Array<string> | undefined;
   variation_id: string;
@@ -83,6 +89,7 @@ export const CanonicalToolAttributes$outboundSchema: z.ZodType<
   confirmPrompt: z.string().optional(),
   description: z.string().optional(),
   name: z.string(),
+  summarizer: z.string().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
   variationId: z.string(),

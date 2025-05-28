@@ -1,4 +1,4 @@
-h1:1XDY/1ePn6covveeRSELNtXqV/xKIe2vnGcIVGDrzSo=
+h1:NS2prBziEdC/yxW/bOCOHi6zgv13mzjn7zu845aT1fo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -16,3 +16,4 @@ h1:1XDY/1ePn6covveeRSELNtXqV/xKIe2vnGcIVGDrzSo=
 20250522231024_add-denormalized-mcp-toolset-data.sql h1:tdr9WODMJy2Onzt3OIwiWQh8/jxt1FtRC3shJpGsq1E=
 20250523163341_add-credit-limit-open-router.sql h1:H9aBZV1fwRH0uMDqFBCn0x84gjtycfJGH1E7nrnb9MA=
 20250523181256_disabled_open_router_keys.sql h1:ana5fMqr5fvihWyUZgcs/9crwmRS/COrAVqGgfEhr80=
+20250527204840_add_summarizer_col.sql h1:ZIUe0uzxCRw23vOsulBAcgHxXF2YGGeEhI1Nydr2Mrw=

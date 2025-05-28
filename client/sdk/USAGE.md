@@ -5,8 +5,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServePublic({
-    mcpSlug: "<value>",
+  const result = await gram.slack.slackLogin({
+    projectSlug: "<value>",
   });
 
   // Handle the result

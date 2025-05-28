@@ -1,19 +1,19 @@
-import { cn } from "@/lib/utils";
-import { Stack } from "@speakeasy-api/moonshine";
-import { Pencil } from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
 import { InputDialog } from "./input-dialog";
+import { Editable } from "./ui/editable";
 
 interface EditableTextProps {
   label: string;
+  description?: string;
   value: string | undefined;
   onSubmit: (newValue: string) => void;
-  validate?: (newValue: string) => boolean;
+  validate?: (newValue: string) => string | boolean;
   children: ReactNode;
 }
 
 export function EditableText({
   label,
+  description,
   value,
   onSubmit,
   validate,
@@ -43,25 +43,12 @@ export function EditableText({
 
   return (
     <>
-      <div
-        onClick={() => setIsEditing(true)}
-        className={cn("group cursor-pointer hover:opacity-80")}
-      >
-        <Stack direction="horizontal" align="center" gap={1}>
-          <Pencil
-            size={16}
-            className={
-              "text-muted-foreground opacity-0 group-hover:opacity-100 trans ml-[-18px]"
-            }
-          />
-          {children}
-        </Stack>
-      </div>
+      <Editable onClick={() => setIsEditing(true)}>{children}</Editable>
       <InputDialog
         open={isEditing}
         onOpenChange={setIsEditing}
         title={`Edit ${label}`}
-        description={`Update the value of ${label.toLowerCase()}`}
+        description={description}
         submitButtonText="Update"
         inputs={{
           label: label,

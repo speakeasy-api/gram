@@ -107,8 +107,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServePublic({
-    mcpSlug: "<value>",
+  const result = await gram.slack.slackLogin({
+    projectSlug: "<value>",
   });
 
   // Handle the result
@@ -176,11 +176,6 @@ run();
 * [create](docs/sdks/keys/README.md#create) - createKey keys
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
-
-### [mcp](docs/sdks/mcp/README.md)
-
-* [mcpNumberServePublic](docs/sdks/mcp/README.md#mcpnumberservepublic) - servePublic mcp
-* [mcpNumberServeAuthenticated](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
 
 ### [packages](docs/sdks/packages/README.md)
 
@@ -265,8 +260,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
-- [`mcpMcpNumberServeAuthenticated`](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
-- [`mcpMcpNumberServePublic`](docs/sdks/mcp/README.md#mcpnumberservepublic) - servePublic mcp
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -344,8 +337,6 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
-- [`useMcpMcpNumberServeAuthenticatedMutation`](docs/sdks/mcp/README.md#mcpnumberserveauthenticated) - serveAuthenticated mcp
-- [`useMcpMcpNumberServePublicMutation`](docs/sdks/mcp/README.md#mcpnumberservepublic) - servePublic mcp
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
@@ -375,8 +366,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServePublic({
-    mcpSlug: "<value>",
+  const result = await gram.slack.slackLogin({
+    projectSlug: "<value>",
   }, {
     retries: {
       strategy: "backoff",
@@ -416,8 +407,8 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServePublic({
-    mcpSlug: "<value>",
+  const result = await gram.slack.slackLogin({
+    projectSlug: "<value>",
   });
 
   // Handle the result
@@ -432,7 +423,7 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `mcpNumberServePublic` method may throw the following errors:
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `slackLogin` method may throw the following errors:
 
 | Error Type          | Status Code                       | Content Type     |
 | ------------------- | --------------------------------- | ---------------- |
@@ -451,8 +442,8 @@ const gram = new Gram();
 async function run() {
   let result;
   try {
-    result = await gram.mcp.mcpNumberServePublic({
-      mcpSlug: "<value>",
+    result = await gram.slack.slackLogin({
+      projectSlug: "<value>",
     });
 
     // Handle the result
@@ -516,8 +507,8 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.mcp.mcpNumberServePublic({
-    mcpSlug: "<value>",
+  const result = await gram.slack.slackLogin({
+    projectSlug: "<value>",
   });
 
   // Handle the result

@@ -80,6 +80,10 @@ export type HTTPToolDefinition = {
    */
   security?: string | undefined;
   /**
+   * Summarizer for the tool
+   */
+  summarizer?: string | undefined;
+  /**
    * Summary of the tool
    */
   summary: string;
@@ -115,6 +119,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   schema: z.string(),
   schema_version: z.string().optional(),
   security: z.string().optional(),
+  summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
@@ -150,6 +155,7 @@ export type HTTPToolDefinition$Outbound = {
   schema: string;
   schema_version?: string | undefined;
   security?: string | undefined;
+  summarizer?: string | undefined;
   summary: string;
   tags: Array<string>;
   updated_at: string;
@@ -177,6 +183,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   schema: z.string(),
   schemaVersion: z.string().optional(),
   security: z.string().optional(),
+  summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
   updatedAt: z.date().transform(v => v.toISOString()),

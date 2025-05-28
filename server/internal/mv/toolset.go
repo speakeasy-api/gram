@@ -109,6 +109,7 @@ func DescribeToolset(
 			description := def.HttpToolDefinition.Description
 			confirmRaw := conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "")
 			confirmPrompt := conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt)
+			summarizer := conv.FromPGText[string](def.HttpToolDefinition.Summarizer)
 			tags := def.HttpToolDefinition.Tags
 			variations, ok := keyedVariations[def.HttpToolDefinition.Name]
 			if ok {
@@ -117,6 +118,7 @@ func DescribeToolset(
 				description = conv.PtrValOr(variations.Description, description)
 				confirmRaw = conv.PtrValOrEmpty(variations.Confirm, confirmRaw)
 				confirmPrompt = conv.Default(variations.ConfirmPrompt, confirmPrompt)
+				summarizer = conv.Default(variations.Summarizer, summarizer)
 				if len(variations.Tags) > 0 {
 					tags = variations.Tags
 				}
@@ -129,6 +131,7 @@ func DescribeToolset(
 					Tags:          def.HttpToolDefinition.Tags,
 					Confirm:       conv.FromPGText[string](def.HttpToolDefinition.Confirm),
 					ConfirmPrompt: conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt),
+					Summarizer:    conv.FromPGText[string](def.HttpToolDefinition.Summarizer),
 				}
 			}
 
@@ -144,6 +147,7 @@ func DescribeToolset(
 				Description:         description,
 				Confirm:             string(confirm),
 				ConfirmPrompt:       confirmPrompt,
+				Summarizer:          summarizer,
 				Tags:                tags,
 				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
 				Security:            conv.FromBytes(def.HttpToolDefinition.Security),

@@ -4725,6 +4725,9 @@ components:
                 name:
                     type: string
                     description: The name of the tool
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
                 summary:
                     type: string
                     description: Summary of the tool
@@ -5601,6 +5604,9 @@ components:
                 security:
                     type: string
                     description: Security requirements for the underlying HTTP endpoint
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
                 summary:
                     type: string
                     description: Summary of the tool

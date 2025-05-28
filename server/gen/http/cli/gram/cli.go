@@ -1431,7 +1431,7 @@ Get a third-party integration by ID or name.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s integrations get --id "Aut aliquam cumque et." --name "Sapiente corrupti quae necessitatibus voluptas et impedit." --session-token "Occaecati nobis dolore facilis atque nesciunt pariatur." --project-slug-input "Voluptatibus exercitationem nihil voluptatum eligendi omnis."
+    %[1]s integrations get --id "Consequuntur necessitatibus laudantium dignissimos similique iusto voluptas." --name "Laboriosam quae aut." --session-token "Cumque et." --project-slug-input "Sapiente corrupti quae necessitatibus voluptas et impedit."
 `, os.Args[0])
 }
 

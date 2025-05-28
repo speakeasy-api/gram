@@ -39,8 +39,8 @@ export function InputDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit?: () => void;
   title: string;
-  description: string;
   inputs: InputProps[] | InputProps;
+  description?: string;
   submitButtonText?: string;
 }) {
   const inputsArray = Array.isArray(inputs) ? inputs : [inputs];
@@ -72,7 +72,9 @@ export function InputDialog({
       <Dialog.Content>
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
-          <Dialog.Description>{description}</Dialog.Description>
+          {description && (
+            <Dialog.Description>{description}</Dialog.Description>
+          )}
         </Dialog.Header>
         <Stack gap={6} className="my-4">
           {inputsArray.map((input) => (

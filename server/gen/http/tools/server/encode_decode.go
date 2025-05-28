@@ -278,6 +278,7 @@ func marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v 
 		Description:   v.Description,
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

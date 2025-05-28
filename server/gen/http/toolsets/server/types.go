@@ -1075,6 +1075,8 @@ type HTTPToolDefinitionResponseBody struct {
 	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
 	// Prompt for the confirmation
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// OpenAPI v3 operation
 	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
 	// The tags list for this http tool
@@ -1111,6 +1113,8 @@ type CanonicalToolAttributesResponseBody struct {
 	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
 	// Prompt for the confirmation
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// The tags list for this http tool
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }

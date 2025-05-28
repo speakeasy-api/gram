@@ -121,7 +121,7 @@ export const Agentify = ({
     setAgentifyInProgress(false);
   };
 
-  const agentifyAvailable = messages.length > 0;
+  const agentifyAvailable = messages.filter((m) => m.role === "user").length > 0;
   const agentifyButton = (
     <Button
       variant={"ghost"}

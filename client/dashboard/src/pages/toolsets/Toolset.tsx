@@ -1,4 +1,5 @@
 import { AddButton } from "@/components/add-button";
+import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { HttpRoute } from "@/components/http-route";
@@ -23,7 +24,11 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { groupTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { EnvironmentEntryInput, Toolset } from "@gram/client/models/components";
+import {
+  EnvironmentEntryInput,
+  Toolset,
+  UpsertGlobalToolVariationForm,
+} from "@gram/client/models/components";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
@@ -247,7 +252,7 @@ export function ToolsetView({
       icon="plus"
       onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
     >
-      Add Tools
+      Add/Remove Tools
     </Button>
   );
 
@@ -294,6 +299,7 @@ export function ToolsetView({
               key={tool.id}
               tool={tool}
               onRemove={() => removeToolFromToolset(tool.name)}
+              onUpdate={() => refetch()}
             />
           ))}
           <CreateThingCard
@@ -342,6 +348,7 @@ export const ToolsetHeader = ({
           value={toolset?.name}
           onSubmit={(newValue) => updateToolset({ name: newValue })}
           label={"Toolset Name"}
+          description={`Update the name of toolset '${toolset?.name}'`}
         >
           <Heading variant="h2">
             <NameAndSlug
@@ -352,13 +359,30 @@ export const ToolsetHeader = ({
         </EditableText>
         {actions}
       </Stack>
-      <Stack direction="horizontal" gap={2}>
-        <ToolsBadge tools={toolset?.httpTools} size="md" variant="outline" />
-        <ToolsetEnvironmentBadge
-          toolset={toolset}
-          size="md"
-          variant="outline"
-        />
+      <Stack direction="horizontal" gap={2} justify="space-between">
+        <EditableText
+          value={toolset?.description}
+          onSubmit={(newValue) => updateToolset({ description: newValue })}
+          label={"Toolset Description"}
+          description={`Update the description of toolset '${toolset?.name}'`}
+          validate={(value) =>
+            value.length > 0 && value.length < 100
+              ? true
+              : "Description must contain fewer than 100 characters"
+          }
+        >
+          <Type variant="body" className="text-muted-foreground">
+            {toolset?.description}
+          </Type>
+        </EditableText>
+        <Stack direction="horizontal" gap={2}>
+          <ToolsBadge tools={toolset?.httpTools} size="md" variant="outline" />
+          <ToolsetEnvironmentBadge
+            toolset={toolset}
+            size="md"
+            variant="outline"
+          />
+        </Stack>
       </Stack>
     </Stack>
   );
@@ -367,17 +391,34 @@ export const ToolsetHeader = ({
 function ToolCard({
   tool,
   onRemove,
+  onUpdate,
 }: {
   tool: HTTPToolDefinition;
   onRemove: () => void;
+  onUpdate: () => void;
 }) {
+  const client = useSdkClient();
+
   const toolNameParts = tool.name.split("_");
   const source = toolNameParts[0];
   const toolName = toolNameParts.slice(1).join(" ");
 
+  const updateVariation = async (
+    vals: Partial<UpsertGlobalToolVariationForm>
+  ) => {
+    await client.variations.upsertGlobal({
+      upsertGlobalToolVariationForm: {
+        srcToolName: tool.name,
+        ...vals,
+      },
+    });
+
+    onUpdate();
+  };
+
   const header = (
     <Stack direction="horizontal" gap={4} justify="space-between">
-      <Stack direction="horizontal" gap={2}>
+      <Stack direction="horizontal" gap={2} align="center">
         <Heading
           variant="h4"
           className="text-muted-foreground capitalize"
@@ -387,6 +428,7 @@ function ToolCard({
         </Heading>
         <Dot />
         <Heading variant="h4">{toolName}</Heading>
+        {tool.summarizer && <AutoSummarizeBadge />}
       </Stack>
     </Stack>
   );
@@ -401,6 +443,22 @@ function ToolCard({
     </>
   );
 
+  const autoSummarizeButton = (
+    <Button
+      icon={tool.summarizer ? "check" : "sparkles"}
+      variant="ghost"
+      size="sm"
+      tooltip="Auto-summarize the tool's response. Prevents long responses from overwhelming the context window."
+      onClick={() => {
+        updateVariation({
+          summarizer: tool.summarizer ? undefined : "auto",
+        });
+      }}
+    >
+      Auto-Summarize
+    </Button>
+  );
+
   return (
     <Card size="sm">
       <Card.Header>
@@ -410,7 +468,9 @@ function ToolCard({
           <HttpRoute method={tool.httpMethod} path={tool.path} />
         </Card.Description>
         <Card.Actions>
+          {autoSummarizeButton}
           <DeleteButton
+            size="sm"
             tooltip="Remove tool from this toolset"
             onClick={onRemove}
           />
@@ -418,14 +478,21 @@ function ToolCard({
       </Card.Header>
       <Card.Content>
         <div className="border-l-2 pl-4">
-          <Type
-            className={cn(
-              "line-clamp-3 text-muted-foreground",
-              !tool.description && "italic"
-            )}
+          <EditableText
+            value={tool.description}
+            onSubmit={(newValue) => updateVariation({ description: newValue })}
+            label={"Tool Description"}
+            description={`Update the description of tool '${tool.name}'`}
           >
-            {tool.description || "No description provided"}
-          </Type>
+            <Type
+              className={cn(
+                "line-clamp-3 text-muted-foreground",
+                !tool.description && "italic"
+              )}
+            >
+              {tool.description || "No description provided"}
+            </Type>
+          </EditableText>
         </div>
       </Card.Content>
     </Card>

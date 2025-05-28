@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: e4337c688667924de53b4d055074b7b9
+  docChecksum: 14f0583c109905aeb4899c00d5500caa
   docVersion: 0.0.1
-  speakeasyVersion: 1.551.0
+  speakeasyVersion: 1.550.0
   generationVersion: 2.610.0
-  releaseVersion: 0.11.8
-  configChecksum: 9e7713ea75eaf2e65e40c6dfdaef1ec0
+  releaseVersion: 0.11.10
+  configChecksum: 8938fd653468e2f7343b3e52028001a3
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -201,11 +201,6 @@ generatedFiles:
   - docs/models/operations/logoutrequest.md
   - docs/models/operations/logoutresponse.md
   - docs/models/operations/logoutsecurity.md
-  - docs/models/operations/mcpnumberserveauthenticatedrequest.md
-  - docs/models/operations/mcpnumberserveauthenticatedresponse.md
-  - docs/models/operations/mcpnumberserveauthenticatedsecurity.md
-  - docs/models/operations/mcpnumberservepublicrequest.md
-  - docs/models/operations/mcpnumberservepublicresponse.md
   - docs/models/operations/publishrequest.md
   - docs/models/operations/publishsecurity.md
   - docs/models/operations/publishsecurityoption1.md
@@ -258,7 +253,6 @@ generatedFiles:
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
-  - docs/sdks/mcp/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
   - docs/sdks/slack/README.md
@@ -295,8 +289,6 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
-  - src/funcs/mcpMcpNumberServeAuthenticated.ts
-  - src/funcs/mcpMcpNumberServePublic.ts
   - src/funcs/packagesCreate.ts
   - src/funcs/packagesList.ts
   - src/funcs/packagesListVersions.ts
@@ -449,8 +441,6 @@ generatedFiles:
   - src/models/operations/listversions.ts
   - src/models/operations/loadchat.ts
   - src/models/operations/logout.ts
-  - src/models/operations/mcpnumberserveauthenticated.ts
-  - src/models/operations/mcpnumberservepublic.ts
   - src/models/operations/publish.ts
   - src/models/operations/revokeapikey.ts
   - src/models/operations/serveimage.ts
@@ -498,8 +488,6 @@ generatedFiles:
   - src/react-query/listVersions.ts
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
-  - src/react-query/mcpMcpNumberServeAuthenticated.ts
-  - src/react-query/mcpMcpNumberServePublic.ts
   - src/react-query/publishPackage.ts
   - src/react-query/revokeAPIKey.ts
   - src/react-query/serveImage.ts
@@ -522,7 +510,6 @@ generatedFiles:
   - src/sdk/instances.ts
   - src/sdk/integrations.ts
   - src/sdk/keys.ts
-  - src/sdk/mcp.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
   - src/sdk/sdk.ts

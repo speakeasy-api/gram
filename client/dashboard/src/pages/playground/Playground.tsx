@@ -32,7 +32,6 @@ export default function Playground() {
     searchParams.get("environment") ?? null
   );
   const [dynamicToolset, setDynamicToolset] = useState(false);
-  const [summarizeResponse, setSummarizeResponse] = useState(false);
   const [chatId, setChatId] = useState<string>(
     searchParams.get("chatId") ?? uuidv7()
   );
@@ -125,8 +124,6 @@ export default function Playground() {
               setSelectedEnvironment={setSelectedEnvironment}
               dynamicToolset={dynamicToolset}
               setDynamicToolset={setDynamicToolset}
-              summarizeResponse={summarizeResponse}
-              setSummarizeResponse={setSummarizeResponse}
             />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
@@ -134,7 +131,6 @@ export default function Playground() {
               configRef={chatConfigRef}
               chatId={chatId}
               dynamicToolset={dynamicToolset}
-              summarizeResponse={summarizeResponse}
             />
           </ResizablePanel.Pane>
         </ResizablePanel>
@@ -187,16 +183,12 @@ export function ToolsetPanel({
   setSelectedEnvironment,
   dynamicToolset,
   setDynamicToolset,
-  summarizeResponse,
-  setSummarizeResponse,
 }: {
   configRef: ChatConfig;
   setSelectedToolset: (toolset: string) => void;
   setSelectedEnvironment: (environment: string) => void;
   dynamicToolset: boolean;
   setDynamicToolset: (dynamicToolset: boolean) => void;
-  summarizeResponse: boolean;
-  setSummarizeResponse: (summarizeResponse: boolean) => void;
 }) {
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();
@@ -291,7 +283,9 @@ export function ToolsetPanel({
       <PanelHeader side="left">
         <Stack direction="horizontal" gap={2} justify="space-between">
           <Stack direction="horizontal" gap={2} align="center">
-            <Heading variant="h5" className="font-medium">Toolset: </Heading>
+            <Heading variant="h5" className="font-medium">
+              Toolset:{" "}
+            </Heading>
             {toolsetDropdown}
             {isAdmin && (
               <Stack direction="horizontal" align="center">
@@ -306,18 +300,6 @@ export function ToolsetPanel({
                   }
                 >
                   {dynamicToolset ? "Dynamic" : "Static"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  icon={summarizeResponse ? "sparkles" : "lock"}
-                  onClick={() => setSummarizeResponse(!summarizeResponse)}
-                  tooltip={
-                    summarizeResponse
-                      ? "Disable response summarization"
-                      : "Enable response summarization"
-                  }
-                >
-                  {summarizeResponse ? "Summarize" : "Don't summarize"}
                 </Button>
               </Stack>
             )}

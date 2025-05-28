@@ -110,10 +110,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useMcpMcpNumberServePublicMutation } from "@gram/client/react-query/mcpMcpNumberServePublic.js";
+import { useUpdateSlackConnectionMutation } from "@gram/client/react-query/slackUpdateSlackConnection.js";
 
 export function Example() {
-  const { mutate, status } = useMcpMcpNumberServePublicMutation();
+  const { mutate, status } = useUpdateSlackConnectionMutation();
 
   return (
     <form
@@ -123,7 +123,9 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          mcpSlug: "<value>",
+          updateSlackConnectionRequestBody: {
+            defaultToolsetSlug: "<value>",
+          },
         });
       }}
     >
@@ -140,10 +142,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useMcpMcpNumberServePublicMutation } from "@gram/client/react-query/mcpMcpNumberServePublic.js";
+import { useUpdateSlackConnectionMutation } from "@gram/client/react-query/slackUpdateSlackConnection.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useMcpMcpNumberServePublicMutation({
+  const { mutate, status } = useUpdateSlackConnectionMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes

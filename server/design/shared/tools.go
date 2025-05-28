@@ -14,8 +14,11 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("name", String, "The name of the tool")
 	Attribute("summary", String, "Summary of the tool")
 	Attribute("description", String, "Description of the tool")
+
 	Attribute("confirm", String, "Confirmation mode for the tool")
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
+	Attribute("summarizer", String, "Summarizer for the tool")
+
 	Attribute("openapiv3_operation", String, "OpenAPI v3 operation")
 	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
 	Attribute("security", String, "Security requirements for the underlying HTTP endpoint")
@@ -49,6 +52,7 @@ var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("confirm", String, "Confirmation mode for the tool")
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
+	Attribute("summarizer", String, "Summarizer for the tool")
 	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
 })
 

@@ -1,3 +1,4 @@
+import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { HttpRoute } from "@/components/http-route";
 import { ProjectAvatar } from "@/components/project-menu";
 import { Heading } from "@/components/ui/heading";
@@ -50,12 +51,10 @@ export function ChatWindow({
   configRef,
   chatId,
   dynamicToolset,
-  summarizeResponse,
 }: {
   configRef: ChatConfig;
   chatId: string;
   dynamicToolset: boolean;
-  summarizeResponse: boolean;
 }) {
   const [model, setModel] = useState(availableModels[0]?.value ?? "");
   const chatKey = `chat-${model}`;
@@ -69,7 +68,6 @@ export function ChatWindow({
       configRef={configRef}
       chatId={chatId}
       dynamicToolset={dynamicToolset}
-      summarizeResponse={summarizeResponse}
     />
   );
 }
@@ -85,14 +83,12 @@ function ChatInner({
   configRef,
   chatId,
   dynamicToolset,
-  summarizeResponse,
 }: {
   model: string;
   setModel: (model: string) => void;
   configRef: ChatConfig;
   chatId: string;
   dynamicToolset: boolean;
-  summarizeResponse: boolean;
 }) {
   const session = useSession();
   const project = useProject();
@@ -138,35 +134,20 @@ function ChatInner({
     () =>
       Object.fromEntries(
         instance.data?.tools.map((tool) => {
-          const schema = tool.schema ? JSON.parse(tool.schema) : {};
-
-          if (summarizeResponse) {
-            const properties = schema.properties ?? {};
-            properties["gram-request-summary"] = {
-              type: "string",
-              description:
-                "REQUIRED: A summary of the chat history and what you are trying to accomplish by invoking this tool",
-            };
-
-            schema.properties = properties;
-
-            const required = schema.required ?? [];
-            required.push("gram-request-summary");
-            schema.required = required;
-          }
-
           return [
             tool.name,
             {
               id: tool.id,
               method: tool.httpMethod,
               path: tool.path,
-              parameters: jsonSchema(schema),
+              parameters: jsonSchema(
+                tool.schema ? JSON.parse(tool.schema) : {}
+              ),
             },
           ];
         }) ?? []
       ),
-    [instance.data?.tools, summarizeResponse]
+    [instance.data?.tools]
   );
 
   const openrouterChat = createOpenRouter({
@@ -384,12 +365,12 @@ function ChatInner({
     }) => {
       const hasSummary = JSON.stringify(args).includes("gram-request-summary");
       return (
-        <Type variant="small" className="font-medium mr-auto">
-          {toolName}
-          {hasSummary ? (
-            <span className="text-muted-foreground"> (auto-summarize)</span>
-          ) : null}
-        </Type>
+        <Stack direction="horizontal" gap={2} align="center" className="mr-auto">
+          <Type variant="small" className="font-medium">
+            {toolName}
+          </Type>
+          {hasSummary && <AutoSummarizeBadge />}
+        </Stack>
       );
     },
     input: (props: { toolName: string; args: string }) => {
@@ -417,12 +398,12 @@ function ChatInner({
         <Stack gap={2} className="mt-4">
           <Type variant="small" className="font-medium text-muted-foreground">
             {tool?.method ? "Response Body" : "Result"}
-            {hasSummary ? (
-              <span className="text-muted-foreground/60">
+            {hasSummary && (
+              <span className="text-muted-foreground/50">
                 {" "}
                 (auto-summarized)
               </span>
-            ) : null}
+            )}
           </Type>
           <JsonDisplay json={props.result} />
         </Stack>

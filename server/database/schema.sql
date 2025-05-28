@@ -247,6 +247,8 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
   confirm TEXT,
   confirm_prompt TEXT,
+  summarizer TEXT,
+
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   summary TEXT NOT NULL,
   description TEXT NOT NULL,

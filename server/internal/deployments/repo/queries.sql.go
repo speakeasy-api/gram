@@ -316,7 +316,7 @@ INSERT INTO http_tool_definitions (
   , $24
   , $25
 )
-RETURNING id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -383,6 +383,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.Openapiv3DocumentID,
 		&i.Confirm,
 		&i.ConfirmPrompt,
+		&i.Summarizer,
 		&i.Name,
 		&i.Summary,
 		&i.Description,

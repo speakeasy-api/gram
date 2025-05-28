@@ -81,7 +81,7 @@ function CardActions({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-action"
       className={cn(
-        "absolute top-[-8px] right-4 bg-card opacity-0 group-hover/card:opacity-100 trans gap-2 flex",
+        "absolute top-[-8px] right-4 bg-card opacity-0 group-hover/card:opacity-100 trans flex",
         className
       )}
       {...props}

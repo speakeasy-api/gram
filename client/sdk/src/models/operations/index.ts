@@ -35,8 +35,6 @@ export * from "./listtoolsets.js";
 export * from "./listversions.js";
 export * from "./loadchat.js";
 export * from "./logout.js";
-export * from "./mcpnumberserveauthenticated.js";
-export * from "./mcpnumberservepublic.js";
 export * from "./publish.js";
 export * from "./revokeapikey.js";
 export * from "./serveimage.js";

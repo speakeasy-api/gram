@@ -11,7 +11,6 @@ import { Environments } from "./environments.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
-import { Mcp } from "./mcp.js";
 import { Packages } from "./packages.js";
 import { Projects } from "./projects.js";
 import { Slack } from "./slack.js";
@@ -20,11 +19,6 @@ import { Toolsets } from "./toolsets.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
-  private _mcp?: Mcp;
-  get mcp(): Mcp {
-    return (this._mcp ??= new Mcp(this._options));
-  }
-
   private _slack?: Slack;
   get slack(): Slack {
     return (this._slack ??= new Slack(this._options));

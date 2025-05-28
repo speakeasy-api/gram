@@ -26,6 +26,8 @@ type HTTPToolDefinition struct {
 	Confirm string
 	// Prompt for the confirmation
 	ConfirmPrompt *string
+	// Summarizer for the tool
+	Summarizer *string
 	// OpenAPI v3 operation
 	Openapiv3Operation *string
 	// The tags list for this http tool

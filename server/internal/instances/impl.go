@@ -66,6 +66,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		chatClient:       chatClient,
 	}
 }
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
@@ -139,6 +140,11 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 
 	httpTools := make([]*types.HTTPToolDefinition, len(toolset.HTTPTools))
 	for i, tool := range toolset.HTTPTools {
+		schema, err := s.getToolSchema(ctx, tool)
+		if err != nil {
+			return nil, err
+		}
+
 		httpTools[i] = &types.HTTPToolDefinition{
 			ID:                  tool.ID,
 			ProjectID:           tool.ProjectID,
@@ -149,13 +155,14 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			Description:         tool.Description,
 			Confirm:             tool.Confirm,
 			ConfirmPrompt:       tool.ConfirmPrompt,
+			Summarizer:          tool.Summarizer,
 			Openapiv3Operation:  tool.Openapiv3Operation,
 			Tags:                tool.Tags,
 			Security:            tool.Security,
 			HTTPMethod:          tool.HTTPMethod,
 			Path:                tool.Path,
 			SchemaVersion:       tool.SchemaVersion,
-			Schema:              tool.Schema,
+			Schema:              schema,
 			CreatedAt:           tool.CreatedAt,
 			UpdatedAt:           tool.UpdatedAt,
 			Canonical:           tool.Canonical,
@@ -350,4 +357,46 @@ func (w *responseInterceptor) Write(b []byte) (int, error) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// getToolSchema returns the schema for a tool, with the "gram-request-summary" property added if the tool has a summarizer
+func (s *Service) getToolSchema(ctx context.Context, tool *types.HTTPToolDefinition) (string, error) {
+	schema := tool.Schema
+	if tool.Summarizer != nil {
+		var jsonSchema map[string]interface{}
+		err := json.Unmarshal([]byte(schema), &jsonSchema)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to unmarshal schema").Log(ctx, s.logger)
+		}
+
+		properties, ok := jsonSchema["properties"].(map[string]interface{})
+		if !ok {
+			properties = make(map[string]interface{})
+		}
+
+		properties["gram-request-summary"] = map[string]interface{}{
+			"type":        "string",
+			"description": "A summary of the request to the tool",
+		}
+
+		jsonSchema["properties"] = properties
+
+		var required []string
+		required, ok = jsonSchema["required"].([]string)
+		if !ok {
+			required = []string{}
+		}
+
+		required = append(required, "gram-request-summary")
+		jsonSchema["required"] = required
+
+		newSchema, err := json.Marshal(jsonSchema)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to marshal schema").Log(ctx, s.logger)
+		}
+
+		schema = string(newSchema)
+	}
+
+	return schema, nil
 }
