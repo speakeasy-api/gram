@@ -21,6 +21,9 @@ export default function App() {
     setTheme(theme);
   };
 
+  console.log(window.location.hostname);
+  console.log("HOSTNAME");
+
   // Top-level redirect from getgram.ai and www.getgram.ai to app.getgram.ai
   useEffect(() => {
     if (
@@ -33,6 +36,8 @@ export default function App() {
         window.location.pathname +
         window.location.search +
         window.location.hash;
+        console.log("REDIRECTING");
+        console.log(newUrl);
       window.location.replace(newUrl);
     }
   }, []);
