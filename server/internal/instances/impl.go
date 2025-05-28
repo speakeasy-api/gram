@@ -213,22 +213,25 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, nil, "tool_id query parameter is required").Log(ctx, s.logger)
 	}
 
-	environmentSlug := r.URL.Query().Get(environmentSlugQueryParam)
-	if environmentSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "environment_slug query parameter is required").Log(ctx, s.logger)
-	}
+	envVars := make(map[string]string)
+	if environmentSlug := r.URL.Query().Get(environmentSlugQueryParam); environmentSlug != "" {
+		envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
+			ProjectID: *authCtx.ProjectID,
+			Slug:      strings.ToLower(environmentSlug),
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+		}
 
-	envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      strings.ToLower(environmentSlug),
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
-	}
+		environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, false)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
+		}
 
-	environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, false)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
+		// Transform environment entries into a map
+		for _, entry := range environmentEntries {
+			envVars[entry.Name] = entry.Value
+		}
 	}
 
 	executionInfo, err := s.toolset.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
@@ -250,12 +253,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// This is so we can modify the response body before writing it to the original writer
 	// in the event summarization is needed
 	interceptor := newResponseInterceptor(w)
-
-	// Transform environment entries into a map
-	envVars := make(map[string]string)
-	for _, entry := range environmentEntries {
-		envVars[entry.Name] = entry.Value
-	}
 
 	err = InstanceToolProxy(ctx, s.tracer, s.logger, interceptor, requestBody, envVars, executionInfo)
 	if err != nil {
