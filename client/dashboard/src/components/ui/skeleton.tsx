@@ -53,4 +53,59 @@ export function SkeletonParagraph({ lines = 3 }: { lines?: number }) {
   );
 }
 
+export function SkeletonCode({ lines = 24 }: { lines?: number }) {
+  const importLines = Math.floor(lines / 4);
+  const codeLines = lines - importLines;
+
+  const LineNumber = () => <Skeleton className="h-5 w-6 mr-4 flex-shrink-0" />;
+
+  const EmptyLine = () => <LineNumber />;
+
+  const CodeLine = ({ width }: { width: string }) => (
+    <div className="flex">
+      <LineNumber />
+      <Skeleton className={`h-5 ${width}`} />
+    </div>
+  );
+
+  return (
+    <div className="border rounded-lg p-4">
+      <Stack gap={2}>
+        {/* Import lines - typically shorter */}
+        {Array.from({ length: importLines }).map((_, i) => (
+          <CodeLine key={`import-${i}`} width="w-36" />
+        ))}
+
+        <EmptyLine key="spacer" />
+
+        {/* Code lines with varying widths */}
+        {Array.from({ length: codeLines }).map((_, i) => {
+          // Create pattern of different line lengths
+          if (i % 9 === 0) {
+            return <EmptyLine key={`empty-${i}`} />;
+          } else if (i % 9 === 1) {
+            // Function declaration - medium line
+            return <CodeLine key={`code-${i}`} width="w-1/2" />;
+          } else if (i % 9 === 2) {
+            // Opening bracket - very short
+            return <CodeLine key={`code-${i}`} width="w-8" />;
+          } else if (i % 9 === 7) {
+            // Closing bracket - very short
+            return <CodeLine key={`code-${i}`} width="w-8" />;
+          } else if (i % 9 === 8) {
+            // Empty line after function
+            return <EmptyLine key={`empty-${i}`} />;
+          } else if (i % 9 === 3 || i % 9 === 5) {
+            // Longer indented lines
+            return <CodeLine key={`code-${i}`} width="w-3/4" />;
+          } else {
+            // Regular indented lines - medium length
+            return <CodeLine key={`code-${i}`} width="w-1/2" />;
+          }
+        })}
+      </Stack>
+    </div>
+  );
+}
+
 export { Skeleton };

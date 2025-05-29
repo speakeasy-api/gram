@@ -26,14 +26,14 @@ import {
   ToolCall,
 } from "ai";
 import Ajv from "ajv";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { McpToolsetCard } from "../mcp/MCP";
 import { SdkContent } from "../sdk/SDK";
-import { Agentify } from "./Agentify";
+import { AgentifyButton } from "./Agentify";
 import { useChatHistory } from "./ChatHistory";
-import { PanelHeader } from "./Playground";
+import { PanelHeader, useChatContext } from "./Playground";
 
 // Ignore int32 format instead of erroring out
 const ajv = new Ajv({ formats: { int32: true } });
@@ -103,6 +103,7 @@ function ChatInner({
 }) {
   const session = useSession();
   const project = useProject();
+  const { setMessages } = useChatContext();
   const { chatHistory, isLoading: isChatHistoryLoading } =
     useChatHistory(chatId);
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
@@ -364,105 +365,9 @@ function ChatInner({
     [append]
   );
 
-  const JsonDisplay = ({ json }: { json: string }) => {
-    let pretty = json;
-    // Particularly when loading chat history from the database, the JSON formatting needs to be restored
-    if (json.startsWith('"') && json.endsWith('"')) {
-      pretty = json.slice(1, -1);
-      pretty = pretty.replace(/\\"/g, '"');
-      pretty = pretty.replace(/\\n/g, "\n");
-    }
-    try {
-      pretty = JSON.stringify(JSON.parse(pretty), null, 2);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (e) {
-      // If its not JSON, that's ok, we'll just return the string
-    }
-
-    return (
-      <pre className="typography-body-xs max-h-48 overflow-auto rounded bg-neutral-900 p-2 break-all whitespace-pre-wrap text-neutral-300">
-        {pretty}
-      </pre>
-    );
-  };
-
-  const toolCallComponents = {
-    toolName: ({
-      toolName,
-      result,
-      args,
-    }: {
-      toolName: string;
-      result?: unknown;
-      args: Record<string, unknown>;
-    }) => {
-      const hasSummary = JSON.stringify(args).includes("gram-request-summary");
-      const validationError =
-        typeof result === "string" &&
-        result.includes("Schema validation error");
-
-      return (
-        <Stack
-          direction="horizontal"
-          gap={2}
-          align="center"
-          className="mr-auto"
-        >
-          <Type
-            variant="small"
-            className={cn(
-              "font-medium",
-              validationError && "line-through text-muted-foreground"
-            )}
-          >
-            {toolName}
-          </Type>
-          {validationError && (
-            <Type variant="small" muted>
-              (invalid args)
-            </Type>
-          )}
-          {hasSummary && <AutoSummarizeBadge />}
-        </Stack>
-      );
-    },
-    input: (props: { toolName: string; args: string }) => {
-      const tool = allTools[props.toolName];
-      return (
-        <Stack gap={2}>
-          {tool?.method && tool?.path && (
-            <HttpRoute method={tool.method} path={tool.path} />
-          )}
-          <JsonDisplay json={props.args} />
-        </Stack>
-      );
-    },
-    result: (props: {
-      toolName: string;
-      result: string;
-      args: Record<string, unknown>;
-    }) => {
-      const tool = allTools[props.toolName];
-      const hasSummary = JSON.stringify(props.args).includes(
-        "gram-request-summary"
-      );
-
-      return (
-        <Stack gap={2} className="mt-4">
-          <Type variant="small" className="font-medium text-muted-foreground">
-            {tool?.method ? "Response Body" : "Result"}
-            {hasSummary && (
-              <span className="text-muted-foreground/50">
-                {" "}
-                (auto-summarized)
-              </span>
-            )}
-          </Type>
-          <JsonDisplay json={props.result} />
-        </Stack>
-      );
-    },
-  };
+  useEffect(() => {
+    setMessages(chatMessages);
+  }, [chatMessages]);
 
   const messagesToDisplay = [...displayOnlyMessages, ...chatMessages];
   messagesToDisplay.sort((a, b) => {
@@ -475,23 +380,15 @@ function ChatInner({
     return 0;
   });
 
-  const onAgentify = (agentCode: string) => {
-    setAgentifyResult(agentCode);
-    setActiveTab("agents");
-  };
-
   const agentifyButton = (
-    <Agentify
-      projectSlug={project.slug}
+    <AgentifyButton
       toolsetSlug={configRef.current.toolsetSlug ?? ""}
       environmentSlug={configRef.current.environmentSlug ?? ""}
-      messages={chatMessages}
       key="agentify-button"
-      onAgentify={onAgentify}
+      onAgentify={() => setActiveTab("agents")}
     />
   );
 
-  const [agentifyResult, setAgentifyResult] = useState<string>();
   const [activeTab, setActiveTab] = useState<"chat" | "agents" | "mcp">("chat");
 
   // TODO: fix this
@@ -534,7 +431,7 @@ function ChatInner({
                     <ProjectAvatar project={project} className="h-6 w-6" />
                   ),
                 },
-                toolCall: toolCallComponents,
+                toolCall: toolCallComponents(allTools),
               },
             }}
             modelSelector={{
@@ -551,8 +448,6 @@ function ChatInner({
           <SdkContent
             toolset={configRef.current.toolsetSlug ?? undefined}
             environment={configRef.current.environmentSlug ?? undefined}
-            codeOverride={agentifyResult}
-            codeOverrideLanguage="typescript"
           />
         </TabsContent>
         <TabsContent value="mcp">
@@ -581,4 +476,106 @@ const McpTab = ({ toolsetSlug }: { toolsetSlug: string }) => {
       <McpToolsetCard toolset={toolset} onUpdate={refetch} />
     </Stack>
   );
+};
+
+const toolCallComponents = (tools: Toolset) => {
+  const JsonDisplay = ({ json }: { json: string }) => {
+    let pretty = json;
+    // Particularly when loading chat history from the database, the JSON formatting needs to be restored
+    if (json.startsWith('"') && json.endsWith('"')) {
+      pretty = json.slice(1, -1);
+      pretty = pretty.replace(/\\"/g, '"');
+      pretty = pretty.replace(/\\n/g, "\n");
+    }
+    try {
+      pretty = JSON.stringify(JSON.parse(pretty), null, 2);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (e) {
+      // If its not JSON, that's ok, we'll just return the string
+    }
+
+    return (
+      <pre className="typography-body-xs max-h-48 overflow-auto rounded bg-neutral-900 p-2 break-all whitespace-pre-wrap text-neutral-300">
+        {pretty}
+      </pre>
+    );
+  };
+
+  return {
+    toolName: ({
+      toolName,
+      result,
+      args,
+    }: {
+      toolName: string;
+      result?: unknown;
+      args: Record<string, unknown>;
+    }) => {
+      const hasSummary = JSON.stringify(args).includes("gram-request-summary");
+      const validationError =
+        typeof result === "string" &&
+        result.includes("Schema validation error");
+
+      return (
+        <Stack
+          direction="horizontal"
+          gap={2}
+          align="center"
+          className="mr-auto"
+        >
+          <Type
+            variant="small"
+            className={cn(
+              "font-medium",
+              validationError && "line-through text-muted-foreground"
+            )}
+          >
+            {toolName}
+          </Type>
+          {validationError && (
+            <Type variant="small" muted>
+              (invalid args)
+            </Type>
+          )}
+          {hasSummary && <AutoSummarizeBadge />}
+        </Stack>
+      );
+    },
+    input: (props: { toolName: string; args: string }) => {
+      const tool = tools[props.toolName];
+      return (
+        <Stack gap={2}>
+          {tool?.method && tool?.path && (
+            <HttpRoute method={tool.method} path={tool.path} />
+          )}
+          <JsonDisplay json={props.args} />
+        </Stack>
+      );
+    },
+    result: (props: {
+      toolName: string;
+      result: string;
+      args: Record<string, unknown>;
+    }) => {
+      const tool = tools[props.toolName];
+      const hasSummary = JSON.stringify(props.args).includes(
+        "gram-request-summary"
+      );
+
+      return (
+        <Stack gap={2} className="mt-4">
+          <Type variant="small" className="font-medium text-muted-foreground">
+            {tool?.method ? "Response Body" : "Result"}
+            {hasSummary && (
+              <span className="text-muted-foreground/50">
+                {" "}
+                (auto-summarized)
+              </span>
+            )}
+          </Type>
+          <JsonDisplay json={props.result} />
+        </Stack>
+      );
+    },
+  };
 };

@@ -78,7 +78,7 @@ export function Type({
 
   switch (variant) {
     case "subheading":
-      return <p className={`text-md ${baseClass} ${className}`}>{children}</p>;
+      return <p className={`text-md font-medium ${baseClass} ${className}`}>{children}</p>;
     case "body":
       return (
         <p className={`text-base ${baseClass} ${className}`}>{children}</p>

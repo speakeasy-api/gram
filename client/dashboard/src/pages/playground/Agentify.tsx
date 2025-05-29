@@ -2,37 +2,207 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
+import { TextArea } from "@/components/ui/textarea";
+import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { generateObject, UIMessage } from "ai";
+import { generateObject } from "ai";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { z } from "zod";
-import { TS_AGENT_EXAMPLE } from "../sdk/examples";
-import { Type } from "@/components/ui/type";
+import { AGENT_EXAMPLES } from "../sdk/examples";
+import {
+  FRAMEWORKS,
+  OPENAI_AGENTS_SDK,
+  SdkFramework,
+  SdkLanguage,
+  SdkLanguageDropdown,
+} from "../sdk/SDK";
+import { useChatMessages } from "./Playground";
 
-export const Agentify = ({
-  projectSlug,
+export const useAgentify = () => {
+  return useContext(AgentifyContext);
+};
+
+const AgentifyContext = createContext<{
+  lang: SdkLanguage;
+  setLang: (lang: SdkLanguage) => void;
+  framework: SdkFramework;
+  setFramework: (framework: SdkFramework) => void;
+  inProgress: boolean;
+  prompt: string | undefined;
+  setPrompt: (prompt: string | undefined) => void;
+  result: string | undefined;
+  resultLang: SdkLanguage | undefined;
+  outdated: boolean;
+  agentify: (toolsetSlug: string, environmentSlug: string) => Promise<string>;
+}>({
+  lang: "python",
+  setLang: () => {},
+  framework: OPENAI_AGENTS_SDK,
+  setFramework: () => {},
+  inProgress: false,
+  prompt: undefined,
+  setPrompt: () => {},
+  result: undefined,
+  resultLang: undefined,
+  outdated: false,
+  agentify: () => Promise.resolve(""),
+});
+
+export const AgentifyProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const session = useSession();
+  const project = useProject();
+  const messages = useChatMessages();
+
+  const [lang, setLang] = useState<SdkLanguage>("python");
+  const [framework, setFramework] = useState<SdkFramework>(FRAMEWORKS[lang][0]);
+  const [prompt, setPrompt] = useState<string>();
+  const [inProgress, setInProgress] = useState(false);
+
+  const [result, setResult] = useState<string | undefined>();
+  const [resultLang, setResultLang] = useState<SdkLanguage | undefined>();
+  const [resultFramework, setResultFramework] = useState<
+    SdkFramework | undefined
+  >();
+  const [resultPrompt, setResultPrompt] = useState<string | undefined>();
+  const [resultNumMessages, setResultNumMessages] = useState<
+    number | undefined
+  >();
+
+  const openrouter = createOpenRouter({
+    apiKey: "this is required",
+    baseURL: getServerURL(),
+    headers: {
+      "Gram-Session": session.session,
+      "Gram-Project": project.slug,
+    },
+  });
+
+  const agentify = async (toolsetSlug: string, environmentSlug: string) => {
+    setInProgress(true);
+
+    const example = await fetch(Object.values(AGENT_EXAMPLES[lang])[0]!).then(
+      (res) => res.text()
+    );
+
+    const frameworkPrompt =
+      framework && Object.keys(AGENT_EXAMPLES[lang]).includes(framework)
+        ? `
+    <framework-sample>
+    ${
+      AGENT_EXAMPLES[lang][
+        framework as keyof (typeof AGENT_EXAMPLES)[typeof lang]
+      ]
+    }
+    </framework-sample>
+    `
+        : "";
+
+    const result = await generateObject({
+      model: openrouter.chat("openai/gpt-4o-mini"),
+      prompt: `
+        <instructions>
+        You will be given a chat history, a statement of intent, and a basic skeleton of an agent. 
+        Using the statement of intent and details from the chat history, produce a complete agent that performs the task.
+        The agent should use LLM calls and toolsets to solve the generic version of the task as described in the statement of intent, not just the specific example given.
+        Note that the toolset provides tools and handles their execution and authentication. For example, any tool call present in the chat history will be available to the agent.
+        Use the example agent as a guide for the structure of the agent. If a framework sample is provided, be sure to use that specific framework.
+        </instructions>
+
+        <statement-of-intent>
+        ${prompt}
+        </statement-of-intent>
+
+        <values-to-use>
+        <project>
+            ${project.slug}
+        </project>
+        <toolset>
+            ${toolsetSlug}
+        </toolset>
+        <environment>
+            ${environmentSlug}
+        </environment>
+        </values-to-use>
+        
+        <chat-history>
+        ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\t")}
+        </chat-history>
+        
+        <example-agent>
+        ${example}
+        </example-agent>
+
+        ${frameworkPrompt}
+      `,
+      temperature: 0.5,
+      schema: z.object({
+        agentCode: z.string(),
+      }),
+    });
+
+    setInProgress(false);
+    setResult(result.object.agentCode);
+    setResultLang(lang);
+    setResultFramework(framework);
+    setResultPrompt(prompt);
+    setResultNumMessages(messages.length);
+
+    return result.object.agentCode;
+  };
+
+  const outdated =
+    lang !== resultLang ||
+    framework !== resultFramework ||
+    prompt !== resultPrompt ||
+    messages.length !== resultNumMessages;
+
+  return (
+    <AgentifyContext.Provider
+      value={{
+        lang,
+        setLang,
+        framework,
+        setFramework,
+        agentify,
+        inProgress,
+        prompt,
+        setPrompt,
+        result,
+        resultLang,
+        outdated,
+      }}
+    >
+      {children}
+    </AgentifyContext.Provider>
+  );
+};
+
+export const AgentifyButton = ({
   toolsetSlug,
   environmentSlug,
-  messages,
   onAgentify,
 }: {
-  projectSlug: string;
   toolsetSlug: string;
   environmentSlug: string;
-  messages: UIMessage[];
-  onAgentify: (agentCode: string) => void;
+  onAgentify: () => void;
 }) => {
   const session = useSession();
   const project = useProject();
 
-  const [agentifyModalOpen, setAgentifyModalOpen] = useState(false);
-  const [agentSummaryPrompt, setAgentSummaryPrompt] = useState<string>();
+  const messages = useChatMessages();
+  const { agentify, inProgress, prompt, setPrompt, lang, setLang } =
+    useAgentify();
+
   const [suggestionNumMessages, setSuggestionNumMessages] = useState(0);
-  const [agentifyInProgress, setAgentifyInProgress] = useState(false);
+  const [agentifyModalOpen, setAgentifyModalOpen] = useState(false);
 
   const openrouter = createOpenRouter({
     apiKey: "this is required",
@@ -48,15 +218,16 @@ export const Agentify = ({
     if (!agentifyModalOpen) return;
     if (suggestionNumMessages === messages.length) return; // Don't generate a new suggestion if the number of messages hasn't changed
 
-    setAgentSummaryPrompt(undefined);
+    setPrompt(undefined);
 
     generateObject({
       model: openrouter.chat("openai/gpt-4o-mini"),
       prompt: `
           <instructions>
             You will be given a chat history. 
-            Your job is to distill the user's intent from the chat history to produce a two-sentence prompt explaining the task the user wants to accomplish.
+            Your job is to distill the user's intent from the chat history to produce a few sentences that describe the function the agent should perform, based on the user's intent from the chat history.
             This prompt will be used to generate an agent that can reusably and extensibly solve the task.
+            Phrase the prompt as instructions, e.g. "Find all new users from the last 30 days and send them a welcome email".
           </instructions>
 
           <chat-history>
@@ -68,63 +239,22 @@ export const Agentify = ({
         promptSuggestion: z.string(),
       }),
     }).then((result) => {
-      setAgentSummaryPrompt(result.object.promptSuggestion);
+      setPrompt(result.object.promptSuggestion);
       setSuggestionNumMessages(messages.length);
     });
   }, [agentifyModalOpen]);
 
-  const agentify = async () => {
-    setAgentifyInProgress(true);
-
-    const result = await generateObject({
-      model: openrouter.chat("openai/gpt-4o-mini"),
-      prompt: `
-          <instructions>
-            You will be given a chat history, a statement of intent, and a basic skeleton of an agent. 
-            Using the statement of intent and details from the chat history, produce a complete agent that performs the task.
-            The agent should use LLM calls and toolsets to solve the generic version of the task as described in the statement of intent, not just the specific example given.
-            Note that the toolset provides tools and handles their execution and authentication. For example, any tool call present in the chat history will be available to the agent.
-          </instructions>
-
-          <statement-of-intent>
-            ${agentSummaryPrompt}
-          </statement-of-intent>
-    
-          <values-to-use>
-            <project>
-              ${projectSlug}
-            </project>
-            <toolset>
-              ${toolsetSlug}
-            </toolset>
-            <environment>
-              ${environmentSlug}
-            </environment>
-          </values-to-use>
-          
-          <chat-history>
-            ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\t")}
-          </chat-history>
-          
-          <example-agent>
-            ${TS_AGENT_EXAMPLE}
-          </example-agent>
-          `,
-      temperature: 0.5,
-      schema: z.object({
-        agentCode: z.string(),
-      }),
-    });
-
-    onAgentify(result.object.agentCode);
+  const agentifyFn = async () => {
+    agentify(toolsetSlug, environmentSlug);
+    onAgentify();
     setAgentifyModalOpen(false);
-    setAgentifyInProgress(false);
   };
 
-  const agentifyAvailable = messages.filter((m) => m.role === "user").length > 0;
+  const agentifyAvailable =
+    messages.filter((m) => m.role === "user").length > 0;
   const agentifyButton = (
     <Button
-      variant={"ghost"}
+      variant={"secondary"}
       size={"sm"}
       icon="wand-sparkles"
       tooltip={
@@ -154,40 +284,45 @@ export const Agentify = ({
               Turn this chat into a reusable agent
             </Dialog.Description>
           </Dialog.Header>
-          <Stack gap={2}>
-            <Heading variant="h5" className="normal-case font-medium">
-              {agentSummaryPrompt
-                ? "What should the agent do?"
-                : "Distilling chat history..."}
-            </Heading>
-            {agentSummaryPrompt ? (
+          <Stack gap={4}>
+            <Stack gap={1}>
+              <Heading variant="h5" className="normal-case font-medium">
+                What language should the agent be written in?
+              </Heading>
+              <SdkLanguageDropdown lang={lang} setLang={setLang} />
+            </Stack>
+            <Stack gap={1}>
+              <Heading variant="h5" className="normal-case font-medium">
+                {prompt
+                  ? "What should the agent do?"
+                  : "Distilling chat history..."}
+              </Heading>
+              {prompt ? (
                 <>
-              <textarea
-                value={agentSummaryPrompt}
-                onChange={(e) => setAgentSummaryPrompt(e.target.value)}
-                className="w-full h-34 border-2 rounded-lg py-1 px-2"
-                disabled={agentifyInProgress}
-              />
-              <Type muted variant="small" italic>
-                The chat history will also be used to generate the agent code.
-              </Type>
-              </>
-            ) : (
-              <SkeletonParagraph lines={4} />
-            )}
+                  <TextArea
+                    value={prompt}
+                    onChange={(value) => setPrompt(value)}
+                    disabled={inProgress}
+                    placeholder="What should the agent do?"
+                    rows={4}
+                  />
+                  <Type muted variant="small" italic>
+                    The chat history will also be used to generate the agent
+                    code.
+                  </Type>
+                </>
+              ) : (
+                <SkeletonParagraph lines={4} />
+              )}
+            </Stack>
           </Stack>
           <Dialog.Footer>
             <Button variant="ghost" onClick={() => setAgentifyModalOpen(false)}>
               Back
             </Button>
-            <Button
-              onClick={agentify}
-              disabled={!agentSummaryPrompt || agentifyInProgress}
-            >
-              {agentifyInProgress && (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              )}
-              {agentifyInProgress ? "Generating..." : "Agentify"}
+            <Button onClick={agentifyFn} disabled={!prompt || inProgress}>
+              {inProgress && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {inProgress ? "Generating..." : "Agentify"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>

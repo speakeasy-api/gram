@@ -14,11 +14,13 @@ import {
   useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
-import { useEffect, useRef, useState } from "react";
+import { UIMessage } from "ai";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { v7 as uuidv7 } from "uuid";
 import { OnboardingContent } from "../onboarding/Onboarding";
 import { ToolsetView } from "../toolsets/Toolset";
+import { AgentifyProvider } from "./Agentify";
 import { ChatConfig, ChatWindow } from "./ChatWindow";
 
 export default function Playground() {
@@ -113,27 +115,31 @@ export default function Playground() {
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body className="max-w-full p-0">
-        <ResizablePanel
-          direction="horizontal"
-          className="h-full [&>[role='separator']]:border-border"
-        >
-          <ResizablePanel.Pane minSize={35}>
-            <ToolsetPanel
-              configRef={chatConfigRef}
-              setSelectedToolset={setSelectedToolset}
-              setSelectedEnvironment={setSelectedEnvironment}
-              dynamicToolset={dynamicToolset}
-              setDynamicToolset={setDynamicToolset}
-            />
-          </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={35} order={0}>
-            <ChatWindow
-              configRef={chatConfigRef}
-              chatId={chatId}
-              dynamicToolset={dynamicToolset}
-            />
-          </ResizablePanel.Pane>
-        </ResizablePanel>
+        <ChatProvider>
+          <AgentifyProvider>
+            <ResizablePanel
+              direction="horizontal"
+              className="h-full [&>[role='separator']]:border-border"
+            >
+              <ResizablePanel.Pane minSize={35}>
+                <ToolsetPanel
+                  configRef={chatConfigRef}
+                  setSelectedToolset={setSelectedToolset}
+                  setSelectedEnvironment={setSelectedEnvironment}
+                  dynamicToolset={dynamicToolset}
+                  setDynamicToolset={setDynamicToolset}
+                />
+              </ResizablePanel.Pane>
+              <ResizablePanel.Pane minSize={35} order={0}>
+                <ChatWindow
+                  configRef={chatConfigRef}
+                  chatId={chatId}
+                  dynamicToolset={dynamicToolset}
+                />
+              </ResizablePanel.Pane>
+            </ResizablePanel>
+          </AgentifyProvider>
+        </ChatProvider>
       </Page.Body>
     </Page>
   );
@@ -338,5 +344,31 @@ export const PanelHeader = ({
     >
       {children}
     </div>
+  );
+};
+
+const ChatContext = createContext<{
+  messages: UIMessage[];
+  setMessages: (messages: UIMessage[]) => void;
+}>({
+  messages: [],
+  setMessages: () => {},
+});
+
+export const useChatContext = () => {
+  return useContext(ChatContext);
+};
+
+export const useChatMessages = () => {
+  return useChatContext().messages;
+};
+
+const ChatProvider = ({ children }: { children: React.ReactNode }) => {
+  const [messages, setMessages] = useState<UIMessage[]>([]);
+
+  return (
+    <ChatContext.Provider value={{ messages, setMessages }}>
+      {children}
+    </ChatContext.Provider>
   );
 };

@@ -1,83 +1,223 @@
-export const TS_AGENT_EXAMPLE = `
-import { createOpenAI } from "@ai-sdk/openai";
+import {
+  FUNCTION_CALLING,
+  LANGCHAIN,
+  OPENAI_AGENTS_SDK,
+  VERCEL_AI_SDK,
+} from "./SDK";
+
+export const AGENT_EXAMPLES = {
+  python: {
+    openai_agents:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/python/gram_agents/gtm_agent.py",
+  },
+  typescript: {
+    vercel_agents:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/typescript/gram_agents/gtmAgent.ts",
+  },
+};
+
+export const CODE_SAMPLES = {
+  typescript: {
+    [VERCEL_AI_SDK]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import { generateText } from 'ai';
 import { VercelAdapter } from "@gram-ai/sdk/vercel";
-import { CoreMessage, generateText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 
-export async function runGTMAgentWorkflow(): Promise<any> {
-  const key = process.env.GRAM_PROD_API_KEY ?? "";
-  const vercelAdapter = new VercelAdapter(key);
+const key = "<GRAM_API_KEY>";
+const vercelAdapter = new VercelAdapter({apiKey: key});
 
-  const openai = createOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+const openai = createOpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
-  const tools = await vercelAdapter.tools({
-    project: "default",
-    toolset: "gtm",
-    environment: "default",
-  });
+const tools = await vercelAdapter.tools({
+    project: "${project}",
+    toolset: "${toolset}",
+    environment: "${environment}",
+});
 
-  const messages: CoreMessage[] = [];
-
-  const orgPrompt = \`The current date is ${new Date()
-    .toISOString()
-    .slice(
-      0,
-      10
-    )}. Please get me the most recent 5 account type business organizations created for speakeasy (fetch in descending order). Render all available organization information for each organization.\`;
-  messages.push({ role: "user", content: orgPrompt });
-  const orgGeneration = await generateText({
-    model: openai("gpt-4o"),
+const result = await generateText({
+    model: openai('gpt-4'),
     tools,
     maxSteps: 5,
-    messages: messages,
-  });
-  console.log(orgGeneration.text);
-  messages.push(...orgGeneration.response.messages);
+    prompt: 'Can you tell me about my tools?'
+});
 
-  const usersPrompt =
-    "For each of these organizations, render the user emails and all user information available associated with that organization from speakeasy.";
-  messages.push({ role: "user", content: usersPrompt });
-  const usersGeneration = await generateText({
-    model: openai("gpt-4o"),
-    tools,
-    maxSteps: 5,
-    messages: messages,
-  });
-  console.log(usersGeneration.text);
-  messages.push(...usersGeneration.response.messages);
+console.log(result.text);`,
+    [LANGCHAIN]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import { LangchainAdapter } from "@gram-ai/sdk/langchain";
+import { ChatOpenAI } from "@langchain/openai";
+import { createOpenAIFunctionsAgent, AgentExecutor } from "langchain/agents";
+import { pull } from "langchain/hub";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 
-  const companiesPrompt =
-    "For each organization look for a hubspot company with a name similar to the name of the organization and render all hubspot company information available alongside the organization information and user information you previously fetched.";
-  messages.push({ role: "user", content: companiesPrompt });
-  const companiesGeneration = await generateText({
-    model: openai("gpt-4o"),
-    tools,
-    maxSteps: 5,
-    messages: messages,
-  });
-  console.log(companiesGeneration.text);
-  messages.push(...companiesGeneration.response.messages);
+const key = "<GRAM_API_KEY>";
+const langchainAdapter = new LangchainAdapter({apiKey: key});
 
-  const slackTools = await vercelAdapter.tools({
-    project: "default",
-    toolset: "slack",
-    environment: "default",
-  });
+const llm = new ChatOpenAI({
+  modelName: "gpt-4",
+  temperature: 0,
+  openAIApiKey: process.env.OPENAI_API_KEY,
+});
 
-  const slackPrompt =
-    "Post a message to the slack channel with ID: C08H55TP4HZ (proj-gram), send information on all of these organizations, users, and companies in a message well formatted for slack using Slack's rich text formatting options.";
-  messages.push({ role: "user", content: slackPrompt });
-  const slackGeneration = await generateText({
-    model: openai("gpt-4o"),
-    tools: slackTools,
-    maxSteps: 5,
-    messages: messages,
-  });
-  console.log(slackGeneration.text);
+const tools = await langchainAdapter.tools({
+  project: "${project}",
+  toolset: "${toolset}",
+  environment: "${environment}",
+});
 
-  return {
-    content: companiesGeneration.text,
-    slack: slackGeneration.text,
-  };
-}`;
+const prompt = await pull<ChatPromptTemplate>(
+  "hwchase17/openai-functions-agent"
+);
+
+const agent = await createOpenAIFunctionsAgent({
+  llm,
+  tools,
+  prompt
+});
+
+const executor = new AgentExecutor({
+  agent,
+  tools,
+  verbose: false,
+});
+
+const result = await executor.invoke({
+  input: "Can you tell me about my tools?",
+});
+
+console.log(result.output);`,
+    [FUNCTION_CALLING]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
+
+const key = process.env.GRAM_API_KEY ?? "";
+
+// vanilla client that matches the function calling interface for direct use with model provider APIs
+const functionCallingAdapter = new FunctionCallingAdapter({apiKey: key});
+
+const tools = await functionCallingAdapter.tools({
+  project: "${project}",
+  toolset: "${toolset}",
+  environment: "${environment}",
+});
+
+// exposes name, description, parameters, and an execute and aexcute (async) function
+console.log(tools[0].name)
+console.log(tools[0].description)
+console.log(tools[0].parameters)
+console.log(tools[0].execute)`,
+  },
+  python: {
+    [OPENAI_AGENTS_SDK]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import asyncio
+import os
+from agents import Agent, Runner, set_default_openai_key
+from gram_ai.openai_agents import GramOpenAIAgents
+
+gram = GramLangchain(api_key=key)
+
+gram = GramOpenAIAgents(
+    api_key=key,
+)
+
+set_default_openai_key(os.getenv("OPENAI_API_KEY"))
+
+agent = Agent(
+    name="Assistant",
+    tools=gram.tools(
+        project="${project}",
+        toolset="${toolset}",
+        environment="${environment}",
+    ),
+)
+
+
+async def main():
+    result = await Runner.run(
+        agent,
+        "Can you tell me about my tools?",
+    )
+    print(result.final_output)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())`,
+    [LANGCHAIN]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import asyncio
+import os
+from langchain import hub
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_openai_functions_agent
+from gram_ai.langchain import GramLangchain
+
+key = "<GRAM_API_KEY>"
+
+gram = GramLangchain(api_key=key)
+
+llm = ChatOpenAI(
+    model="gpt-4",
+    temperature=0,
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
+
+tools = gram.tools(
+    project="${project}",
+    toolset="${toolset}",
+    environment="${environment}",
+)
+
+prompt = hub.pull("hwchase17/openai-functions-agent")
+
+agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
+
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
+
+async def main():
+    response = await agent_executor.ainvoke({
+        "input": "Can you tell me about my tools?"
+    })
+    print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())`,
+    [FUNCTION_CALLING]: (
+      project: string,
+      toolset: string,
+      environment: string
+    ) => `import os
+from gram_ai.function_calling import GramFunctionCalling
+
+key = "<GRAM_API_KEY>"
+
+# vanilla client that matches the function calling interface for direct use with model provider APIs
+gram = GramFunctionCalling(api_key=key)
+
+tools = gram.tools(
+    project="${project}",
+    toolset="${toolset}",
+    environment="${environment}",
+)
+
+# exposes name, description, parameters, and an execute and aexecute (async) function
+print(tools[0].name)
+print(tools[0].description)
+print(tools[0].parameters)
+print(tools[0].execute)
+print(tools[0].aexecute)`,
+  },
+} as const;
