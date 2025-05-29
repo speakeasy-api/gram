@@ -264,6 +264,37 @@ function ChatInner({
       experimental_transform: smoothStream({
         delayInMs: 15, // Looks a little smoother
       }),
+      onError: (event: { error: unknown }) => {
+        let displayMessage: string | undefined;
+        if (typeof event.error === 'object' && event.error !== null) {
+          const errorObject = event.error as { responseBody?: unknown; message?: unknown; [key: string]: unknown };
+
+          if (typeof errorObject.responseBody === "string") {
+            try {
+              const parsedBody = JSON.parse(errorObject.responseBody);
+              if (typeof parsedBody === 'object' && parsedBody !== null && parsedBody.error && typeof parsedBody.error.message === "string") {
+                displayMessage = parsedBody.error.message;
+              }
+            } catch(e) {
+              console.error(`Error parsing model error: ${e}`);
+            }
+          } else if (typeof errorObject.message === 'string') {
+            displayMessage = errorObject.message;
+          }
+        }
+        if (displayMessage) {
+          // some manipulation to promote summarization
+          if (displayMessage.includes("maximum context length")) {
+            const cutoffPhrase = "Please reduce the length of either one";
+            const cutoffIndex = displayMessage.indexOf(cutoffPhrase);
+            if (cutoffIndex !== -1) {
+              displayMessage = displayMessage.substring(0, cutoffIndex);
+            }
+            displayMessage += " Please consider enabling *Auto-Summarize* for your tool or revise your prompt.";
+          }
+          appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
+        }
+      },
     });
 
     return result.toDataStreamResponse();
@@ -342,15 +373,23 @@ function ChatInner({
     fetch: openaiFetch,
     onError: (error) => {
       console.error("Chat error:", error.message, error.stack);
-      appendDisplayOnlyMessage(`**Error:** *${error.message}*`);
+      // don't write display message for non useful obscured onChat error. StreamText will handle it if it's a model error.
+      if (error.message.trim() !== "An error occurred.") {
+        appendDisplayOnlyMessage(`**Error:** *${error.message}*`);
+      }
     },
     maxSteps: 5,
     initialMessages,
     onToolCall: (toolCall) => {
-      const validationError = validateArgs(toolCall.toolCall);
-      if (validationError) {
-        return validationError;
+      try {
+        const validationError = validateArgs(toolCall.toolCall);
+        if (validationError) {
+          appendDisplayOnlyMessage(`**Warning:** *${validationError}*`);
+        }
+      } catch (e) {
+        appendDisplayOnlyMessage(`**Warning:** *${e}*`);
       }
+
       return toolCallApproval.toolCallFn(toolCall);
     },
   });

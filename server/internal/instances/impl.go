@@ -270,13 +270,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	responseBody := interceptor.buffer.String()
 
 	// Summarize if the response is too large or if the "gram-request-summary" param is provided
-	shouldSummarize := len(responseBody) > SUMMARIZE_BREAKPOINT_BYTES
+	shouldSummarize := false
 	var requestSummary struct {
 		GramRequestSummary string `json:"gram-request-summary"`
 	}
 	err = json.Unmarshal(requestBodyBytes, &requestSummary)
 	if err == nil && requestSummary.GramRequestSummary != "" {
-		shouldSummarize = true
+		shouldSummarize = len(responseBody) > SUMMARIZE_BREAKPOINT_BYTES && executionInfo.Tool.Summarizer.String == "auto"
 	}
 
 	if shouldSummarize {
