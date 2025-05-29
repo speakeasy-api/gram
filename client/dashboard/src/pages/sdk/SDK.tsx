@@ -30,16 +30,16 @@ import { VercelAdapter } from "@gram-ai/sdk/vercel";
 import { createOpenAI } from "@ai-sdk/openai";
 
 const key = "<GRAM_API_KEY>";
-const vercelAdapter = new VercelAdapter(key);
+const vercelAdapter = new VercelAdapter({apiKey: key});
 
 const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
 const tools = await vercelAdapter.tools({
-    project: ${project},
-    toolset: ${toolset},
-    environment: ${environment}
+    project: "${project}",
+    toolset: "${toolset}",
+    environment: "${environment}",
 });
 
 const result = await generateText({
@@ -61,7 +61,7 @@ import { pull } from "langchain/hub";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 const key = "<GRAM_API_KEY>";
-const langchainAdapter = new LangchainAdapter(key);
+const langchainAdapter = new LangchainAdapter({apiKey: key});
 
 const llm = new ChatOpenAI({
   modelName: "gpt-4",
@@ -70,9 +70,9 @@ const llm = new ChatOpenAI({
 });
 
 const tools = await langchainAdapter.tools({
-  project: ${project},
-  toolset: ${toolset},
-  environment: ${environment},
+  project: "${project}",
+  toolset: "${toolset}",
+  environment: "${environment}",
 });
 
 const prompt = await pull<ChatPromptTemplate>(
@@ -105,12 +105,12 @@ console.log(result.output);`,
 const key = process.env.GRAM_API_KEY ?? "";
 
 // vanilla client that matches the function calling interface for direct use with model provider APIs
-const functionCallingAdapter = new FunctionCallingAdapter(key);
+const functionCallingAdapter = new FunctionCallingAdapter({apiKey: key});
 
 const tools = await functionCallingAdapter.tools({
-  project: ${project},
-  toolset: ${toolset},
-  environment: ${environment},
+  project: "${project}",
+  toolset: "${toolset}",
+  environment: "${environment}",
 });
 
 // exposes name, description, parameters, and an execute and aexcute (async) function
@@ -140,9 +140,9 @@ set_default_openai_key(os.getenv("OPENAI_API_KEY"))
 agent = Agent(
     name="Assistant",
     tools=gram.tools(
-        project=${project},
-        toolset=${toolset},
-        environment=${environment},
+        project="${project}",
+        toolset="${toolset}",
+        environment="${environment}",
     ),
 )
 
@@ -179,9 +179,9 @@ llm = ChatOpenAI(
 )
 
 tools = gram.tools(
-    project=${project},
-    toolset=${toolset},
-    environment=${environment},
+    project="${project}",
+    toolset="${toolset}",
+    environment="${environment}",
 )
 
 prompt = hub.pull("hwchase17/openai-functions-agent")
@@ -211,9 +211,9 @@ key = "<GRAM_API_KEY>"
 gram = GramFunctionCalling(api_key=key)
 
 tools = gram.tools(
-    project=${project},
-    toolset=${toolset},
-    environment=${environment},
+    project="${project}",
+    toolset="${toolset}",
+    environment="${environment}",
 )
 
 # exposes name, description, parameters, and an execute and aexecute (async) function
