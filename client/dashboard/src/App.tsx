@@ -1,14 +1,14 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
+import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout } from "./components/app-layout.tsx";
-import { AppRoute, useRoutes } from "./routes";
-import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { ThemeContext } from "./components/ui/theme-toggle.tsx";
 import { AuthProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
+import { AppRoute, useRoutes } from "./routes";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -18,6 +18,21 @@ export default function App() {
     if (root.classList.contains(theme)) return;
     root.classList.add(theme);
     root.classList.remove(theme === "dark" ? "light" : "dark");
+
+    // Update favicon based on theme
+    const favicon = document.getElementById("favicon") as HTMLLinkElement;
+    const faviconAlt = document.getElementById(
+      "favicon-alt"
+    ) as HTMLLinkElement;
+
+    if (favicon) {
+      favicon.href = theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
+    }
+
+    if (faviconAlt) {
+      faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
+    }
+
     setTheme(theme);
   };
 
@@ -37,6 +52,15 @@ export default function App() {
       "(prefers-color-scheme: dark)"
     ).matches;
     applyTheme(prefersDark ? "dark" : "light");
+
+    // Listen for system preference changes
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e: MediaQueryListEvent) => {
+      applyTheme(e.matches ? "dark" : "light");
+    };
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
 
   return (
