@@ -23,7 +23,7 @@ func BuildUpsertGlobalPayload(variationsUpsertGlobalBody string, variationsUpser
 	{
 		err = json.Unmarshal([]byte(variationsUpsertGlobalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"always\",\n      \"confirm_prompt\": \"Dolorum veritatis quae asperiores quod molestiae iure.\",\n      \"description\": \"Cumque molestiae.\",\n      \"name\": \"Est error dolorum.\",\n      \"src_tool_name\": \"Consequatur quia saepe dolores neque est.\",\n      \"summarizer\": \"Voluptatem porro.\",\n      \"summary\": \"Sed harum voluptatem perspiciatis sed eligendi assumenda.\",\n      \"tags\": [\n         \"Harum adipisci nihil vel ut debitis veritatis.\",\n         \"Porro consequuntur.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"Ad libero repellat.\",\n      \"description\": \"Eum eaque aut deleniti earum exercitationem quis.\",\n      \"name\": \"Et laborum quasi et ut numquam sed.\",\n      \"src_tool_name\": \"Earum aut unde alias vel.\",\n      \"summarizer\": \"Ad dolore temporibus molestias.\",\n      \"summary\": \"Blanditiis itaque vel dolorum.\",\n      \"tags\": [\n         \"Et consequatur odit id vitae est.\",\n         \"Sed ut quasi laboriosam eum.\",\n         \"Quam blanditiis dicta illum non deserunt in.\",\n         \"Animi iure.\"\n      ]\n   }'")
 		}
 		if body.Confirm != nil {
 			if !(*body.Confirm == "always" || *body.Confirm == "never" || *body.Confirm == "session") {

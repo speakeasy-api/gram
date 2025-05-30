@@ -261,11 +261,11 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
-// unmarshalToolEntryResponseBodyToToolsToolEntry builds a value of type
-// *tools.ToolEntry from a value of type *ToolEntryResponseBody.
-func unmarshalToolEntryResponseBodyToToolsToolEntry(v *ToolEntryResponseBody) *tools.ToolEntry {
-	res := &tools.ToolEntry{
-		PackageName:         v.PackageName,
+// unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition builds a
+// value of type *types.HTTPToolDefinition from a value of type
+// *HTTPToolDefinitionResponseBody.
+func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
+	res := &types.HTTPToolDefinition{
 		ID:                  *v.ID,
 		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
@@ -282,6 +282,7 @@ func unmarshalToolEntryResponseBodyToToolsToolEntry(v *ToolEntryResponseBody) *t
 		Path:                *v.Path,
 		SchemaVersion:       v.SchemaVersion,
 		Schema:              *v.Schema,
+		PackageName:         v.PackageName,
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
 	}

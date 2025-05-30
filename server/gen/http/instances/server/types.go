@@ -247,6 +247,8 @@ type HTTPToolDefinitionResponseBody struct {
 	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// JSON schema for the request
 	Schema string `form:"schema" json:"schema" xml:"schema"`
+	// The name of the source package
+	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.

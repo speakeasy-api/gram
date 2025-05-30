@@ -40,11 +40,6 @@ var _ = Service("tools", func() {
 
 var ListToolsResult = Type("ListToolsResult", func() {
 	Attribute("next_cursor", String, "The cursor to fetch results from")
-	Attribute("tools", ArrayOf(ToolEntry), "The list of tools")
+	Attribute("tools", ArrayOf(shared.HTTPToolDefinition), "The list of tools")
 	Required("tools")
-})
-
-var ToolEntry = Type("ToolEntry", func() {
-	Extend(shared.HTTPToolDefinition)
-	Attribute("packageName", String, "The package name")
 })

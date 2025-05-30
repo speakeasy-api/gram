@@ -66,6 +66,10 @@ export type HTTPToolDefinition = {
    */
   openapiv3Operation?: string | undefined;
   /**
+   * The name of the source package
+   */
+  packageName?: string | undefined;
+  /**
    * Path for the request
    */
   path: string;
@@ -121,6 +125,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   name: z.string(),
   openapiv3_document_id: z.string().optional(),
   openapiv3_operation: z.string().optional(),
+  package_name: z.string().optional(),
   path: z.string(),
   project_id: z.string(),
   schema: z.string(),
@@ -139,6 +144,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "http_method": "httpMethod",
     "openapiv3_document_id": "openapiv3DocumentId",
     "openapiv3_operation": "openapiv3Operation",
+    "package_name": "packageName",
     "project_id": "projectId",
     "schema_version": "schemaVersion",
     "updated_at": "updatedAt",
@@ -158,6 +164,7 @@ export type HTTPToolDefinition$Outbound = {
   name: string;
   openapiv3_document_id?: string | undefined;
   openapiv3_operation?: string | undefined;
+  package_name?: string | undefined;
   path: string;
   project_id: string;
   schema: string;
@@ -187,6 +194,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   name: z.string(),
   openapiv3DocumentId: z.string().optional(),
   openapiv3Operation: z.string().optional(),
+  packageName: z.string().optional(),
   path: z.string(),
   projectId: z.string(),
   schema: z.string(),
@@ -205,6 +213,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     httpMethod: "http_method",
     openapiv3DocumentId: "openapiv3_document_id",
     openapiv3Operation: "openapiv3_operation",
+    packageName: "package_name",
     projectId: "project_id",
     schemaVersion: "schema_version",
     updatedAt: "updated_at",

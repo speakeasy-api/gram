@@ -32,14 +32,15 @@ import {
 } from "@gram/client/models/components";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
+  queryKeyInstance,
   useDeleteToolsetMutation,
   useDeployment,
-  useInstance,
   useToolset,
   useUpdateEnvironmentMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
@@ -123,6 +124,7 @@ export function ToolsetView({
   className?: string;
   environmentSlug?: string;
 }) {
+  const queryClient = useQueryClient();
   const routes = useRoutes();
 
   const { data: toolset, refetch } = useToolset({
@@ -130,10 +132,14 @@ export function ToolsetView({
   });
 
   // Refetch any loaded instances of this toolset on update (primarily for the playground)
-  const { refetch: refetchInstance } = useInstance({
-    toolsetSlug: toolsetSlug,
-    environmentSlug: environmentSlug,
-  });
+  const refetchInstance = () => {
+    const queryKey = queryKeyInstance({
+      toolsetSlug,
+      environmentSlug,
+    });
+
+    queryClient.invalidateQueries({ queryKey });
+  };
 
   const environment = useEnvironment(
     environmentSlug || toolset?.defaultEnvironmentSlug
@@ -398,12 +404,24 @@ export const ToolsetHeader = ({
   );
 };
 
-function useOpenApiDocumentSlug(deploymentId: string, tool: HTTPToolDefinition) {
-  const { data: deployment } = useDeployment({
-    id: deploymentId,
-  });
+function useToolSourceName(deploymentId: string, tool: HTTPToolDefinition) {
+  const { data: deployment } = useDeployment(
+    {
+      id: deploymentId,
+    },
+    undefined,
+    {
+      enabled: !tool.packageName,
+    }
+  );
 
-  return deployment?.openapiv3Assets.find((asset) => asset.id === tool.openapiv3DocumentId)?.slug;
+  if (tool.packageName) {
+    return tool.packageName;
+  }
+
+  return deployment?.openapiv3Assets.find(
+    (asset) => asset.id === tool.openapiv3DocumentId
+  )?.slug;
 }
 
 function ToolCard({
@@ -416,9 +434,11 @@ function ToolCard({
   onUpdate: () => void;
 }) {
   const client = useSdkClient();
-  const openApiDocumentSlug = useOpenApiDocumentSlug(tool.deploymentId, tool);
+  const sourceName = useToolSourceName(tool.deploymentId, tool);
 
-  const toolNameDisplay = openApiDocumentSlug ? tool.name.replace(openApiDocumentSlug + "_", "") : tool.name;
+  const toolNameDisplay = sourceName
+    ? tool.name.replace(sourceName + "_", "")
+    : tool.name;
 
   const updateVariation = async (
     vals: Partial<UpsertGlobalToolVariationForm>
@@ -447,9 +467,9 @@ function ToolCard({
           <Heading
             variant="h4"
             className="text-muted-foreground capitalize"
-            tooltip={"This tool is from your " + openApiDocumentSlug + " source"}
+            tooltip={"This tool is from your " + sourceName + " source"}
           >
-            {openApiDocumentSlug}
+            {sourceName}
           </Heading>
           <Dot />
           <Heading variant="h4">{toolNameDisplay}</Heading>

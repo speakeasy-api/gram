@@ -8,15 +8,15 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { groupTools } from "@/lib/toolNames";
-import { ToolEntry } from "@gram/client/models/components";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { ToolsetHeader } from "./Toolset";
+import { HTTPToolDefinition } from "@gram/client/models/components";
 
-type Tool = ToolEntry & {
+type Tool = HTTPToolDefinition & {
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
   displayName?: string;

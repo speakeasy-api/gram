@@ -18,7 +18,6 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { DeploymentPackage } from "@gram/client/models/components/deploymentpackage.js";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
-import { ToolEntry } from "@gram/client/models/components/toolentry.js";
 import {
   useDeploymentSuspense,
   useLatestDeployment,
@@ -30,6 +29,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Suspense, useState } from "react";
 import { OnboardingContent } from "../onboarding/Onboarding";
 import { CreateThingCard } from "../toolsets/Toolsets";
+import { HTTPToolDefinition } from "@gram/client/models/components";
 
 function DeploymentCards() {
   const { data: deployment, refetch, isLoading } = useLatestDeployment();
@@ -227,7 +227,7 @@ function DeploymentCard({
   removeDocument,
   setChangeDocumentTargetSlug,
 }: {
-  tools: ToolEntry[];
+  tools: HTTPToolDefinition[];
   asset: GetDeploymentResult["openapiv3Assets"][0];
   removeDocument: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
@@ -382,8 +382,8 @@ function PackageCard({
   );
 }
 
-function groupToolsByDocument(tools: ToolEntry[]) {
-  return tools.reduce<Record<string, ToolEntry[]>>((groups, tool) => {
+function groupToolsByDocument(tools: HTTPToolDefinition[]) {
+  return tools.reduce<Record<string, HTTPToolDefinition[]>>((groups, tool) => {
     const docId = tool.openapiv3DocumentId;
     if (!docId) return groups;
 

@@ -61,7 +61,6 @@ export * from "./project.js";
 export * from "./projectentry.js";
 export * from "./publishpackageform.js";
 export * from "./publishpackageresult.js";
-export * from "./toolentry.js";
 export * from "./toolset.js";
 export * from "./toolvariation.js";
 export * from "./updateenvironmentrequestbody.js";

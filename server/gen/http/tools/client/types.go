@@ -9,6 +9,7 @@ package client
 
 import (
 	tools "github.com/speakeasy-api/gram/gen/tools"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -18,7 +19,7 @@ type ListToolsResponseBody struct {
 	// The cursor to fetch results from
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// The list of tools
-	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	Tools []*HTTPToolDefinitionResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 
 // ListToolsUnauthorizedResponseBody is the type of the "tools" service
@@ -201,10 +202,9 @@ type ListToolsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ToolEntryResponseBody is used to define fields on response body types.
-type ToolEntryResponseBody struct {
-	// The package name
-	PackageName *string `form:"packageName,omitempty" json:"packageName,omitempty" xml:"packageName,omitempty"`
+// HTTPToolDefinitionResponseBody is used to define fields on response body
+// types.
+type HTTPToolDefinitionResponseBody struct {
 	// The ID of the HTTP tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the project
@@ -239,6 +239,8 @@ type ToolEntryResponseBody struct {
 	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// JSON schema for the request
 	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	// The name of the source package
+	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
 	// The creation date of the tool.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the tool.
@@ -304,9 +306,9 @@ func NewListToolsResultOK(body *ListToolsResponseBody) *tools.ListToolsResult {
 	v := &tools.ListToolsResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Tools = make([]*tools.ToolEntry, len(body.Tools))
+	v.Tools = make([]*types.HTTPToolDefinition, len(body.Tools))
 	for i, val := range body.Tools {
-		v.Tools[i] = unmarshalToolEntryResponseBodyToToolsToolEntry(val)
+		v.Tools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
 	}
 
 	return v
@@ -469,7 +471,7 @@ func ValidateListToolsResponseBody(body *ListToolsResponseBody) (err error) {
 	}
 	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateToolEntryResponseBody(e); err2 != nil {
+			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -717,9 +719,9 @@ func ValidateListToolsGatewayErrorResponseBody(body *ListToolsGatewayErrorRespon
 	return
 }
 
-// ValidateToolEntryResponseBody runs the validations defined on
-// ToolEntryResponseBody
-func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
+// ValidateHTTPToolDefinitionResponseBody runs the validations defined on
+// HTTPToolDefinitionResponseBody
+func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 0a3a0ff7e51b6c863720b54e0a91a1c4
+  docChecksum: f4a5bca0f7f952754f3aea46e65198a0
   docVersion: 0.0.1
   speakeasyVersion: 1.554.1
   generationVersion: 2.616.1
-  releaseVersion: 0.12.0
-  configChecksum: 39e2d672f02057217fef68df1cde70d5
+  releaseVersion: 0.12.1
+  configChecksum: 419369de24561b262110651c2e1fcdd7
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -97,7 +97,6 @@ generatedFiles:
   - docs/models/components/projectentry.md
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
-  - docs/models/components/toolentry.md
   - docs/models/components/toolset.md
   - docs/models/components/toolvariation.md
   - docs/models/components/updateenvironmentrequestbody.md
@@ -390,7 +389,6 @@ generatedFiles:
   - src/models/components/projectentry.ts
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
-  - src/models/components/toolentry.ts
   - src/models/components/toolset.ts
   - src/models/components/toolvariation.ts
   - src/models/components/updateenvironmentrequestbody.ts

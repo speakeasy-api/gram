@@ -163,6 +163,7 @@ func DescribeToolset(
 				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:           canonical,
 				Variation:           variation,
+				PackageName:         &def.PackageName,
 			})
 		}
 

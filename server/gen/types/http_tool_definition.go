@@ -42,6 +42,8 @@ type HTTPToolDefinition struct {
 	SchemaVersion *string
 	// JSON schema for the request
 	Schema string
+	// The name of the source package
+	PackageName *string
 	// The creation date of the tool.
 	CreatedAt string
 	// The last update date of the tool.

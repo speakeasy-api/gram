@@ -18,7 +18,7 @@ type ListToolsResponseBody struct {
 	// The cursor to fetch results from
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// The list of tools
-	Tools []*ToolEntryResponseBody `form:"tools" json:"tools" xml:"tools"`
+	Tools []*HTTPToolDefinitionResponseBody `form:"tools" json:"tools" xml:"tools"`
 }
 
 // ListToolsUnauthorizedResponseBody is the type of the "tools" service
@@ -201,10 +201,9 @@ type ListToolsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ToolEntryResponseBody is used to define fields on response body types.
-type ToolEntryResponseBody struct {
-	// The package name
-	PackageName *string `form:"packageName,omitempty" json:"packageName,omitempty" xml:"packageName,omitempty"`
+// HTTPToolDefinitionResponseBody is used to define fields on response body
+// types.
+type HTTPToolDefinitionResponseBody struct {
 	// The ID of the HTTP tool
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the project
@@ -239,6 +238,8 @@ type ToolEntryResponseBody struct {
 	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// JSON schema for the request
 	Schema string `form:"schema" json:"schema" xml:"schema"`
+	// The name of the source package
+	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.
@@ -305,12 +306,12 @@ func NewListToolsResponseBody(res *tools.ListToolsResult) *ListToolsResponseBody
 		NextCursor: res.NextCursor,
 	}
 	if res.Tools != nil {
-		body.Tools = make([]*ToolEntryResponseBody, len(res.Tools))
+		body.Tools = make([]*HTTPToolDefinitionResponseBody, len(res.Tools))
 		for i, val := range res.Tools {
-			body.Tools[i] = marshalToolsToolEntryToToolEntryResponseBody(val)
+			body.Tools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
 		}
 	} else {
-		body.Tools = []*ToolEntryResponseBody{}
+		body.Tools = []*HTTPToolDefinitionResponseBody{}
 	}
 	return body
 }

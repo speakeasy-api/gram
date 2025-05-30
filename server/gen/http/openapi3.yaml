@@ -5589,6 +5589,9 @@ components:
                 openapiv3_operation:
                     type: string
                     description: OpenAPI v3 operation
+                package_name:
+                    type: string
+                    description: The name of the source package
                 path:
                     type: string
                     description: Path for the request
@@ -5896,7 +5899,7 @@ components:
                 tools:
                     type: array
                     items:
-                        $ref: '#/components/schemas/ToolEntry'
+                        $ref: '#/components/schemas/HTTPToolDefinition'
                     description: The list of tools
             required:
                 - tools
@@ -6185,91 +6188,6 @@ components:
                 - content_type
                 - content_length
                 - last_modified
-        ToolEntry:
-            type: object
-            properties:
-                canonical:
-                    $ref: '#/components/schemas/CanonicalToolAttributes'
-                confirm:
-                    type: string
-                    description: Confirmation mode for the tool
-                confirm_prompt:
-                    type: string
-                    description: Prompt for the confirmation
-                created_at:
-                    type: string
-                    description: The creation date of the tool.
-                    format: date-time
-                deployment_id:
-                    type: string
-                    description: The ID of the deployment
-                description:
-                    type: string
-                    description: Description of the tool
-                http_method:
-                    type: string
-                    description: HTTP method for the request
-                id:
-                    type: string
-                    description: The ID of the HTTP tool
-                name:
-                    type: string
-                    description: The name of the tool
-                openapiv3_document_id:
-                    type: string
-                    description: The ID of the OpenAPI v3 document
-                openapiv3_operation:
-                    type: string
-                    description: OpenAPI v3 operation
-                packageName:
-                    type: string
-                    description: The package name
-                path:
-                    type: string
-                    description: Path for the request
-                project_id:
-                    type: string
-                    description: The ID of the project
-                schema:
-                    type: string
-                    description: JSON schema for the request
-                schema_version:
-                    type: string
-                    description: Version of the schema
-                security:
-                    type: string
-                    description: Security requirements for the underlying HTTP endpoint
-                summarizer:
-                    type: string
-                    description: Summarizer for the tool
-                summary:
-                    type: string
-                    description: Summary of the tool
-                tags:
-                    type: array
-                    items:
-                        type: string
-                    description: The tags list for this http tool
-                updated_at:
-                    type: string
-                    description: The last update date of the tool.
-                    format: date-time
-                variation:
-                    $ref: '#/components/schemas/ToolVariation'
-            required:
-                - id
-                - project_id
-                - deployment_id
-                - name
-                - summary
-                - description
-                - confirm
-                - tags
-                - http_method
-                - path
-                - schema
-                - created_at
-                - updated_at
         ToolVariation:
             type: object
             properties:

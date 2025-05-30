@@ -8,11 +8,11 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  ToolEntry,
-  ToolEntry$inboundSchema,
-  ToolEntry$Outbound,
-  ToolEntry$outboundSchema,
-} from "./toolentry.js";
+  HTTPToolDefinition,
+  HTTPToolDefinition$inboundSchema,
+  HTTPToolDefinition$Outbound,
+  HTTPToolDefinition$outboundSchema,
+} from "./httptooldefinition.js";
 
 export type ListToolsResult = {
   /**
@@ -22,7 +22,7 @@ export type ListToolsResult = {
   /**
    * The list of tools
    */
-  tools: Array<ToolEntry>;
+  tools: Array<HTTPToolDefinition>;
 };
 
 /** @internal */
@@ -32,7 +32,7 @@ export const ListToolsResult$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   next_cursor: z.string().optional(),
-  tools: z.array(ToolEntry$inboundSchema),
+  tools: z.array(HTTPToolDefinition$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
     "next_cursor": "nextCursor",
@@ -42,7 +42,7 @@ export const ListToolsResult$inboundSchema: z.ZodType<
 /** @internal */
 export type ListToolsResult$Outbound = {
   next_cursor?: string | undefined;
-  tools: Array<ToolEntry$Outbound>;
+  tools: Array<HTTPToolDefinition$Outbound>;
 };
 
 /** @internal */
@@ -52,7 +52,7 @@ export const ListToolsResult$outboundSchema: z.ZodType<
   ListToolsResult
 > = z.object({
   nextCursor: z.string().optional(),
-  tools: z.array(ToolEntry$outboundSchema),
+  tools: z.array(HTTPToolDefinition$outboundSchema),
 }).transform((v) => {
   return remap$(v, {
     nextCursor: "next_cursor",

@@ -26,6 +26,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("path", String, "Path for the request")
 	Attribute("schema_version", String, "Version of the schema")
 	Attribute("schema", String, "JSON schema for the request")
+	Attribute("package_name", String, "The name of the source package")
 
 	Attribute("created_at", String, func() {
 		Description("The creation date of the tool.")

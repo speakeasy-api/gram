@@ -234,11 +234,11 @@ func EncodeListToolsError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
-// marshalToolsToolEntryToToolEntryResponseBody builds a value of type
-// *ToolEntryResponseBody from a value of type *tools.ToolEntry.
-func marshalToolsToolEntryToToolEntryResponseBody(v *tools.ToolEntry) *ToolEntryResponseBody {
-	res := &ToolEntryResponseBody{
-		PackageName:         v.PackageName,
+// marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
+// value of type *HTTPToolDefinitionResponseBody from a value of type
+// *types.HTTPToolDefinition.
+func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
+	res := &HTTPToolDefinitionResponseBody{
 		ID:                  v.ID,
 		ProjectID:           v.ProjectID,
 		DeploymentID:        v.DeploymentID,
@@ -255,6 +255,7 @@ func marshalToolsToolEntryToToolEntryResponseBody(v *tools.ToolEntry) *ToolEntry
 		Path:                v.Path,
 		SchemaVersion:       v.SchemaVersion,
 		Schema:              v.Schema,
+		PackageName:         v.PackageName,
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
 	}

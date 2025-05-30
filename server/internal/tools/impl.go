@@ -84,7 +84,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	result := &gen.ListToolsResult{
-		Tools:      make([]*gen.ToolEntry, len(tools)),
+		Tools:      make([]*types.HTTPToolDefinition, len(tools)),
 		NextCursor: nil,
 	}
 
@@ -161,7 +161,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 		confirm, _ := mv.SanitizeConfirm(confirmRaw)
 
-		result.Tools[i] = &gen.ToolEntry{
+		result.Tools[i] = &types.HTTPToolDefinition{
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
 			ProjectID:           authCtx.ProjectID.String(),

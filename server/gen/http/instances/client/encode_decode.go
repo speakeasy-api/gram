@@ -284,6 +284,7 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 		Path:                *v.Path,
 		SchemaVersion:       v.SchemaVersion,
 		Schema:              *v.Schema,
+		PackageName:         v.PackageName,
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
 	}
