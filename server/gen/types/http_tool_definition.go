@@ -14,8 +14,6 @@ type HTTPToolDefinition struct {
 	ProjectID string
 	// The ID of the deployment
 	DeploymentID string
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string
 	// The name of the tool
 	Name string
 	// Summary of the tool
@@ -28,6 +26,8 @@ type HTTPToolDefinition struct {
 	ConfirmPrompt *string
 	// Summarizer for the tool
 	Summarizer *string
+	// The ID of the OpenAPI v3 document
+	Openapiv3DocumentID *string
 	// OpenAPI v3 operation
 	Openapiv3Operation *string
 	// The tags list for this http tool
@@ -46,5 +46,8 @@ type HTTPToolDefinition struct {
 	CreatedAt string
 	// The last update date of the tool.
 	UpdatedAt string
+	// The original details of a tool, excluding any variations
 	Canonical *CanonicalToolAttributes
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariation
 }

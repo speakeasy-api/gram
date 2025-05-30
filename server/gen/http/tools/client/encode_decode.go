@@ -265,27 +265,35 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 // *tools.ToolEntry from a value of type *ToolEntryResponseBody.
 func unmarshalToolEntryResponseBodyToToolsToolEntry(v *ToolEntryResponseBody) *tools.ToolEntry {
 	res := &tools.ToolEntry{
+		PackageName:         v.PackageName,
 		ID:                  *v.ID,
+		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
 		Name:                *v.Name,
 		Summary:             *v.Summary,
 		Description:         *v.Description,
 		Confirm:             *v.Confirm,
 		ConfirmPrompt:       v.ConfirmPrompt,
-		Openapiv3DocumentID: *v.Openapiv3DocumentID,
-		PackageName:         v.PackageName,
+		Summarizer:          v.Summarizer,
+		Openapiv3DocumentID: v.Openapiv3DocumentID,
+		Openapiv3Operation:  v.Openapiv3Operation,
+		Security:            v.Security,
 		HTTPMethod:          *v.HTTPMethod,
 		Path:                *v.Path,
+		SchemaVersion:       v.SchemaVersion,
+		Schema:              *v.Schema,
 		CreatedAt:           *v.CreatedAt,
+		UpdatedAt:           *v.UpdatedAt,
 	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
+	res.Tags = make([]string, len(v.Tags))
+	for i, val := range v.Tags {
+		res.Tags[i] = val
 	}
 	if v.Canonical != nil {
 		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
 	}
 
 	return res
@@ -306,6 +314,35 @@ func unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
 		Summarizer:    v.Summarizer,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalToolVariationResponseBodyToTypesToolVariation builds a value of
+// type *types.ToolVariation from a value of type *ToolVariationResponseBody.
+func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResponseBody) *types.ToolVariation {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolVariation{
+		ID:            *v.ID,
+		GroupID:       *v.GroupID,
+		SrcToolName:   *v.SrcToolName,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Name:          v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

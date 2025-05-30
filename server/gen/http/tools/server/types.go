@@ -203,33 +203,50 @@ type ListToolsGatewayErrorResponseBody struct {
 
 // ToolEntryResponseBody is used to define fields on response body types.
 type ToolEntryResponseBody struct {
-	// The tool ID
-	ID string `form:"id" json:"id" xml:"id"`
-	// The deployment ID
-	DeploymentID string `form:"deploymentId" json:"deploymentId" xml:"deploymentId"`
-	// The tool name
-	Name string `form:"name" json:"name" xml:"name"`
-	// The tool summary
-	Summary string `form:"summary" json:"summary" xml:"summary"`
-	// The tool description
-	Description string `form:"description" json:"description" xml:"description"`
-	// The confirmation mode for the tool
-	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
-	// The confirmation prompt for the tool
-	ConfirmPrompt *string `form:"confirmPrompt,omitempty" json:"confirmPrompt,omitempty" xml:"confirmPrompt,omitempty"`
-	// The OpenAPI v3 document ID
-	Openapiv3DocumentID string `form:"openapiv3DocumentId" json:"openapiv3DocumentId" xml:"openapiv3DocumentId"`
 	// The package name
 	PackageName *string `form:"packageName,omitempty" json:"packageName,omitempty" xml:"packageName,omitempty"`
-	// The HTTP method
-	HTTPMethod string `form:"httpMethod" json:"httpMethod" xml:"httpMethod"`
-	// The path
+	// The ID of the HTTP tool
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the project
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the deployment
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+	// Summary of the tool
+	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// Description of the tool
+	Description string `form:"description" json:"description" xml:"description"`
+	// Confirmation mode for the tool
+	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The ID of the OpenAPI v3 document
+	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
+	// OpenAPI v3 operation
+	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
+	// The tags list for this http tool
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
+	// Security requirements for the underlying HTTP endpoint
+	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
+	// HTTP method for the request
+	HTTPMethod string `form:"http_method" json:"http_method" xml:"http_method"`
+	// Path for the request
 	Path string `form:"path" json:"path" xml:"path"`
-	// The tags for the tool
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema string `form:"schema" json:"schema" xml:"schema"`
 	// The creation date of the tool.
-	CreatedAt string                               `form:"created_at" json:"created_at" xml:"created_at"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The original details of a tool, excluding any variations
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // CanonicalToolAttributesResponseBody is used to define fields on response
@@ -251,6 +268,34 @@ type CanonicalToolAttributesResponseBody struct {
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// The tags list for this http tool
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+}
+
+// ToolVariationResponseBody is used to define fields on response body types.
+type ToolVariationResponseBody struct {
+	// The ID of the tool variation
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the tool variation group
+	GroupID string `form:"group_id" json:"group_id" xml:"group_id"`
+	// The name of the source tool
+	SrcToolName string `form:"src_tool_name" json:"src_tool_name" xml:"src_tool_name"`
+	// The confirmation mode for the tool variation
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// The confirmation prompt for the tool variation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// The name of the tool variation
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The summary of the tool variation
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the tool variation
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The tags of the tool variation
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// The summarizer of the tool variation
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool variation
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool variation
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewListToolsResponseBody builds the HTTP response body from the result of

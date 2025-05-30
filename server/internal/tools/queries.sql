@@ -48,7 +48,12 @@ SELECT
   http_tool_definitions.summarizer,
   http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
+  http_tool_definitions.openapiv3_operation,
+  http_tool_definitions.schema_version,
+  http_tool_definitions.schema,
+  http_tool_definitions.security,
   http_tool_definitions.created_at,
+  http_tool_definitions.updated_at,
   http_tool_definitions.tags,
   (CASE
     WHEN http_tool_definitions.project_id = @project_id THEN ''

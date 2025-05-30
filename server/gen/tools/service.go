@@ -62,33 +62,50 @@ type ListToolsResult struct {
 }
 
 type ToolEntry struct {
-	// The tool ID
-	ID string
-	// The deployment ID
-	DeploymentID string
-	// The tool name
-	Name string
-	// The tool summary
-	Summary string
-	// The tool description
-	Description string
-	// The confirmation mode for the tool
-	Confirm string
-	// The confirmation prompt for the tool
-	ConfirmPrompt *string
-	// The OpenAPI v3 document ID
-	Openapiv3DocumentID string
 	// The package name
 	PackageName *string
-	// The HTTP method
-	HTTPMethod string
-	// The path
-	Path string
-	// The tags for the tool
+	// The ID of the HTTP tool
+	ID string
+	// The ID of the project
+	ProjectID string
+	// The ID of the deployment
+	DeploymentID string
+	// The name of the tool
+	Name string
+	// Summary of the tool
+	Summary string
+	// Description of the tool
+	Description string
+	// Confirmation mode for the tool
+	Confirm string
+	// Prompt for the confirmation
+	ConfirmPrompt *string
+	// Summarizer for the tool
+	Summarizer *string
+	// The ID of the OpenAPI v3 document
+	Openapiv3DocumentID *string
+	// OpenAPI v3 operation
+	Openapiv3Operation *string
+	// The tags list for this http tool
 	Tags []string
+	// Security requirements for the underlying HTTP endpoint
+	Security *string
+	// HTTP method for the request
+	HTTPMethod string
+	// Path for the request
+	Path string
+	// Version of the schema
+	SchemaVersion *string
+	// JSON schema for the request
+	Schema string
 	// The creation date of the tool.
 	CreatedAt string
+	// The last update date of the tool.
+	UpdatedAt string
+	// The original details of a tool, excluding any variations
 	Canonical *types.CanonicalToolAttributes
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *types.ToolVariation
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

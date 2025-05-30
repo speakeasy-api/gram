@@ -180,7 +180,7 @@ export function OnboardingContent({
           <Stack direction={"horizontal"} gap={2} className="max-w-sm">
             <Input
               value={apiName}
-              onChange={(e) => setApiName(e.target.value)}
+              onChange={setApiName}
               placeholder="My API"
               disabled={!!existingDocumentSlug}
             />

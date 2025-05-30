@@ -8,6 +8,7 @@ interface EditableTextProps {
   value: string | undefined;
   onSubmit: (newValue: string) => void;
   validate?: (newValue: string) => string | boolean;
+  lines?: number;
   children: ReactNode;
 }
 
@@ -17,6 +18,7 @@ export function EditableText({
   value,
   onSubmit,
   validate,
+  lines,
   children,
 }: EditableTextProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -57,12 +59,13 @@ export function EditableText({
         description={description}
         submitButtonText="Update"
         inputs={{
-          label: label,
+          label,
           placeholder: label,
           value: editedValue ?? "Loading...",
           onChange: setEditedValue,
           onSubmit: handleSubmit,
           validate: validate ?? (() => true),
+          lines,
         }}
       />
     </>

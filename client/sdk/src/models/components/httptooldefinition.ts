@@ -13,6 +13,12 @@ import {
   CanonicalToolAttributes$Outbound,
   CanonicalToolAttributes$outboundSchema,
 } from "./canonicaltoolattributes.js";
+import {
+  ToolVariation,
+  ToolVariation$inboundSchema,
+  ToolVariation$Outbound,
+  ToolVariation$outboundSchema,
+} from "./toolvariation.js";
 
 export type HTTPToolDefinition = {
   /**
@@ -95,6 +101,7 @@ export type HTTPToolDefinition = {
    * The last update date of the tool.
    */
   updatedAt: Date;
+  variation?: ToolVariation | undefined;
 };
 
 /** @internal */
@@ -123,6 +130,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   summary: z.string(),
   tags: z.array(z.string()),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
     "confirm_prompt": "confirmPrompt",
@@ -159,6 +167,7 @@ export type HTTPToolDefinition$Outbound = {
   summary: string;
   tags: Array<string>;
   updated_at: string;
+  variation?: ToolVariation$Outbound | undefined;
 };
 
 /** @internal */
@@ -187,6 +196,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   summary: z.string(),
   tags: z.array(z.string()),
   updatedAt: z.date().transform(v => v.toISOString()),
+  variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
     confirmPrompt: "confirm_prompt",

@@ -78,7 +78,7 @@ function EntryDialog({
             <Type>Name</Type>
             <Input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={setName}
               disabled={!!initialEntry}
               onFocus={preventSelect}
             />
@@ -87,7 +87,7 @@ function EntryDialog({
             <Type>Value</Type>
             <Input
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={setValue}
               onFocus={preventSelect}
             />
           </div>

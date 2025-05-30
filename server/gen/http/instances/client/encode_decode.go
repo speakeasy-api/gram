@@ -271,13 +271,13 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 		ID:                  *v.ID,
 		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
-		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Name:                *v.Name,
 		Summary:             *v.Summary,
 		Description:         *v.Description,
 		Confirm:             *v.Confirm,
 		ConfirmPrompt:       v.ConfirmPrompt,
 		Summarizer:          v.Summarizer,
+		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Openapiv3Operation:  v.Openapiv3Operation,
 		Security:            v.Security,
 		HTTPMethod:          *v.HTTPMethod,
@@ -293,6 +293,9 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 	}
 	if v.Canonical != nil {
 		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
 	}
 
 	return res
@@ -313,6 +316,35 @@ func unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
 		Summarizer:    v.Summarizer,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalToolVariationResponseBodyToTypesToolVariation builds a value of
+// type *types.ToolVariation from a value of type *ToolVariationResponseBody.
+func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResponseBody) *types.ToolVariation {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolVariation{
+		ID:            *v.ID,
+		GroupID:       *v.GroupID,
+		SrcToolName:   *v.SrcToolName,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Name:          v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

@@ -187,7 +187,7 @@ export default function Settings() {
                   <Input
                     placeholder="Enter key name"
                     value={newKeyName}
-                    onChange={(e) => setNewKeyName(e.target.value)}
+                    onChange={setNewKeyName}
                   />
                 </div>
                 <div className="flex justify-end space-x-2">

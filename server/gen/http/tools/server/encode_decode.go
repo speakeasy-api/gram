@@ -238,27 +238,39 @@ func EncodeListToolsError(encoder func(context.Context, http.ResponseWriter) goa
 // *ToolEntryResponseBody from a value of type *tools.ToolEntry.
 func marshalToolsToolEntryToToolEntryResponseBody(v *tools.ToolEntry) *ToolEntryResponseBody {
 	res := &ToolEntryResponseBody{
+		PackageName:         v.PackageName,
 		ID:                  v.ID,
+		ProjectID:           v.ProjectID,
 		DeploymentID:        v.DeploymentID,
 		Name:                v.Name,
 		Summary:             v.Summary,
 		Description:         v.Description,
 		Confirm:             v.Confirm,
 		ConfirmPrompt:       v.ConfirmPrompt,
+		Summarizer:          v.Summarizer,
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
-		PackageName:         v.PackageName,
+		Openapiv3Operation:  v.Openapiv3Operation,
+		Security:            v.Security,
 		HTTPMethod:          v.HTTPMethod,
 		Path:                v.Path,
+		SchemaVersion:       v.SchemaVersion,
+		Schema:              v.Schema,
 		CreatedAt:           v.CreatedAt,
+		UpdatedAt:           v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	} else {
+		res.Tags = []string{}
 	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
 
 	return res
@@ -279,6 +291,35 @@ func marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v 
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
 		Summarizer:    v.Summarizer,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalTypesToolVariationToToolVariationResponseBody builds a value of type
+// *ToolVariationResponseBody from a value of type *types.ToolVariation.
+func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation) *ToolVariationResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolVariationResponseBody{
+		ID:            v.ID,
+		GroupID:       v.GroupID,
+		SrcToolName:   v.SrcToolName,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Name:          v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

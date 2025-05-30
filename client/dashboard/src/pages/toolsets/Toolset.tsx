@@ -25,6 +25,7 @@ import { groupTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
+  Confirm,
   EnvironmentEntryInput,
   Toolset,
   UpsertGlobalToolVariationForm,
@@ -32,6 +33,7 @@ import {
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
   useDeleteToolsetMutation,
+  useDeployment,
   useInstance,
   useToolset,
   useUpdateEnvironmentMutation,
@@ -396,6 +398,14 @@ export const ToolsetHeader = ({
   );
 };
 
+function useOpenApiDocumentSlug(deploymentId: string, tool: HTTPToolDefinition) {
+  const { data: deployment } = useDeployment({
+    id: deploymentId,
+  });
+
+  return deployment?.openapiv3Assets.find((asset) => asset.id === tool.openapiv3DocumentId)?.slug;
+}
+
 function ToolCard({
   tool,
   onRemove,
@@ -406,10 +416,9 @@ function ToolCard({
   onUpdate: () => void;
 }) {
   const client = useSdkClient();
+  const openApiDocumentSlug = useOpenApiDocumentSlug(tool.deploymentId, tool);
 
-  const toolNameParts = tool.name.split("_");
-  const source = toolNameParts[0];
-  const toolName = toolNameParts.slice(1).join(" ");
+  const toolNameDisplay = openApiDocumentSlug ? tool.name.replace(openApiDocumentSlug + "_", "") : tool.name;
 
   const updateVariation = async (
     vals: Partial<UpsertGlobalToolVariationForm>
@@ -417,6 +426,8 @@ function ToolCard({
     await client.variations.upsertGlobal({
       upsertGlobalToolVariationForm: {
         srcToolName: tool.name,
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
         ...vals,
       },
     });
@@ -425,19 +436,26 @@ function ToolCard({
   };
 
   const header = (
-    <Stack direction="horizontal" gap={4} justify="space-between">
-      <Stack direction="horizontal" gap={2} align="center">
-        <Heading
-          variant="h4"
-          className="text-muted-foreground capitalize"
-          tooltip={"This tool is from your " + source + " source"}
-        >
-          {source}
-        </Heading>
-        <Dot />
-        <Heading variant="h4">{toolName}</Heading>
-        {tool.summarizer && <AutoSummarizeBadge />}
-      </Stack>
+    <Stack direction="horizontal" gap={2} align="center">
+      <EditableText
+        value={tool.name}
+        onSubmit={(newValue) => updateVariation({ name: newValue })}
+        label={"Tool Name"}
+        description={`Update the name of tool '${tool.name}'`}
+      >
+        <Stack direction="horizontal" gap={2} align="center">
+          <Heading
+            variant="h4"
+            className="text-muted-foreground capitalize"
+            tooltip={"This tool is from your " + openApiDocumentSlug + " source"}
+          >
+            {openApiDocumentSlug}
+          </Heading>
+          <Dot />
+          <Heading variant="h4">{toolNameDisplay}</Heading>
+        </Stack>
+      </EditableText>
+      {tool.summarizer && <AutoSummarizeBadge />}
     </Stack>
   );
 
@@ -491,6 +509,7 @@ function ToolCard({
             onSubmit={(newValue) => updateVariation({ description: newValue })}
             label={"Tool Description"}
             description={`Update the description of tool '${tool.name}'`}
+            lines={3}
           >
             <Type
               className={cn(

@@ -16,6 +16,7 @@ type InputProps =
       onSubmit?: (value: string) => void;
       optional?: boolean;
       disabled?: boolean;
+      lines?: number;
     }
   | {
       type: "image";
@@ -89,10 +90,11 @@ export function InputDialog({
                 <Input
                   placeholder={input.placeholder}
                   value={input.value}
-                  onChange={(e) => input.onChange(e.target.value)}
+                  onChange={input.onChange}
                   onEnter={submit}
                   disabled={input.disabled}
                   validate={input.validate}
+                  lines={input.lines}
                 />
               )}
               {input.type === "image" && (

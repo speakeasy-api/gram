@@ -4,15 +4,19 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { TextArea } from "./textarea";
 
-interface InputProps extends React.ComponentProps<"input"> {
+interface InputProps extends Omit<React.ComponentProps<"input">, "handleChange" | "onChange" | "value"> {
+  value?: string;
   onEnter?: () => void;
   validate?: (value: string) => boolean | string;
+  lines?: number;
+  onChange?: (value: string) => void;
 }
 
 const DEFAULT_ERROR = "Invalid value";
 
-function Input({ className, type, onEnter, validate, ...props }: InputProps) {
+function Input({ className, type, onEnter, validate, lines, ...props }: InputProps) {
   const v = (val: string) => {
     if (val === "") {
       return null;
@@ -41,12 +45,23 @@ function Input({ className, type, onEnter, validate, ...props }: InputProps) {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    onChange(e.target.value);
+  };
+  const onChange = (value: string) => {
     setError(v(value));
-    props.onChange?.(e);
+    props.onChange?.(value);
   };
 
-  const input = (
+  const input = lines && lines > 1 ? (
+    <TextArea
+      data-slot="input"
+      className={cn(className)}
+      onKeyDown={handleKeyDown}
+      onChange={onChange}
+      rows={lines}
+      {...props}
+    />
+  ) : (
     <input
       type={type}
       data-slot="input"

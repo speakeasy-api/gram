@@ -10,7 +10,6 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("id", String, "The ID of the HTTP tool")
 	Attribute("project_id", String, "The ID of the project")
 	Attribute("deployment_id", String, "The ID of the deployment")
-	Attribute("openapiv3_document_id", String, "The ID of the OpenAPI v3 document")
 	Attribute("name", String, "The name of the tool")
 	Attribute("summary", String, "Summary of the tool")
 	Attribute("description", String, "Description of the tool")
@@ -18,7 +17,8 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("confirm", String, "Confirmation mode for the tool")
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
 	Attribute("summarizer", String, "Summarizer for the tool")
-
+	
+	Attribute("openapiv3_document_id", String, "The ID of the OpenAPI v3 document")
 	Attribute("openapiv3_operation", String, "OpenAPI v3 operation")
 	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
 	Attribute("security", String, "Security requirements for the underlying HTTP endpoint")
@@ -26,6 +26,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("path", String, "Path for the request")
 	Attribute("schema_version", String, "Version of the schema")
 	Attribute("schema", String, "JSON schema for the request")
+
 	Attribute("created_at", String, func() {
 		Description("The creation date of the tool.")
 		Format(FormatDateTime)
@@ -35,7 +36,8 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 		Format(FormatDateTime)
 	})
 
-	Attribute("canonical", CanonicalToolAttributes)
+	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
+	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 
 	Required("id", "project_id", "deployment_id", "name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "created_at", "updated_at")
 })

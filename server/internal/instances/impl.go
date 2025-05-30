@@ -168,6 +168,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			CreatedAt:           tool.CreatedAt,
 			UpdatedAt:           tool.UpdatedAt,
 			Canonical:           tool.Canonical,
+			Variation:           tool.Variation,
 		}
 	}
 

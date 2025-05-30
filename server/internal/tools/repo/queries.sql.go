@@ -328,7 +328,12 @@ SELECT
   http_tool_definitions.summarizer,
   http_tool_definitions.path,
   http_tool_definitions.openapiv3_document_id,
+  http_tool_definitions.openapiv3_operation,
+  http_tool_definitions.schema_version,
+  http_tool_definitions.schema,
+  http_tool_definitions.security,
   http_tool_definitions.created_at,
+  http_tool_definitions.updated_at,
   http_tool_definitions.tags,
   (CASE
     WHEN http_tool_definitions.project_id = $1 THEN ''
@@ -362,7 +367,12 @@ type ListToolsRow struct {
 	Summarizer          pgtype.Text
 	Path                string
 	Openapiv3DocumentID uuid.NullUUID
+	Openapiv3Operation  pgtype.Text
+	SchemaVersion       string
+	Schema              []byte
+	Security            []byte
 	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
 	Tags                []string
 	PackageName         string
 }
@@ -388,7 +398,12 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 			&i.Summarizer,
 			&i.Path,
 			&i.Openapiv3DocumentID,
+			&i.Openapiv3Operation,
+			&i.SchemaVersion,
+			&i.Schema,
+			&i.Security,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 			&i.Tags,
 			&i.PackageName,
 		); err != nil {

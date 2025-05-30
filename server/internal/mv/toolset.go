@@ -103,7 +103,9 @@ func DescribeToolset(
 			}
 			seen[def.HttpToolDefinition.ID.String()] = true
 
+			var variation *types.ToolVariation
 			var canonical *types.CanonicalToolAttributes
+
 			name := def.HttpToolDefinition.Name
 			summary := def.HttpToolDefinition.Summary
 			description := def.HttpToolDefinition.Description
@@ -111,6 +113,7 @@ func DescribeToolset(
 			confirmPrompt := conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt)
 			summarizer := conv.FromPGText[string](def.HttpToolDefinition.Summarizer)
 			tags := def.HttpToolDefinition.Tags
+			
 			variations, ok := keyedVariations[def.HttpToolDefinition.Name]
 			if ok {
 				name = conv.PtrValOrEmpty(variations.Name, name)
@@ -123,6 +126,7 @@ func DescribeToolset(
 					tags = variations.Tags
 				}
 
+				variation = &variations
 				canonical = &types.CanonicalToolAttributes{
 					VariationID:   variations.ID,
 					Name:          def.HttpToolDefinition.Name,
@@ -158,6 +162,7 @@ func DescribeToolset(
 				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:           canonical,
+				Variation:           variation,
 			})
 		}
 

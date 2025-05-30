@@ -13,6 +13,12 @@ import {
   CanonicalToolAttributes$Outbound,
   CanonicalToolAttributes$outboundSchema,
 } from "./canonicaltoolattributes.js";
+import {
+  ToolVariation,
+  ToolVariation$inboundSchema,
+  ToolVariation$Outbound,
+  ToolVariation$outboundSchema,
+} from "./toolvariation.js";
 
 export type ToolEntry = {
   /**
@@ -20,11 +26,11 @@ export type ToolEntry = {
    */
   canonical?: CanonicalToolAttributes | undefined;
   /**
-   * The confirmation mode for the tool
+   * Confirmation mode for the tool
    */
   confirm: string;
   /**
-   * The confirmation prompt for the tool
+   * Prompt for the confirmation
    */
   confirmPrompt?: string | undefined;
   /**
@@ -32,45 +38,74 @@ export type ToolEntry = {
    */
   createdAt: Date;
   /**
-   * The deployment ID
+   * The ID of the deployment
    */
   deploymentId: string;
   /**
-   * The tool description
+   * Description of the tool
    */
   description: string;
   /**
-   * The HTTP method
+   * HTTP method for the request
    */
   httpMethod: string;
   /**
-   * The tool ID
+   * The ID of the HTTP tool
    */
   id: string;
   /**
-   * The tool name
+   * The name of the tool
    */
   name: string;
   /**
-   * The OpenAPI v3 document ID
+   * The ID of the OpenAPI v3 document
    */
-  openapiv3DocumentId: string;
+  openapiv3DocumentId?: string | undefined;
+  /**
+   * OpenAPI v3 operation
+   */
+  openapiv3Operation?: string | undefined;
   /**
    * The package name
    */
   packageName?: string | undefined;
   /**
-   * The path
+   * Path for the request
    */
   path: string;
   /**
-   * The tool summary
+   * The ID of the project
+   */
+  projectId: string;
+  /**
+   * JSON schema for the request
+   */
+  schema: string;
+  /**
+   * Version of the schema
+   */
+  schemaVersion?: string | undefined;
+  /**
+   * Security requirements for the underlying HTTP endpoint
+   */
+  security?: string | undefined;
+  /**
+   * Summarizer for the tool
+   */
+  summarizer?: string | undefined;
+  /**
+   * Summary of the tool
    */
   summary: string;
   /**
-   * The tags for the tool
+   * The tags list for this http tool
    */
-  tags?: Array<string> | undefined;
+  tags: Array<string>;
+  /**
+   * The last update date of the tool.
+   */
+  updatedAt: Date;
+  variation?: ToolVariation | undefined;
 };
 
 /** @internal */
@@ -81,21 +116,37 @@ export const ToolEntry$inboundSchema: z.ZodType<
 > = z.object({
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   confirm: z.string(),
-  confirmPrompt: z.string().optional(),
+  confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
-  deploymentId: z.string(),
+  deployment_id: z.string(),
   description: z.string(),
-  httpMethod: z.string(),
+  http_method: z.string(),
   id: z.string(),
   name: z.string(),
-  openapiv3DocumentId: z.string(),
+  openapiv3_document_id: z.string().optional(),
+  openapiv3_operation: z.string().optional(),
   packageName: z.string().optional(),
   path: z.string(),
+  project_id: z.string(),
+  schema: z.string(),
+  schema_version: z.string().optional(),
+  security: z.string().optional(),
+  summarizer: z.string().optional(),
   summary: z.string(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()),
+  updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
+    "deployment_id": "deploymentId",
+    "http_method": "httpMethod",
+    "openapiv3_document_id": "openapiv3DocumentId",
+    "openapiv3_operation": "openapiv3Operation",
+    "project_id": "projectId",
+    "schema_version": "schemaVersion",
+    "updated_at": "updatedAt",
   });
 });
 
@@ -103,18 +154,26 @@ export const ToolEntry$inboundSchema: z.ZodType<
 export type ToolEntry$Outbound = {
   canonical?: CanonicalToolAttributes$Outbound | undefined;
   confirm: string;
-  confirmPrompt?: string | undefined;
+  confirm_prompt?: string | undefined;
   created_at: string;
-  deploymentId: string;
+  deployment_id: string;
   description: string;
-  httpMethod: string;
+  http_method: string;
   id: string;
   name: string;
-  openapiv3DocumentId: string;
+  openapiv3_document_id?: string | undefined;
+  openapiv3_operation?: string | undefined;
   packageName?: string | undefined;
   path: string;
+  project_id: string;
+  schema: string;
+  schema_version?: string | undefined;
+  security?: string | undefined;
+  summarizer?: string | undefined;
   summary: string;
-  tags?: Array<string> | undefined;
+  tags: Array<string>;
+  updated_at: string;
+  variation?: ToolVariation$Outbound | undefined;
 };
 
 /** @internal */
@@ -132,14 +191,30 @@ export const ToolEntry$outboundSchema: z.ZodType<
   httpMethod: z.string(),
   id: z.string(),
   name: z.string(),
-  openapiv3DocumentId: z.string(),
+  openapiv3DocumentId: z.string().optional(),
+  openapiv3Operation: z.string().optional(),
   packageName: z.string().optional(),
   path: z.string(),
+  projectId: z.string(),
+  schema: z.string(),
+  schemaVersion: z.string().optional(),
+  security: z.string().optional(),
+  summarizer: z.string().optional(),
   summary: z.string(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()),
+  updatedAt: z.date().transform(v => v.toISOString()),
+  variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    confirmPrompt: "confirm_prompt",
     createdAt: "created_at",
+    deploymentId: "deployment_id",
+    httpMethod: "http_method",
+    openapiv3DocumentId: "openapiv3_document_id",
+    openapiv3Operation: "openapiv3_operation",
+    projectId: "project_id",
+    schemaVersion: "schema_version",
+    updatedAt: "updated_at",
   });
 });
 

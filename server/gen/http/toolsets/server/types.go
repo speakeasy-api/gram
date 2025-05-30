@@ -1063,8 +1063,6 @@ type HTTPToolDefinitionResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the deployment
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
 	// The name of the tool
 	Name string `form:"name" json:"name" xml:"name"`
 	// Summary of the tool
@@ -1077,6 +1075,8 @@ type HTTPToolDefinitionResponseBody struct {
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// Summarizer for the tool
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The ID of the OpenAPI v3 document
+	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
 	// OpenAPI v3 operation
 	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
 	// The tags list for this http tool
@@ -1094,8 +1094,11 @@ type HTTPToolDefinitionResponseBody struct {
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.
-	UpdatedAt string                               `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The original details of a tool, excluding any variations
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // CanonicalToolAttributesResponseBody is used to define fields on response
@@ -1117,6 +1120,34 @@ type CanonicalToolAttributesResponseBody struct {
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// The tags list for this http tool
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+}
+
+// ToolVariationResponseBody is used to define fields on response body types.
+type ToolVariationResponseBody struct {
+	// The ID of the tool variation
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the tool variation group
+	GroupID string `form:"group_id" json:"group_id" xml:"group_id"`
+	// The name of the source tool
+	SrcToolName string `form:"src_tool_name" json:"src_tool_name" xml:"src_tool_name"`
+	// The confirmation mode for the tool variation
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// The confirmation prompt for the tool variation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// The name of the tool variation
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The summary of the tool variation
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the tool variation
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The tags of the tool variation
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// The summarizer of the tool variation
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool variation
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool variation
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ToolsetResponseBody is used to define fields on response body types.

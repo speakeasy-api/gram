@@ -15,9 +15,14 @@ let value: ListToolsResult = {
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      openapiv3DocumentId: "<id>",
       path: "/usr/lib",
+      projectId: "<id>",
+      schema: "<value>",
       summary: "<value>",
+      tags: [
+        "<value>",
+      ],
+      updatedAt: new Date("2025-06-28T14:34:38.671Z"),
     },
   ],
 };

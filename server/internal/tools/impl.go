@@ -112,7 +112,9 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			pkg = &tool.PackageName
 		}
 
+		var variation *types.ToolVariation
 		var canonical *types.CanonicalToolAttributes
+
 		name := tool.Name
 		summary := tool.Summary
 		description := tool.Description
@@ -140,6 +142,21 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				ConfirmPrompt: conv.FromPGText[string](tool.ConfirmPrompt),
 				Summarizer:    conv.FromPGText[string](tool.Summarizer),
 			}
+
+			variation = &types.ToolVariation{
+				ID:            variations.ID.String(),
+				GroupID:       variations.GroupID.String(),
+				SrcToolName:   tool.Name,
+				Confirm:       conv.FromPGText[string](variations.Confirm),
+				ConfirmPrompt: conv.FromPGText[string](variations.ConfirmPrompt),
+				Name:          conv.PtrEmpty(variations.Name.String),
+				Summary:       conv.PtrEmpty(variations.Summary.String),
+				Description:   conv.PtrEmpty(variations.Description.String),
+				Tags:          variations.Tags,
+				Summarizer:    conv.FromPGText[string](variations.Summarizer),
+				CreatedAt:     variations.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     variations.UpdatedAt.Time.Format(time.RFC3339),
+			}
 		}
 
 		confirm, _ := mv.SanitizeConfirm(confirmRaw)
@@ -147,18 +164,26 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		result.Tools[i] = &gen.ToolEntry{
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
+			ProjectID:           authCtx.ProjectID.String(),
 			Name:                name,
 			Summary:             summary,
 			Description:         description,
 			Confirm:             string(confirm),
 			ConfirmPrompt:       confirmPrompt,
+			Summarizer:          conv.FromPGText[string](tool.Summarizer),
 			HTTPMethod:          tool.HttpMethod,
 			Path:                tool.Path,
 			Tags:                tags,
-			Openapiv3DocumentID: tool.Openapiv3DocumentID.UUID.String(),
+			Openapiv3DocumentID: conv.Ptr(tool.Openapiv3DocumentID.UUID.String()),
+			Openapiv3Operation:  conv.Ptr(tool.Openapiv3Operation.String),
+			SchemaVersion:       conv.Ptr(tool.SchemaVersion),
+			Schema:              string(tool.Schema),
+			Security:            conv.Ptr(string(tool.Security)),
 			PackageName:         pkg,
 			CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 			Canonical:           canonical,
+			Variation:           variation,
 		}
 	}
 

@@ -8,9 +8,9 @@ export function TextArea({
   className,
   rows = 3,
 }: {
-  value: string;
   onChange: (value: string) => void;
-  disabled: boolean;
+  value?: string;
+  disabled?: boolean;
   placeholder?: string;
   className?: string;
   rows?: number;
