@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,7 +53,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-const SUMMARIZE_BREAKPOINT_BYTES = 4 * 25_000 // 4 bytes per token, 25k token limit
+const SUMMARIZE_BREAKPOINT_BYTES = 4 * 50_000 // 4 bytes per token, 50k token limit
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
 	envRepo := environments_repo.New(db)
@@ -276,7 +278,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 	err = json.Unmarshal(requestBodyBytes, &requestSummary)
 	if err == nil && requestSummary.GramRequestSummary != "" {
-		shouldSummarize = len(responseBody) > SUMMARIZE_BREAKPOINT_BYTES && executionInfo.Tool.Summarizer.String == "auto"
+		shouldSummarize = len(responseBody) > SUMMARIZE_BREAKPOINT_BYTES
 	}
 
 	if shouldSummarize {
@@ -305,13 +307,60 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 }
 
 func (s *Service) summarizeResponse(ctx context.Context, orgID string, requestSummary, responseBody string) (string, error) {
+	var chunks []string
+	for i := 0; i < len(responseBody); i += SUMMARIZE_BREAKPOINT_BYTES {
+		end := int(math.Min(float64(i+SUMMARIZE_BREAKPOINT_BYTES), float64(len(responseBody))))
+		chunks = append(chunks, responseBody[i:end])
+	}
+
+	var wg sync.WaitGroup
+	workerSlots := make(chan bool, 5) // max 5 parallel workers
+	responsesCh := make(chan string, len(chunks))
+
+	for _, chunk := range chunks {
+		wg.Add(1)
+		workerSlots <- true // acquire slot
+
+		go func(chunk string) {
+			defer wg.Done()
+			defer func() { <-workerSlots }() // release slot
+
+			systemPrompt := `
+			You are a helper tasked with reducing the size of the response of a tool based on a given request summary.
+			For example, if the request is to "List all usernames", the response may include a list of users with many additional fields not relevant to the request.
+			Your goal is to extract the information that is most relevant to the request summary and return it as a new response.
+			There's no need to over-summarize responses that are already concise. Prioritize reducing enormous responses to manageable sizes.
+			`
+			prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere is a chunk of the response body:\n\n%s", requestSummary, chunk)
+
+			chatResponse, err := s.chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
+				return
+			}
+
+			responsesCh <- chatResponse.Content
+		}(chunk)
+	}
+
+	// Wait and close channel when all goroutines are done
+	go func() {
+		wg.Wait()
+		close(responsesCh)
+	}()
+
+	var chatResponses []string
+	for res := range responsesCh {
+		chatResponses = append(chatResponses, res)
+	}
+
 	systemPrompt := `
 	You are a helper tasked with reducing the size of the response of a tool based on a given request summary.
 	For example, if the request is to "List all usernames", the response may include a list of users with many additional fields not relevant to the request.
-	Your goal is to extract the information that is most relevant to the request summary and return it as a new response.
-	There's no need to over-summarize responses that are already concise. Prioritize reducing enormous responses to manageable sizes.
+	You previously extracted the information into condensed response chunks of the most relevant information.
+	Now please combine these chunks into one cohesive response.
 	`
-	prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere is the response body:\n\n%s", requestSummary, responseBody)
+	prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere are all the response chunks with each separated by a new line :\n\n%s", requestSummary, strings.Join(chatResponses, "\n"))
 	chatResponse, err := s.chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))

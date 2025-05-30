@@ -288,7 +288,7 @@ function ChatInner({
             if (cutoffIndex !== -1) {
               displayMessage = displayMessage.substring(0, cutoffIndex);
             }
-            displayMessage += " Please consider enabling *Auto-Summarize* for your tool or revise your prompt.";
+            displayMessage += " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
           }
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
@@ -405,6 +405,11 @@ function ChatInner({
   useEffect(() => {
     setMessages(chatMessages);
   }, [chatMessages]);
+
+  // If chatId changes, clear the display only messages
+  useEffect(() => {
+    setDisplayOnlyMessages([]);
+  }, [chatId]);
 
   const messagesToDisplay = [...displayOnlyMessages, ...chatMessages];
   messagesToDisplay.sort((a, b) => {

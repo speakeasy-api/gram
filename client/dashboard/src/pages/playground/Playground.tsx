@@ -59,7 +59,7 @@ export default function Playground() {
         value: chat.id,
       })) ?? [];
 
-  chatHistoryItems.push({
+  chatHistoryItems.unshift({
     icon: <Icon name="plus" />,
     label: "New chat",
     value: uuidv7(),

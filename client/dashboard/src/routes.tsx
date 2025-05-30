@@ -122,7 +122,7 @@ const ROUTE_STRUCTURE = {
     component: SDK,
   },
   slackApp: {
-    title: "Slack App",
+    title: "Slack App (alpha)",
     url: "slack-app",
     icon: "slack" as IconName,
     component: SlackApp,

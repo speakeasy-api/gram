@@ -456,14 +456,14 @@ function ToolCard({
       icon={tool.summarizer ? "check" : "sparkles"}
       variant="ghost"
       size="sm"
-      tooltip="Auto-summarize the tool's response. Prevents long responses from overwhelming the context window."
+      tooltip="An experimental feature. Attempt to Auto-summarize the tool's response via separate LLM and prevent large data from overwhelming the context window."
       onClick={() => {
         updateVariation({
           summarizer: tool.summarizer ? undefined : "auto",
         });
       }}
     >
-      Auto-Summarize
+      {tool.summarizer ? "Auto-Summarize" : "Auto-Summarize (alpha)"}
     </Button>
   );
 
