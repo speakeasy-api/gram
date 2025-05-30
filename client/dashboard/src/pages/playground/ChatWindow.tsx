@@ -450,8 +450,8 @@ function ChatInner({
           <Type className="font-medium">Use with: </Type>
           <TabsList className="bg-stone-200 dark:bg-stone-800">
             <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="agents">Agents</TabsTrigger>
             <TabsTrigger value="mcp">MCP</TabsTrigger>
+            <TabsTrigger value="agents">Agents</TabsTrigger>
           </TabsList>
         </Stack>
       </PanelHeader>
