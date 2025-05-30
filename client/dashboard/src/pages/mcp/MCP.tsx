@@ -19,21 +19,46 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
-import {
-  useListToolsetsSuspense,
-  useUpdateToolsetMutation,
-} from "@gram/client/react-query/index.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Check, Lock, Pencil } from "lucide-react";
 import React, { useState } from "react";
-
-function useToolsets() {
-  const { data: toolsets, refetch } = useListToolsetsSuspense();
-  return Object.assign(toolsets.toolsets, { refetch });
-}
+import { useToolsets } from "../toolsets/Toolsets";
 
 export default function MCP() {
+  const routes = useRoutes();
   const toolsets = useToolsets();
+
+  const content =
+    toolsets.length === 0 ? (
+      <Stack gap={2}>
+        <Heading variant="h3" className="normal-case">
+          Expose any toolset as a hosted MCP server in seconds.
+        </Heading>
+        <Type>
+          Head to the{" "}
+          <Button
+            size="inline"
+            icon="arrow-right"
+            iconAfter
+            onClick={() => routes.playground.goTo()}
+          >
+            Playground
+          </Button>{" "}
+          to get started
+        </Type>
+      </Stack>
+    ) : (
+      <Cards>
+        {toolsets.map((toolset: Toolset) => (
+          <McpToolsetCard
+            key={toolset.id}
+            toolset={toolset}
+            onUpdate={toolsets.refetch}
+          />
+        ))}
+      </Cards>
+    );
 
   return (
     <Page>
@@ -47,15 +72,7 @@ export default function MCP() {
             Use any Gram toolset as a hosted MCP server.
           </Type>
         </div>
-        <Cards>
-          {toolsets.map((toolset: Toolset) => (
-            <McpToolsetCard
-              key={toolset.id}
-              toolset={toolset}
-              onUpdate={toolsets.refetch}
-            />
-          ))}
-        </Cards>
+        {content}
       </Page.Body>
     </Page>
   );
@@ -100,9 +117,10 @@ export function McpToolsetCard({
   }, [publishModalOpen, toolset, organization, project]);
 
   let mcpJsonPublic: string | undefined = undefined;
-  const envHeaders = toolset.relevantEnvironmentVariables?.filter(
-    (v) => !v.toLowerCase().includes("server_url")
-  ) ?? [];
+  const envHeaders =
+    toolset.relevantEnvironmentVariables?.filter(
+      (v) => !v.toLowerCase().includes("server_url")
+    ) ?? [];
 
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
@@ -115,14 +133,14 @@ export function McpToolsetCard({
     mcpUrl,
     "--allow-http",
     "--header",
-    ...envHeaders.map(header => `MCP-${header}:${"${VALUE}"}`),
+    ...envHeaders.map((header) => `MCP-${header}:${"${VALUE}"}`),
   ];
   // Indent each line of the header args array by 8 spaces for alignment
-  const INDENT = ' '.repeat(8);
+  const INDENT = " ".repeat(8);
   const argsStringIndented = JSON.stringify(mcpJsonPublicArgs, null, 2)
-    .split('\n')
-    .map((line, idx) => idx === 0 ? line : INDENT + line)
-    .join('\n');
+    .split("\n")
+    .map((line, idx) => (idx === 0 ? line : INDENT + line))
+    .join("\n");
   mcpJsonPublic = `{
     "mcpServers": {
       "Gram${toolset.slug

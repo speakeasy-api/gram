@@ -1,18 +1,27 @@
 import {
   FUNCTION_CALLING,
   LANGCHAIN,
+  LANGGRAPH,
   OPENAI_AGENTS_SDK,
   VERCEL_AI_SDK,
 } from "./SDK";
 
 export const AGENT_EXAMPLES = {
   python: {
-    openai_agents:
-      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/python/gram_agents/gtm_agent.py",
+    [OPENAI_AGENTS_SDK]:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/python/agents_sdk/gtm_agent.py",
+    [LANGCHAIN]:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/python/langchain/gtm_agent.py",
   },
   typescript: {
-    vercel_agents:
-      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/typescript/gram_agents/gtmAgent.ts",
+    [VERCEL_AI_SDK]:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/typescript/vercel/gtmAgent.ts",
+    [LANGCHAIN]:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/typescript/langchain/gtmAgent.ts",
+    [LANGGRAPH]:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/typescript/langgraph/gtmAgent.ts",
+    [FUNCTION_CALLING]:
+      "https://raw.githubusercontent.com/speakeasy-api/gram-examples/refs/heads/main/typescript/function_calling/gtmAgent.ts",
   },
 };
 

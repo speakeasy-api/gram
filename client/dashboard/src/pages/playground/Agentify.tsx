@@ -85,62 +85,57 @@ export const AgentifyProvider = ({
     },
   });
 
+  useEffect(() => {
+    if (!Object.keys(FRAMEWORKS[lang]).includes(framework)) {
+      setFramework(FRAMEWORKS[lang][0]);
+    }
+  }, [lang]);
+
   const agentify = async (toolsetSlug: string, environmentSlug: string) => {
     setInProgress(true);
 
-    const example = await fetch(Object.values(AGENT_EXAMPLES[lang])[0]!).then(
-      (res) => res.text()
-    );
+    const exampleUrl = Object.keys(AGENT_EXAMPLES[lang]).includes(framework)
+      ? AGENT_EXAMPLES[lang][
+          framework as keyof (typeof AGENT_EXAMPLES)[typeof lang]
+        ]
+      : Object.values(AGENT_EXAMPLES[lang])[0];
 
-    const frameworkPrompt =
-      framework && Object.keys(AGENT_EXAMPLES[lang]).includes(framework)
-        ? `
-    <framework-sample>
-    ${
-      AGENT_EXAMPLES[lang][
-        framework as keyof (typeof AGENT_EXAMPLES)[typeof lang]
-      ]
-    }
-    </framework-sample>
-    `
-        : "";
+    const example = await fetch(exampleUrl!).then((res) => res.text());
 
     const result = await generateObject({
       model: openrouter.chat("openai/gpt-4o-mini"),
       prompt: `
-        <instructions>
-        You will be given a chat history, a statement of intent, and a basic skeleton of an agent. 
-        Using the statement of intent and details from the chat history, produce a complete agent that performs the task.
-        The agent should use LLM calls and toolsets to solve the generic version of the task as described in the statement of intent, not just the specific example given.
-        Note that the toolset provides tools and handles their execution and authentication. For example, any tool call present in the chat history will be available to the agent.
-        Use the example agent as a guide for the structure of the agent. If a framework sample is provided, be sure to use that specific framework.
-        </instructions>
+<instructions>
+  You will be given a chat history, a statement of intent, and a basic skeleton of an agent. 
+  Using the statement of intent and details from the chat history, produce a complete agent in ${lang} using ${framework} that performs the task.
+  The agent should use LLM calls and toolsets to solve the generic version of the task as described in the statement of intent, not just the specific example given.
+  Note that the toolset provides tools and handles their execution and authentication. For example, any tool call present in the chat history will be available to the agent.
+  The agents structure should closely mirror the example agent, but should be tailored to the specific task and chat history.
+</instructions>
 
-        <statement-of-intent>
-        ${prompt}
-        </statement-of-intent>
+<statement-of-intent>
+  ${prompt}
+</statement-of-intent>
 
-        <values-to-use>
-        <project>
-            ${project.slug}
-        </project>
-        <toolset>
-            ${toolsetSlug}
-        </toolset>
-        <environment>
-            ${environmentSlug}
-        </environment>
-        </values-to-use>
-        
-        <chat-history>
-        ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\t")}
-        </chat-history>
-        
-        <example-agent>
-        ${example}
-        </example-agent>
+<values-to-use>
+  <project>
+      ${project.slug}
+  </project>
+  <toolset>
+      ${toolsetSlug}
+  </toolset>
+  <environment>
+      ${environmentSlug}
+  </environment>
+</values-to-use>
 
-        ${frameworkPrompt}
+<chat-history>
+  ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\t")}
+</chat-history>
+
+<example-agent>
+  ${example}
+</example-agent>
       `,
       temperature: 0.5,
       schema: z.object({

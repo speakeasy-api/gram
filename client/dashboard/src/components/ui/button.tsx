@@ -31,6 +31,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
+        inline: "h-7 rounded-sm px-1.5 py-1.5 gap-0.5",
         sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
         icon: "size-9",
@@ -49,7 +50,8 @@ export function Button({
   variant,
   size,
   tooltip,
-  icon,
+  icon: iconName,
+  iconAfter = false,
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> &
@@ -57,6 +59,7 @@ export function Button({
     asChild?: boolean;
     tooltip?: string;
     icon?: IconName;
+    iconAfter?: boolean;
   }) {
   const Comp = asChild ? Slot : "button";
 
@@ -70,6 +73,16 @@ export function Button({
     link: "text-muted-foreground group-hover:text-foreground",
   }[variant ?? "default"];
 
+  const icon = iconName && (
+    <Icon
+      name={iconName}
+      className={cn(
+        "w-4 h-4 text-muted-foreground group-hover:text-foreground",
+        iconColors
+      )}
+    />
+  );
+
   const base = (
     <Comp
       data-slot="button"
@@ -79,16 +92,9 @@ export function Button({
       )}
       {...props}
     >
-      {icon && (
-        <Icon
-          name={icon}
-          className={cn(
-            "w-4 h-4 text-muted-foreground group-hover:text-foreground",
-            iconColors
-          )}
-        />
-      )}
+      {!iconAfter && icon}
       {props.children}
+      {iconAfter && icon}
     </Comp>
   );
 
