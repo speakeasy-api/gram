@@ -141,7 +141,7 @@ const ROUTE_STRUCTURE = {
   },
   docs: {
     title: "Docs",
-    url: "https://docs.speakeasy.com",
+    url: "https://docs.getgram.ai",
     icon: "book-open" as IconName,
     external: true,
   },
