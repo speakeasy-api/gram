@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/pb33f/libopenapi v0.21.10
+	github.com/pb33f/libopenapi v0.22.2
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.9.0
 	github.com/redis/go-redis/v9 v9.9.0
@@ -131,7 +131,7 @@ require (
 	github.com/samber/lo v1.49.1 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.3 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/speakeasy-api/jsonpath v0.6.1 // indirect
+	github.com/speakeasy-api/jsonpath v0.6.2 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect

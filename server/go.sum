@@ -342,8 +342,8 @@ github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3I
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
-github.com/pb33f/libopenapi v0.21.10 h1:CSy2asSXbDYBGRw9O+VgIrkE+ZyTW408HDoieORw3jk=
-github.com/pb33f/libopenapi v0.21.10/go.mod h1:Gc8oQkjr2InxwumK0zOBtKN9gIlv9L2VmSVIUk2YxcU=
+github.com/pb33f/libopenapi v0.22.2 h1:ChXG911vrr24KE7wzIib3eL8Td73ANFCNSpWf1C9hy4=
+github.com/pb33f/libopenapi v0.22.2/go.mod h1:utT5sD2/mnN7YK68FfZT5yEPbI1wwRBpSS4Hi0oOrBU=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 h1:onHthvaw9LFnH4t2DcNVpwGmV9E1BkGknEliJkfwQj0=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58/go.mod h1:DXv8WO4yhMYhSNPKjeNKa5WY9YCIEBRbNzFFPJbWO6Y=
 github.com/pganalyze/pg_query_go/v6 v6.1.0 h1:jG5ZLhcVgL1FAw4C/0VNQaVmX1SUJx71wBGdtTtBvls=
@@ -405,8 +405,8 @@ github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9yS
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/speakeasy-api/goa/v3 v3.0.0-20250402162029-007a880aa38c h1:FeURqpiSVBvxniLYMEZbKImxt/WvMzYgandN5nvkDHE=
 github.com/speakeasy-api/goa/v3 v3.0.0-20250402162029-007a880aa38c/go.mod h1:cLX3Y1JvnCabMWDAZxmfnjxM1f1l9g7Zf0C9CD9GIAQ=
-github.com/speakeasy-api/jsonpath v0.6.1 h1:FWbuCEPGaJTVB60NZg2orcYHGZlelbNJAcIk/JGnZvo=
-github.com/speakeasy-api/jsonpath v0.6.1/go.mod h1:ymb2iSkyOycmzKwbEAYPJV/yi2rSmvBCLZJcyD+VVWw=
+github.com/speakeasy-api/jsonpath v0.6.2 h1:Mys71yd6u8kuowNCR0gCVPlVAHCmKtoGXYoAtcEbqXQ=
+github.com/speakeasy-api/jsonpath v0.6.2/go.mod h1:ymb2iSkyOycmzKwbEAYPJV/yi2rSmvBCLZJcyD+VVWw=
 github.com/spf13/cobra v1.9.1 h1:CXSaggrXdbHK9CF+8ywj8Amf7PBRmPCOJugH954Nnlo=
 github.com/spf13/cobra v1.9.1/go.mod h1:nDyEzZ8ogv936Cinf6g1RU9MRY64Ir93oCnqb9wxYW0=
 github.com/spf13/pflag v1.0.6 h1:jFzHGLGAlb3ruxLB8MhbI6A8+AQX/2eW4qeyNZXNp2o=
