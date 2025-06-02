@@ -105,7 +105,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 
-	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug)) // TODO: We will know whether we are on a custom domain here
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get toolset for MCP server slug", slog.String("error", err.Error()))
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)

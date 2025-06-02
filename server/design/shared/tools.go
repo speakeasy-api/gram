@@ -17,7 +17,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("confirm", String, "Confirmation mode for the tool")
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
 	Attribute("summarizer", String, "Summarizer for the tool")
-	
+
 	Attribute("openapiv3_document_id", String, "The ID of the OpenAPI v3 document")
 	Attribute("openapiv3_operation", String, "OpenAPI v3 operation")
 	Attribute("tags", ArrayOf(String), "The tags list for this http tool")

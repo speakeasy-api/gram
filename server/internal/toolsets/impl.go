@@ -167,6 +167,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		ProjectID:              *authCtx.ProjectID,
 		HttpToolNames:          existingToolset.HttpToolNames,
 		McpSlug:                existingToolset.McpSlug,
+		CustomDomainID:         existingToolset.CustomDomainID,
 		McpIsPublic:            existingToolset.McpIsPublic,
 	}
 	if payload.Name != nil {
@@ -188,8 +189,17 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	if payload.McpSlug != nil && *payload.McpSlug != "" {
-		mcpToolset, err := s.repo.GetToolsetByMcpSlug(ctx, updateParams.McpSlug)
-		if err == nil && mcpToolset.ID != existingToolset.ID {
+		var mcpToolset repo.Toolset
+		var mcpToolsetErr error
+		if existingToolset.CustomDomainID.Valid {
+			mcpToolset, mcpToolsetErr = s.repo.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
+				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
+				CustomDomainID: existingToolset.CustomDomainID,
+			})
+		} else {
+			mcpToolset, mcpToolsetErr = s.repo.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
+		}
+		if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
 			return nil, oops.E(oops.CodeConflict, nil, "this slug is already ta")
 		}
 		updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))

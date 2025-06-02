@@ -113,7 +113,7 @@ func DescribeToolset(
 			confirmPrompt := conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt)
 			summarizer := conv.FromPGText[string](def.HttpToolDefinition.Summarizer)
 			tags := def.HttpToolDefinition.Tags
-			
+
 			variations, ok := keyedVariations[def.HttpToolDefinition.Name]
 			if ok {
 				name = conv.PtrValOrEmpty(variations.Name, name)

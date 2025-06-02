@@ -36,6 +36,7 @@ type Toolset struct {
 	HttpToolNames          []string
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
+	CustomDomainID         uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

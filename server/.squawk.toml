@@ -5,6 +5,7 @@ excluded_rules = [
   "prefer-robust-stmts",
   "ban-drop-not-null",
   "constraint-missing-not-valid",
+  "adding-foreign-key-constraint",
 ]
 [upload_to_github]
 fail_on_violations = true

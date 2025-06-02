@@ -39,6 +39,7 @@ SET
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
   , mcp_slug = COALESCE(@mcp_slug, mcp_slug)
   , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
+  , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
@@ -54,8 +55,16 @@ SELECT *
 FROM http_security
 WHERE key = ANY(@security_keys::TEXT[]) AND deployment_id = ANY(@deployment_ids::UUID[]);
 
--- name: GetToolsetByMcpSlug :one 
+-- name: GetToolsetByMcpSlug :one
 SELECT *
 FROM toolsets
 WHERE mcp_slug = @mcp_slug
+  AND custom_domain_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: GetToolsetByMcpSlugAndCustomDomain :one
+SELECT *
+FROM toolsets
+WHERE mcp_slug = @mcp_slug
+  AND custom_domain_id = @custom_domain_id
   AND deleted IS FALSE;

@@ -318,6 +318,31 @@ CREATE TABLE IF NOT EXISTS environment_entries (
   CONSTRAINT environments_entries_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS custom_domains (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  domain TEXT NOT NULL,
+  verified BOOLEAN NOT NULL DEFAULT FALSE,
+  ingress_name TEXT,
+  cert_secret_name TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  
+  CONSTRAINT custom_domains_pkey PRIMARY KEY (id),
+  CONSTRAINT custom_domains_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_domain_key
+ON custom_domains (domain)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_project_id_key
+ON custom_domains (project_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -332,6 +357,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
     mcp_slug IS NULL OR (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 40)
   ),
   mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  custom_domain_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -339,16 +365,21 @@ CREATE TABLE IF NOT EXISTS toolsets (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
-  CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
+  CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_key
+CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_custom_domain_id_key
+ON toolsets (mcp_slug, custom_domain_id)
+WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_null_custom_domain_id_key
 ON toolsets (mcp_slug)
-WHERE mcp_slug IS NOT NULL AND deleted IS FALSE;
+WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS http_security (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

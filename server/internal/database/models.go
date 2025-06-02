@@ -67,6 +67,19 @@ type ChatMessage struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
+type CustomDomain struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	Domain         string
+	Verified       bool
+	IngressName    pgtype.Text
+	CertSecretName pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type Deployment struct {
 	ID             uuid.UUID
 	Seq            int64
@@ -303,6 +316,7 @@ type Toolset struct {
 	HttpToolNames          []string
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
+	CustomDomainID         uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
