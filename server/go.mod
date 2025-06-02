@@ -16,7 +16,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/charmbracelet/log v0.4.2
 	github.com/ettle/strcase v0.2.0
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/go-redis/cache/v9 v9.0.0
 	github.com/gomarkdown/markdown v0.0.0-20250311123330-531bef5e742b
 	github.com/hashicorp/go-cleanhttp v0.5.2
