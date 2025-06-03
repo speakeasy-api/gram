@@ -7,14 +7,18 @@ import { Dot } from "@/components/ui/dot";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import {
+  useRegisterToolsetTelemetry,
+  useTelemetry,
+} from "@/contexts/Telemetry";
 import { groupTools } from "@/lib/toolNames";
+import { HTTPToolDefinition } from "@gram/client/models/components";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { ToolsetHeader } from "./Toolset";
-import { HTTPToolDefinition } from "@gram/client/models/components";
 
 type Tool = HTTPToolDefinition & {
   enabled: boolean;
@@ -131,6 +135,11 @@ const columns: Column<Tool>[] = [
 
 export function ToolSelect() {
   const { toolsetSlug } = useParams();
+  const telemetry = useTelemetry();
+  useRegisterToolsetTelemetry({
+    toolsetSlug: toolsetSlug ?? "",
+  });
+
   const { data: toolset, refetch } = useToolset({
     slug: toolsetSlug ?? "",
   });
@@ -138,6 +147,9 @@ export function ToolSelect() {
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
+      telemetry.capture("toolset_event", {
+        action: "tools_added_removed",
+      });
       refetch();
     },
   });

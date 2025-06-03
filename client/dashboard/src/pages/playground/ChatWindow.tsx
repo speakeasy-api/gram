@@ -5,6 +5,7 @@ import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
 import {
@@ -58,11 +59,9 @@ export type ChatConfig = React.RefObject<{
 
 export function ChatWindow({
   configRef,
-  chatId,
   dynamicToolset,
 }: {
   configRef: ChatConfig;
-  chatId: string;
   dynamicToolset: boolean;
 }) {
   const [model, setModel] = useState(availableModels[0]?.value ?? "");
@@ -75,7 +74,6 @@ export function ChatWindow({
       model={model}
       setModel={setModel}
       configRef={configRef}
-      chatId={chatId}
       dynamicToolset={dynamicToolset}
     />
   );
@@ -90,22 +88,23 @@ function ChatInner({
   model,
   setModel,
   configRef,
-  chatId,
   dynamicToolset,
 }: {
   model: string;
   setModel: (model: string) => void;
   configRef: ChatConfig;
-  chatId: string;
   dynamicToolset: boolean;
 }) {
   const session = useSession();
   const project = useProject();
+  const telemetry = useTelemetry();
+
+  const chat = useChatContext();
   const { setMessages } = useChatContext();
   const { chatHistory, isLoading: isChatHistoryLoading } =
-    useChatHistory(chatId);
-  const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
+    useChatHistory(chat.id);
 
+  const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
   const selectedTools = useRef<string[]>([]);
 
   const instance = useInstance(
@@ -166,7 +165,7 @@ function ChatInner({
     headers: {
       "Gram-Session": session.session,
       "Gram-Project": project.slug,
-      "Gram-Chat-ID": chatId,
+      "Gram-Chat-ID": chat.id,
     },
   });
 
@@ -264,19 +263,28 @@ function ChatInner({
       }),
       onError: (event: { error: unknown }) => {
         let displayMessage: string | undefined;
-        if (typeof event.error === 'object' && event.error !== null) {
-          const errorObject = event.error as { responseBody?: unknown; message?: unknown; [key: string]: unknown };
+        if (typeof event.error === "object" && event.error !== null) {
+          const errorObject = event.error as {
+            responseBody?: unknown;
+            message?: unknown;
+            [key: string]: unknown;
+          };
 
           if (typeof errorObject.responseBody === "string") {
             try {
               const parsedBody = JSON.parse(errorObject.responseBody);
-              if (typeof parsedBody === 'object' && parsedBody !== null && parsedBody.error && typeof parsedBody.error.message === "string") {
+              if (
+                typeof parsedBody === "object" &&
+                parsedBody !== null &&
+                parsedBody.error &&
+                typeof parsedBody.error.message === "string"
+              ) {
                 displayMessage = parsedBody.error.message;
               }
-            } catch(e) {
+            } catch (e) {
               console.error(`Error parsing model error: ${e}`);
             }
-          } else if (typeof errorObject.message === 'string') {
+          } else if (typeof errorObject.message === "string") {
             displayMessage = errorObject.message;
           }
         }
@@ -288,7 +296,8 @@ function ChatInner({
             if (cutoffIndex !== -1) {
               displayMessage = displayMessage.substring(0, cutoffIndex);
             }
-            displayMessage += " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
+            displayMessage +=
+              " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
           }
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
@@ -367,7 +376,7 @@ function ChatInner({
     status,
     append,
   } = useChat({
-    id: chatId,
+    id: chat.id,
     fetch: openaiFetch,
     onError: (error) => {
       console.error("Chat error:", error.message, error.stack);
@@ -375,6 +384,11 @@ function ChatInner({
       if (error.message.trim() !== "An error occurred.") {
         appendDisplayOnlyMessage(`**Error:** *${error.message}*`);
       }
+
+      telemetry.capture("chat_event", {
+        action: "chat_error",
+        error: error.message,
+      });
     },
     maxSteps: 5,
     initialMessages,
@@ -394,6 +408,16 @@ function ChatInner({
 
   const handleSend = useCallback(
     async (msg: string) => {
+      const userMessages = chatMessages.filter((m) => m.role === "user");
+      // Capture chat_started event when the user sends their first message
+      if (userMessages.length === 0) {
+        telemetry.capture("chat_event", {
+          action: "chat_started",
+          model,
+          message: msg,
+        });
+      }
+
       await append({
         role: "user",
         content: msg,
@@ -409,7 +433,7 @@ function ChatInner({
   // If chatId changes, clear the display only messages
   useEffect(() => {
     setDisplayOnlyMessages([]);
-  }, [chatId]);
+  }, [chat.id]);
 
   const messagesToDisplay = [...displayOnlyMessages, ...chatMessages];
   messagesToDisplay.sort((a, b) => {

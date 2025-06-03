@@ -8,6 +8,7 @@ import { Card, Cards } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
 import { IntegrationEntry } from "@gram/client/models/components";
 import {
@@ -201,6 +202,8 @@ export function IntegrationCard({
   integration: IntegrationEntry;
   newVersionCallback: () => void;
 }) {
+  const telemetry = useTelemetry();
+  
   const { data: deployment, refetch } = useLatestDeployment();
   const { data: packages } = useListPackagesSuspense();
 
@@ -217,6 +220,11 @@ export function IntegrationCard({
         ],
       },
     });
+
+    telemetry.capture("integration_event", {
+      action: "integration_enabled",
+      integration_name: integration.packageName,
+    });
   };
 
   const handleDisable = async () => {
@@ -224,6 +232,11 @@ export function IntegrationCard({
       evolveForm: {
         excludePackages: [integration.packageId],
       },
+    });
+
+    telemetry.capture("integration_event", {
+      action: "integration_disabled",
+      integration_name: integration.packageName,
     });
   };
 

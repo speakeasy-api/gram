@@ -5,6 +5,12 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import {
+  useRegisterChatTelemetry,
+  useRegisterEnvironmentTelemetry,
+  useRegisterToolsetTelemetry,
+  useTelemetry,
+} from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import { capitalize, cn } from "@/lib/utils";
 import { Deployment } from "@gram/client/models/components";
@@ -24,8 +30,20 @@ import { AgentifyProvider } from "./Agentify";
 import { ChatConfig, ChatWindow } from "./ChatWindow";
 
 export default function Playground() {
+  return (
+    <ChatProvider>
+      <AgentifyProvider>
+        <PlaygroundInner />
+      </AgentifyProvider>
+    </ChatProvider>
+  );
+}
+
+function PlaygroundInner() {
   const [searchParams] = useSearchParams();
   const { data: chatsData, refetch: refetchChats } = useListChats();
+  const chat = useChatContext();
+  const telemetry = useTelemetry();
 
   const [selectedToolset, setSelectedToolset] = useState<string | null>(
     searchParams.get("toolset") ?? null
@@ -34,9 +52,6 @@ export default function Playground() {
     searchParams.get("environment") ?? null
   );
   const [dynamicToolset, setDynamicToolset] = useState(false);
-  const [chatId, setChatId] = useState<string>(
-    searchParams.get("chatId") ?? uuidv7()
-  );
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -50,6 +65,13 @@ export default function Playground() {
     environmentSlug: selectedEnvironment,
     isOnboarding: false,
   };
+
+  useRegisterToolsetTelemetry({
+    toolsetSlug: selectedToolset ?? "",
+  });
+  useRegisterEnvironmentTelemetry({
+    environmentSlug: selectedEnvironment ?? "",
+  });
 
   const chatHistoryItems: DropdownItem[] =
     chatsData?.chats
@@ -69,9 +91,9 @@ export default function Playground() {
     <Combobox
       items={chatHistoryItems}
       onSelectionChange={(item) => {
-        setChatId(item.value);
+        chat.setId(item.value);
       }}
-      selected={chatId}
+      selected={chat.id}
       variant="ghost"
       onOpenChange={(open) => {
         if (open) {
@@ -95,9 +117,10 @@ export default function Playground() {
       icon="link"
       variant={"ghost"}
       onClick={() => {
-        const url = new URL(window.location.href);
-        url.searchParams.set("chatId", chatId);
-        navigator.clipboard.writeText(url.toString());
+        telemetry.capture("chat_event", {
+          action: "chat_shared",
+        });
+        navigator.clipboard.writeText(chat.url);
         alert("Chat link copied to clipboard");
       }}
     >
@@ -115,31 +138,26 @@ export default function Playground() {
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body className="max-w-full p-0">
-        <ChatProvider>
-          <AgentifyProvider>
-            <ResizablePanel
-              direction="horizontal"
-              className="h-full [&>[role='separator']]:border-border"
-            >
-              <ResizablePanel.Pane minSize={35}>
-                <ToolsetPanel
-                  configRef={chatConfigRef}
-                  setSelectedToolset={setSelectedToolset}
-                  setSelectedEnvironment={setSelectedEnvironment}
-                  dynamicToolset={dynamicToolset}
-                  setDynamicToolset={setDynamicToolset}
-                />
-              </ResizablePanel.Pane>
-              <ResizablePanel.Pane minSize={35} order={0}>
-                <ChatWindow
-                  configRef={chatConfigRef}
-                  chatId={chatId}
-                  dynamicToolset={dynamicToolset}
-                />
-              </ResizablePanel.Pane>
-            </ResizablePanel>
-          </AgentifyProvider>
-        </ChatProvider>
+        <ResizablePanel
+          direction="horizontal"
+          className="h-full [&>[role='separator']]:border-border"
+        >
+          <ResizablePanel.Pane minSize={35}>
+            <ToolsetPanel
+              configRef={chatConfigRef}
+              setSelectedToolset={setSelectedToolset}
+              setSelectedEnvironment={setSelectedEnvironment}
+              dynamicToolset={dynamicToolset}
+              setDynamicToolset={setDynamicToolset}
+            />
+          </ResizablePanel.Pane>
+          <ResizablePanel.Pane minSize={35} order={0}>
+            <ChatWindow
+              configRef={chatConfigRef}
+              dynamicToolset={dynamicToolset}
+            />
+          </ResizablePanel.Pane>
+        </ResizablePanel>
       </Page.Body>
     </Page>
   );
@@ -348,9 +366,15 @@ export const PanelHeader = ({
 };
 
 const ChatContext = createContext<{
+  id: string;
+  setId: (id: string) => void;
+  url: string;
   messages: UIMessage[];
   setMessages: (messages: UIMessage[]) => void;
 }>({
+  id: "",
+  setId: () => {},
+  url: "",
   messages: [],
   setMessages: () => {},
 });
@@ -364,10 +388,34 @@ export const useChatMessages = () => {
 };
 
 const ChatProvider = ({ children }: { children: React.ReactNode }) => {
+  const telemetry = useTelemetry();
+  const [searchParams] = useSearchParams();
+  const [id, setId] = useState<string>(searchParams.get("chatId") ?? uuidv7());
   const [messages, setMessages] = useState<UIMessage[]>([]);
 
+  const url = new URL(window.location.href);
+  url.searchParams.set("chatId", id);
+  const urlString = url.toString();
+
+  useRegisterChatTelemetry({
+    chatId: id,
+    chatUrl: urlString,
+  });
+
+  // This means a chat was explicitly loaded
+  const doSetId = (id: string) => {
+    setId(id);
+    telemetry.capture("chat_event", {
+      action: "chat_loaded",
+      num_messages: messages.length,
+      chat_id: id,
+    });
+  };
+
   return (
-    <ChatContext.Provider value={{ messages, setMessages }}>
+    <ChatContext.Provider
+      value={{ id, setId: doSetId, messages, setMessages, url: urlString }}
+    >
       {children}
     </ChatContext.Provider>
   );

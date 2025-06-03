@@ -8,21 +8,7 @@ import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
 import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { AgentifyProvider, useAgentify } from "../playground/Agentify";
-import { CODE_SAMPLES } from "./examples";
-
-export const VERCEL_AI_SDK = "Vercel AI SDK" as const;
-export const LANGCHAIN = "LangChain" as const;
-export const LANGGRAPH = "LangGraph" as const;
-export const OPENAI_AGENTS_SDK = "OpenAI Agents SDK" as const;
-export const FUNCTION_CALLING = "Function Calling" as const;
-
-export const FRAMEWORKS = {
-  typescript: [VERCEL_AI_SDK, LANGCHAIN, FUNCTION_CALLING] as const,
-  python: [OPENAI_AGENTS_SDK, LANGCHAIN, FUNCTION_CALLING] as const,
-} as const;
-
-export type SdkLanguage = keyof typeof FRAMEWORKS;
-export type SdkFramework = (typeof FRAMEWORKS)[keyof typeof FRAMEWORKS][number];
+import { CODE_SAMPLES, FRAMEWORKS, SdkFramework, SdkLanguage } from "./examples";
 
 export default function SDK() {
   return (

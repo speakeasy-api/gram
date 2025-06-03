@@ -21,6 +21,11 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import {
+  useRegisterEnvironmentTelemetry,
+  useRegisterToolsetTelemetry,
+  useTelemetry,
+} from "@/contexts/Telemetry";
 import { groupTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -52,13 +57,21 @@ export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
   const toolsets = useToolsets();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
 
   const { data: toolset } = useToolset({
     slug: toolsetSlug || "",
   });
 
+  useRegisterToolsetTelemetry({
+    toolsetSlug: toolsetSlug ?? "",
+  });
+
   const deleteToolsetMutation = useDeleteToolsetMutation({
     onSuccess: async () => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_deleted",
+      });
       await toolsets.refetch();
       routes.toolsets.goTo();
     },
@@ -126,9 +139,17 @@ export function ToolsetView({
 }) {
   const queryClient = useQueryClient();
   const routes = useRoutes();
-
+  const telemetry = useTelemetry();
   const { data: toolset, refetch } = useToolset({
     slug: toolsetSlug,
+  });
+
+  useRegisterToolsetTelemetry({
+    toolsetSlug: toolsetSlug ?? "",
+  });
+
+  useRegisterEnvironmentTelemetry({
+    environmentSlug: environmentSlug ?? "",
   });
 
   // Refetch any loaded instances of this toolset on update (primarily for the playground)
@@ -154,17 +175,38 @@ export function ToolsetView({
   };
 
   const updateToolsetMutation = useUpdateToolsetMutation({
-    onSuccess: onUpdate,
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+    },
+    onError: (error) => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_update_failed",
+        error: error.message,
+      });
+    },
   });
 
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
-    onSuccess: onUpdate,
+    onSuccess: () => {
+      telemetry.capture("environment_event", { action: "environment_updated" });
+    },
+    onError: (error) => {
+      telemetry.capture("environment_event", {
+        action: "environment_update_failed",
+        error: error.message,
+      });
+    },
   });
 
   const removeToolFromToolset = (toolName: string) => {
     if (!toolset) {
       return;
     }
+
+    telemetry.capture("toolset_event", {
+      action: "tool_removed",
+      tool_name: toolName,
+    });
 
     updateToolsetMutation.mutate({
       request: {
@@ -435,7 +477,7 @@ function ToolCard({
 }) {
   const client = useSdkClient();
   const sourceName = useToolSourceName(tool.deploymentId, tool);
-
+  const telemetry = useTelemetry();
   const toolNameDisplay = sourceName
     ? tool.name.replace(sourceName + "_", "")
     : tool.name;
@@ -450,6 +492,12 @@ function ToolCard({
         confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
         ...vals,
       },
+    });
+
+    telemetry.capture("toolset_event", {
+      action: "tool_variation_updated",
+      tool_name: tool.name,
+      overridden_fields: Object.keys(vals).join(", "),
     });
 
     onUpdate();

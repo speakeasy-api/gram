@@ -12,15 +12,10 @@ import { generateObject } from "ai";
 import { Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { z } from "zod";
-import { AGENT_EXAMPLES } from "../sdk/examples";
-import {
-  FRAMEWORKS,
-  OPENAI_AGENTS_SDK,
-  SdkFramework,
-  SdkLanguage,
-  SdkLanguageDropdown,
-} from "../sdk/SDK";
+import { AGENT_EXAMPLES, FRAMEWORKS, OPENAI_AGENTS_SDK, SdkFramework, SdkLanguage } from "../sdk/examples";
 import { useChatMessages } from "./Playground";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { SdkLanguageDropdown } from "../sdk/SDK";
 
 export const useAgentify = () => {
   return useContext(AgentifyContext);
@@ -60,6 +55,7 @@ export const AgentifyProvider = ({
   const session = useSession();
   const project = useProject();
   const messages = useChatMessages();
+  const telemetry = useTelemetry();
 
   const [lang, setLang] = useState<SdkLanguage>("python");
   const [framework, setFramework] = useState<SdkFramework>(FRAMEWORKS[lang][0]);
@@ -92,6 +88,14 @@ export const AgentifyProvider = ({
   }, [lang]);
 
   const agentify = async (toolsetSlug: string, environmentSlug: string) => {
+    telemetry.capture("agentify_event", {
+      action: "agentify_started",
+      num_messages: messages.length,
+      prompt,
+      lang,
+      framework,
+    });
+
     setInProgress(true);
 
     const exampleUrl = Object.keys(AGENT_EXAMPLES[lang]).includes(framework)
@@ -191,7 +195,7 @@ export const AgentifyButton = ({
 }) => {
   const session = useSession();
   const project = useProject();
-
+  const telemetry = useTelemetry();
   const messages = useChatMessages();
   const { agentify, inProgress, prompt, setPrompt, lang, setLang } =
     useAgentify();
@@ -214,6 +218,13 @@ export const AgentifyButton = ({
     if (suggestionNumMessages === messages.length) return; // Don't generate a new suggestion if the number of messages hasn't changed
 
     setPrompt(undefined);
+
+    telemetry.capture("agentify_event", {
+      action: "agentify_modal_opened",
+      num_messages: messages.length,
+      prompt,
+      lang,
+    });
 
     generateObject({
       model: openrouter.chat("openai/gpt-4o-mini"),

@@ -6,8 +6,9 @@ import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout } from "./components/app-layout.tsx";
 import { ThemeContext } from "./components/ui/theme-toggle.tsx";
-import { AuthProvider } from "./contexts/Auth.tsx";
+import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
+import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
 
 export default function App() {
@@ -66,13 +67,17 @@ export default function App() {
   return (
     <ThemeContext.Provider value={{ theme, setTheme: applyTheme }}>
       <MoonshineConfigProvider themeElement={document.documentElement}>
-        <BrowserRouter>
-          <SdkProvider>
-            <AuthProvider>
-              <RouteProvider />
-            </AuthProvider>
-          </SdkProvider>
-        </BrowserRouter>
+        <TelemetryProvider>
+          <BrowserRouter>
+            <SdkProvider>
+              <AuthProvider>
+                <ProjectProvider>
+                  <RouteProvider />
+                </ProjectProvider>
+              </AuthProvider>
+            </SdkProvider>
+          </BrowserRouter>
+        </TelemetryProvider>
       </MoonshineConfigProvider>
     </ThemeContext.Provider>
   );

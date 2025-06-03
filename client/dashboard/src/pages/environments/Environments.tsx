@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
-import { useProject } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
@@ -33,20 +34,30 @@ export function useEnvironments() {
 }
 
 export default function Environments() {
-  const project = useProject();
+  const session = useSession();
   const environments = useEnvironments();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
 
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
   const [environmentName, setEnvironmentName] = useState("");
+  
   const createEnvironmentMutation = useCreateEnvironmentMutation({
     onSuccess: async (data) => {
+      telemetry.capture("environment_event", {
+        action: "environment_created",
+        environment_slug: data.slug,
+      });
       await environments.refetch();
       routes.environments.environment.goTo(data.slug);
     },
     onError: (error) => {
       console.error("Failed to create environment:", error);
+      telemetry.capture("environment_event", {
+        action: "environment_creation_failed",
+        error: error.message,
+      });
     },
   });
 
@@ -57,7 +68,7 @@ export default function Environments() {
           name: environmentName,
           description: "New Environment Description",
           entries: [],
-          organizationId: project.organizationId,
+          organizationId: session.activeOrganizationId,
         },
       },
     });

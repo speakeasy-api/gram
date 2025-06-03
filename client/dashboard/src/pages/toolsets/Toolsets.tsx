@@ -19,6 +19,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { ToolsetEnvironmentBadge } from "./Toolset";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -42,11 +43,16 @@ export function ToolsetsRoot() {
 export default function Toolsets() {
   const toolsets = useToolsets();
   const routes = useRoutes();
-
+  const telemetry = useTelemetry();
+  
   const [createToolsetDialogOpen, setCreateToolsetDialogOpen] = useState(false);
   const [toolsetName, setToolsetName] = useState("");
   const createToolsetMutation = useCreateToolsetMutation({
     onSuccess: async (data) => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_created",
+        toolset_slug: data.slug,
+      });
       await toolsets.refetch();
       routes.toolsets.toolset.goTo(data.slug);
     },
