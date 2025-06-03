@@ -1,4 +1,4 @@
-h1:iYv8eTLHzlb1cDa5txezbGiDOk6Bl8l9o5FBD3TqD1E=
+h1:0HEF2cA1WylQeIuYNJn+489u5CeHDTr234c6Cl2JR4M=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -19,3 +19,4 @@ h1:iYv8eTLHzlb1cDa5txezbGiDOk6Bl8l9o5FBD3TqD1E=
 20250527204840_add_summarizer_col.sql h1:ZIUe0uzxCRw23vOsulBAcgHxXF2YGGeEhI1Nydr2Mrw=
 20250602212830_custom-domains-table.sql h1:641AL8w6r/PihFplqQyfu8MrYfK4lugzEa4KN/j//iA=
 20250602213351_mcp-custom-domain-indexes.sql h1:e7Bb5TDU/GRAhvMeWxDBKQ4ei+KnEYEFluJxzrPGm5A=
+20250603195303_ensure-single-domain-registration.sql h1:ifh+7334sO4bEmsplceIz/rOzpngPmvyc5T1dZk6zeE=
