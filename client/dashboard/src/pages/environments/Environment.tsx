@@ -16,6 +16,7 @@ import { PencilIcon } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useListToolsets, useToolset } from "@gram/client/react-query/index.js";
+import { useRegisterEnvironmentTelemetry, useTelemetry } from "@/contexts/Telemetry";
 
 interface EntryDialogProps {
   open: boolean;
@@ -196,6 +197,7 @@ export function useEnvironment(slug?: string) {
 export default function EnvironmentPage() {
   const environment = useEnvironment();
   const navigate = useNavigate();
+  const telemetry = useTelemetry();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
@@ -204,8 +206,15 @@ export default function EnvironmentPage() {
   >(undefined);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
 
+  useRegisterEnvironmentTelemetry({
+    environmentSlug: environment?.slug ?? "",
+  });
+
   const deleteEnvironmentMutation = useDeleteEnvironmentMutation({
     onSuccess: () => {
+      telemetry.capture("environment_event", {
+        action: "environment_deleted",
+      });
       environment!.refetch();
       navigate("/environments");
     },
@@ -213,6 +222,9 @@ export default function EnvironmentPage() {
 
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
     onSuccess: () => {
+      telemetry.capture("environment_event", {
+        action: "environment_updated",
+      });
       environment!.refetch();
     },
   });

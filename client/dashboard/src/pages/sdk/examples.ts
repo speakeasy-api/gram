@@ -1,10 +1,16 @@
-import {
-  FUNCTION_CALLING,
-  LANGCHAIN,
-  LANGGRAPH,
-  OPENAI_AGENTS_SDK,
-  VERCEL_AI_SDK,
-} from "./SDK";
+export const VERCEL_AI_SDK = "Vercel AI SDK" as const;
+export const LANGCHAIN = "LangChain" as const;
+export const LANGGRAPH = "LangGraph" as const;
+export const OPENAI_AGENTS_SDK = "OpenAI Agents SDK" as const;
+export const FUNCTION_CALLING = "Function Calling" as const;
+
+export const FRAMEWORKS = {
+  typescript: [VERCEL_AI_SDK, LANGCHAIN, FUNCTION_CALLING] as const,
+  python: [OPENAI_AGENTS_SDK, LANGCHAIN, FUNCTION_CALLING] as const,
+} as const;
+
+export type SdkLanguage = keyof typeof FRAMEWORKS;
+export type SdkFramework = (typeof FRAMEWORKS)[keyof typeof FRAMEWORKS][number];
 
 export const AGENT_EXAMPLES = {
   python: {

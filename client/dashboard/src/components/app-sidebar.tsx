@@ -64,7 +64,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <GramLogo className="text-3xl" />
                 </routes.home.Link>
                 <Type variant="small" muted className="self-end">
-                  v0.4.0 (alpha)
+                  v0.4.1 (alpha)
                 </Type>
               </Stack>
             </SidebarMenuButton>

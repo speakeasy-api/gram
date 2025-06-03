@@ -1,30 +1,31 @@
 import { Page } from "@/components/page-layout";
-import FileUpload from "@/components/upload";
-import { Type } from "@/components/ui/type";
-import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
-import { useProject, useSession } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
-import {
-  Deployment,
-  UploadOpenAPIv3Result,
-} from "@gram/client/models/components";
-import { useNavigate } from "react-router";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  useDeploymentLogs,
-  useLatestDeployment,
-  useListTools,
-} from "@gram/client/react-query/index.js";
-import { Input } from "@/components/ui/input";
 import { Stepper, StepProps } from "@/components/stepper";
-import { cn, getServerURL } from "@/lib/utils";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Type } from "@/components/ui/type";
+import FileUpload from "@/components/upload";
+import { useProject, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { cn, getServerURL } from "@/lib/utils";
+import {
+  Deployment,
+  UploadOpenAPIv3Result,
+} from "@gram/client/models/components";
+import {
+  useDeploymentLogs,
+  useLatestDeployment,
+  useListTools,
+} from "@gram/client/react-query/index.js";
+import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { useState } from "react";
+import { useNavigate } from "react-router";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -55,6 +56,7 @@ export function OnboardingContent({
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
+  const telemetry = useTelemetry();
 
   const { data: latestDeployment } = useLatestDeployment();
 
@@ -71,6 +73,10 @@ export function OnboardingContent({
   const handleUpload = async (file: File) => {
     try {
       setFile(file);
+
+      telemetry.capture("onboarding_event", {
+        action: "spec_uploaded",
+      });
 
       // Need to use fetch directly because the SDK doesn't support file uploads
       fetch(`${getServerURL()}/rpc/assets.uploadOpenAPIv3`, {
@@ -121,6 +127,10 @@ export function OnboardingContent({
     setDeployment(deployment.deployment);
     refetchTools();
     setCreatingDeployment(false);
+
+    telemetry.capture("onboarding_event", {
+      action: "deployment_created",
+    });
   };
 
   const documentId = deployment?.openapiv3Assets.find(

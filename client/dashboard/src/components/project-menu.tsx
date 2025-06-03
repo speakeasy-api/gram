@@ -165,7 +165,7 @@ export function ProjectMenu() {
               {organization?.slug}
             </Type>
             <Type muted variant="small" className="px-2 truncate">
-              {session.userEmail}
+              {session.user.email}
             </Type>
           </Stack>
           <ProjectSelector />
