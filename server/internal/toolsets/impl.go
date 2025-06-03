@@ -216,7 +216,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
 		}
 		updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
-		updateParams.CustomDomainID = uuid.NullUUID{UUID: *activeCustomDomainID, Valid: true}
+		if activeCustomDomainID != nil {
+			updateParams.CustomDomainID = uuid.NullUUID{UUID: *activeCustomDomainID, Valid: true}
+		}
 	}
 
 	if payload.McpIsPublic != nil {
