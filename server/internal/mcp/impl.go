@@ -105,10 +105,20 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 
-	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug)) // TODO: We will know whether we are on a custom domain here
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get toolset for MCP server slug", slog.String("error", err.Error()))
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	var toolset toolsets_repo.Toolset
+	var toolsetErr error
+	if customDomainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && customDomainCtx != nil {
+		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
+			McpSlug:        conv.ToPGText(mcpSlug),
+			CustomDomainID: uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true},
+		})
+	} else {
+		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug)) //
+	}
+
+	if toolsetErr != nil {
+		s.logger.ErrorContext(ctx, "failed to get toolset for MCP server slug", slog.String("error", toolsetErr.Error()))
+		return oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
 	}
 	var defaultEnvironment string
 	var authenticated bool
@@ -144,7 +154,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		defaultEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
 	}
 	var batch batchedRawRequest
-	err = json.NewDecoder(r.Body).Decode(&batch)
+	err := json.NewDecoder(r.Body).Decode(&batch)
 	switch {
 	case errors.Is(err, io.EOF):
 		return nil

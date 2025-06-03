@@ -43,6 +43,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				slog.String("url", r.URL.String()),
 				slog.Int("status", rw.statusCode),
 				slog.String("duration", time.Since(start).String()),
+				slog.String("host", r.Host),
 			)
 		})
 	}

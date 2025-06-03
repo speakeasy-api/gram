@@ -332,6 +332,7 @@ func newStartCommand() *cli.Command {
 
 			mux.Use(middleware.DevCORSMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
+			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment")))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
