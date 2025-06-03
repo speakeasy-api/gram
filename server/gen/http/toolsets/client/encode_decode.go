@@ -1298,6 +1298,7 @@ func unmarshalToolsetResponseBodyToTypesToolset(v *ToolsetResponseBody) *types.T
 		Slug:           types.Slug(*v.Slug),
 		Description:    v.Description,
 		McpIsPublic:    v.McpIsPublic,
+		CustomDomainID: v.CustomDomainID,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}

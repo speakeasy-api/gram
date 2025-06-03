@@ -31,6 +31,8 @@ type Toolset struct {
 	McpSlug *Slug
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

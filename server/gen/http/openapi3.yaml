@@ -6553,6 +6553,9 @@ components:
                     type: string
                     description: When the toolset was created.
                     format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -6713,6 +6716,9 @@ components:
         UpdateToolsetForm:
             type: object
             properties:
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -6749,6 +6755,9 @@ components:
         UpdateToolsetRequestBody:
             type: object
             properties:
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset

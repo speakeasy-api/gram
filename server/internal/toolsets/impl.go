@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
+	domainsRepo "github.com/speakeasy-api/gram/internal/customdomains/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/mv"
@@ -36,6 +38,7 @@ type Service struct {
 	environmentRepo *environmentsRepo.Queries
 	auth            *auth.Auth
 	toolsets        *Toolsets
+	domainsRepo     *domainsRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -49,6 +52,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		auth:            auth.New(logger, db, sessions),
 		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
+		domainsRepo:     domainsRepo.New(db),
 	}
 }
 
@@ -188,21 +192,31 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
 	}
 
+	var activeCustomDomainID *uuid.UUID
+	if domain, err := s.domainsRepo.GetCustomDomainsByProject(ctx, *authCtx.ProjectID); err == nil && domain.Activated && domain.Verified {
+		activeCustomDomainID = &domain.ID
+	}
+
+	if payload.CustomDomainID != nil && activeCustomDomainID != nil && *payload.CustomDomainID == activeCustomDomainID.String() {
+		updateParams.CustomDomainID = uuid.NullUUID{UUID: *activeCustomDomainID, Valid: true}
+	}
+
 	if payload.McpSlug != nil && *payload.McpSlug != "" {
 		var mcpToolset repo.Toolset
 		var mcpToolsetErr error
-		if existingToolset.CustomDomainID.Valid {
+		if activeCustomDomainID != nil {
 			mcpToolset, mcpToolsetErr = s.repo.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
 				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
-				CustomDomainID: existingToolset.CustomDomainID,
+				CustomDomainID: uuid.NullUUID{UUID: *activeCustomDomainID, Valid: true},
 			})
 		} else {
 			mcpToolset, mcpToolsetErr = s.repo.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
 		}
 		if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-			return nil, oops.E(oops.CodeConflict, nil, "this slug is already ta")
+			return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
 		}
 		updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
+		updateParams.CustomDomainID = uuid.NullUUID{UUID: *activeCustomDomainID, Valid: true}
 	}
 
 	if payload.McpIsPublic != nil {

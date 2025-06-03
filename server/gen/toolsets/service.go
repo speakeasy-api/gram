@@ -115,7 +115,9 @@ type UpdateToolsetPayload struct {
 	// The slug of the MCP to use for the toolset
 	McpSlug *types.Slug
 	// Whether the toolset is public in MCP
-	McpIsPublic      *bool
+	McpIsPublic *bool
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID   *string
 	ProjectSlugInput *string
 }
 

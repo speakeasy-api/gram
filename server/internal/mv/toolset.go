@@ -184,6 +184,7 @@ func DescribeToolset(
 		Description:                  conv.FromPGText[string](toolset.Description),
 		HTTPTools:                    httpTools,
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
+		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
 		McpIsPublic:                  &toolset.McpIsPublic,
 		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
