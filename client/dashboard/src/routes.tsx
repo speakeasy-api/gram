@@ -17,6 +17,7 @@ import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import SlackApp from "./pages/slackapp/SlackApp";
 import MCP from "./pages/mcp/MCP";
+import ToolBuilder from "./pages/toolBuilder/ToolBuilder";
 
 type AppRouteBasic = {
   title: string;
@@ -72,6 +73,12 @@ const ROUTE_STRUCTURE = {
     url: "integrations",
     icon: "blocks" as IconName,
     component: Integrations,
+  },
+  toolBuilder: {
+    title: "Tool Builder",
+    url: "tool-builder",
+    icon: "pencil-ruler" as IconName,
+    component: ToolBuilder,
   },
   toolsets: {
     title: "Toolsets",

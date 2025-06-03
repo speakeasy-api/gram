@@ -4,7 +4,7 @@ import { createContext, ReactNode, useContext, useEffect } from "react";
 import { User } from "./Auth";
 
 // Set this to true to test telemetry locally
-const AM_TESTING_TELEMETRY = true;
+const AM_TESTING_TELEMETRY = false;
 
 export type Telemetry = Pick<
   PostHog,

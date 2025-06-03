@@ -1,32 +1,40 @@
+import { useGroupedTools } from "@/lib/toolNames";
+import { HTTPToolDefinition } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
-import {
-  TooltipProvider,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "./ui/tooltip";
 import { Badge } from "./ui/badge";
-import { reduceToolNames as simplifyToolNames } from "@/lib/toolNames";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
 
 export const ToolsBadge = ({
   tools,
   size = "md",
   variant = "default",
 }: {
-  tools: ({ name: string } | string)[] | undefined;
+  tools: (HTTPToolDefinition | string)[] | undefined;
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {
-  const { tools: cleanedTools } = simplifyToolNames(
-    tools?.map((tool) => (typeof tool === "string" ? { name: tool } : tool)) ??
-      []
+  const isStrings = tools?.every((tool) => typeof tool === "string");
+  const groupedTools = useGroupedTools(
+    !isStrings && tools ? (tools as HTTPToolDefinition[]) : []
   );
+
+  const groupedToolNames =
+    groupedTools.length == 1
+      ? groupedTools[0]!.tools.map((tool) => tool.displayName)
+      : groupedTools.flatMap((group) => group.tools.map((tool) => tool.name));
+
+  const toolNames = isStrings ? tools : groupedToolNames;
 
   const tooltipContent = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
-        {cleanedTools.map((tool, i) => (
-          <p key={i}>{tool.displayName}</p>
+        {toolNames.map((tool, i) => (
+          <p key={i}>{tool}</p>
         ))}
       </Stack>
     </div>

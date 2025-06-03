@@ -26,7 +26,7 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
-import { groupTools } from "@/lib/toolNames";
+import { useGroupedTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
@@ -314,7 +314,8 @@ export function ToolsetView({
     </Button>
   );
 
-  const grouped = groupTools(toolset?.httpTools || []);
+  const grouped = useGroupedTools(toolset?.httpTools || []);
+  console.log("grouped", grouped);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(
     grouped.map((group) => group.key)
   );
@@ -328,7 +329,7 @@ export function ToolsetView({
       defaultValue={groupFilterItems.map((group) => group.value)}
       onValueChange={setSelectedGroups}
       placeholder="Filter tools"
-      className="w-fit mb-4"
+      className="w-fit mb-4 capitalize"
     />
   );
 

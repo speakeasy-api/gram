@@ -11,8 +11,7 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
-import { groupTools } from "@/lib/toolNames";
-import { HTTPToolDefinition } from "@gram/client/models/components";
+import { Tool, useGroupedTools } from "@/lib/toolNames";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
@@ -20,39 +19,49 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { ToolsetHeader } from "./Toolset";
 
-type Tool = HTTPToolDefinition & {
+type ToggleableTool = Tool & {
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
-  displayName?: string;
 };
 
-type ToolGroup = {
+type ToggleableToolGroup = {
   key: string;
   defaultExpanded: boolean;
   toggleAll: () => void;
-  tools: Tool[];
+  tools: ToggleableTool[];
 };
 
-const groupColumns: Column<ToolGroup>[] = [
+const sourceColumn: Column<{ key: string; tools: Tool[] }> = {
+  header: "Tool Source",
+  key: "name",
+  render: (row) => (
+    <Stack direction={"horizontal"} gap={4} align={"center"}>
+      <Type className="capitalize">{row.key}</Type>
+      {row.tools[0]?.packageName && (
+        <Badge
+          variant={"outline"}
+          size={"sm"}
+          className="text-muted-foreground"
+        >
+          Third Party
+        </Badge>
+      )}
+    </Stack>
+  ),
+  width: "0.5fr",
+};
+
+const groupColumns: Column<{ key: string; tools: Tool[] }>[] = [
+  sourceColumn,
   {
-    header: "Tool Source",
-    key: "name",
-    render: (row) => (
-      <Stack direction={"horizontal"} gap={4} align={"center"}>
-        <Type className="capitalize">{row.key}</Type>
-        {row.tools[0]?.packageName && (
-          <Badge
-            variant={"outline"}
-            size={"sm"}
-            className="text-muted-foreground"
-          >
-            Third Party
-          </Badge>
-        )}
-      </Stack>
-    ),
-    width: "0.5fr",
+    header: "# Tools",
+    key: "numTools",
+    render: (row) => <Type muted>{row.tools.length} Tools</Type>,
   },
+];
+
+const groupColumnsToggleable: Column<ToggleableToolGroup>[] = [
+  sourceColumn,
   {
     header: "# Tools",
     key: "numTools",
@@ -91,18 +100,6 @@ const groupColumns: Column<ToolGroup>[] = [
 
 const columns: Column<Tool>[] = [
   {
-    header: "Enable",
-    key: "enabled",
-    render: (row) => (
-      <SimpleTooltip
-        tooltip={row.enabled ? "Remove from toolset" : "Add to toolset"}
-      >
-        <Checkbox checked={row.enabled} onCheckedChange={row.setEnabled} />
-      </SimpleTooltip>
-    ),
-    width: "48px",
-  },
-  {
     header: "Name",
     key: "name",
     render: (row) => (
@@ -131,6 +128,22 @@ const columns: Column<Tool>[] = [
       </Type>
     ),
   },
+];
+
+const toggleableColumns: Column<ToggleableTool>[] = [
+  {
+    header: "Enable",
+    key: "enabled",
+    render: (row) => (
+      <SimpleTooltip
+        tooltip={row.enabled ? "Remove from toolset" : "Add to toolset"}
+      >
+        <Checkbox checked={row.enabled} onCheckedChange={row.setEnabled} />
+      </SimpleTooltip>
+    ),
+    width: "48px",
+  },
+  ...columns,
 ];
 
 export function ToolSelect() {
@@ -177,15 +190,17 @@ export function ToolSelect() {
     });
   };
 
+  const groupedTools = useGroupedTools(tools?.tools ?? []);
+
   const toolGroups = useMemo(() => {
-    const toggleAll = (tools: Tool[]) => {
+    const toggleAll = (tools: ToggleableTool[]) => {
       setToolsEnabled(
         tools.map((t) => t.name),
         tools.some((t) => !t.enabled) // Disable iff all are already enabled
       );
     };
 
-    const toolGroups = groupTools(tools?.tools ?? []).map((group) => ({
+    const toolGroups = groupedTools.map((group) => ({
       ...group,
       tools: group.tools.map((tool) => ({
         ...tool,
@@ -227,14 +242,14 @@ export function ToolSelect() {
       <ToolsetHeader toolsetSlug={toolsetSlug} />
       {!isLoadingTools ? (
         <Table
-          columns={groupColumns}
+          columns={groupColumnsToggleable}
           data={toolGroups}
           rowKey={(row) => row.key}
           className="mb-6 overflow-y-auto"
           hideHeader
           renderExpandedContent={(group) => (
             <Table
-              columns={columns}
+              columns={toggleableColumns}
               data={group.tools}
               rowKey={(row) => row.id}
               hideHeader
@@ -246,5 +261,36 @@ export function ToolSelect() {
         <SkeletonTable />
       )}
     </Page.Body>
+  );
+}
+
+export function ToolsTable({
+  additionalColumns,
+}: {
+  additionalColumns?: Column<Tool>[];
+}) {
+  const { data: tools, isLoading: isLoadingTools } = useListTools();
+
+  const toolGroups = useGroupedTools(tools?.tools ?? []);
+
+  return !isLoadingTools ? (
+    <Table
+      columns={groupColumns}
+      data={toolGroups}
+      rowKey={(row) => row.key}
+      className="mb-6 overflow-y-auto"
+      hideHeader
+      renderExpandedContent={(group) => (
+        <Table
+          columns={[...columns, ...(additionalColumns ?? [])]}
+          data={group.tools}
+          rowKey={(row) => row.id}
+          hideHeader
+          className="bg-card max-h-[600px] overflow-y-auto"
+        />
+      )}
+    />
+  ) : (
+    <SkeletonTable />
   );
 }

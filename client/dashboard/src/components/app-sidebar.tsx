@@ -25,9 +25,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navGroups = {
     configure: [
       routes.home,
-      routes.integrations,
       routes.toolsets,
+      // routes.toolBuilder,
       routes.environments,
+      routes.integrations,
     ],
     connect: [routes.mcp, routes.sdk, routes.slackApp],
     manage: [routes.settings, routes.docs],

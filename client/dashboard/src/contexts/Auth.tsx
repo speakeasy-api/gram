@@ -232,11 +232,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   useIdentifyUserForTelemetry(session?.user);
 
   // you need something like this so you don't redirect with empty session too soon
-  if (isLoading || !session) {
+  if (isLoading) {
     return <FullScreenLoader />;
   }
 
-  if (error || !session.session || !session.organization) {
+  if (error || !session || !session.session || !session.organization) {
     return (
       <SessionContext.Provider value={emptySession}>
         {children}
