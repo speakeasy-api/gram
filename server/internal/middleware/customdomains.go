@@ -32,6 +32,11 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string) 
 				return
 			}
 
+			if strings.HasPrefix(host, "localhost") && env == "local" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if slices.Contains(GramDomains, host) {
 				next.ServeHTTP(w, r)
 				return
