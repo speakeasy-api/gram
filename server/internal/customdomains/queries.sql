@@ -12,23 +12,26 @@ INSERT INTO custom_domains (
 )
 RETURNING *;
 
--- name: GetCustomDomainsByProject :many
+-- name: GetCustomDomainsByProject :one
 SELECT *
 FROM custom_domains
 WHERE project_id = @project_id
   AND deleted IS FALSE
-ORDER BY created_at DESC;
+LIMIT 1;
 
--- name: GetCustomDomainByDomain :one
+-- name: GetActiveCustomDomainByDomain :one
 SELECT *
 FROM custom_domains
 WHERE domain = @domain
+  AND activated IS TRUE
+  AND verified IS TRUE
   AND deleted IS FALSE;
 
 -- name: UpdateCustomDomain :one
 UPDATE custom_domains
 SET
     verified = COALESCE(@verified, verified),
+    activated = COALESCE(@activated, activated),
     ingress_name = COALESCE(@ingress_name, ingress_name),
     cert_secret_name = COALESCE(@cert_secret_name, cert_secret_name),
     updated_at = clock_timestamp()

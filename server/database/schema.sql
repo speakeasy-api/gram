@@ -323,6 +323,7 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   project_id uuid NOT NULL,
   domain TEXT NOT NULL,
   verified BOOLEAN NOT NULL DEFAULT FALSE,
+  activated BOOLEAN NOT NULL DEFAULT FALSE,
   ingress_name TEXT,
   cert_secret_name TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

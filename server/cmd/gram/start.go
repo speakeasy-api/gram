@@ -17,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/speakeasy-api/gram/internal/background"
+	"github.com/speakeasy-api/gram/internal/customdomains"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -358,6 +359,7 @@ func newStartCommand() *cli.Command {
 				SlackSigningSecret: c.String("slack-signing-secret"),
 			}))
 			variations.Attach(mux, variations.NewService(logger.With(slog.String("component", "variations")), db, sessionManager))
+			customdomains.Attach(mux, customdomains.NewService(logger.With(slog.String("component", "customdomains")), db, sessionManager))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

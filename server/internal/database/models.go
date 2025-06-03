@@ -72,6 +72,7 @@ type CustomDomain struct {
 	ProjectID      uuid.UUID
 	Domain         string
 	Verified       bool
+	Activated      bool
 	IngressName    pgtype.Text
 	CertSecretName pgtype.Text
 	CreatedAt      pgtype.Timestamptz

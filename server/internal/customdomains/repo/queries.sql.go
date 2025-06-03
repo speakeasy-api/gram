@@ -24,7 +24,7 @@ INSERT INTO custom_domains (
     $3,
     $4
 )
-RETURNING id, project_id, domain, verified, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCustomDomainParams struct {
@@ -47,6 +47,7 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 		&i.ProjectID,
 		&i.Domain,
 		&i.Verified,
+		&i.Activated,
 		&i.IngressName,
 		&i.CertSecretName,
 		&i.CreatedAt,
@@ -69,21 +70,24 @@ func (q *Queries) DeleteCustomDomain(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const getCustomDomainByDomain = `-- name: GetCustomDomainByDomain :one
-SELECT id, project_id, domain, verified, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+const getActiveCustomDomainByDomain = `-- name: GetActiveCustomDomainByDomain :one
+SELECT id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE domain = $1
+  AND activated IS TRUE
+  AND verified IS TRUE
   AND deleted IS FALSE
 `
 
-func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (CustomDomain, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainByDomain, domain)
+func (q *Queries) GetActiveCustomDomainByDomain(ctx context.Context, domain string) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getActiveCustomDomainByDomain, domain)
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
 		&i.Domain,
 		&i.Verified,
+		&i.Activated,
 		&i.IngressName,
 		&i.CertSecretName,
 		&i.CreatedAt,
@@ -94,59 +98,49 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 	return i, err
 }
 
-const getCustomDomainsByProject = `-- name: GetCustomDomainsByProject :many
-SELECT id, project_id, domain, verified, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+const getCustomDomainsByProject = `-- name: GetCustomDomainsByProject :one
+SELECT id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE project_id = $1
   AND deleted IS FALSE
-ORDER BY created_at DESC
+LIMIT 1
 `
 
-func (q *Queries) GetCustomDomainsByProject(ctx context.Context, projectID uuid.UUID) ([]CustomDomain, error) {
-	rows, err := q.db.Query(ctx, getCustomDomainsByProject, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CustomDomain
-	for rows.Next() {
-		var i CustomDomain
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.Domain,
-			&i.Verified,
-			&i.IngressName,
-			&i.CertSecretName,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetCustomDomainsByProject(ctx context.Context, projectID uuid.UUID) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainsByProject, projectID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateCustomDomain = `-- name: UpdateCustomDomain :one
 UPDATE custom_domains
 SET
     verified = COALESCE($1, verified),
-    ingress_name = COALESCE($2, ingress_name),
-    cert_secret_name = COALESCE($3, cert_secret_name),
+    activated = COALESCE($2, activated),
+    ingress_name = COALESCE($3, ingress_name),
+    cert_secret_name = COALESCE($4, cert_secret_name),
     updated_at = clock_timestamp()
-WHERE id = $4
+WHERE id = $5
   AND deleted IS FALSE
-RETURNING id, project_id, domain, verified, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainParams struct {
 	Verified       bool
+	Activated      bool
 	IngressName    pgtype.Text
 	CertSecretName pgtype.Text
 	ID             uuid.UUID
@@ -155,6 +149,7 @@ type UpdateCustomDomainParams struct {
 func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomainParams) (CustomDomain, error) {
 	row := q.db.QueryRow(ctx, updateCustomDomain,
 		arg.Verified,
+		arg.Activated,
 		arg.IngressName,
 		arg.CertSecretName,
 		arg.ID,
@@ -165,6 +160,7 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		&i.ProjectID,
 		&i.Domain,
 		&i.Verified,
+		&i.Activated,
 		&i.IngressName,
 		&i.CertSecretName,
 		&i.CreatedAt,
