@@ -91,12 +91,29 @@ export const ProjectProvider = ({
   const [project, setProject] = useState<ProjectEntry | null>(null);
 
   const defaultProject = organization.projects[0];
-  if (!defaultProject) {
-    throw new Error("No projects found");
-  }
 
   const currentProject =
     organization.projects.find((p) => p.slug === projectSlug) ?? defaultProject;
+
+  useRegisterProjectForTelemetry({
+    projectSlug: currentProject?.slug ?? "",
+    organizationSlug: organization.slug,
+  });
+
+  useCaptureUserAuthorizationEvent({
+    projectSlug: currentProject?.slug ?? "",
+    organizationSlug: organization.slug,
+    email: user.email,
+  });
+
+  // Not logged in
+  if (!currentProject) {
+    return (
+      <ProjectContext.Provider value={emptyProject}>
+        {children}
+      </ProjectContext.Provider>
+    );
+  }
 
   if (!project || project.slug !== currentProject.slug) {
     setProject(currentProject);
@@ -106,17 +123,6 @@ export const ProjectProvider = ({
     localStorage.setItem(PREFERRED_PROJECT_KEY, slug);
     navigate(`/${organization.slug}/${slug}`);
   };
-
-  useRegisterProjectForTelemetry({
-    projectSlug: currentProject.slug,
-    organizationSlug: organization.slug,
-  });
-
-  useCaptureUserAuthorizationEvent({
-    projectSlug: currentProject.slug,
-    organizationSlug: organization.slug,
-    email: user.email,
-  });
 
   const value = Object.assign(currentProject, {
     organizationId: organization.id,
