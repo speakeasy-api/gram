@@ -101,8 +101,9 @@ function ChatInner({
 
   const chat = useChatContext();
   const { setMessages } = useChatContext();
-  const { chatHistory, isLoading: isChatHistoryLoading } =
-    useChatHistory(chat.id);
+  const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
+    chat.id
+  );
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
   const selectedTools = useRef<string[]>([]);

@@ -315,7 +315,6 @@ export function ToolsetView({
   );
 
   const grouped = useGroupedTools(toolset?.httpTools || []);
-  console.log("grouped", grouped);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(
     grouped.map((group) => group.key)
   );
