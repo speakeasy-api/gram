@@ -1,0 +1,273 @@
+@import "tailwindcss";
+
+:root {
+  --color-base-white: hsl(0 0% 100%);
+  --color-base-black: hsl(0 0% 0%);
+
+  /* Neutrals */
+  --color-neutral-100: hsl(0, 0%, 98%);
+  --color-neutral-200: hsl(0, 0%, 92%);
+  --color-neutral-300: hsl(0, 0%, 86%);
+  --color-neutral-400: hsl(0, 0%, 73%);
+  --color-neutral-500: hsl(0, 0%, 59%);
+  --color-neutral-600: hsl(0, 0%, 46%);
+  --color-neutral-700: hsl(0, 0%, 33%);
+  --color-neutral-800: hsl(0, 0%, 20%);
+  --color-neutral-900: hsl(0, 0%, 7%);
+
+  /* Brand red */
+  --color-brand-red-100: hsl(23, 96%, 62%);
+  --color-brand-red-200: hsl(19, 84%, 58%);
+  --color-brand-red-300: hsl(14, 74%, 54%);
+  --color-brand-red-400: hsl(9, 67%, 51%);
+  --color-brand-red-500: hsl(4, 67%, 47%);
+  --color-brand-red-600: hsl(1, 62%, 39%);
+  --color-brand-red-700: hsl(359, 58%, 31%);
+  --color-brand-red-800: hsl(352, 57%, 22%);
+  --color-brand-red-900: hsl(334, 54%, 13%);
+
+  --gradient-brand-red: radial-gradient(
+    138.34% 138.34% at 0% 4.4%,
+    var(--color-brand-red-900) 0%,
+    var(--color-brand-red-800) 12.5%,
+    var(--color-brand-red-700) 25%,
+    var(--color-brand-red-600) 37.5%,
+    var(--color-brand-red-500) 50%,
+    var(--color-brand-red-400) 62.5%,
+    var(--color-brand-red-300) 75%,
+    var(--color-brand-red-200) 87.5%,
+    var(--color-brand-red-100) 100%
+  );
+
+  /* Brand green */
+  --color-brand-green-100: hsl(68, 52%, 72%);
+  --color-brand-green-200: hsl(75, 37%, 64%);
+  --color-brand-green-300: hsl(84, 28%, 56%);
+  --color-brand-green-400: hsl(95, 23%, 49%);
+  --color-brand-green-500: hsl(108, 24%, 41%);
+  --color-brand-green-600: hsl(116, 24%, 34%);
+  --color-brand-green-700: hsl(128, 30%, 25%);
+  --color-brand-green-800: hsl(140, 44%, 16%);
+  --color-brand-green-900: hsl(154, 100%, 7%);
+
+  --gradient-brand-green: radial-gradient(
+    137.26% 137.26% at 0% 0%,
+    var(--color-brand-green-900) 0%,
+    var(--color-brand-green-800) 12.5%,
+    var(--color-brand-green-700) 25%,
+    var(--color-brand-green-600) 37.5%,
+    var(--color-brand-green-500) 50%,
+    var(--color-brand-green-400) 62.5%,
+    var(--color-brand-green-300) 75%,
+    var(--color-brand-green-200) 87.5%,
+    var(--color-brand-green-100) 100%
+  );
+
+  /* Brand blue */
+  --color-brand-blue-100: hsl(216, 100%, 100%);
+  --color-brand-blue-200: hsl(215, 86%, 73%);
+  --color-brand-blue-300: hsl(215, 77%, 65%);
+  --color-brand-blue-400: hsl(215, 72%, 58%);
+  --color-brand-blue-500: hsl(214, 69%, 50%);
+  --color-brand-blue-600: hsl(215, 71%, 40%);
+  --color-brand-blue-700: hsl(215, 75%, 31%);
+  --color-brand-blue-800: hsl(217, 82%, 21%);
+  --color-brand-blue-900: hsl(220, 100%, 12%);
+
+  --gradient-brand-blue: radial-gradient(
+    141.42% 141.42% at 0% 0%,
+    var(--color-brand-blue-900) 0%,
+    var(--color-brand-blue-800) 12.5%,
+    var(--color-brand-blue-700) 25%,
+    var(--color-brand-blue-600) 37.5%,
+    var(--color-brand-blue-500) 50%,
+    var(--color-brand-blue-400) 62.5%,
+    var(--color-brand-blue-300) 75%,
+    var(--color-brand-blue-200) 87.5%,
+    var(--color-brand-blue-100) 100%
+  );
+
+  /* Tech colors */
+  --color-brand-typescript: hsl(0, 0%, 0%);
+  --color-brand-go: hsl(220, 100%, 12%);
+  --color-brand-java: hsl(214, 69%, 50%);
+  --color-brand-python: hsl(216, 100%, 80%);
+  --color-brand-c: hsl(154, 100%, 7%);
+  --color-brand-terraform: hsl(108, 24%, 41%);
+  --color-brand-unity: hsl(68, 52%, 72%);
+  --color-brand-php: hsl(334, 54%, 13%);
+  --color-brand-swift: hsl(4, 67%, 47%);
+  --color-brand-ruby: hsl(23, 96%, 62%);
+  --color-brand-postman: hsl(0, 0%, 83%);
+
+  --gradient-brand-primary-colors: var(--color-brand-php) 0%,
+    var(--color-brand-swift) 12.56%, var(--color-brand-ruby) 25.06%,
+    var(--color-brand-unity) 37.56%, var(--color-brand-terraform) 50.06%,
+    var(--color-brand-c) 62.06%, var(--color-brand-go) 74.06%,
+    var(--color-brand-java) 86.06%, var(--color-brand-python) 97.06%;
+
+  --gradient-brand-primary: linear-gradient(
+    90deg,
+    var(--gradient-brand-primary-colors)
+  );
+
+  --gradient-brand-primary-y: linear-gradient(
+    180deg,
+    var(--gradient-brand-primary-colors)
+  );
+
+  /* Feedback colors */
+
+  /* Destructive */
+  --color-destructive-100: hsl(0, 100%, 97%);
+  --color-destructive-200: hsl(3, 84%, 85%);
+  --color-destructive-300: hsl(3, 78%, 71%);
+  --color-destructive-400: hsl(2, 74%, 58%);
+  --color-destructive-500: hsl(4, 67%, 47%);
+  --color-destructive-600: hsl(2, 65%, 39%);
+  --color-destructive-700: hsl(1, 64%, 32%);
+  --color-destructive-800: hsl(1, 63%, 24%);
+  --color-destructive-900: hsl(0, 62%, 17%);
+
+  /* Warning */
+  --color-warning-100: hsl(29, 100%, 95%);
+  --color-warning-200: hsl(30, 100%, 85%);
+  --color-warning-300: hsl(28, 100%, 74%);
+  --color-warning-400: hsl(27, 100%, 66%);
+  --color-warning-500: hsl(23, 96%, 62%);
+  --color-warning-600: hsl(22, 70%, 53%);
+  --color-warning-700: hsl(21, 64%, 43%);
+  --color-warning-800: hsl(19, 66%, 33%);
+  --color-warning-900: hsl(18, 69%, 24%);
+
+  /* Success */
+  --color-success-100: hsl(102, 35%, 93%);
+  --color-success-200: hsl(99, 33%, 83%);
+  --color-success-300: hsl(99, 30%, 73%);
+  --color-success-400: hsl(101, 28%, 62%);
+  --color-success-500: hsl(108, 24%, 41%);
+  --color-success-600: hsl(107, 24%, 34%);
+  --color-success-700: hsl(105, 24%, 27%);
+  --color-success-800: hsl(104, 24%, 20%);
+  --color-success-900: hsl(105, 24%, 13%);
+
+  /* Information */
+  --color-info-100: hsl(212, 100%, 95%);
+  --color-info-200: hsl(214, 100%, 86%);
+  --color-info-300: hsl(214, 100%, 77%);
+  --color-info-400: hsl(214, 89%, 67%);
+  --color-info-500: hsl(214, 69%, 50%);
+  --color-info-600: hsl(215, 70%, 41%);
+  --color-info-700: hsl(215, 71%, 32%);
+  --color-info-800: hsl(217, 73%, 23%);
+  --color-info-900: hsl(218, 73%, 15%);
+
+  --color-link-default: hsl(201, 86%, 43%);
+  --color-link-visited-primary: hsl(201, 100%, 24%);
+  --color-link-visited-secondary: hsl(201, 5%, 65%);
+
+  /* Dimensions */
+  --header-height: 65px;
+
+  --background-pure: var(--color-base-white);
+  --background: var(--color-neutral-100);
+  --foreground: var(--color-base-black);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-display: var(--font-tobias), serif;
+  --font-sans: var(--font-diatype), var(--font-diatype-mono), sans-serif;
+  --font-mono: var(--font-diatype-mono), monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-pure: var(--color-base-black);
+    --background: var(--color-base-black);
+    --foreground: var(--color-base-white);
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-diatype), var(--font-diatype-mono), var(--font-tobias),
+    sans-serif;
+}
+
+/* Display */
+@utility text-display-xl {
+  font-size: 5.625rem;
+  font-weight: 100;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  font-family: var(--font-tobias);
+}
+@utility text-display-lg {
+  font-size: 4.188rem;
+  font-weight: 100;
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  font-family: var(--font-tobias);
+}
+@utility text-display-md {
+  font-size: 3.188rem;
+  font-weight: 100;
+  line-height: 1.3;
+  letter-spacing: -0.04em;
+  font-family: var(--font-tobias);
+}
+@utility text-display-sm {
+  font-size: 2.375rem;
+  font-weight: 100;
+  line-height: 1.375;
+  letter-spacing: -0.04em;
+  font-family: var(--font-tobias);
+}
+@utility text-display-xs {
+  font-size: 1.75rem;
+  font-weight: 100;
+  line-height: 1.4;
+  letter-spacing: -0.04em;
+  font-family: var(--font-tobias);
+}
+
+/* Heading */
+
+@utility text-heading-xl {
+  font-size: 2.063rem;
+  font-weight: 300;
+  line-height: 1.375;
+  letter-spacing: 0.0015em;
+  font-family: var(--font-diatype);
+}
+@utility text-heading-lg {
+  font-size: 1.813rem;
+  font-weight: 300;
+  line-height: 1.5;
+  letter-spacing: 0.0015em;
+  font-family: var(--font-diatype);
+}
+@utility text-heading-md {
+  font-size: 1.625rem;
+  font-weight: 300;
+  line-height: 1.6;
+  letter-spacing: 0.0015em;
+  font-family: var(--font-diatype);
+}
+@utility text-heading-sm {
+  font-size: 1.438rem;
+  font-weight: 300;
+  line-height: 1.6;
+  letter-spacing: 0.0015em;
+  font-family: var(--font-diatype);
+}
+@utility text-heading-xs {
+  font-size: 1.25rem;
+  font-weight: 300;
+  line-height: 1.6;
+  letter-spacing: 0.0015em;
+  font-family: var(--font-diatype);
+}
