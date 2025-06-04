@@ -39,7 +39,6 @@ export function authInfo(
   Result<
     operations.SessionInfoResponse,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -66,7 +65,6 @@ async function $do(
   [
     Result<
       operations.SessionInfoResponse,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -170,7 +168,6 @@ async function $do(
 
   const [result] = await M.match<
     operations.SessionInfoResponse,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

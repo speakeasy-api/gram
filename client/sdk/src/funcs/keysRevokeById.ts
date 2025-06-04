@@ -40,7 +40,6 @@ export function keysRevokeById(
   Result<
     void,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       void,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -175,7 +173,6 @@ async function $do(
 
   const [result] = await M.match<
     void,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

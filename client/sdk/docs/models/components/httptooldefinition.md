@@ -18,10 +18,8 @@ let value: HTTPToolDefinition = {
   projectId: "<id>",
   schema: "<value>",
   summary: "<value>",
-  tags: [
-    "<value>",
-  ],
-  updatedAt: new Date("2023-01-25T17:59:41.729Z"),
+  tags: [],
+  updatedAt: new Date("2025-05-22T21:11:55.475Z"),
 };
 ```
 

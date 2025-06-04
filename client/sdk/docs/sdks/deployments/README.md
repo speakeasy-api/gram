@@ -36,7 +36,6 @@ async function run() {
     },
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -65,15 +64,12 @@ async function run() {
       githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
     },
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("deploymentsCreate failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -134,7 +130,6 @@ async function run() {
     evolveForm: {},
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -157,15 +152,12 @@ async function run() {
   const res = await deploymentsEvolveDeployment(gram, {
     evolveForm: {},
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("deploymentsEvolveDeployment failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -226,7 +218,6 @@ async function run() {
     id: "<id>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -249,15 +240,12 @@ async function run() {
   const res = await deploymentsGetById(gram, {
     id: "<id>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("deploymentsGetById failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -327,7 +315,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.deployments.latest();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -348,15 +335,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await deploymentsLatest(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("deploymentsLatest failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -426,7 +410,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.deployments.list();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -447,15 +430,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await deploymentsList(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("deploymentsList failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -527,7 +507,6 @@ async function run() {
     deploymentId: "<id>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -550,15 +529,12 @@ async function run() {
   const res = await deploymentsLogs(gram, {
     deploymentId: "<id>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("deploymentsLogs failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();

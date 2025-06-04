@@ -40,7 +40,6 @@ export function packagesList(
   Result<
     components.ListPackagesResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.ListPackagesResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -196,7 +194,6 @@ async function $do(
 
   const [result] = await M.match<
     components.ListPackagesResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

@@ -27,7 +27,6 @@ async function run() {
     variationId: "<id>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -50,15 +49,12 @@ async function run() {
   const res = await variationsDeleteGlobal(gram, {
     variationId: "<id>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("variationsDeleteGlobal failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -117,7 +113,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.variations.listGlobal();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -138,15 +133,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await variationsListGlobal(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("variationsListGlobal failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -220,7 +212,6 @@ async function run() {
     },
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -245,15 +236,12 @@ async function run() {
       srcToolName: "<value>",
     },
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("variationsUpsertGlobal failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();

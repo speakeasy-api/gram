@@ -39,7 +39,6 @@ export function slackSlackLogin(
   Result<
     operations.SlackLoginResponse | undefined,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -66,7 +65,6 @@ async function $do(
   [
     Result<
       operations.SlackLoginResponse | undefined,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -186,7 +184,6 @@ async function $do(
 
   const [result] = await M.match<
     operations.SlackLoginResponse | undefined,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

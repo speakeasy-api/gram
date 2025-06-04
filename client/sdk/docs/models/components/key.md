@@ -12,10 +12,12 @@ let value: Key = {
   name: "<value>",
   organizationId: "<id>",
   scopes: [
-    "<value>",
+    "<value 1>",
+    "<value 2>",
+    "<value 3>",
   ],
   token: "<value>",
-  updatedAt: new Date("2025-11-12T04:40:01.714Z"),
+  updatedAt: new Date("2024-01-16T10:52:26.209Z"),
 };
 ```
 

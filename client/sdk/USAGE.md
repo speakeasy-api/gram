@@ -9,7 +9,6 @@ async function run() {
     projectSlug: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 

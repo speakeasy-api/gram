@@ -8,11 +8,11 @@ import { ListVariationsResult } from "@gram/client/models/components";
 let value: ListVariationsResult = {
   variations: [
     {
-      createdAt: "1735496867052",
+      createdAt: "1708604588094",
       groupId: "<id>",
       id: "<id>",
       srcToolName: "<value>",
-      updatedAt: "1735615394347",
+      updatedAt: "1735676357006",
     },
   ],
 };

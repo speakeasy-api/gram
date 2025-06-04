@@ -20,6 +20,10 @@ export type Toolset = {
    */
   createdAt: Date;
   /**
+   * The ID of the custom domain to use for the toolset
+   */
+  customDomainId?: string | undefined;
+  /**
    * A short url-friendly label that uniquely identifies a resource.
    */
   defaultEnvironmentSlug?: string | undefined;
@@ -75,6 +79,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     created_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
+    custom_domain_id: z.string().optional(),
     default_environment_slug: z.string().optional(),
     description: z.string().optional(),
     http_tools: z.array(HTTPToolDefinition$inboundSchema),
@@ -92,6 +97,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
   }).transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
       "http_tools": "httpTools",
       "mcp_is_public": "mcpIsPublic",
@@ -106,6 +112,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
 /** @internal */
 export type Toolset$Outbound = {
   created_at: string;
+  custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   http_tools: Array<HTTPToolDefinition$Outbound>;
@@ -127,6 +134,7 @@ export const Toolset$outboundSchema: z.ZodType<
   Toolset
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
+  customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   httpTools: z.array(HTTPToolDefinition$outboundSchema),
@@ -142,6 +150,7 @@ export const Toolset$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
+    customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
     httpTools: "http_tools",
     mcpIsPublic: "mcp_is_public",

@@ -29,7 +29,6 @@ async function run() {
     idToken: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -52,15 +51,12 @@ async function run() {
   const res = await authCallback(gram, {
     idToken: "<value>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("authCallback failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -101,7 +97,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.auth.info();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -122,15 +117,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await authInfo(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("authInfo failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -200,7 +192,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.auth.login();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -221,15 +212,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await authLogin(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("authLogin failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -269,7 +257,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.auth.logout();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -290,15 +277,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await authLogout(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("authLogout failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -357,7 +341,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.auth.switchScopes();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -378,15 +361,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await authSwitchScopes(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("authSwitchScopes failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();

@@ -40,7 +40,6 @@ export function keysList(
   Result<
     components.ListKeysResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.ListKeysResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -171,7 +169,6 @@ async function $do(
 
   const [result] = await M.match<
     components.ListKeysResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

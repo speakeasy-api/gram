@@ -29,7 +29,6 @@ async function run() {
     },
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -54,15 +53,12 @@ async function run() {
       name: "<value>",
     },
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("keysCreate failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -121,7 +117,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.keys.list();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -142,15 +137,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await keysList(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("keysList failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -244,14 +236,12 @@ async function run() {
   const res = await keysRevokeById(gram, {
     id: "<id>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    
+  } else {
+    console.log("keysRevokeById failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  
 }
 
 run();

@@ -39,7 +39,6 @@ export function packagesUpdate(
   Result<
     operations.UpdatePackageResponse,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -66,7 +65,6 @@ async function $do(
   [
     Result<
       operations.UpdatePackageResponse,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -195,7 +193,6 @@ async function $do(
 
   const [result] = await M.match<
     operations.UpdatePackageResponse,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

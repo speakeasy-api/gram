@@ -4,6 +4,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
+import { cn } from "@/lib/utils";
 import { HumanizeDateTime } from "@/lib/dates";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
@@ -12,9 +13,10 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
+import { useGetDomain } from "@gram/client/react-query";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy, Trash2 } from "lucide-react";
+import { CheckCircle2, Copy, Trash2, Check } from "lucide-react";
 import { useState } from "react";
 
 export default function Settings() {
@@ -26,6 +28,10 @@ export default function Settings() {
   const queryClient = useQueryClient();
 
   const { data: keysData } = useListAPIKeysSuspense();
+  const domain = useGetDomain(undefined, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
 
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
@@ -238,6 +244,50 @@ export default function Settings() {
             </div>
           </Dialog.Content>
         </Dialog>
+
+        <div className="mt-10">
+          <Heading variant="h4" className="mb-4">Custom Domains</Heading>
+          {!domain.data?.domain && (
+            <Type className="text-muted-foreground mb-2">Contact gram support to get access to custom domains.</Type>
+          )}
+          {!domain.data?.domain && (
+            <div className="flex justify-end mb-6">
+              <Button disabled>Add Domain</Button>
+            </div>
+          )}
+          <Table
+            columns={[
+              {
+                key: "domain",
+                header: "Domain",
+                width: "1fr",
+                render: (row) => <Type variant="body">{row.domain}</Type>,
+              },
+              {
+                key: "createdAt",
+                header: "Date Linked",
+                width: "1fr",
+                render: (row) => <Type variant="body"><HumanizeDateTime date={row.createdAt} /></Type>,
+              },
+              {
+                key: "verified",
+                header: "Verified",
+                width: "120px",
+                render: (row) => (
+                  <span className="flex justify-center items-center">
+                    {row.verified ? (
+                      <Check className={cn("w-5 h-5 stroke-3", "text-green-500")} />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </span>
+                ),
+              },
+            ]}
+            data={domain.data?.domain ? [domain.data] : []}
+            rowKey={(row) => row.id}
+          />
+        </div>
       </Page.Body>
     </Page>
   );

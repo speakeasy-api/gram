@@ -40,7 +40,6 @@ export function integrationsList(
   Result<
     components.ListIntegrationsResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.ListIntegrationsResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -185,7 +183,6 @@ async function $do(
 
   const [result] = await M.match<
     components.ListIntegrationsResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

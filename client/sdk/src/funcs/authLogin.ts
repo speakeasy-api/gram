@@ -34,7 +34,6 @@ export function authLogin(
   Result<
     operations.AuthLoginResponse | undefined,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -57,7 +56,6 @@ async function $do(
   [
     Result<
       operations.AuthLoginResponse | undefined,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -133,7 +131,6 @@ async function $do(
 
   const [result] = await M.match<
     operations.AuthLoginResponse | undefined,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

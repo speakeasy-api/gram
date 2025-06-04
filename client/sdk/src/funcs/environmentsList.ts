@@ -40,7 +40,6 @@ export function environmentsList(
   Result<
     components.ListEnvironmentsResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.ListEnvironmentsResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -180,7 +178,6 @@ async function $do(
 
   const [result] = await M.match<
     components.ListEnvironmentsResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

@@ -7,31 +7,13 @@ import { Toolset } from "@gram/client/models/components";
 
 let value: Toolset = {
   createdAt: new Date("2025-09-03T11:41:50.334Z"),
-  httpTools: [
-    {
-      confirm: "<value>",
-      createdAt: new Date("2024-05-12T19:09:07.564Z"),
-      deploymentId: "<id>",
-      description: "stabilise mutate gadzooks wherever pantyhose vice",
-      httpMethod: "<value>",
-      id: "<id>",
-      name: "<value>",
-      path: "/etc/defaults",
-      projectId: "<id>",
-      schema: "<value>",
-      summary: "<value>",
-      tags: [
-        "<value>",
-      ],
-      updatedAt: new Date("2023-11-29T09:56:04.014Z"),
-    },
-  ],
+  httpTools: [],
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2025-10-01T20:02:31.731Z"),
+  updatedAt: new Date("2024-05-19T17:36:43.019Z"),
 };
 ```
 
@@ -40,6 +22,7 @@ let value: Toolset = {
 | Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `createdAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the toolset was created.                                                                 |
+| `customDomainId`                                                                              | *string*                                                                                      | :heavy_minus_sign:                                                                            | The ID of the custom domain to use for the toolset                                            |
 | `defaultEnvironmentSlug`                                                                      | *string*                                                                                      | :heavy_minus_sign:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
 | `description`                                                                                 | *string*                                                                                      | :heavy_minus_sign:                                                                            | Description of the toolset                                                                    |
 | `httpTools`                                                                                   | [components.HTTPToolDefinition](../../models/components/httptooldefinition.md)[]              | :heavy_check_mark:                                                                            | The HTTP tools in this toolset                                                                |

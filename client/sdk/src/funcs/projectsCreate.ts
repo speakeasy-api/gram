@@ -40,7 +40,6 @@ export function projectsCreate(
   Result<
     components.CreateProjectResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.CreateProjectResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -184,7 +182,6 @@ async function $do(
 
   const [result] = await M.match<
     components.CreateProjectResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

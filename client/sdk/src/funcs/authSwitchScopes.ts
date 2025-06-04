@@ -39,7 +39,6 @@ export function authSwitchScopes(
   Result<
     operations.SwitchAuthScopesResponse | undefined,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -66,7 +65,6 @@ async function $do(
   [
     Result<
       operations.SwitchAuthScopesResponse | undefined,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -176,7 +174,6 @@ async function $do(
 
   const [result] = await M.match<
     operations.SwitchAuthScopesResponse | undefined,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

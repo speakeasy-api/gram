@@ -10,9 +10,9 @@ let value: GetInstanceResult = {
     createdAt: new Date("2025-09-30T14:15:42.248Z"),
     entries: [
       {
-        createdAt: new Date("2025-07-08T12:50:08.798Z"),
+        createdAt: new Date("2025-04-04T09:14:28.012Z"),
         name: "<value>",
-        updatedAt: new Date("2023-07-28T21:14:20.018Z"),
+        updatedAt: new Date("2024-02-25T05:54:42.792Z"),
         value: "<value>",
       },
     ],
@@ -21,7 +21,7 @@ let value: GetInstanceResult = {
     organizationId: "<id>",
     projectId: "<id>",
     slug: "<value>",
-    updatedAt: new Date("2025-07-10T05:17:09.093Z"),
+    updatedAt: new Date("2023-07-28T21:14:20.018Z"),
   },
   name: "<value>",
   tools: [
@@ -38,9 +38,9 @@ let value: GetInstanceResult = {
       schema: "<value>",
       summary: "<value>",
       tags: [
-        "<value>",
+        "<value 1>",
       ],
-      updatedAt: new Date("2024-04-28T02:23:08.344Z"),
+      updatedAt: new Date("2025-03-13T06:28:48.216Z"),
     },
   ],
 };

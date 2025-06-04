@@ -40,7 +40,6 @@ export function toolsList(
   Result<
     components.ListToolsResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.ListToolsResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -186,7 +184,6 @@ async function $do(
 
   const [result] = await M.match<
     components.ListToolsResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

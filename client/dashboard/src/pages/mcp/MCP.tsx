@@ -18,8 +18,8 @@ import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
-import { useUpdateToolsetMutation } from "@gram/client/react-query/index.js";
+import { CustomDomain, Toolset } from "@gram/client/models/components";
+import { useUpdateToolsetMutation, useGetDomain } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Check, Lock, Pencil } from "lucide-react";
 import React, { useState } from "react";
@@ -28,6 +28,10 @@ import { useToolsets } from "../toolsets/Toolsets";
 export default function MCP() {
   const routes = useRoutes();
   const toolsets = useToolsets();
+  const domain = useGetDomain(undefined, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
 
   const content =
     toolsets.length === 0 ? (
@@ -54,6 +58,7 @@ export default function MCP() {
           <McpToolsetCard
             key={toolset.id}
             toolset={toolset}
+            domain={domain.error ? undefined : domain.data}
             onUpdate={toolsets.refetch}
           />
         ))}
@@ -80,9 +85,11 @@ export default function MCP() {
 
 export function McpToolsetCard({
   toolset,
+  domain,
   onUpdate,
 }: {
   toolset: Toolset;
+  domain?: CustomDomain;
   onUpdate: () => void;
 }) {
   const routes = useRoutes();
@@ -97,6 +104,16 @@ export function McpToolsetCard({
   const [mcpSlug, setMcpSlug] = useState("");
   const [mcpIsPublic, setMcpIsPublic] = useState(false);
   const [mcpSlugError, setMcpSlugError] = useState<string | null>(null);
+
+  // Determine which server URL to use
+  let customServerURL: string | undefined;
+  if (
+    domain &&
+    toolset.customDomainId &&
+    domain.id == toolset.customDomainId
+  ) {
+    customServerURL = `https://${domain.domain}`;
+  }
 
   // Sync modal state with toolset when opening
   React.useEffect(() => {
@@ -114,7 +131,7 @@ export function McpToolsetCard({
       setMcpIsPublic(!!toolset.mcpIsPublic);
       setMcpSlugError(null);
     }
-  }, [publishModalOpen, toolset, organization, project]);
+  }, [publishModalOpen, toolset, organization, project, domain]);
 
   let mcpJsonPublic: string | undefined = undefined;
   const envHeaders =
@@ -125,7 +142,7 @@ export function McpToolsetCard({
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  const mcpUrl = `${getServerURL()}/mcp/${urlSuffix}`;
+  const mcpUrl = `${toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()}/mcp/${urlSuffix}`;
 
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [
@@ -202,7 +219,7 @@ export function McpToolsetCard({
             <label className="block mb-1 font-medium">MCP Slug</label>
             <Stack direction="horizontal" align="start">
               <Type muted mono variant="small" className="mt-2">
-                {getServerURL()}/mcp/
+                {toolset.mcpSlug && customServerURL ? `${customServerURL}/mcp/` : `${getServerURL()}/mcp/`}
               </Type>
               <div className="w-full">
                 <input
@@ -311,6 +328,9 @@ export function McpToolsetCard({
               <Stack direction="horizontal" className="group" align="center">
                 <Type muted mono variant="small" className="break-all">
                   {mcpUrl}
+                  {toolset.mcpSlug && customServerURL && (
+                    <span className="ml-2 text-green-600 text-xs"></span>
+                  )}
                 </Type>
                 <Button
                   variant="ghost"
@@ -349,9 +369,7 @@ export function McpToolsetCard({
                 </TooltipTrigger>
                 <TooltipContent>
                   {toolset.mcpIsPublic
-                    ? `Your MCP server is publicly reachable at ${getServerURL()}/mcp/${
-                        toolset.mcpSlug
-                      }`
+                    ? `Your MCP server is publicly reachable at ${mcpUrl}`
                     : "Your MCP server can be used alongisde a Gram API key."}
                 </TooltipContent>
               </Tooltip>
@@ -362,15 +380,46 @@ export function McpToolsetCard({
       </Card.Header>
       <Card.Content></Card.Content>
       <Card.Footer>
-        <Button icon="braces" onClick={() => setMcpModalOpen(true)}>
-          MCP Config
-        </Button>
-        <Button icon="package" onClick={() => setPublishModalOpen(true)}>
-          {toolset.mcpSlug ? "Publish Settings" : "Publish"}
-        </Button>
+        <div className="flex w-full items-center">
+          {domain && !toolset.customDomainId && !!toolset.mcpSlug && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mr-2"
+                    disabled={updateToolsetMutation.isPending}
+                    onClick={() => {
+                      updateToolsetMutation.mutate({
+                        request: {
+                          slug: toolset.slug,
+                          updateToolsetRequestBody: {
+                            customDomainId: domain.id,
+                          },
+                        },
+                      });
+                    }}
+                  >
+                    Link Domain
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {domain.domain}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          <Button icon="braces" className="ml-auto" onClick={() => setMcpModalOpen(true)}>
+            MCP Config
+          </Button>
+          <Button icon="package" className="ml-2" onClick={() => setPublishModalOpen(true)}>
+            {toolset.mcpIsPublic ? "Publish Settings" : "Publish"}
+          </Button>
+        </div>
+        {mcpConfigDialog}
+        {publishDialog}
       </Card.Footer>
-      {mcpConfigDialog}
-      {publishDialog}
     </Card>
   );
 }

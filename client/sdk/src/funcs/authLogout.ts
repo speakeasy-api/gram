@@ -39,7 +39,6 @@ export function authLogout(
   Result<
     operations.LogoutResponse | undefined,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -66,7 +65,6 @@ async function $do(
   [
     Result<
       operations.LogoutResponse | undefined,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -169,7 +167,6 @@ async function $do(
 
   const [result] = await M.match<
     operations.LogoutResponse | undefined,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

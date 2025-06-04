@@ -5,11 +5,7 @@
 ```typescript
 import { CreateAPIKeyRequest } from "@gram/client/models/operations";
 
-let value: CreateAPIKeyRequest = {
-  createKeyForm: {
-    name: "<value>",
-  },
-};
+let value: CreateAPIKeyRequest = {};
 ```
 
 ## Fields

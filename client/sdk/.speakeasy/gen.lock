@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: f4a5bca0f7f952754f3aea46e65198a0
+  docChecksum: 24e175b0f53c515b73e34c6a3bb245fb
   docVersion: 0.0.1
-  speakeasyVersion: 1.554.1
-  generationVersion: 2.616.1
-  releaseVersion: 0.12.1
-  configChecksum: 419369de24561b262110651c2e1fcdd7
+  speakeasyVersion: 1.555.2
+  generationVersion: 2.620.2
+  releaseVersion: 0.12.2
+  configChecksum: abfc5f67ece823e848c9044a2cd9c744
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.9
+    core: 3.21.10
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -47,6 +47,7 @@ generatedFiles:
   - docs/models/components/confirm.md
   - docs/models/components/createdeploymentrequestbody.md
   - docs/models/components/createdeploymentresult.md
+  - docs/models/components/createdomainrequestbody.md
   - docs/models/components/createenvironmentform.md
   - docs/models/components/createkeyform.md
   - docs/models/components/createpackageform.md
@@ -54,6 +55,7 @@ generatedFiles:
   - docs/models/components/createprojectrequestbody.md
   - docs/models/components/createprojectresult.md
   - docs/models/components/createtoolsetrequestbody.md
+  - docs/models/components/customdomain.md
   - docs/models/components/deleteglobaltoolvariationresult.md
   - docs/models/components/deployment.md
   - docs/models/components/deploymentlogevent.md
@@ -129,6 +131,8 @@ generatedFiles:
   - docs/models/operations/createprojectsecurity.md
   - docs/models/operations/createtoolsetrequest.md
   - docs/models/operations/createtoolsetsecurity.md
+  - docs/models/operations/deletedomainrequest.md
+  - docs/models/operations/deletedomainsecurity.md
   - docs/models/operations/deleteenvironmentrequest.md
   - docs/models/operations/deleteenvironmentsecurity.md
   - docs/models/operations/deleteglobalvariationrequest.md
@@ -151,6 +155,8 @@ generatedFiles:
   - docs/models/operations/getdeploymentsecurity.md
   - docs/models/operations/getdeploymentsecurityoption1.md
   - docs/models/operations/getdeploymentsecurityoption2.md
+  - docs/models/operations/getdomainrequest.md
+  - docs/models/operations/getdomainsecurity.md
   - docs/models/operations/getinstancerequest.md
   - docs/models/operations/getinstancesecurity.md
   - docs/models/operations/getinstancesecurityoption1.md
@@ -204,6 +210,8 @@ generatedFiles:
   - docs/models/operations/publishsecurity.md
   - docs/models/operations/publishsecurityoption1.md
   - docs/models/operations/publishsecurityoption2.md
+  - docs/models/operations/registerdomainrequest.md
+  - docs/models/operations/registerdomainsecurity.md
   - docs/models/operations/revokeapikeyrequest.md
   - docs/models/operations/revokeapikeysecurity.md
   - docs/models/operations/serveimagerequest.md
@@ -247,6 +255,7 @@ generatedFiles:
   - docs/sdks/auth/README.md
   - docs/sdks/chat/README.md
   - docs/sdks/deployments/README.md
+  - docs/sdks/domains/README.md
   - docs/sdks/environments/README.md
   - docs/sdks/gram/README.md
   - docs/sdks/instances/README.md
@@ -278,6 +287,9 @@ generatedFiles:
   - src/funcs/deploymentsLatest.ts
   - src/funcs/deploymentsList.ts
   - src/funcs/deploymentsLogs.ts
+  - src/funcs/domainsDeleteDomain.ts
+  - src/funcs/domainsGetDomain.ts
+  - src/funcs/domainsRegisterDomain.ts
   - src/funcs/environmentsCreate.ts
   - src/funcs/environmentsDeleteBySlug.ts
   - src/funcs/environmentsList.ts
@@ -339,6 +351,7 @@ generatedFiles:
   - src/models/components/chatoverview.ts
   - src/models/components/createdeploymentrequestbody.ts
   - src/models/components/createdeploymentresult.ts
+  - src/models/components/createdomainrequestbody.ts
   - src/models/components/createenvironmentform.ts
   - src/models/components/createkeyform.ts
   - src/models/components/createpackageform.ts
@@ -346,6 +359,7 @@ generatedFiles:
   - src/models/components/createprojectrequestbody.ts
   - src/models/components/createprojectresult.ts
   - src/models/components/createtoolsetrequestbody.ts
+  - src/models/components/customdomain.ts
   - src/models/components/deleteglobaltoolvariationresult.ts
   - src/models/components/deployment.ts
   - src/models/components/deploymentlogevent.ts
@@ -413,6 +427,7 @@ generatedFiles:
   - src/models/operations/createpackage.ts
   - src/models/operations/createproject.ts
   - src/models/operations/createtoolset.ts
+  - src/models/operations/deletedomain.ts
   - src/models/operations/deleteenvironment.ts
   - src/models/operations/deleteglobalvariation.ts
   - src/models/operations/deleteslackconnection.ts
@@ -420,6 +435,7 @@ generatedFiles:
   - src/models/operations/evolvedeployment.ts
   - src/models/operations/getdeployment.ts
   - src/models/operations/getdeploymentlogs.ts
+  - src/models/operations/getdomain.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
   - src/models/operations/getslackconnection.ts
@@ -440,6 +456,7 @@ generatedFiles:
   - src/models/operations/loadchat.ts
   - src/models/operations/logout.ts
   - src/models/operations/publish.ts
+  - src/models/operations/registerdomain.ts
   - src/models/operations/revokeapikey.ts
   - src/models/operations/serveimage.ts
   - src/models/operations/sessioninfo.ts
@@ -461,6 +478,7 @@ generatedFiles:
   - src/react-query/createPackage.ts
   - src/react-query/createProject.ts
   - src/react-query/createToolset.ts
+  - src/react-query/deleteDomain.ts
   - src/react-query/deleteEnvironment.ts
   - src/react-query/deleteGlobalVariation.ts
   - src/react-query/deleteSlackConnection.ts
@@ -468,6 +486,7 @@ generatedFiles:
   - src/react-query/deployment.ts
   - src/react-query/deploymentLogs.ts
   - src/react-query/evolveDeployment.ts
+  - src/react-query/getDomain.ts
   - src/react-query/getSlackConnection.ts
   - src/react-query/globalVariations.ts
   - src/react-query/index.ts
@@ -487,6 +506,7 @@ generatedFiles:
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
   - src/react-query/publishPackage.ts
+  - src/react-query/registerDomain.ts
   - src/react-query/revokeAPIKey.ts
   - src/react-query/serveImage.ts
   - src/react-query/sessionInfo.ts
@@ -503,6 +523,7 @@ generatedFiles:
   - src/sdk/auth.ts
   - src/sdk/chat.ts
   - src/sdk/deployments.ts
+  - src/sdk/domains.ts
   - src/sdk/environments.ts
   - src/sdk/index.ts
   - src/sdk/instances.ts
@@ -1073,5 +1094,32 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteDomain:
+    speakeasy-default-delete-domain:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getDomain:
+    speakeasy-default-get-domain:
+      responses:
+        "200":
+          application/json: {"activated": true, "created_at": "2025-04-30T22:14:55.541Z", "domain": "velvety-yarmulke.com", "id": "<id>", "project_id": "<id>", "updated_at": "2025-01-26T03:50:47.682Z", "verified": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  registerDomain:
+    speakeasy-default-register-domain:
+      requestBody:
+        application/json: {"domain": "cooperative-partridge.name"}
+      responses:
+        "200":
+          application/json: {"activated": true, "created_at": "2025-09-29T17:29:07.753Z", "domain": "variable-integer.info", "id": "<id>", "project_id": "<id>", "updated_at": "2024-04-16T06:24:34.787Z", "verified": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

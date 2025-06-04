@@ -40,7 +40,6 @@ export function variationsDeleteGlobal(
   Result<
     components.DeleteGlobalToolVariationResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.DeleteGlobalToolVariationResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -201,7 +199,6 @@ async function $do(
 
   const [result] = await M.match<
     components.DeleteGlobalToolVariationResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

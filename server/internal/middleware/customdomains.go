@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -25,7 +24,6 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string) 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			host := r.Host
-			logger.InfoContext(r.Context(), fmt.Sprintf("host: %s", host)) // TODO: Temporary sanity check
 			if strings.HasPrefix(host, "localhost") && env != "local" {
 				http.Error(w, "localhost not allowed in this environment", http.StatusForbidden)
 				logger.ErrorContext(r.Context(), "localhost not allowed in this environment", slog.String("host", host))

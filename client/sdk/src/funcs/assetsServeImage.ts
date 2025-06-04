@@ -39,7 +39,6 @@ export function assetsServeImage(
   Result<
     operations.ServeImageResponse,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -66,7 +65,6 @@ async function $do(
   [
     Result<
       operations.ServeImageResponse,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -174,7 +172,6 @@ async function $do(
 
   const [result] = await M.match<
     operations.ServeImageResponse,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError

@@ -5,12 +5,7 @@
 ```typescript
 import { CreateProjectRequest } from "@gram/client/models/operations";
 
-let value: CreateProjectRequest = {
-  createProjectRequestBody: {
-    name: "<value>",
-    organizationId: "<id>",
-  },
-};
+let value: CreateProjectRequest = {};
 ```
 
 ## Fields

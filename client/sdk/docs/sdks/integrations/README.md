@@ -24,7 +24,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.integrations.integrationsNumberGet();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -45,15 +44,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await integrationsIntegrationsNumberGet(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("integrationsIntegrationsNumberGet failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -123,7 +119,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.integrations.list();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -144,15 +139,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await integrationsList(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("integrationsList failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();

@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type UpdateToolsetRequestBody = {
   /**
+   * The ID of the custom domain to use for the toolset
+   */
+  customDomainId?: string | undefined;
+  /**
    * The slug of the environment to use as the default for the toolset
    */
   defaultEnvironmentSlug?: string | undefined;
@@ -41,6 +45,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  custom_domain_id: z.string().optional(),
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
   http_tool_names: z.array(z.string()).optional(),
@@ -49,6 +54,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "custom_domain_id": "customDomainId",
     "default_environment_slug": "defaultEnvironmentSlug",
     "http_tool_names": "httpToolNames",
     "mcp_is_public": "mcpIsPublic",
@@ -58,6 +64,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
 
 /** @internal */
 export type UpdateToolsetRequestBody$Outbound = {
+  custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   http_tool_names?: Array<string> | undefined;
@@ -72,6 +79,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   UpdateToolsetRequestBody
 > = z.object({
+  customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   httpToolNames: z.array(z.string()).optional(),
@@ -80,6 +88,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   name: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
     httpToolNames: "http_tool_names",
     mcpIsPublic: "mcp_is_public",

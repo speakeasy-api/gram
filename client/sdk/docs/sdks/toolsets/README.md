@@ -31,7 +31,6 @@ async function run() {
     },
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -56,15 +55,12 @@ async function run() {
       name: "<value>",
     },
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("toolsetsCreate failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -147,14 +143,12 @@ async function run() {
   const res = await toolsetsDeleteBySlug(gram, {
     slug: "<value>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    
+  } else {
+    console.log("toolsetsDeleteBySlug failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  
 }
 
 run();
@@ -215,7 +209,6 @@ async function run() {
     slug: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -238,15 +231,12 @@ async function run() {
   const res = await toolsetsGetBySlug(gram, {
     slug: "<value>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("toolsetsGetBySlug failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -316,7 +306,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.toolsets.list();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -337,15 +326,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await toolsetsList(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("toolsetsList failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -418,7 +404,6 @@ async function run() {
     updateToolsetRequestBody: {},
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -442,15 +427,12 @@ async function run() {
     slug: "<value>",
     updateToolsetRequestBody: {},
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("toolsetsUpdateBySlug failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();

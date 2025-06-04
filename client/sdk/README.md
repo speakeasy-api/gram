@@ -111,7 +111,6 @@ async function run() {
     projectSlug: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -153,6 +152,12 @@ run();
 * [latest](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 * [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
 * [logs](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+
+### [domains](docs/sdks/domains/README.md)
+
+* [deleteDomain](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
+* [getDomain](docs/sdks/domains/README.md#getdomain) - getDomain domains
+* [registerDomain](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 
 ### [environments](docs/sdks/environments/README.md)
 
@@ -250,6 +255,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsLatest`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`deploymentsLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+- [`domainsDeleteDomain`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
+- [`domainsGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
+- [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
@@ -313,6 +321,7 @@ To learn about this feature and how to get started, check
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+- [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
@@ -320,6 +329,7 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
+- [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
@@ -338,6 +348,7 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
+- [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
@@ -381,7 +392,6 @@ async function run() {
     },
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -411,7 +421,6 @@ async function run() {
     projectSlug: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -423,55 +432,49 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `slackLogin` method may throw the following errors:
+This table shows properties which are common on error classes. For full details see [error classes](#error-classes).
 
-| Error Type          | Status Code                       | Content Type     |
-| ------------------- | --------------------------------- | ---------------- |
-| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
-| errors.ServiceError | 500, 502                          | application/json |
-| errors.APIError     | 4XX, 5XX                          | \*/\*            |
+| Property            | Type       | Description                                                                             |
+| ------------------- | ---------- | --------------------------------------------------------------------------------------- |
+| `error.name`        | `string`   | Error class name eg `APIError`                                                          |
+| `error.message`     | `string`   | Error message                                                                           |
+| `error.statusCode`  | `number`   | HTTP status code eg `404`                                                               |
+| `error.contentType` | `string`   | HTTP content type eg `application/json`                                                 |
+| `error.body`        | `string`   | HTTP body. Can be empty string if no body is returned.                                  |
+| `error.rawResponse` | `Response` | Raw HTTP response. Access to headers and more.                                          |
+| `error.data$`       |            | Optional. Some errors may contain structured data. [See Error Classes](#error-classes). |
 
-If the method throws an error and it is not captured by the known errors, it will default to throwing a `APIError`.
-
+### Example
 ```typescript
 import { Gram } from "@gram/client";
-import { SDKValidationError, ServiceError } from "@gram/client/models/errors";
+import * as errors from "@gram/client/models/errors";
 
 const gram = new Gram();
 
 async function run() {
-  let result;
   try {
-    result = await gram.slack.slackLogin({
+    const result = await gram.slack.slackLogin({
       projectSlug: "<value>",
     });
 
-    // Handle the result
     console.log(result);
-  } catch (err) {
-    switch (true) {
-      // The server response does not match the expected SDK schema
-      case (err instanceof SDKValidationError): {
-        // Pretty-print will provide a human-readable multi-line error message
-        console.error(err.pretty());
-        // Raw value may also be inspected
-        console.error(err.rawValue);
-        return;
-      }
-      case (err instanceof ServiceError): {
-        // Handle err.data$: ServiceErrorData
-        console.error(err);
-        return;
-      }
-      case (err instanceof ServiceError): {
-        // Handle err.data$: ServiceErrorData
-        console.error(err);
-        return;
-      }
-      default: {
-        // Other errors such as network errors, see HTTPClientErrors for more details
-        throw err;
-      }
+  } catch (error) {
+    // Depending on the method different errors may be thrown
+    if (error instanceof errors.ServiceError) {
+      console.log(error.message);
+      console.log(error.data$.fault); // boolean
+      console.log(error.data$.id); // string
+      console.log(error.data$.message); // string
+      console.log(error.data$.name); // string
+      console.log(error.data$.temporary); // boolean
+    }
+
+    // Fallback error class, if no other more specific error class is matched
+    if (error instanceof errors.APIError) {
+      console.log(error.message);
+      console.log(error.statusCode);
+      console.log(error.body);
+      console.log(error.rawResponse.headers);
     }
   }
 }
@@ -480,17 +483,16 @@ run();
 
 ```
 
-Validation errors can also occur when either method arguments or data returned from the server do not match the expected format. The `SDKValidationError` that is thrown as a result will capture the raw value that failed validation in an attribute called `rawValue`. Additionally, a `pretty()` method is available on this error that can be used to log a nicely formatted multi-line string since validation errors can list many issues and the plain error string may be difficult read when debugging.
-
-In some rare cases, the SDK can fail to get a response from the server or even make the request due to unexpected circumstances such as network conditions. These types of errors are captured in the `models/errors/httpclienterrors.ts` module:
-
-| HTTP Client Error                                    | Description                                          |
-| ---------------------------------------------------- | ---------------------------------------------------- |
-| RequestAbortedError                                  | HTTP request was aborted by the client               |
-| RequestTimeoutError                                  | HTTP request timed out due to an AbortSignal signal  |
-| ConnectionError                                      | HTTP client was unable to make a request to a server |
-| InvalidRequestError                                  | Any input used to create a request is invalid        |
-| UnexpectedClientError                                | Unrecognised or unexpected error                     |
+### Error Classes
+* [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
+* `APIError`: The fallback error class, if no other more specific error class is matched.
+* `SDKValidationError`: Type mismatch between the data returned from the server and the structure expected by the SDK. This can also be thrown for invalid method arguments. See `error.rawValue` for the raw value and `error.pretty()` for a nicely formatted multi-line string.
+* Network errors:
+    * `ConnectionError`: HTTP client was unable to make a request to a server.
+    * `RequestTimeoutError`: HTTP request timed out due to an AbortSignal signal.
+    * `RequestAbortedError`: HTTP request was aborted by the client.
+    * `InvalidRequestError`: Any input used to create a request is invalid.
+    * `UnexpectedClientError`: Unrecognised or unexpected error.
 <!-- End Error Handling [errors] -->
 
 <!-- Start Server Selection [server] -->
@@ -511,7 +513,6 @@ async function run() {
     projectSlug: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 

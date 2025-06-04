@@ -40,7 +40,6 @@ export function projectsList(
   Result<
     components.ListProjectsResult,
     | errors.ServiceError
-    | errors.ServiceError
     | APIError
     | SDKValidationError
     | UnexpectedClientError
@@ -67,7 +66,6 @@ async function $do(
   [
     Result<
       components.ListProjectsResult,
-      | errors.ServiceError
       | errors.ServiceError
       | APIError
       | SDKValidationError
@@ -182,7 +180,6 @@ async function $do(
 
   const [result] = await M.match<
     components.ListProjectsResult,
-    | errors.ServiceError
     | errors.ServiceError
     | APIError
     | SDKValidationError
