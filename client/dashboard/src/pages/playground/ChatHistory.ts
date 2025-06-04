@@ -31,6 +31,7 @@ export const useChatHistory = (chatId: string) => {
       id: message.id,
       role: message.role as Message["role"],
       content: message.content ?? "",
+      createdAt: message.createdAt,
     };
 
     if (message.toolCalls) {
@@ -55,6 +56,12 @@ export const useChatHistory = (chatId: string) => {
       chatHistory.push(base);
     }
   }
+
+  chatHistory.sort((a, b) => {
+    const aTime = a.createdAt?.getTime() ?? 0;
+    const bTime = b.createdAt?.getTime() ?? 0;
+    return bTime - aTime;
+  });
 
   return { chatHistory, isLoading };
 };
