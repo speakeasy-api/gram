@@ -223,17 +223,6 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", toolName))
 	defer span.End()
 
-	// TODO: This is temporary while in development
-	bodyBytes, _ := io.ReadAll(req.Body)
-	// Restore the body so it can be read again in the actual request
-	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-	logger.InfoContext(ctx, "outgoing request details",
-		slog.String("method", req.Method),
-		slog.String("url", req.URL.String()),
-		slog.Any("headers", req.Header),
-		slog.String("body", string(bodyBytes)))
-
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
