@@ -46,12 +46,11 @@ type ToolCallBody struct {
 }
 
 type caseInsensitiveEnv struct {
-	data   map[string]string
-	logger *slog.Logger
+	data map[string]string
 }
 
-func newCaseInsensitiveEnv(m map[string]string, logger *slog.Logger) *caseInsensitiveEnv {
-	ci := &caseInsensitiveEnv{data: make(map[string]string, len(m)), logger: logger}
+func newCaseInsensitiveEnv(m map[string]string) *caseInsensitiveEnv {
+	ci := &caseInsensitiveEnv{data: make(map[string]string, len(m))}
 	for k, v := range m {
 		ci.data[strings.ToLower(k)] = v
 	}
@@ -59,7 +58,6 @@ func newCaseInsensitiveEnv(m map[string]string, logger *slog.Logger) *caseInsens
 }
 
 func (c *caseInsensitiveEnv) Get(key string) string {
-	c.logger.InfoContext(context.Background(), "getting env var", slog.String("key", key), slog.String("value", c.data[strings.ToLower(key)]))
 	return c.data[strings.ToLower(key)]
 }
 
@@ -68,7 +66,7 @@ func (c *caseInsensitiveEnv) Set(key, value string) {
 }
 
 func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
-	ciEnv := newCaseInsensitiveEnv(envVars, logger)
+	ciEnv := newCaseInsensitiveEnv(envVars)
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
