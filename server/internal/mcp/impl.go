@@ -325,7 +325,7 @@ func parseMcpEnvVariables(r *http.Request) map[string]string {
 	for k := range r.Header {
 		keySanitized := strings.ToLower(k)
 		if strings.HasPrefix(keySanitized, "mcp-") && !slices.Contains(ignoredHeaders, keySanitized) {
-			envVars[strings.TrimPrefix(keySanitized, "mcp-")] = r.Header.Get(k)
+			envVars[strings.ReplaceAll(strings.TrimPrefix(keySanitized, "mcp-"), "-", "_")] = r.Header.Get(k)
 		}
 
 	}

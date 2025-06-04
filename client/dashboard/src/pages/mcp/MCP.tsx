@@ -149,8 +149,7 @@ export function McpToolsetCard({
     "mcp-remote",
     mcpUrl,
     "--allow-http",
-    "--header",
-    ...envHeaders.map((header) => `MCP-${header}:${"${VALUE}"}`),
+    ...envHeaders.flatMap((header) => ["--header", `MCP-${header.replace(/_/g, "-")}:${"${VALUE}"}`]),
   ];
   // Indent each line of the header args array by 8 spaces for alignment
   const INDENT = " ".repeat(8);
