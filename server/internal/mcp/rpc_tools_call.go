@@ -86,10 +86,14 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		}
 	}
 
+	logger.InfoContext(ctx, "mcp request env variables", slog.Any("env_vars", payload.mcpEnvVariables))
+
 	if len(payload.mcpEnvVariables) > 0 {
 		// apply user provided env variable overrides
 		maps.Copy(envVars, payload.mcpEnvVariables)
 	}
+
+	logger.InfoContext(ctx, "total env variables", slog.Any("env_vars", envVars))
 
 	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, toolID, uuid.UUID(projectID))
 	if err != nil {

@@ -165,6 +165,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if len(batch) == 0 {
 		return respondWithNoContent(true, w)
 	}
+	s.logger.InfoContext(ctx, "mcp request header", slog.Any("headers", r.Header))
+
+	mcpEnvVariables := parseMcpEnvVariables(r)
+	s.logger.InfoContext(ctx, "mcp mapped env variables", slog.Any("env_vars", mcpEnvVariables))
 
 	mcpInputs := &mcpInputs{
 		projectID:       toolset.ProjectID,
