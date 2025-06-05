@@ -10,6 +10,7 @@ import (
 	domainsRepo "github.com/speakeasy-api/gram/internal/customdomains/repo"
 )
 
+// TODO: Running with custom domains in general should be a config
 var GramDomains = []string{
 	"app.getgram.ai",
 	"prod.getgram.ai",
