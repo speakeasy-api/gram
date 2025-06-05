@@ -30,12 +30,6 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string) 
 				return
 			}
 
-			if strings.HasPrefix(host, "localhost") {
-				http.Error(w, "localhost domain is not allowed", http.StatusForbidden)
-				logger.ErrorContext(r.Context(), "localhost domain is not allowed", slog.String("host", host))
-				return
-			}
-
 			if slices.Contains(GramDomains, host) {
 				next.ServeHTTP(w, r)
 				return
