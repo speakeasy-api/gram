@@ -13,6 +13,8 @@ type ProjectID uuid.UUID
 type DeploymentID uuid.UUID
 type ToolsetSlug types.Slug
 type ToolID uuid.UUID
+type PromptTemplateID uuid.NullUUID
+type PromptTemplateName *string
 
 type Confirm string
 

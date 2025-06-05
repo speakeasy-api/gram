@@ -563,3 +563,39 @@ CREATE TABLE IF NOT EXISTS tool_variations (
 CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_name_key
 ON tool_variations (group_id, src_tool_name)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS prompt_templates (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  history_id uuid NOT NULL,
+  predecessor_id uuid,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
+  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
+  arguments JSONB,
+  prompt TEXT NOT NULL,
+  engine TEXT CHECK (engine IN ('mustache')),
+  kind TEXT CHECK (kind IN ('prompt', 'higher_order_tool')),
+
+  -- Any referenced tools in the prompt template. This can be used to suggest
+  -- including them in toolsets where a prompt template is added.
+  tools_hint TEXT[] DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tools_hint, 1) <= 20),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT prompt_templates_pkey PRIMARY KEY (id),
+  CONSTRAINT prompt_templates_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT prompt_templates_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES prompt_templates (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS prompt_templates_project_id_idx
+ON prompt_templates (project_id, history_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS prompt_templates_project_id_name_key
+ON prompt_templates (project_id, name, predecessor_id)
+WHERE deleted IS FALSE;

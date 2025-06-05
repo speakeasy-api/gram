@@ -267,6 +267,24 @@ type ProjectToolVariation struct {
 	GroupID   uuid.UUID
 }
 
+type PromptTemplate struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	HistoryID     uuid.UUID
+	PredecessorID uuid.NullUUID
+	Name          string
+	Description   pgtype.Text
+	Arguments     []byte
+	Prompt        string
+	Engine        pgtype.Text
+	Kind          pgtype.Text
+	ToolsHint     []string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
 type SlackAppConnection struct {
 	SlackTeamID        string
 	OrganizationID     string

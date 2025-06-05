@@ -3982,6 +3982,428 @@ paths:
             x-speakeasy-name-override: updateSlackConnection
             x-speakeasy-react-hook:
                 name: updateSlackConnection
+    /rpc/templates.create:
+        post:
+            description: Create a new prompt template.
+            operationId: createTemplate
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePromptTemplateForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreatePromptTemplateResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createTemplate templates
+            tags:
+                - templates
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateTemplate
+    /rpc/templates.delete:
+        delete:
+            description: Delete prompt template by its ID or name.
+            operationId: deleteTemplate
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the prompt template
+                  in: query
+                  name: id
+                  schema:
+                    description: The ID of the prompt template
+                    type: string
+                - allowEmptyValue: true
+                  description: The name of the prompt template
+                  in: query
+                  name: name
+                  schema:
+                    description: The name of the prompt template
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteTemplate templates
+            tags:
+                - templates
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteTemplate
+    /rpc/templates.get:
+        get:
+            description: Get prompt template by its ID or name.
+            operationId: getTemplate
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the prompt template
+                  in: query
+                  name: id
+                  schema:
+                    description: The ID of the prompt template
+                    type: string
+                - allowEmptyValue: true
+                  description: The name of the prompt template
+                  in: query
+                  name: name
+                  schema:
+                    description: The name of the prompt template
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetPromptTemplateResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getTemplate templates
+            tags:
+                - templates
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: Template
+    /rpc/templates.list:
+        get:
+            description: List available prompt template.
+            operationId: listTemplates
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPromptTemplatesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listTemplates templates
+            tags:
+                - templates
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: Templates
     /rpc/tools.list:
         get:
             description: List all tools for a project
@@ -5308,6 +5730,54 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        CreatePromptTemplateForm:
+            type: object
+            properties:
+                arguments:
+                    type: string
+                    description: The JSON Schema defining the placeholders found in the prompt template
+                    format: json
+                description:
+                    type: string
+                    description: The description of the prompt template
+                engine:
+                    type: string
+                    description: The template engine
+                    enum:
+                        - mustache
+                kind:
+                    type: string
+                    description: The kind of prompt the template is used for
+                    enum:
+                        - prompt
+                        - higher_order_tool
+                name:
+                    type: string
+                    description: The name of the prompt template
+                predecessor_id:
+                    type: string
+                    description: The previous version of the prompt template to use as predecessor
+                prompt:
+                    type: string
+                    description: The template content
+                tools_hint:
+                    type: array
+                    items:
+                        type: string
+                    description: The suggested tool names associated with the prompt template
+                    maxItems: 20
+            required:
+                - name
+                - prompt
+                - engine
+                - kind
+        CreatePromptTemplateResult:
+            type: object
+            properties:
+                template:
+                    $ref: '#/components/schemas/PromptTemplate'
+            required:
+                - template
         CreateToolsetForm:
             type: object
             properties:
@@ -5838,6 +6308,13 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        GetPromptTemplateResult:
+            type: object
+            properties:
+                template:
+                    $ref: '#/components/schemas/PromptTemplate'
+            required:
+                - template
         GetSlackConnectionResult:
             type: object
             properties:
@@ -6201,6 +6678,16 @@ components:
                     description: The list of projects
             required:
                 - projects
+        ListPromptTemplatesResult:
+            type: object
+            properties:
+                templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: The created prompt template
+            required:
+                - templates
         ListToolsResult:
             type: object
             properties:
@@ -6442,6 +6929,66 @@ components:
                 - id
                 - name
                 - slug
+        PromptTemplate:
+            type: object
+            properties:
+                arguments:
+                    type: string
+                    description: The JSON Schema defining the placeholders found in the prompt template
+                    format: json
+                created_at:
+                    type: string
+                    description: The creation date of the prompt template.
+                    format: date-time
+                description:
+                    type: string
+                    description: The description of the prompt template
+                engine:
+                    type: string
+                    description: The template engine
+                    enum:
+                        - mustache
+                history_id:
+                    type: string
+                    description: The revision tree ID for the prompt template
+                id:
+                    type: string
+                    description: The ID of the prompt template
+                kind:
+                    type: string
+                    description: The kind of prompt the template is used for
+                    enum:
+                        - prompt
+                        - higher_order_tool
+                name:
+                    type: string
+                    description: The name of the prompt template
+                predecessor_id:
+                    type: string
+                    description: The previous version of the prompt template to use as predecessor
+                prompt:
+                    type: string
+                    description: The template content
+                tools_hint:
+                    type: array
+                    items:
+                        type: string
+                    description: The suggested tool names associated with the prompt template
+                    maxItems: 20
+                updated_at:
+                    type: string
+                    description: The last update date of the prompt template.
+                    format: date-time
+            required:
+                - id
+                - history_id
+                - name
+                - prompt
+                - engine
+                - kind
+                - tools_hint
+                - created_at
+                - updated_at
         PublishPackageForm:
             type: object
             properties:
@@ -6923,6 +7470,8 @@ tags:
       description: Manages projects in Gram.
     - name: slack
       description: Auth and interactions for the Gram Slack App.
+    - name: templates
+      description: Manages re-usable prompt templates and higher-order tools for a project.
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: toolsets

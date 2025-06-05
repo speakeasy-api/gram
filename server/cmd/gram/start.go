@@ -16,9 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/speakeasy-api/gram/internal/background"
-	"github.com/speakeasy-api/gram/internal/customdomains"
-	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.temporal.io/sdk/client"
@@ -27,9 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/background"
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
+	"github.com/speakeasy-api/gram/internal/customdomains"
 	"github.com/speakeasy-api/gram/internal/deployments"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
@@ -41,8 +40,10 @@ import (
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/packages"
 	"github.com/speakeasy-api/gram/internal/projects"
+	"github.com/speakeasy-api/gram/internal/templates"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
+	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/internal/tools"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 	"github.com/speakeasy-api/gram/internal/variations"
@@ -344,6 +345,7 @@ func newStartCommand() *cli.Command {
 			projects.Attach(mux, projects.NewService(logger.With(slog.String("component", "projects")), db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger.With(slog.String("component", "packages")), db, sessionManager))
 			integrations.Attach(mux, integrations.NewService(logger.With(slog.String("component", "integrations")), db, sessionManager))
+			templates.Attach(mux, templates.NewService(logger.With(slog.String("component", "templates")), db, sessionManager))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, temporalClient, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
