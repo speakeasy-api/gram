@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/database"
 	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/templates/repo"
@@ -19,7 +18,7 @@ import (
 func DescribePromptTemplate(
 	ctx context.Context,
 	logger *slog.Logger,
-	tx database.DBTX,
+	tx DBTX,
 	projectID ProjectID,
 	id PromptTemplateID,
 	name PromptTemplateName,
@@ -58,7 +57,7 @@ func DescribePromptTemplate(
 func DescribePromptTemplates(
 	ctx context.Context,
 	logger *slog.Logger,
-	tx database.DBTX,
+	tx DBTX,
 	projectID ProjectID,
 ) ([]*types.PromptTemplate, error) {
 	pid := uuid.UUID(projectID)

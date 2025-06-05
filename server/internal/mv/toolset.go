@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/database"
 	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/oops"
 	tr "github.com/speakeasy-api/gram/internal/tools/repo"
@@ -24,7 +23,7 @@ import (
 func DescribeToolset(
 	ctx context.Context,
 	logger *slog.Logger,
-	tx database.DBTX,
+	tx DBTX,
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
 ) (*types.Toolset, error) {
@@ -191,7 +190,7 @@ func DescribeToolset(
 	}, nil
 }
 
-func environmentVariablesForTools(ctx context.Context, tx database.DBTX, tools []tr.FindToolsByNameRow) ([]string, error) {
+func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindToolsByNameRow) ([]string, error) {
 	if len(tools) == 0 {
 		return []string{}, nil
 	}
