@@ -32,6 +32,7 @@ import (
 	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/toolsets"
@@ -43,6 +44,7 @@ const environmentSlugQueryParam = "environment_slug"
 type Service struct {
 	tracer           trace.Tracer
 	logger           *slog.Logger
+	metrics          *o11y.MetricsHandler
 	db               *pgxpool.Pool
 	auth             *auth.Auth
 	toolset          *toolsets.Toolsets
@@ -60,6 +62,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	return &Service{
 		tracer:           otel.Tracer("github.com/speakeasy-api/gram/internal/instances"),
 		logger:           logger,
+		metrics:          o11y.NewMetricsHandler(),
 		db:               db,
 		auth:             auth.New(logger, db, sessions),
 		toolset:          toolsets.NewToolsets(db),
@@ -265,7 +268,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// in the event summarization is needed
 	interceptor := newResponseInterceptor(w)
 
-	err = InstanceToolProxy(ctx, s.tracer, s.logger, interceptor, requestBody, envVars, executionInfo)
+	err = InstanceToolProxy(ctx, s.tracer, s.logger, s.metrics, interceptor, requestBody, envVars, executionInfo)
 	if err != nil {
 		return err
 	}

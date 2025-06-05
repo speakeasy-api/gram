@@ -36,6 +36,7 @@ import (
 type Service struct {
 	tracer       trace.Tracer
 	logger       *slog.Logger
+	metrics      *o11y.MetricsHandler
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	projectsRepo *projects_repo.Queries
@@ -56,6 +57,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/mcp"),
 		logger:       logger,
+		metrics:      o11y.NewMetricsHandler(),
 		db:           db,
 		repo:         repo.New(db),
 		projectsRepo: projects_repo.New(db),
@@ -344,7 +346,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req)
 	case "tools/call":
-		return handleToolsCall(ctx, s.tracer, s.logger, s.db, s.enc, payload, req)
+		return handleToolsCall(ctx, s.tracer, s.logger, s.metrics, s.db, s.enc, payload, req)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -27,6 +28,9 @@ type SetupOTelSDKOptions struct {
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDKOptions) (shutdown func(context.Context) error, err error) {
+	// Just a sanity check on k8s templating, will be removed right after
+	otelExporterEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	logger.InfoContext(ctx, "OTEL_EXPORTER_OTLP_ENDPOINT", slog.String("otel_exporter_endpoint", otelExporterEndpoint))
 	var shutdownFuncs []func(context.Context) error
 
 	var metricExporter sdkmetric.Exporter

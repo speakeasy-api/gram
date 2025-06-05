@@ -22,6 +22,7 @@ import (
 	er "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	tr "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/toolsets"
@@ -33,7 +34,7 @@ type toolsCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
+func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, logger)
@@ -102,7 +103,7 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		statusCode: http.StatusOK,
 	}
 
-	err = instances.InstanceToolProxy(ctx, tracer, logger, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan)
+	err = instances.InstanceToolProxy(ctx, tracer, logger, metrics, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan)
 	if err != nil {
 		return nil, err
 	}

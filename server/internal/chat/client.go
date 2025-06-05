@@ -20,6 +20,7 @@ import (
 	env_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	tools_repo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/toolsets"
@@ -34,6 +35,7 @@ type ChatClient struct {
 	db         *pgxpool.Pool
 	enc        *encryption.Encryption
 	tracer     trace.Tracer
+	metrics    *o11y.MetricsHandler
 }
 
 func NewChatClient(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption) *ChatClient {
@@ -44,6 +46,7 @@ func NewChatClient(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.
 		db:         db,
 		enc:        enc,
 		tracer:     otel.Tracer("github.com/speakeasy-api/gram/internal/chat"),
+		metrics:    o11y.NewMetricsHandler(),
 	}
 }
 
@@ -240,7 +243,7 @@ func (c *ChatClient) LoadToolsetTools(
 				envVars[key] = value
 			}
 
-			err = instances.InstanceToolProxy(ctx, c.tracer, c.logger, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan)
+			err = instances.InstanceToolProxy(ctx, c.tracer, c.logger, c.metrics, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

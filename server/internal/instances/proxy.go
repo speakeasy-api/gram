@@ -18,12 +18,14 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/serialization"
+	tools_repo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
@@ -65,7 +67,7 @@ func (c *caseInsensitiveEnv) Set(key, value string) {
 	c.data[strings.ToLower(key)] = value
 }
 
-func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
+func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
 	ciEnv := newCaseInsensitiveEnv(envVars)
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
@@ -216,11 +218,11 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
 	}
 
-	return reverseProxyRequest(ctx, tracer, logger, toolExecutionInfo.Tool.Name, w, req)
+	return reverseProxyRequest(ctx, tracer, logger, metrics, toolExecutionInfo.Tool, w, req)
 }
 
-func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, toolName string, w http.ResponseWriter, req *http.Request) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", toolName))
+func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, tool tools_repo.HttpToolDefinition, w http.ResponseWriter, req *http.Request) error {
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
 
 	transport := &http.Transport{
@@ -270,6 +272,16 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 	// Copy cookies from response
 	for _, cookie := range resp.Cookies() {
 		http.SetCookie(w, cookie)
+	}
+
+	// project_id and tool_name do add some cardinality but this should be reasonable
+	// tracking metrics for failures and successes on tool calls is high value, nevertheless we will keep an eye on the metric cost
+	if err := metrics.IncCounter(ctx, o11y.MetricNameToolCallCounter,
+		attribute.String("tool", tool.Name),
+		attribute.String("project_id", tool.ProjectID.String()),
+		attribute.String("status_code", fmt.Sprintf("%d", resp.StatusCode)),
+	); err != nil {
+		logger.ErrorContext(ctx, fmt.Sprintf("failed to increment %s metric", string(o11y.MetricNameToolCallCounter)), slog.String("error", err.Error()))
 	}
 
 	// Copy status code
