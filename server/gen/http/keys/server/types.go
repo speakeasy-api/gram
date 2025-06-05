@@ -32,8 +32,10 @@ type CreateKeyResponseBody struct {
 	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
 	// The name of the key
 	Name string `form:"name" json:"name" xml:"name"`
-	// The API token value
-	Token string `form:"token" json:"token" xml:"token"`
+	// The store prefix of the api key for recognition
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// The token of the api key (only returned on key creation)
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// List of permission scopes for this key
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// The creation date of the key.
@@ -600,8 +602,10 @@ type KeyResponseBody struct {
 	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
 	// The name of the key
 	Name string `form:"name" json:"name" xml:"name"`
-	// The API token value
-	Token string `form:"token" json:"token" xml:"token"`
+	// The store prefix of the api key for recognition
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// The token of the api key (only returned on key creation)
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// List of permission scopes for this key
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// The creation date of the key.
@@ -619,7 +623,8 @@ func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
 		ProjectID:       res.ProjectID,
 		CreatedByUserID: res.CreatedByUserID,
 		Name:            res.Name,
-		Token:           res.Token,
+		KeyPrefix:       res.KeyPrefix,
+		Key:             res.Key,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
 	}

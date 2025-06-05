@@ -32,8 +32,10 @@ type CreateKeyResponseBody struct {
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The name of the key
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The API token value
-	Token *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
+	// The store prefix of the api key for recognition
+	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	// The token of the api key (only returned on key creation)
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// List of permission scopes for this key
 	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	// The creation date of the key.
@@ -600,8 +602,10 @@ type KeyResponseBody struct {
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The name of the key
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The API token value
-	Token *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
+	// The store prefix of the api key for recognition
+	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	// The token of the api key (only returned on key creation)
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// List of permission scopes for this key
 	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	// The creation date of the key.
@@ -628,7 +632,8 @@ func NewCreateKeyKeyOK(body *CreateKeyResponseBody) *keys.Key {
 		ProjectID:       body.ProjectID,
 		CreatedByUserID: *body.CreatedByUserID,
 		Name:            *body.Name,
-		Token:           *body.Token,
+		KeyPrefix:       *body.KeyPrefix,
+		Key:             body.Key,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
 	}
@@ -1109,8 +1114,8 @@ func ValidateCreateKeyResponseBody(body *CreateKeyResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Token == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
+	if body.KeyPrefix == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_prefix", "body"))
 	}
 	if body.Scopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
@@ -1880,8 +1885,8 @@ func ValidateKeyResponseBody(body *KeyResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Token == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
+	if body.KeyPrefix == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_prefix", "body"))
 	}
 	if body.Scopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))

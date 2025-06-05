@@ -192,7 +192,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
   created_by_user_id TEXT NOT NULL,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
-  token TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -201,7 +202,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT api_keys_pkey PRIMARY KEY (id),
-  CONSTRAINT api_keys_token_key UNIQUE (token),
+  CONSTRAINT api_keys_key_hash UNIQUE (key_hash),
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 

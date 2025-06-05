@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 24e175b0f53c515b73e34c6a3bb245fb
+  docChecksum: 0cd0e1e2df7194b6e9155682d556ebd8
   docVersion: 0.0.1
-  speakeasyVersion: 1.555.2
-  generationVersion: 2.620.2
-  releaseVersion: 0.12.2
-  configChecksum: abfc5f67ece823e848c9044a2cd9c744
+  speakeasyVersion: 1.556.2
+  generationVersion: 2.621.3
+  releaseVersion: 0.12.3
+  configChecksum: 6d21ea1867ad5d2264459dc92be875b4
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -54,6 +54,9 @@ generatedFiles:
   - docs/models/components/createpackageresult.md
   - docs/models/components/createprojectrequestbody.md
   - docs/models/components/createprojectresult.md
+  - docs/models/components/createprompttemplateform.md
+  - docs/models/components/createprompttemplateformkind.md
+  - docs/models/components/createprompttemplateresult.md
   - docs/models/components/createtoolsetrequestbody.md
   - docs/models/components/customdomain.md
   - docs/models/components/deleteglobaltoolvariationresult.md
@@ -61,6 +64,7 @@ generatedFiles:
   - docs/models/components/deploymentlogevent.md
   - docs/models/components/deploymentpackage.md
   - docs/models/components/deploymentsummary.md
+  - docs/models/components/engine.md
   - docs/models/components/environment.md
   - docs/models/components/environmententry.md
   - docs/models/components/environmententryinput.md
@@ -71,6 +75,7 @@ generatedFiles:
   - docs/models/components/getinstanceresult.md
   - docs/models/components/getintegrationresult.md
   - docs/models/components/getlatestdeploymentresult.md
+  - docs/models/components/getprompttemplateresult.md
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
   - docs/models/components/inforesponsebody.md
@@ -86,6 +91,7 @@ generatedFiles:
   - docs/models/components/listkeysresult.md
   - docs/models/components/listpackagesresult.md
   - docs/models/components/listprojectsresult.md
+  - docs/models/components/listprompttemplatesresult.md
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
   - docs/models/components/listvariationsresult.md
@@ -97,6 +103,9 @@ generatedFiles:
   - docs/models/components/packageversion.md
   - docs/models/components/project.md
   - docs/models/components/projectentry.md
+  - docs/models/components/prompttemplate.md
+  - docs/models/components/prompttemplateengine.md
+  - docs/models/components/prompttemplatekind.md
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
   - docs/models/components/toolset.md
@@ -129,6 +138,10 @@ generatedFiles:
   - docs/models/operations/createpackagesecurityoption2.md
   - docs/models/operations/createprojectrequest.md
   - docs/models/operations/createprojectsecurity.md
+  - docs/models/operations/createtemplaterequest.md
+  - docs/models/operations/createtemplatesecurity.md
+  - docs/models/operations/createtemplatesecurityoption1.md
+  - docs/models/operations/createtemplatesecurityoption2.md
   - docs/models/operations/createtoolsetrequest.md
   - docs/models/operations/createtoolsetsecurity.md
   - docs/models/operations/deletedomainrequest.md
@@ -141,6 +154,10 @@ generatedFiles:
   - docs/models/operations/deleteglobalvariationsecurityoption2.md
   - docs/models/operations/deleteslackconnectionrequest.md
   - docs/models/operations/deleteslackconnectionsecurity.md
+  - docs/models/operations/deletetemplaterequest.md
+  - docs/models/operations/deletetemplatesecurity.md
+  - docs/models/operations/deletetemplatesecurityoption1.md
+  - docs/models/operations/deletetemplatesecurityoption2.md
   - docs/models/operations/deletetoolsetrequest.md
   - docs/models/operations/deletetoolsetsecurity.md
   - docs/models/operations/evolvedeploymentrequest.md
@@ -167,6 +184,10 @@ generatedFiles:
   - docs/models/operations/getlatestdeploymentsecurityoption2.md
   - docs/models/operations/getslackconnectionrequest.md
   - docs/models/operations/getslackconnectionsecurity.md
+  - docs/models/operations/gettemplaterequest.md
+  - docs/models/operations/gettemplatesecurity.md
+  - docs/models/operations/gettemplatesecurityoption1.md
+  - docs/models/operations/gettemplatesecurityoption2.md
   - docs/models/operations/gettoolsetrequest.md
   - docs/models/operations/gettoolsetsecurity.md
   - docs/models/operations/integrationsnumbergetrequest.md
@@ -193,6 +214,10 @@ generatedFiles:
   - docs/models/operations/listpackagessecurityoption2.md
   - docs/models/operations/listprojectsrequest.md
   - docs/models/operations/listprojectssecurity.md
+  - docs/models/operations/listtemplatesrequest.md
+  - docs/models/operations/listtemplatessecurity.md
+  - docs/models/operations/listtemplatessecurityoption1.md
+  - docs/models/operations/listtemplatessecurityoption2.md
   - docs/models/operations/listtoolsetsrequest.md
   - docs/models/operations/listtoolsetssecurity.md
   - docs/models/operations/listtoolsrequest.md
@@ -264,6 +289,7 @@ generatedFiles:
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
   - docs/sdks/slack/README.md
+  - docs/sdks/templates/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
   - docs/sdks/variations/README.md
@@ -312,6 +338,10 @@ generatedFiles:
   - src/funcs/slackSlackCallback.ts
   - src/funcs/slackSlackLogin.ts
   - src/funcs/slackUpdateSlackConnection.ts
+  - src/funcs/templatesCreate.ts
+  - src/funcs/templatesDelete.ts
+  - src/funcs/templatesGet.ts
+  - src/funcs/templatesList.ts
   - src/funcs/toolsList.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
@@ -358,6 +388,8 @@ generatedFiles:
   - src/models/components/createpackageresult.ts
   - src/models/components/createprojectrequestbody.ts
   - src/models/components/createprojectresult.ts
+  - src/models/components/createprompttemplateform.ts
+  - src/models/components/createprompttemplateresult.ts
   - src/models/components/createtoolsetrequestbody.ts
   - src/models/components/customdomain.ts
   - src/models/components/deleteglobaltoolvariationresult.ts
@@ -375,6 +407,7 @@ generatedFiles:
   - src/models/components/getinstanceresult.ts
   - src/models/components/getintegrationresult.ts
   - src/models/components/getlatestdeploymentresult.ts
+  - src/models/components/getprompttemplateresult.ts
   - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
   - src/models/components/index.ts
@@ -390,6 +423,7 @@ generatedFiles:
   - src/models/components/listkeysresult.ts
   - src/models/components/listpackagesresult.ts
   - src/models/components/listprojectsresult.ts
+  - src/models/components/listprompttemplatesresult.ts
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
   - src/models/components/listvariationsresult.ts
@@ -401,6 +435,7 @@ generatedFiles:
   - src/models/components/packageversion.ts
   - src/models/components/project.ts
   - src/models/components/projectentry.ts
+  - src/models/components/prompttemplate.ts
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
   - src/models/components/toolset.ts
@@ -426,11 +461,13 @@ generatedFiles:
   - src/models/operations/createenvironment.ts
   - src/models/operations/createpackage.ts
   - src/models/operations/createproject.ts
+  - src/models/operations/createtemplate.ts
   - src/models/operations/createtoolset.ts
   - src/models/operations/deletedomain.ts
   - src/models/operations/deleteenvironment.ts
   - src/models/operations/deleteglobalvariation.ts
   - src/models/operations/deleteslackconnection.ts
+  - src/models/operations/deletetemplate.ts
   - src/models/operations/deletetoolset.ts
   - src/models/operations/evolvedeployment.ts
   - src/models/operations/getdeployment.ts
@@ -439,6 +476,7 @@ generatedFiles:
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
   - src/models/operations/getslackconnection.ts
+  - src/models/operations/gettemplate.ts
   - src/models/operations/gettoolset.ts
   - src/models/operations/index.ts
   - src/models/operations/integrationsnumberget.ts
@@ -450,6 +488,7 @@ generatedFiles:
   - src/models/operations/listintegrations.ts
   - src/models/operations/listpackages.ts
   - src/models/operations/listprojects.ts
+  - src/models/operations/listtemplates.ts
   - src/models/operations/listtools.ts
   - src/models/operations/listtoolsets.ts
   - src/models/operations/listversions.ts
@@ -477,11 +516,13 @@ generatedFiles:
   - src/react-query/createEnvironment.ts
   - src/react-query/createPackage.ts
   - src/react-query/createProject.ts
+  - src/react-query/createTemplate.ts
   - src/react-query/createToolset.ts
   - src/react-query/deleteDomain.ts
   - src/react-query/deleteEnvironment.ts
   - src/react-query/deleteGlobalVariation.ts
   - src/react-query/deleteSlackConnection.ts
+  - src/react-query/deleteTemplate.ts
   - src/react-query/deleteToolset.ts
   - src/react-query/deployment.ts
   - src/react-query/deploymentLogs.ts
@@ -511,6 +552,8 @@ generatedFiles:
   - src/react-query/serveImage.ts
   - src/react-query/sessionInfo.ts
   - src/react-query/switchScopes.ts
+  - src/react-query/template.ts
+  - src/react-query/templates.ts
   - src/react-query/toolset.ts
   - src/react-query/updateEnvironment.ts
   - src/react-query/updatePackage.ts
@@ -533,6 +576,7 @@ generatedFiles:
   - src/sdk/projects.ts
   - src/sdk/sdk.ts
   - src/sdk/slack.ts
+  - src/sdk/templates.ts
   - src/sdk/tools.ts
   - src/sdk/toolsets.ts
   - src/sdk/variations.ts
@@ -848,7 +892,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2023-10-19T09:53:48.522Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>"], "token": "<value>", "updated_at": "2024-01-24T08:50:30.713Z"}
+          application/json: {"created_at": "2023-10-19T09:53:48.522Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>"], "updated_at": "2024-01-24T08:50:30.713Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -857,7 +901,7 @@ examples:
     speakeasy-default-list-API-keys:
       responses:
         "200":
-          application/json: {"keys": [{"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "token": "<value>", "updated_at": "2025-04-06T09:22:03.296Z"}, {"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "token": "<value>", "updated_at": "2025-04-06T09:22:03.296Z"}, {"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "token": "<value>", "updated_at": "2025-04-06T09:22:03.296Z"}]}
+          application/json: {"keys": [{"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-04-06T09:22:03.296Z"}, {"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-04-06T09:22:03.296Z"}, {"created_at": "2023-07-24T02:30:42.343Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-04-06T09:22:03.296Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1121,5 +1165,41 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createTemplate:
+    speakeasy-default-create-template:
+      requestBody:
+        application/json: {"engine": "mustache", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>"}
+      responses:
+        "200":
+          application/json: {"template": {"created_at": "2023-07-18T03:17:12.882Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-11-12T17:29:28.662Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteTemplate:
+    speakeasy-default-delete-template:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getTemplate:
+    speakeasy-default-get-template:
+      responses:
+        "200":
+          application/json: {"template": {"created_at": "2024-12-19T01:56:17.353Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-01-07T00:24:23.441Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listTemplates:
+    speakeasy-default-list-templates:
+      responses:
+        "200":
+          application/json: {"templates": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

@@ -203,6 +203,13 @@ run();
 * [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 * [updateSlackConnection](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 
+### [templates](docs/sdks/templates/README.md)
+
+* [create](docs/sdks/templates/README.md#create) - createTemplate templates
+* [delete](docs/sdks/templates/README.md#delete) - deleteTemplate templates
+* [get](docs/sdks/templates/README.md#get) - getTemplate templates
+* [list](docs/sdks/templates/README.md#list) - listTemplates templates
+
 ### [tools](docs/sdks/tools/README.md)
 
 * [list](docs/sdks/tools/README.md#list) - listTools tools
@@ -280,6 +287,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
+- [`templatesCreate`](docs/sdks/templates/README.md#create) - createTemplate templates
+- [`templatesDelete`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
+- [`templatesGet`](docs/sdks/templates/README.md#get) - getTemplate templates
+- [`templatesList`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
@@ -320,11 +331,13 @@ To learn about this feature and how to get started, check
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
+- [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
+- [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
@@ -353,6 +366,8 @@ To learn about this feature and how to get started, check
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
+- [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages

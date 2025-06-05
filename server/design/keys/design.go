@@ -88,14 +88,15 @@ var ListKeysResult = Type("ListKeysResult", func() {
 })
 
 var KeyModel = Type("Key", func() {
-	Required("id", "organization_id", "created_by_user_id", "name", "token", "scopes", "created_at", "updated_at")
+	Required("id", "organization_id", "created_by_user_id", "name", "key_prefix", "scopes", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the key")
 	Attribute("organization_id", String, "The organization ID this key belongs to")
 	Attribute("project_id", String, "The optional project ID this key is scoped to")
 	Attribute("created_by_user_id", String, "The ID of the user who created this key")
 	Attribute("name", String, "The name of the key")
-	Attribute("token", String, "The API token value")
+	Attribute("key_prefix", String, "The store prefix of the api key for recognition")
+	Attribute("key", String, "The token of the api key (only returned on key creation)") // this will only be set on key creation
 	Attribute("scopes", ArrayOf(String), "List of permission scopes for this key")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the key.")

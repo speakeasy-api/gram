@@ -4,22 +4,24 @@ INSERT INTO api_keys (
   , project_id
   , created_by_user_id
   , name
-  , token
+  , key_prefix
+  , key_hash
   , scopes
 ) VALUES (
     @organization_id
   , @project_id
   , @created_by_user_id
   , @name
-  , @token
+  , @key_prefix
+  , @key_hash
   , @scopes::text[]
 )
 RETURNING *;
 
--- name: GetAPIKeyByToken :one
+-- name: GetAPIKeyByKeyHash :one
 SELECT *
 FROM api_keys
-WHERE token = @token
+WHERE key_hash = @key_hash
   AND deleted IS FALSE;
 
 -- name: ListAPIKeysByOrganization :many

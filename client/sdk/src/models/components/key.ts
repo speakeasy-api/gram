@@ -22,6 +22,14 @@ export type Key = {
    */
   id: string;
   /**
+   * The token of the api key (only returned on key creation)
+   */
+  key?: string | undefined;
+  /**
+   * The store prefix of the api key for recognition
+   */
+  keyPrefix: string;
+  /**
    * The name of the key
    */
   name: string;
@@ -38,10 +46,6 @@ export type Key = {
    */
   scopes: Array<string>;
   /**
-   * The API token value
-   */
-  token: string;
-  /**
    * When the key was last updated.
    */
   updatedAt: Date;
@@ -55,11 +59,12 @@ export const Key$inboundSchema: z.ZodType<Key, z.ZodTypeDef, unknown> = z
     ),
     created_by_user_id: z.string(),
     id: z.string(),
+    key: z.string().optional(),
+    key_prefix: z.string(),
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string().optional(),
     scopes: z.array(z.string()),
-    token: z.string(),
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
@@ -67,6 +72,7 @@ export const Key$inboundSchema: z.ZodType<Key, z.ZodTypeDef, unknown> = z
     return remap$(v, {
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
+      "key_prefix": "keyPrefix",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",
@@ -78,11 +84,12 @@ export type Key$Outbound = {
   created_at: string;
   created_by_user_id: string;
   id: string;
+  key?: string | undefined;
+  key_prefix: string;
   name: string;
   organization_id: string;
   project_id?: string | undefined;
   scopes: Array<string>;
-  token: string;
   updated_at: string;
 };
 
@@ -92,16 +99,18 @@ export const Key$outboundSchema: z.ZodType<Key$Outbound, z.ZodTypeDef, Key> = z
     createdAt: z.date().transform(v => v.toISOString()),
     createdByUserId: z.string(),
     id: z.string(),
+    key: z.string().optional(),
+    keyPrefix: z.string(),
     name: z.string(),
     organizationId: z.string(),
     projectId: z.string().optional(),
     scopes: z.array(z.string()),
-    token: z.string(),
     updatedAt: z.date().transform(v => v.toISOString()),
   }).transform((v) => {
     return remap$(v, {
       createdAt: "created_at",
       createdByUserId: "created_by_user_id",
+      keyPrefix: "key_prefix",
       organizationId: "organization_id",
       projectId: "project_id",
       updatedAt: "updated_at",

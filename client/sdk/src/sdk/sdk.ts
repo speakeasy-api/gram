@@ -15,6 +15,7 @@ import { Keys } from "./keys.js";
 import { Packages } from "./packages.js";
 import { Projects } from "./projects.js";
 import { Slack } from "./slack.js";
+import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Variations } from "./variations.js";
@@ -78,6 +79,11 @@ export class Gram extends ClientSDK {
   private _projects?: Projects;
   get projects(): Projects {
     return (this._projects ??= new Projects(this._options));
+  }
+
+  private _templates?: Templates;
+  get templates(): Templates {
+    return (this._templates ??= new Templates(this._options));
   }
 
   private _tools?: Tools;

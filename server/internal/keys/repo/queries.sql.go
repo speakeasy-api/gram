@@ -17,7 +17,8 @@ INSERT INTO api_keys (
   , project_id
   , created_by_user_id
   , name
-  , token
+  , key_prefix
+  , key_hash
   , scopes
 ) VALUES (
     $1
@@ -25,9 +26,10 @@ INSERT INTO api_keys (
   , $3
   , $4
   , $5
-  , $6::text[]
+  , $6
+  , $7::text[]
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, token, scopes, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAPIKeyParams struct {
@@ -35,7 +37,8 @@ type CreateAPIKeyParams struct {
 	ProjectID       uuid.NullUUID
 	CreatedByUserID string
 	Name            string
-	Token           string
+	KeyPrefix       string
+	KeyHash         string
 	Scopes          []string
 }
 
@@ -45,7 +48,8 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		arg.ProjectID,
 		arg.CreatedByUserID,
 		arg.Name,
-		arg.Token,
+		arg.KeyPrefix,
+		arg.KeyHash,
 		arg.Scopes,
 	)
 	var i ApiKey
@@ -55,7 +59,8 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.ProjectID,
 		&i.CreatedByUserID,
 		&i.Name,
-		&i.Token,
+		&i.KeyPrefix,
+		&i.KeyHash,
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -83,15 +88,15 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) erro
 	return err
 }
 
-const getAPIKeyByToken = `-- name: GetAPIKeyByToken :one
-SELECT id, organization_id, project_id, created_by_user_id, name, token, scopes, created_at, updated_at, deleted_at, deleted
+const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted
 FROM api_keys
-WHERE token = $1
+WHERE key_hash = $1
   AND deleted IS FALSE
 `
 
-func (q *Queries) GetAPIKeyByToken(ctx context.Context, token string) (ApiKey, error) {
-	row := q.db.QueryRow(ctx, getAPIKeyByToken, token)
+func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByKeyHash, keyHash)
 	var i ApiKey
 	err := row.Scan(
 		&i.ID,
@@ -99,7 +104,8 @@ func (q *Queries) GetAPIKeyByToken(ctx context.Context, token string) (ApiKey, e
 		&i.ProjectID,
 		&i.CreatedByUserID,
 		&i.Name,
-		&i.Token,
+		&i.KeyPrefix,
+		&i.KeyHash,
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -110,7 +116,7 @@ func (q *Queries) GetAPIKeyByToken(ctx context.Context, token string) (ApiKey, e
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT id, organization_id, project_id, created_by_user_id, name, token, scopes, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted
 FROM api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -132,7 +138,8 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 			&i.ProjectID,
 			&i.CreatedByUserID,
 			&i.Name,
-			&i.Token,
+			&i.KeyPrefix,
+			&i.KeyHash,
 			&i.Scopes,
 			&i.CreatedAt,
 			&i.UpdatedAt,

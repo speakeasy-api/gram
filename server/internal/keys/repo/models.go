@@ -15,7 +15,8 @@ type ApiKey struct {
 	ProjectID       uuid.NullUUID
 	CreatedByUserID string
 	Name            string
-	Token           string
+	KeyPrefix       string
+	KeyHash         string
 	Scopes          []string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz

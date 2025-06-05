@@ -11,6 +11,7 @@ let value: ListKeysResult = {
       createdAt: new Date("2024-09-10T01:23:16.211Z"),
       createdByUserId: "<id>",
       id: "<id>",
+      keyPrefix: "<value>",
       name: "<value>",
       organizationId: "<id>",
       scopes: [
@@ -18,7 +19,6 @@ let value: ListKeysResult = {
         "<value 2>",
         "<value 3>",
       ],
-      token: "<value>",
       updatedAt: new Date("2025-06-30T02:33:05.338Z"),
     },
   ],

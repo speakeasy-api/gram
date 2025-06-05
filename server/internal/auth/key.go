@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"slices"
 	"strings"
@@ -12,6 +14,11 @@ import (
 	"github.com/speakeasy-api/gram/internal/keys/repo"
 	"github.com/speakeasy-api/gram/internal/oops"
 )
+
+func GetAPIKeyHash(key string) (string, error) {
+	hash := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(hash[:]), nil
+}
 
 type ByKey struct {
 	keyDB *repo.Queries
@@ -32,7 +39,12 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		key = key[len("bearer "):]
 	}
 
-	apiKey, err := k.keyDB.GetAPIKeyByToken(ctx, key)
+	keyHash, err := GetAPIKeyHash(key)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized: invalid api key")
+	}
+
+	apiKey, err := k.keyDB.GetAPIKeyByKeyHash(ctx, keyHash)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized: api key not found")

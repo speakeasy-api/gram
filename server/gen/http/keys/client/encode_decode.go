@@ -711,7 +711,8 @@ func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
 		ProjectID:       v.ProjectID,
 		CreatedByUserID: *v.CreatedByUserID,
 		Name:            *v.Name,
-		Token:           *v.Token,
+		KeyPrefix:       *v.KeyPrefix,
+		Key:             v.Key,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
 	}

@@ -77,8 +77,8 @@ export default function Settings() {
   };
 
   const handleCopyToken = async () => {
-    if (newlyCreatedKey?.token) {
-      await navigator.clipboard.writeText(newlyCreatedKey.token);
+    if (newlyCreatedKey?.key) {
+      await navigator.clipboard.writeText(newlyCreatedKey.key);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     }
@@ -98,10 +98,10 @@ export default function Settings() {
       render: (key: Key) => <Type variant="body">{key.name}</Type>,
     },
     {
-      key: "token",
-      header: "Token",
+      key: "key",
+      header: "Key",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.token}</Type>,
+      render: (key: Key) => <Type variant="body">{key.keyPrefix}</Type>,
     },
     {
       key: "scopes",
@@ -168,7 +168,7 @@ export default function Settings() {
                 </div>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md">
                   <code className="flex-1 break-all">
-                    {newlyCreatedKey.token}
+                    {newlyCreatedKey.key}
                   </code>
                   <Button
                     variant="ghost"

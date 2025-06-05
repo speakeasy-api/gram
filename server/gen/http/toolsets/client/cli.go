@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"g4q\",\n      \"description\": \"Nulla rem blanditiis eveniet ex.\",\n      \"http_tool_names\": [\n         \"Nemo enim sit.\",\n         \"Excepturi esse architecto asperiores.\"\n      ],\n      \"name\": \"Natus animi.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"7da\",\n      \"description\": \"Quis sed harum.\",\n      \"http_tool_names\": [\n         \"Sed eligendi assumenda sit cumque.\",\n         \"Molestiae in harum.\",\n         \"Nihil vel.\"\n      ],\n      \"name\": \"Asperiores quod molestiae iure veniam est error.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
@@ -101,7 +101,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Facilis officiis eius suscipit magni voluptatem.\",\n      \"default_environment_slug\": \"25u\",\n      \"description\": \"Omnis ut itaque alias.\",\n      \"http_tool_names\": [\n         \"Voluptate qui.\",\n         \"Quisquam est quia esse quos voluptas.\"\n      ],\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"63w\",\n      \"name\": \"Et sapiente temporibus possimus.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Magni earum est dolorem veritatis.\",\n      \"default_environment_slug\": \"vjn\",\n      \"description\": \"Omnis aut veniam non quod voluptatem.\",\n      \"http_tool_names\": [\n         \"Quidem qui animi.\",\n         \"Officia beatae voluptate.\",\n         \"Pariatur et libero hic et libero necessitatibus.\"\n      ],\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"gzy\",\n      \"name\": \"Adipisci consequatur provident deleniti consectetur.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))

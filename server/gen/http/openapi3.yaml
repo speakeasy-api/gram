@@ -6550,6 +6550,12 @@ components:
                 id:
                     type: string
                     description: The ID of the key
+                key:
+                    type: string
+                    description: The token of the api key (only returned on key creation)
+                key_prefix:
+                    type: string
+                    description: The store prefix of the api key for recognition
                 name:
                     type: string
                     description: The name of the key
@@ -6564,9 +6570,6 @@ components:
                     items:
                         type: string
                     description: List of permission scopes for this key
-                token:
-                    type: string
-                    description: The API token value
                 updated_at:
                     type: string
                     description: When the key was last updated.
@@ -6576,7 +6579,7 @@ components:
                 - organization_id
                 - created_by_user_id
                 - name
-                - token
+                - key_prefix
                 - scopes
                 - created_at
                 - updated_at

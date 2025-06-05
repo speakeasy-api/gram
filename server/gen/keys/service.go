@@ -65,8 +65,10 @@ type Key struct {
 	CreatedByUserID string
 	// The name of the key
 	Name string
-	// The API token value
-	Token string
+	// The store prefix of the api key for recognition
+	KeyPrefix string
+	// The token of the api key (only returned on key creation)
+	Key *string
 	// List of permission scopes for this key
 	Scopes []string
 	// The creation date of the key.

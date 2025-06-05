@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -79,7 +78,14 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	token, err := s.generateKey()
+	token, err := s.generateToken()
+	if err != nil {
+		return nil, err
+	}
+
+	fullKey := s.keyPrefix + token
+
+	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +100,8 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	createdKey, err := s.repo.CreateAPIKey(ctx, repo.CreateAPIKeyParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            payload.Name,
-		Token:           token,
+		KeyHash:         keyHash,
+		KeyPrefix:       s.keyPrefix + token[:5],
 		Scopes:          []string{string(APIKeyScopesConsumer)}, // this is the only default scopes for now
 		CreatedByUserID: authCtx.UserID,
 		ProjectID:       projectID,
@@ -108,7 +115,8 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		Name:            createdKey.Name,
 		OrganizationID:  createdKey.OrganizationID,
 		ProjectID:       conv.FromNullableUUID(createdKey.ProjectID),
-		Token:           createdKey.Token,
+		Key:             &fullKey,
+		KeyPrefix:       createdKey.KeyPrefix,
 		Scopes:          createdKey.Scopes,
 		CreatedByUserID: createdKey.CreatedByUserID,
 		CreatedAt:       createdKey.CreatedAt.Time.Format(time.RFC3339),
@@ -134,7 +142,8 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 			Name:            key.Name,
 			OrganizationID:  key.OrganizationID,
 			ProjectID:       conv.FromNullableUUID(key.ProjectID),
-			Token:           redactedKey(key.Token),
+			Key:             nil,
+			KeyPrefix:       key.KeyPrefix,
 			Scopes:          key.Scopes,
 			CreatedByUserID: key.CreatedByUserID,
 			CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
@@ -159,8 +168,4 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
-}
-
-func redactedKey(key string) string {
-	return key[:15] + strings.Repeat("*", 3)
 }
