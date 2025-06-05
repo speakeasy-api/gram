@@ -24,14 +24,15 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string) 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			host := r.Host
-			if strings.HasPrefix(host, "localhost") && env != "local" {
-				http.Error(w, "localhost not allowed in this environment", http.StatusForbidden)
-				logger.ErrorContext(r.Context(), "localhost not allowed in this environment", slog.String("host", host))
+			// custom domains are not relevant in the local environment
+			if env == "local" {
+				next.ServeHTTP(w, r)
 				return
 			}
 
-			if strings.HasPrefix(host, "localhost") && env == "local" {
-				next.ServeHTTP(w, r)
+			if strings.HasPrefix(host, "localhost") {
+				http.Error(w, "localhost domain is not allowed", http.StatusForbidden)
+				logger.ErrorContext(r.Context(), "localhost domain is not allowed", slog.String("host", host))
 				return
 			}
 
