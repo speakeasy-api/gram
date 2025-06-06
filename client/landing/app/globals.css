@@ -186,13 +186,13 @@
   --font-mono: var(--font-diatype-mono), monospace;
 }
 
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
   :root {
     --background-pure: var(--color-base-black);
     --background: var(--color-base-black);
     --foreground: var(--color-base-white);
   }
-}
+} */
 
 body {
   background: var(--background);

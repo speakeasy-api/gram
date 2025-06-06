@@ -308,7 +308,7 @@ export default function Home() {
             >
               <a
                 className="relative rounded-full flex items-center justify-center h-[52px] px-5 font-mono font-light text-sm tracking-[0.03em] uppercase bg-[#FAFAFA] text-black transition-all hover:-translate-y-0.5 whitespace-nowrap overflow-hidden group"
-                href="https://app.getgram.ai/login"
+                href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
               >
                 <span className="absolute inset-0 rounded-full bg-gradient-primary p-[1px]">
                   <span className="flex h-full w-full items-center justify-center rounded-full bg-[#FAFAFA] group-hover:bg-[#F0F0F0]" />
