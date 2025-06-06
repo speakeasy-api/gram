@@ -18,14 +18,33 @@ import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, Trash2, Check } from "lucide-react";
 import { useState } from "react";
+import { useProject } from "@/contexts/Auth";
 
 export default function Settings() {
+  const project = useProject();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const queryClient = useQueryClient();
+  const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
+  const [isCnameCopied, setIsCnameCopied] = useState(false);
+  const [isTxtCopied, setIsTxtCopied] = useState(false);
+  const CNAME_VALUE = "cname.getgram.ai.";
+  const SUBDOMAIN = "sub.yourdomain.com";
+  const TXT_NAME = `_gram.${SUBDOMAIN}`;
+  const TXT_VALUE = `gram-domain-verify=${SUBDOMAIN},${project.id}`;
+  const handleCopyCname = async () => {
+    await navigator.clipboard.writeText(CNAME_VALUE);
+    setIsCnameCopied(true);
+    setTimeout(() => setIsCnameCopied(false), 2000);
+  };
+  const handleCopyTxt = async () => {
+    await navigator.clipboard.writeText(TXT_VALUE);
+    setIsTxtCopied(true);
+    setTimeout(() => setIsTxtCopied(false), 2000);
+  };
 
   const { data: keysData } = useListAPIKeysSuspense();
   const domain = useGetDomain(undefined, undefined, {
@@ -246,13 +265,20 @@ export default function Settings() {
         </Dialog>
 
         <div className="mt-10">
-          <Heading variant="h4" className="mb-4">Custom Domains</Heading>
+          <Heading variant="h4" className="mb-4">
+            Custom Domains
+          </Heading>
           {!domain.data?.domain && (
-            <Type className="text-muted-foreground mb-2">Contact gram support to get access to custom domains.</Type>
+            <Type className="text-muted-foreground mb-2">
+              Contact gram support to get access to adding a custom subdomain to
+              your account.
+            </Type>
           )}
           {!domain.data?.domain && (
             <div className="flex justify-end mb-6">
-              <Button disabled>Add Domain</Button>
+              <Button onClick={() => setIsAddDomainDialogOpen(true)}>
+                Add Domain
+              </Button>
             </div>
           )}
           <Table
@@ -267,7 +293,11 @@ export default function Settings() {
                 key: "createdAt",
                 header: "Date Linked",
                 width: "1fr",
-                render: (row) => <Type variant="body"><HumanizeDateTime date={row.createdAt} /></Type>,
+                render: (row) => (
+                  <Type variant="body">
+                    <HumanizeDateTime date={row.createdAt} />
+                  </Type>
+                ),
               },
               {
                 key: "verified",
@@ -276,7 +306,9 @@ export default function Settings() {
                 render: (row) => (
                   <span className="flex justify-center items-center">
                     {row.verified ? (
-                      <Check className={cn("w-5 h-5 stroke-3", "text-green-500")} />
+                      <Check
+                        className={cn("w-5 h-5 stroke-3", "text-green-500")}
+                      />
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
@@ -288,6 +320,91 @@ export default function Settings() {
             rowKey={(row) => row.id}
           />
         </div>
+
+        <Dialog
+          open={isAddDomainDialogOpen}
+          onOpenChange={setIsAddDomainDialogOpen}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Connect a Custom Domain</Dialog.Title>
+            </Dialog.Header>
+            <div className="space-y-6 py-4">
+              <div>
+                <Type
+                  variant="body"
+                  className="font-extrabold text-lg mb-2 block"
+                >
+                  Step 1
+                </Type>
+                <Type variant="body" className="text-muted-foreground mb-2">
+                  Create a CNAME record for{" "}
+                  <span className="font-mono">{SUBDOMAIN}</span> pointing to the
+                  following:
+                </Type>
+                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
+                  <code className="flex-1 break-all">{CNAME_VALUE}</code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCopyCname}
+                    className="shrink-0"
+                  >
+                    {isCnameCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Type
+                  variant="body"
+                  className="font-extrabold text-lg mb-2 block"
+                >
+                  Step 2
+                </Type>
+                <Type variant="body" className="text-muted-foreground mb-2">
+                  Create a TXT record at{" "}
+                  <span className="font-mono">{TXT_NAME}</span> with the
+                  following value:
+                </Type>
+                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
+                  <code className="flex-1 break-all">{TXT_VALUE}</code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCopyTxt}
+                    className="shrink-0"
+                  >
+                    {isTxtCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Type
+                  variant="body"
+                  className="font-extrabold text-lg mb-2 block"
+                >
+                  Step 3
+                </Type>
+                <Type variant="body" className="text-muted-foreground mb-2">
+                  Contact the gram team to finish connecting your domain.
+                </Type>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={() => setIsAddDomainDialogOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog>
       </Page.Body>
     </Page>
   );
