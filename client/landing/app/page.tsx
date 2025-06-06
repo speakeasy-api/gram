@@ -32,9 +32,8 @@ export default function Home() {
     isMobile: boolean,
     isTablet: boolean
   ) => {
-    // "Introducing" text - include descenders with generous padding
     const introducingPadding = isMobile ? 20 : isTablet ? 25 : 30;
-    const introducingDescenderExtra = isMobile ? 15 : isTablet ? 20 : 25; // Responsive extra space
+    const introducingDescenderExtra = isMobile ? 15 : isTablet ? 20 : 25;
 
     if (
       x >= introducingBounds.left - introducingPadding &&
@@ -45,9 +44,8 @@ export default function Home() {
       return true;
     }
 
-    // "gram." text - generous padding all around, extra for descender
     const gramPadding = isMobile ? 20 : isTablet ? 25 : 30;
-    const gramDescenderExtra = isMobile ? 25 : isTablet ? 30 : 40; // More space for prominent 'g'
+    const gramDescenderExtra = isMobile ? 25 : isTablet ? 30 : 40;
 
     if (
       x >= gramBounds.left - gramPadding &&
@@ -312,7 +310,6 @@ export default function Home() {
                 className="relative rounded-full flex items-center justify-center h-[52px] px-5 font-mono font-light text-sm tracking-[0.03em] uppercase bg-[#FAFAFA] text-black transition-all hover:-translate-y-0.5 whitespace-nowrap overflow-hidden group"
                 href="https://app.getgram.ai/login"
               >
-                {/* Gradient border using pseudo-element */}
                 <span className="absolute inset-0 rounded-full bg-gradient-primary p-[1px]">
                   <span className="flex h-full w-full items-center justify-center rounded-full bg-[#FAFAFA] group-hover:bg-[#F0F0F0]" />
                 </span>
