@@ -26,9 +26,9 @@ export type CustomDomain = {
    */
   id: string;
   /**
-   * The ID of the project this domain belongs to
+   * The ID of the organization this domain belongs to
    */
-  projectId: string;
+  organizationId: string;
   /**
    * When the custom domain was last updated.
    */
@@ -49,13 +49,13 @@ export const CustomDomain$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   domain: z.string(),
   id: z.string(),
-  project_id: z.string(),
+  organization_id: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   verified: z.boolean(),
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
-    "project_id": "projectId",
+    "organization_id": "organizationId",
     "updated_at": "updatedAt",
   });
 });
@@ -66,7 +66,7 @@ export type CustomDomain$Outbound = {
   created_at: string;
   domain: string;
   id: string;
-  project_id: string;
+  organization_id: string;
   updated_at: string;
   verified: boolean;
 };
@@ -81,13 +81,13 @@ export const CustomDomain$outboundSchema: z.ZodType<
   createdAt: z.date().transform(v => v.toISOString()),
   domain: z.string(),
   id: z.string(),
-  projectId: z.string(),
+  organizationId: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
   verified: z.boolean(),
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
-    projectId: "project_id",
+    organizationId: "organization_id",
     updatedAt: "updated_at",
   });
 });

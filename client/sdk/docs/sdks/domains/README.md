@@ -192,7 +192,7 @@ import {
 
 ## registerDomain
 
-Create a custom domain for a project
+Create a custom domain for a organization
 
 ### Example Usage
 

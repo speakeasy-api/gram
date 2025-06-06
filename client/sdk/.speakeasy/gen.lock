@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 4127f15e1dd5d6edd56863eb5161332a
+  docChecksum: 94660e58b2e33372db5f6ef15a27984a
   docVersion: 0.0.1
-  speakeasyVersion: 1.557.0
-  generationVersion: 2.623.0
-  releaseVersion: 0.12.5
-  configChecksum: 08aa73a9eccdfb3967374ec7f7f4dd84
+  speakeasyVersion: 1.556.2
+  generationVersion: 2.621.3
+  releaseVersion: 0.12.6
+  configChecksum: 9e61b286642a52bf4009edc24ff92819
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -450,10 +450,8 @@ generatedFiles:
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/errors/apierror.ts
-  - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
-  - src/models/errors/responsevalidationerror.ts
   - src/models/errors/sdkvalidationerror.ts
   - src/models/errors/serviceerror.ts
   - src/models/operations/authcallback.ts
@@ -1151,7 +1149,7 @@ examples:
     speakeasy-default-get-domain:
       responses:
         "200":
-          application/json: {"activated": true, "created_at": "2025-04-30T22:14:55.541Z", "domain": "velvety-yarmulke.com", "id": "<id>", "project_id": "<id>", "updated_at": "2025-01-26T03:50:47.682Z", "verified": true}
+          application/json: {"activated": true, "created_at": "2025-04-30T22:14:55.541Z", "domain": "velvety-yarmulke.com", "id": "<id>", "organization_id": "<id>", "updated_at": "2025-01-26T03:50:47.682Z", "verified": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1162,7 +1160,7 @@ examples:
         application/json: {"domain": "cooperative-partridge.name"}
       responses:
         "200":
-          application/json: {"activated": true, "created_at": "2025-09-29T17:29:07.753Z", "domain": "variable-integer.info", "id": "<id>", "project_id": "<id>", "updated_at": "2024-04-16T06:24:34.787Z", "verified": true}
+          application/json: {"activated": true, "created_at": "2025-09-29T17:29:07.753Z", "domain": "variable-integer.info", "id": "<id>", "organization_id": "<id>", "updated_at": "2024-04-16T06:24:34.787Z", "verified": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

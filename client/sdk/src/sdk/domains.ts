@@ -53,7 +53,7 @@ export class Domains extends ClientSDK {
    * createDomain domains
    *
    * @remarks
-   * Create a custom domain for a project
+   * Create a custom domain for a organization
    */
   async registerDomain(
     request: operations.RegisterDomainRequest,

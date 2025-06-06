@@ -29,7 +29,7 @@ export type RegisterDomainMutationData = components.CustomDomain;
  * createDomain domains
  *
  * @remarks
- * Create a custom domain for a project
+ * Create a custom domain for a organization
  */
 export function useRegisterDomainMutation(
   options?: MutationHookOptions<

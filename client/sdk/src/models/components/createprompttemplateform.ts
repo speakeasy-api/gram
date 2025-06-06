@@ -52,7 +52,7 @@ export type CreatePromptTemplateForm = {
    */
   kind: CreatePromptTemplateFormKind;
   /**
-   * The name of the prompt template
+   * A short url-friendly label that uniquely identifies a resource.
    */
   name: string;
   /**
