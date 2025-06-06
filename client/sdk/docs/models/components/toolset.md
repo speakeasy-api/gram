@@ -12,8 +12,9 @@ let value: Toolset = {
   name: "<value>",
   organizationId: "<id>",
   projectId: "<id>",
+  promptTemplates: [],
   slug: "<value>",
-  updatedAt: new Date("2024-05-19T17:36:43.019Z"),
+  updatedAt: new Date("2023-03-17T16:58:47.552Z"),
 };
 ```
 
@@ -32,6 +33,7 @@ let value: Toolset = {
 | `name`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | The name of the toolset                                                                       |
 | `organizationId`                                                                              | *string*                                                                                      | :heavy_check_mark:                                                                            | The organization ID this toolset belongs to                                                   |
 | `projectId`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | The project ID this toolset belongs to                                                        |
+| `promptTemplates`                                                                             | [components.PromptTemplate](../../models/components/prompttemplate.md)[]                      | :heavy_check_mark:                                                                            | The prompt templates in this toolset                                                          |
 | `relevantEnvironmentVariables`                                                                | *string*[]                                                                                    | :heavy_minus_sign:                                                                            | The environment variables that are relevant to the toolset                                    |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the toolset was last updated.                                                            |

@@ -342,3 +342,11 @@ type Toolset struct {
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
 }
+
+type ToolsetPrompt struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ToolsetID        uuid.UUID
+	PromptHistoryID  uuid.UUID
+	PromptTemplateID uuid.NullUUID
+}

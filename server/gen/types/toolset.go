@@ -27,6 +27,8 @@ type Toolset struct {
 	RelevantEnvironmentVariables []string
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinition
+	// The prompt templates in this toolset
+	PromptTemplates []*PromptTemplate
 	// The slug of the MCP to use for the toolset
 	McpSlug *Slug
 	// Whether the toolset is public in MCP

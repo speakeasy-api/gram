@@ -14,8 +14,21 @@ let value: ListToolsetsResult = {
       name: "<value>",
       organizationId: "<id>",
       projectId: "<id>",
+      promptTemplates: [
+        {
+          createdAt: new Date("2024-04-18T10:37:41.805Z"),
+          engine: "mustache",
+          historyId: "<id>",
+          id: "<id>",
+          kind: "higher_order_tool",
+          name: "<value>",
+          prompt: "<value>",
+          toolsHint: [],
+          updatedAt: new Date("2024-10-27T10:52:08.281Z"),
+        },
+      ],
       slug: "<value>",
-      updatedAt: new Date("2024-07-18T11:28:08.935Z"),
+      updatedAt: new Date("2025-12-23T11:52:23.236Z"),
     },
   ],
 };

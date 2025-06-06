@@ -13,6 +13,12 @@ import {
   HTTPToolDefinition$Outbound,
   HTTPToolDefinition$outboundSchema,
 } from "./httptooldefinition.js";
+import {
+  PromptTemplate,
+  PromptTemplate$inboundSchema,
+  PromptTemplate$Outbound,
+  PromptTemplate$outboundSchema,
+} from "./prompttemplate.js";
 
 export type Toolset = {
   /**
@@ -60,6 +66,10 @@ export type Toolset = {
    */
   projectId: string;
   /**
+   * The prompt templates in this toolset
+   */
+  promptTemplates: Array<PromptTemplate>;
+  /**
    * The environment variables that are relevant to the toolset
    */
   relevantEnvironmentVariables?: Array<string> | undefined;
@@ -89,6 +99,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
+    prompt_templates: z.array(PromptTemplate$inboundSchema),
     relevant_environment_variables: z.array(z.string()).optional(),
     slug: z.string(),
     updated_at: z.string().datetime({ offset: true }).transform(v =>
@@ -104,6 +115,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "mcp_slug": "mcpSlug",
       "organization_id": "organizationId",
       "project_id": "projectId",
+      "prompt_templates": "promptTemplates",
       "relevant_environment_variables": "relevantEnvironmentVariables",
       "updated_at": "updatedAt",
     });
@@ -122,6 +134,7 @@ export type Toolset$Outbound = {
   name: string;
   organization_id: string;
   project_id: string;
+  prompt_templates: Array<PromptTemplate$Outbound>;
   relevant_environment_variables?: Array<string> | undefined;
   slug: string;
   updated_at: string;
@@ -144,6 +157,7 @@ export const Toolset$outboundSchema: z.ZodType<
   name: z.string(),
   organizationId: z.string(),
   projectId: z.string(),
+  promptTemplates: z.array(PromptTemplate$outboundSchema),
   relevantEnvironmentVariables: z.array(z.string()).optional(),
   slug: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
@@ -157,6 +171,7 @@ export const Toolset$outboundSchema: z.ZodType<
     mcpSlug: "mcp_slug",
     organizationId: "organization_id",
     projectId: "project_id",
+    promptTemplates: "prompt_templates",
     relevantEnvironmentVariables: "relevant_environment_variables",
     updatedAt: "updated_at",
   });

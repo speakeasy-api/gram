@@ -112,6 +112,8 @@ type UpdateToolsetPayload struct {
 	DefaultEnvironmentSlug *types.Slug
 	// List of HTTP tool names to include
 	HTTPToolNames []string
+	// List of prompt template names to include
+	PromptTemplateNames []string
 	// The slug of the MCP to use for the toolset
 	McpSlug *types.Slug
 	// Whether the toolset is public in MCP

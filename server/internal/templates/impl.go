@@ -114,7 +114,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		historyID = uuid.New()
 	}
 
-	args := []byte{}
+	var args []byte
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
 	}
@@ -149,7 +149,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template").Log(ctx, s.logger)
 	}
 
-	pt, err := mv.DescribePromptTemplate(ctx, s.logger, dbtx, mv.ProjectID(projectID), mv.PromptTemplateID(uuid.NullUUID{UUID: id, Valid: true}), mv.PromptTemplateName(nil))
+	pt, err := mv.DescribePromptTemplate(ctx, s.logger, s.db, mv.ProjectID(projectID), mv.PromptTemplateID(uuid.NullUUID{UUID: id, Valid: true}), mv.PromptTemplateName(nil))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read template").Log(ctx, s.logger)
 	}

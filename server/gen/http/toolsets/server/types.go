@@ -39,6 +39,8 @@ type UpdateToolsetRequestBody struct {
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// List of HTTP tool names to include
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
+	// List of prompt template names to include
+	PromptTemplateNames []string `form:"prompt_template_names,omitempty" json:"prompt_template_names,omitempty" xml:"prompt_template_names,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -68,6 +70,8 @@ type CreateToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The prompt templates in this toolset
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -108,6 +112,8 @@ type UpdateToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The prompt templates in this toolset
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -141,6 +147,8 @@ type GetToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The prompt templates in this toolset
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -1160,6 +1168,34 @@ type ToolVariationResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// PromptTemplateResponseBody is used to define fields on response body types.
+type PromptTemplateResponseBody struct {
+	// The ID of the prompt template
+	ID string `form:"id" json:"id" xml:"id"`
+	// The revision tree ID for the prompt template
+	HistoryID string `form:"history_id" json:"history_id" xml:"history_id"`
+	// The previous version of the prompt template to use as predecessor
+	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
+	// The name of the prompt template
+	Name string `form:"name" json:"name" xml:"name"`
+	// The template content
+	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
+	// The description of the prompt template
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The JSON Schema defining the placeholders found in the prompt template
+	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	// The template engine
+	Engine string `form:"engine" json:"engine" xml:"engine"`
+	// The kind of prompt the template is used for
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The suggested tool names associated with the prompt template
+	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
+	// The creation date of the prompt template.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the prompt template.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // ToolsetResponseBody is used to define fields on response body types.
 type ToolsetResponseBody struct {
 	// The ID of the toolset
@@ -1180,6 +1216,8 @@ type ToolsetResponseBody struct {
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The prompt templates in this toolset
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -1228,6 +1266,14 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		}
 	} else {
 		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
 	return body
 }
@@ -1284,6 +1330,14 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 	} else {
 		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
 	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
 	return body
 }
 
@@ -1323,6 +1377,14 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		}
 	} else {
 		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
 	return body
 }
@@ -2081,6 +2143,12 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		v.HTTPToolNames = make([]string, len(body.HTTPToolNames))
 		for i, val := range body.HTTPToolNames {
 			v.HTTPToolNames[i] = val
+		}
+	}
+	if body.PromptTemplateNames != nil {
+		v.PromptTemplateNames = make([]string, len(body.PromptTemplateNames))
+		for i, val := range body.PromptTemplateNames {
+			v.PromptTemplateNames[i] = val
 		}
 	}
 	v.Slug = types.Slug(slug)

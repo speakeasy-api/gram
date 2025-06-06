@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 0cd0e1e2df7194b6e9155682d556ebd8
+  docChecksum: 4127f15e1dd5d6edd56863eb5161332a
   docVersion: 0.0.1
-  speakeasyVersion: 1.556.2
-  generationVersion: 2.621.3
-  releaseVersion: 0.12.3
-  configChecksum: 6d21ea1867ad5d2264459dc92be875b4
+  speakeasyVersion: 1.557.0
+  generationVersion: 2.623.0
+  releaseVersion: 0.12.4
+  configChecksum: 0ab67588f0378f04145fd331ca2573e8
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -450,8 +450,10 @@ generatedFiles:
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/errors/apierror.ts
+  - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
+  - src/models/errors/responsevalidationerror.ts
   - src/models/errors/sdkvalidationerror.ts
   - src/models/errors/serviceerror.ts
   - src/models/operations/authcallback.ts
@@ -1013,7 +1015,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-03-22T17:12:26.250Z", "http_tools": [{"confirm": "<value>", "created_at": "2024-02-29T01:58:33.962Z", "deployment_id": "<id>", "description": "raw yearly ha instead ferociously usefully", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/local/bin", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2025-05-02T12:45:41.606Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-03-27T13:39:53.066Z"}
+          application/json: {"created_at": "2025-03-22T17:12:26.250Z", "http_tools": [{"confirm": "<value>", "created_at": "2024-02-29T01:58:33.962Z", "deployment_id": "<id>", "description": "raw yearly ha instead ferociously usefully", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/local/bin", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2025-05-02T12:45:41.606Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2024-05-04T09:55:16.502Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2025-02-05T09:42:11.361Z"}], "slug": "<value>", "updated_at": "2025-03-27T13:39:53.066Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -1037,7 +1039,7 @@ examples:
         header: {}
       responses:
         "200":
-          application/json: {"created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}, {"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}, {"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2023-03-27T11:45:29.815Z"}
+          application/json: {"created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}, {"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}, {"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2023-03-27T11:45:29.815Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -1046,7 +1048,7 @@ examples:
     speakeasy-default-list-toolsets:
       responses:
         "200":
-          application/json: {"toolsets": [{"created_at": "2024-09-09T21:30:41.089Z", "http_tools": [{"confirm": "<value>", "created_at": "2023-01-03T06:34:11.738Z", "deployment_id": "<id>", "description": "bowed minister ah furiously yellow rot given", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/dev", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2025-12-27T17:05:58.816Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-13T07:44:41.736Z"}]}
+          application/json: {"toolsets": [{"created_at": "2024-09-09T21:30:41.089Z", "http_tools": [{"confirm": "<value>", "created_at": "2023-01-03T06:34:11.738Z", "deployment_id": "<id>", "description": "bowed minister ah furiously yellow rot given", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/dev", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2025-12-27T17:05:58.816Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2024-05-13T07:44:41.736Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1061,7 +1063,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"created_at": "2025-08-15T11:40:59.388Z", "http_tools": [{"confirm": "<value>", "created_at": "2024-08-03T00:08:16.637Z", "deployment_id": "<id>", "description": "oily what live reservation boohoo buck louse massage ew inside", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/boot/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2024-10-18T20:18:38.751Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-03-17T22:27:22.375Z"}
+          application/json: {"created_at": "2025-08-15T11:40:59.388Z", "http_tools": [{"confirm": "<value>", "created_at": "2024-08-03T00:08:16.637Z", "deployment_id": "<id>", "description": "oily what live reservation boohoo buck louse massage ew inside", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/boot/defaults", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2024-10-18T20:18:38.751Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2024-01-05T14:46:48.090Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-03-01T03:15:09.212Z"}], "slug": "<value>", "updated_at": "2025-03-17T22:27:22.375Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

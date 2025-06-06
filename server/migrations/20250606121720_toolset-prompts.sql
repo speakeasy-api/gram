@@ -1,0 +1,6 @@
+-- Modify "prompt_templates" table
+ALTER TABLE "prompt_templates" ADD CONSTRAINT "prompt_templates_project_id_history_id_key" UNIQUE ("project_id", "history_id");
+-- Create "toolset_prompts" table
+CREATE TABLE "toolset_prompts" ("id" uuid NOT NULL DEFAULT generate_uuidv7(), "project_id" uuid NOT NULL, "toolset_id" uuid NOT NULL, "prompt_history_id" uuid NOT NULL, "prompt_template_id" uuid NULL, PRIMARY KEY ("id"), CONSTRAINT "toolset_prompts_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE, CONSTRAINT "toolset_prompts_prompt_history_id_fkey" FOREIGN KEY ("project_id", "prompt_history_id") REFERENCES "prompt_templates" ("project_id", "history_id") ON UPDATE NO ACTION ON DELETE CASCADE, CONSTRAINT "toolset_prompts_prompt_template_id_fkey" FOREIGN KEY ("prompt_template_id") REFERENCES "prompt_templates" ("id") ON UPDATE NO ACTION ON DELETE CASCADE, CONSTRAINT "toolset_prompts_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE CASCADE);
+-- Create index "toolset_prompts_project_id_history_id_key" to table: "toolset_prompts"
+CREATE UNIQUE INDEX "toolset_prompts_project_id_history_id_key" ON "toolset_prompts" ("project_id", "prompt_history_id");

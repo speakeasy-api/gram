@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/internal/database"
 	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/tools/security"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
@@ -18,7 +17,7 @@ type Toolsets struct {
 	toolsRepo *toolsRepo.Queries
 }
 
-func NewToolsets(tx database.DBTX) *Toolsets {
+func NewToolsets(tx repo.DBTX) *Toolsets {
 	return &Toolsets{
 		repo:      repo.New(tx),
 		toolsRepo: toolsRepo.New(tx),

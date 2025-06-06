@@ -68,3 +68,26 @@ FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND custom_domain_id = @custom_domain_id
   AND deleted IS FALSE;
+
+-- name: GetPromptTemplatesForToolset :many
+SELECT rel.id, sqlc.embed(pt)
+FROM toolset_prompts rel
+INNER JOIN prompt_templates pt ON rel.project_id = pt.project_id AND rel.prompt_history_id = pt.history_id
+WHERE 
+  rel.project_id = @project_id
+  AND rel.toolset_id = @toolset_id
+  AND (rel.prompt_template_id IS NULL OR pt.id = rel.prompt_template_id);
+
+-- name: ClearToolsetPromptTemplates :exec
+DELETE FROM toolset_prompts
+WHERE project_id = @project_id
+  AND toolset_id = @toolset_id;
+
+
+-- name: AddToolsetPromptTemplates :copyfrom
+INSERT INTO toolset_prompts (
+    project_id
+  , toolset_id
+  , prompt_history_id
+  , prompt_template_id
+) VALUES (@project_id, @toolset_id, @prompt_history_id, @prompt_template_id);

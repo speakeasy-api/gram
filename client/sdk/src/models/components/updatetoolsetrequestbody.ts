@@ -37,6 +37,10 @@ export type UpdateToolsetRequestBody = {
    * The new name of the toolset
    */
   name?: string | undefined;
+  /**
+   * List of prompt template names to include
+   */
+  promptTemplateNames?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -52,6 +56,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   mcp_is_public: z.boolean().optional(),
   mcp_slug: z.string().optional(),
   name: z.string().optional(),
+  prompt_template_names: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     "custom_domain_id": "customDomainId",
@@ -59,6 +64,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
     "http_tool_names": "httpToolNames",
     "mcp_is_public": "mcpIsPublic",
     "mcp_slug": "mcpSlug",
+    "prompt_template_names": "promptTemplateNames",
   });
 });
 
@@ -71,6 +77,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name?: string | undefined;
+  prompt_template_names?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -86,6 +93,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   mcpIsPublic: z.boolean().optional(),
   mcpSlug: z.string().optional(),
   name: z.string().optional(),
+  promptTemplateNames: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     customDomainId: "custom_domain_id",
@@ -93,6 +101,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
     httpToolNames: "http_tool_names",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
+    promptTemplateNames: "prompt_template_names",
   });
 });
 

@@ -447,16 +447,15 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-This table shows properties which are common on error classes. For full details see [error classes](#error-classes).
+[`GramError`](./src/models/errors/gramerror.ts) is the base class for all HTTP error responses. It has the following properties:
 
 | Property            | Type       | Description                                                                             |
 | ------------------- | ---------- | --------------------------------------------------------------------------------------- |
-| `error.name`        | `string`   | Error class name eg `APIError`                                                          |
 | `error.message`     | `string`   | Error message                                                                           |
-| `error.statusCode`  | `number`   | HTTP status code eg `404`                                                               |
-| `error.contentType` | `string`   | HTTP content type eg `application/json`                                                 |
+| `error.statusCode`  | `number`   | HTTP response status code eg `404`                                                      |
+| `error.headers`     | `Headers`  | HTTP response headers                                                                   |
 | `error.body`        | `string`   | HTTP body. Can be empty string if no body is returned.                                  |
-| `error.rawResponse` | `Response` | Raw HTTP response. Access to headers and more.                                          |
+| `error.rawResponse` | `Response` | Raw HTTP response                                                                       |
 | `error.data$`       |            | Optional. Some errors may contain structured data. [See Error Classes](#error-classes). |
 
 ### Example
@@ -474,22 +473,21 @@ async function run() {
 
     console.log(result);
   } catch (error) {
-    // Depending on the method different errors may be thrown
-    if (error instanceof errors.ServiceError) {
-      console.log(error.message);
-      console.log(error.data$.fault); // boolean
-      console.log(error.data$.id); // string
-      console.log(error.data$.message); // string
-      console.log(error.data$.name); // string
-      console.log(error.data$.temporary); // boolean
-    }
-
-    // Fallback error class, if no other more specific error class is matched
-    if (error instanceof errors.APIError) {
+    // The base class for HTTP error responses
+    if (error instanceof errors.GramError) {
       console.log(error.message);
       console.log(error.statusCode);
       console.log(error.body);
-      console.log(error.rawResponse.headers);
+      console.log(error.headers);
+
+      // Depending on the method different errors may be thrown
+      if (error instanceof errors.ServiceError) {
+        console.log(error.data$.fault); // boolean
+        console.log(error.data$.id); // string
+        console.log(error.data$.message); // string
+        console.log(error.data$.name); // string
+        console.log(error.data$.temporary); // boolean
+      }
     }
   }
 }
@@ -499,15 +497,26 @@ run();
 ```
 
 ### Error Classes
-* [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
-* `APIError`: The fallback error class, if no other more specific error class is matched.
-* `SDKValidationError`: Type mismatch between the data returned from the server and the structure expected by the SDK. This can also be thrown for invalid method arguments. See `error.rawValue` for the raw value and `error.pretty()` for a nicely formatted multi-line string.
-* Network errors:
-    * `ConnectionError`: HTTP client was unable to make a request to a server.
-    * `RequestTimeoutError`: HTTP request timed out due to an AbortSignal signal.
-    * `RequestAbortedError`: HTTP request was aborted by the client.
-    * `InvalidRequestError`: Any input used to create a request is invalid.
-    * `UnexpectedClientError`: Unrecognised or unexpected error.
+**Primary errors:**
+* [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
+  * [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
+
+<details><summary>Less common errors (6)</summary>
+
+<br />
+
+**Network errors:**
+* [`ConnectionError`](./src/models/errors/httpclienterrors.ts): HTTP client was unable to make a request to a server.
+* [`RequestTimeoutError`](./src/models/errors/httpclienterrors.ts): HTTP request timed out due to an AbortSignal signal.
+* [`RequestAbortedError`](./src/models/errors/httpclienterrors.ts): HTTP request was aborted by the client.
+* [`InvalidRequestError`](./src/models/errors/httpclienterrors.ts): Any input used to create a request is invalid.
+* [`UnexpectedClientError`](./src/models/errors/httpclienterrors.ts): Unrecognised or unexpected error.
+
+
+**Inherit from [`GramError`](./src/models/errors/gramerror.ts)**:
+* [`ResponseValidationError`](./src/models/errors/responsevalidationerror.ts): Type mismatch between the data returned from the server and the structure expected by the SDK. See `error.rawValue` for the raw value and `error.pretty()` for a nicely formatted multi-line string.
+
+</details>
 <!-- End Error Handling [errors] -->
 
 <!-- Start Server Selection [server] -->

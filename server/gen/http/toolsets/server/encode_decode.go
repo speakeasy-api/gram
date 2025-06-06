@@ -1214,6 +1214,34 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 	return res
 }
 
+// marshalTypesPromptTemplateToPromptTemplateResponseBody builds a value of
+// type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
+func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
+	res := &PromptTemplateResponseBody{
+		ID:            v.ID,
+		HistoryID:     v.HistoryID,
+		PredecessorID: v.PredecessorID,
+		Name:          v.Name,
+		Prompt:        v.Prompt,
+		Description:   v.Description,
+		Arguments:     v.Arguments,
+		Engine:        v.Engine,
+		Kind:          v.Kind,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	if v.ToolsHint != nil {
+		res.ToolsHint = make([]string, len(v.ToolsHint))
+		for i, val := range v.ToolsHint {
+			res.ToolsHint[i] = val
+		}
+	} else {
+		res.ToolsHint = []string{}
+	}
+
+	return res
+}
+
 // marshalTypesToolsetToToolsetResponseBody builds a value of type
 // *ToolsetResponseBody from a value of type *types.Toolset.
 func marshalTypesToolsetToToolsetResponseBody(v *types.Toolset) *ToolsetResponseBody {
@@ -1250,6 +1278,14 @@ func marshalTypesToolsetToToolsetResponseBody(v *types.Toolset) *ToolsetResponse
 		}
 	} else {
 		res.HTTPTools = []*HTTPToolDefinitionResponseBody{}
+	}
+	if v.PromptTemplates != nil {
+		res.PromptTemplates = make([]*PromptTemplateResponseBody, len(v.PromptTemplates))
+		for i, val := range v.PromptTemplates {
+			res.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		res.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
 
 	return res

@@ -172,6 +172,42 @@ func DescribeToolset(
 		}
 	}
 
+	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
+		ProjectID: pid,
+		ToolsetID: toolset.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+	}
+
+	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
+	for _, pt := range ptrows {
+		var args *string
+		if len(pt.PromptTemplate.Arguments) > 0 {
+			args = conv.PtrEmpty(string(pt.PromptTemplate.Arguments))
+		}
+
+		hint := pt.PromptTemplate.ToolsHint
+		if hint == nil {
+			hint = []string{}
+		}
+
+		promptTemplates = append(promptTemplates, &types.PromptTemplate{
+			ID:            pt.PromptTemplate.ID.String(),
+			HistoryID:     pt.PromptTemplate.HistoryID.String(),
+			PredecessorID: conv.FromNullableUUID(pt.PromptTemplate.PredecessorID),
+			Name:          pt.PromptTemplate.Name,
+			Prompt:        pt.PromptTemplate.Prompt,
+			Description:   conv.FromPGText[string](pt.PromptTemplate.Description),
+			Arguments:     args,
+			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.PromptTemplate.Engine), "none"),
+			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.PromptTemplate.Kind), "prompt"),
+			ToolsHint:     hint,
+			CreatedAt:     pt.PromptTemplate.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     pt.PromptTemplate.UpdatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
 	return &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
@@ -182,6 +218,7 @@ func DescribeToolset(
 		RelevantEnvironmentVariables: relevantEnvVars,
 		Description:                  conv.FromPGText[string](toolset.Description),
 		HTTPTools:                    httpTools,
+		PromptTemplates:              promptTemplates,
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
 		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
 		McpIsPublic:                  &toolset.McpIsPublic,

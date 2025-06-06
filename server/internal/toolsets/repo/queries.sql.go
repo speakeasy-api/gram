@@ -12,6 +12,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AddToolsetPromptTemplatesParams struct {
+	ProjectID        uuid.UUID
+	ToolsetID        uuid.UUID
+	PromptHistoryID  uuid.UUID
+	PromptTemplateID uuid.NullUUID
+}
+
+const clearToolsetPromptTemplates = `-- name: ClearToolsetPromptTemplates :exec
+DELETE FROM toolset_prompts
+WHERE project_id = $1
+  AND toolset_id = $2
+`
+
+type ClearToolsetPromptTemplatesParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+func (q *Queries) ClearToolsetPromptTemplates(ctx context.Context, arg ClearToolsetPromptTemplatesParams) error {
+	_, err := q.db.Exec(ctx, clearToolsetPromptTemplates, arg.ProjectID, arg.ToolsetID)
+	return err
+}
+
 const createToolset = `-- name: CreateToolset :one
 INSERT INTO toolsets (
     organization_id
@@ -125,6 +148,63 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPromptTemplatesForToolset = `-- name: GetPromptTemplatesForToolset :many
+SELECT rel.id, pt.id, pt.project_id, pt.history_id, pt.predecessor_id, pt.name, pt.description, pt.arguments, pt.prompt, pt.engine, pt.kind, pt.tools_hint, pt.created_at, pt.updated_at, pt.deleted_at, pt.deleted
+FROM toolset_prompts rel
+INNER JOIN prompt_templates pt ON rel.project_id = pt.project_id AND rel.prompt_history_id = pt.history_id
+WHERE 
+  rel.project_id = $1
+  AND rel.toolset_id = $2
+  AND (rel.prompt_template_id IS NULL OR pt.id = rel.prompt_template_id)
+`
+
+type GetPromptTemplatesForToolsetParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+type GetPromptTemplatesForToolsetRow struct {
+	ID             uuid.UUID
+	PromptTemplate PromptTemplate
+}
+
+func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromptTemplatesForToolsetParams) ([]GetPromptTemplatesForToolsetRow, error) {
+	rows, err := q.db.Query(ctx, getPromptTemplatesForToolset, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPromptTemplatesForToolsetRow
+	for rows.Next() {
+		var i GetPromptTemplatesForToolsetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PromptTemplate.ID,
+			&i.PromptTemplate.ProjectID,
+			&i.PromptTemplate.HistoryID,
+			&i.PromptTemplate.PredecessorID,
+			&i.PromptTemplate.Name,
+			&i.PromptTemplate.Description,
+			&i.PromptTemplate.Arguments,
+			&i.PromptTemplate.Prompt,
+			&i.PromptTemplate.Engine,
+			&i.PromptTemplate.Kind,
+			&i.PromptTemplate.ToolsHint,
+			&i.PromptTemplate.CreatedAt,
+			&i.PromptTemplate.UpdatedAt,
+			&i.PromptTemplate.DeletedAt,
+			&i.PromptTemplate.Deleted,
 		); err != nil {
 			return nil, err
 		}

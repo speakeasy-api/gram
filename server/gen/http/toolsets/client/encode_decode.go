@@ -1287,6 +1287,30 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 	return res
 }
 
+// unmarshalPromptTemplateResponseBodyToTypesPromptTemplate builds a value of
+// type *types.PromptTemplate from a value of type *PromptTemplateResponseBody.
+func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateResponseBody) *types.PromptTemplate {
+	res := &types.PromptTemplate{
+		ID:            *v.ID,
+		HistoryID:     *v.HistoryID,
+		PredecessorID: v.PredecessorID,
+		Name:          *v.Name,
+		Prompt:        *v.Prompt,
+		Description:   v.Description,
+		Arguments:     v.Arguments,
+		Engine:        *v.Engine,
+		Kind:          *v.Kind,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
+	}
+	res.ToolsHint = make([]string, len(v.ToolsHint))
+	for i, val := range v.ToolsHint {
+		res.ToolsHint[i] = val
+	}
+
+	return res
+}
+
 // unmarshalToolsetResponseBodyToTypesToolset builds a value of type
 // *types.Toolset from a value of type *ToolsetResponseBody.
 func unmarshalToolsetResponseBodyToTypesToolset(v *ToolsetResponseBody) *types.Toolset {
@@ -1319,6 +1343,10 @@ func unmarshalToolsetResponseBodyToTypesToolset(v *ToolsetResponseBody) *types.T
 	res.HTTPTools = make([]*types.HTTPToolDefinition, len(v.HTTPTools))
 	for i, val := range v.HTTPTools {
 		res.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
+	}
+	res.PromptTemplates = make([]*types.PromptTemplate, len(v.PromptTemplates))
+	for i, val := range v.PromptTemplates {
+		res.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 
 	return res

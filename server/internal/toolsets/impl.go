@@ -26,7 +26,9 @@ import (
 	environmentsRepo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
+	tplRepo "github.com/speakeasy-api/gram/internal/templates/repo"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
 
@@ -153,8 +155,17 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+	tplr := tplRepo.New(dbtx)
+
 	// First get the existing toolset
-	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -207,12 +218,12 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		var mcpToolset repo.Toolset
 		var mcpToolsetErr error
 		if toolsetDomainID != nil {
-			mcpToolset, mcpToolsetErr = s.repo.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
+			mcpToolset, mcpToolsetErr = tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
 				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
 				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
 			})
 		} else {
-			mcpToolset, mcpToolsetErr = s.repo.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
+			mcpToolset, mcpToolsetErr = tr.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
 		}
 		if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
 			return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
@@ -234,9 +245,46 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.HttpToolNames = append(updateParams.HttpToolNames, payload.HTTPToolNames...)
 	}
 
-	updatedToolset, err := s.repo.UpdateToolset(ctx, updateParams)
+	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").Log(ctx, s.logger)
+	}
+
+	if payload.PromptTemplateNames != nil {
+		ptrows, err := tplr.PeekTemplatesByNames(ctx, tplRepo.PeekTemplatesByNamesParams{
+			ProjectID: *authCtx.ProjectID,
+			Names:     payload.PromptTemplateNames,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error validating prompt templates").Log(ctx, s.logger)
+		}
+
+		err = tr.ClearToolsetPromptTemplates(ctx, repo.ClearToolsetPromptTemplatesParams{
+			ProjectID: *authCtx.ProjectID,
+			ToolsetID: existingToolset.ID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error resetting prompt templates for toolset").Log(ctx, s.logger)
+		}
+
+		additions := make([]repo.AddToolsetPromptTemplatesParams, 0, len(ptrows))
+		for _, ptrow := range ptrows {
+			additions = append(additions, repo.AddToolsetPromptTemplatesParams{
+				ProjectID:        *authCtx.ProjectID,
+				ToolsetID:        existingToolset.ID,
+				PromptHistoryID:  ptrow.HistoryID,
+				PromptTemplateID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			})
+		}
+
+		_, err = tr.AddToolsetPromptTemplates(ctx, additions)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error adding prompt templates to toolset").Log(ctx, s.logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").Log(ctx, s.logger)
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug))

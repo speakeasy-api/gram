@@ -110,7 +110,7 @@ FROM prompt_templates pt
 WHERE
   pt.project_id = $1
   AND pt.id = $2
-  AND pt.deleted = FALSE
+  AND pt.deleted IS FALSE
 LIMIT 1
 `
 
@@ -148,7 +148,7 @@ FROM prompt_templates pt
 WHERE
   pt.project_id = $1
   AND pt.name = $2
-  AND pt.deleted = FALSE
+  AND pt.deleted IS FALSE
 LIMIT 1
 `
 
@@ -184,8 +184,8 @@ const listTemplates = `-- name: ListTemplates :many
 SELECT DISTINCT ON (pt.project_id, pt.name) id, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE pt.project_id = $1
-  AND pt.deleted = FALSE
-ORDER BY pt.id
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.name, pt.id
 `
 
 func (q *Queries) ListTemplates(ctx context.Context, projectID uuid.UUID) ([]PromptTemplate, error) {
@@ -229,7 +229,7 @@ SELECT id, history_id
 FROM prompt_templates
 WHERE project_id = $1
   AND id = $2
-  AND deleted = FALSE
+  AND deleted IS FALSE
 ORDER BY id DESC
 LIMIT 1
 `
@@ -249,4 +249,43 @@ func (q *Queries) PeekTemplateByID(ctx context.Context, arg PeekTemplateByIDPara
 	var i PeekTemplateByIDRow
 	err := row.Scan(&i.ID, &i.HistoryID)
 	return i, err
+}
+
+const peekTemplatesByNames = `-- name: PeekTemplatesByNames :many
+SELECT DISTINCT ON (pt.project_id, pt.name) pt.id, pt.history_id
+FROM prompt_templates pt
+WHERE pt.project_id = $1
+  AND pt.name = ANY($2::TEXT[])
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.name, pt.id DESC
+`
+
+type PeekTemplatesByNamesParams struct {
+	ProjectID uuid.UUID
+	Names     []string
+}
+
+type PeekTemplatesByNamesRow struct {
+	ID        uuid.UUID
+	HistoryID uuid.UUID
+}
+
+func (q *Queries) PeekTemplatesByNames(ctx context.Context, arg PeekTemplatesByNamesParams) ([]PeekTemplatesByNamesRow, error) {
+	rows, err := q.db.Query(ctx, peekTemplatesByNames, arg.ProjectID, arg.Names)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PeekTemplatesByNamesRow
+	for rows.Next() {
+		var i PeekTemplatesByNamesRow
+		if err := rows.Scan(&i.ID, &i.HistoryID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

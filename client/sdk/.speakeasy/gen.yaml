@@ -20,7 +20,7 @@ generation:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
 typescript:
-  version: 0.12.3
+  version: 0.12.4
   additionalDependencies:
     dependencies: {}
     devDependencies:
@@ -30,6 +30,7 @@ typescript:
     peerDependencies: {}
   additionalPackageJSON: {}
   author: Speakeasy
+  baseErrorName: GramError
   clientServerStatusCodesAsErrors: true
   compileCommand:
     - ./scripts/compile.sh

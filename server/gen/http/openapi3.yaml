@@ -7139,6 +7139,11 @@ components:
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: The prompt templates in this toolset
                 relevant_environment_variables:
                     type: array
                     items:
@@ -7160,6 +7165,7 @@ components:
                 - name
                 - slug
                 - http_tools
+                - prompt_templates
                 - created_at
                 - updated_at
         UpdateEnvironmentForm:
@@ -7295,6 +7301,11 @@ components:
                     description: The new name of the toolset
                 project_slug_input:
                     type: string
+                prompt_template_names:
+                    type: array
+                    items:
+                        type: string
+                    description: List of prompt template names to include
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -7332,6 +7343,11 @@ components:
                 name:
                     type: string
                     description: The new name of the toolset
+                prompt_template_names:
+                    type: array
+                    items:
+                        type: string
+                    description: List of prompt template names to include
         UploadImageForm:
             type: object
             properties:
