@@ -18,15 +18,18 @@ import * as React from "react";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
 import { Type } from "./ui/type";
+import { useIsAdmin } from "@/contexts/Auth";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
+  const isAdmin = useIsAdmin();
 
   const navGroups = {
     configure: [
       routes.home,
       routes.toolsets,
       // routes.toolBuilder,
+      ...(isAdmin ? [routes.prompts] : []),
       routes.environments,
       routes.integrations,
     ],

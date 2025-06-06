@@ -5,7 +5,6 @@ import { Page } from "@/components/page-layout";
 import { ToolsBadge } from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
@@ -20,6 +19,7 @@ import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { ToolsetEnvironmentBadge } from "./Toolset";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { CreateThingCard } from "@/components/create-thing-card";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -44,7 +44,7 @@ export default function Toolsets() {
   const toolsets = useToolsets();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  
+
   const [createToolsetDialogOpen, setCreateToolsetDialogOpen] = useState(false);
   const [toolsetName, setToolsetName] = useState("");
   const createToolsetMutation = useCreateToolsetMutation({
@@ -106,30 +106,6 @@ export default function Toolsets() {
         />
       </Page.Body>
     </Page>
-  );
-}
-
-export function CreateThingCard({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card
-      className="border-dashed border-2 hover:border-muted-foreground/50 bg-transparent cursor-pointer h-36 trans group shadow-none"
-      onClick={onClick}
-    >
-      <Card.Content className="flex items-center justify-center h-full">
-        <Heading
-          variant="h5"
-          className="text-muted-foreground/40 group-hover:text-muted-foreground trans"
-        >
-          {children}
-        </Heading>
-      </Card.Content>
-    </Card>
   );
 }
 

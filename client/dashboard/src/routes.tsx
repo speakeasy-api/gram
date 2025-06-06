@@ -1,8 +1,10 @@
 import Integrations from "./pages/integrations/Integrations";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
+import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import Home from "./pages/home/Home";
 import Onboarding from "./pages/onboarding/Onboarding";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
+import PromptPage, { PromptRoot } from "./pages/prompts/Prompt";
 import Playground from "./pages/playground/Playground";
 import Settings from "./pages/settings/Settings";
 import Environments from "./pages/environments/Environments";
@@ -18,6 +20,7 @@ import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import SlackApp from "./pages/slackapp/SlackApp";
 import MCP from "./pages/mcp/MCP";
 import ToolBuilder from "./pages/toolBuilder/ToolBuilder";
+import NewPromptPage, { NewPromptPageRoot } from "./pages/prompts/NewPrompt";
 
 type AppRouteBasic = {
   title: string;
@@ -49,6 +52,29 @@ export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
   }>;
 };
 
+type RouteEntry = {
+  title: string;
+  url: string;
+  icon?: IconName;
+} & (
+  | {
+      external: true;
+
+      component?: never;
+      indexComponent?: never;
+      unauthenticated?: never;
+      subPages?: never;
+    }
+  | {
+      external?: false;
+
+      component?: React.ComponentType;
+      indexComponent?: React.ComponentType;
+      unauthenticated?: boolean;
+      subPages?: Record<string, RouteEntry>;
+    }
+);
+
 const ROUTE_STRUCTURE = {
   login: {
     title: "Login",
@@ -59,31 +85,31 @@ const ROUTE_STRUCTURE = {
   home: {
     title: "Home",
     url: "",
-    icon: "circle-gauge" as IconName,
+    icon: "circle-gauge",
     component: Home,
   },
   playground: {
     title: "Playground",
     url: "playground",
-    icon: "message-circle" as IconName,
+    icon: "message-circle",
     component: Playground,
   },
   integrations: {
     title: "Integrations",
     url: "integrations",
-    icon: "blocks" as IconName,
+    icon: "blocks",
     component: Integrations,
   },
   toolBuilder: {
     title: "Tool Builder",
     url: "tool-builder",
-    icon: "pencil-ruler" as IconName,
+    icon: "pencil-ruler",
     component: ToolBuilder,
   },
   toolsets: {
     title: "Toolsets",
     url: "toolsets",
-    icon: "pencil-ruler" as IconName,
+    icon: "pencil-ruler",
     component: ToolsetsRoot,
     indexComponent: Toolsets,
     subPages: {
@@ -102,16 +128,37 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  prompts: {
+    title: "Prompts",
+    url: "prompts",
+    icon: "newspaper",
+    component: PromptsRoot,
+    indexComponent: Prompts,
+    subPages: {
+      newPrompt: {
+        title: "New Prompt",
+        url: "new",
+        component: NewPromptPageRoot,
+        indexComponent: NewPromptPage,
+      },
+      prompt: {
+        title: "Edit Prompt",
+        url: "edit/:promptName",
+        component: PromptRoot,
+        indexComponent: PromptPage,
+      },
+    },
+  },
   mcp: {
     title: "MCP",
     url: "mcp",
-    icon: "network" as IconName,
+    icon: "network",
     component: MCP,
   },
   environments: {
     title: "Environments",
     url: "environments",
-    icon: "globe" as IconName,
+    icon: "globe",
     component: EnvironmentsRoot,
     indexComponent: Environments,
     subPages: {
@@ -125,34 +172,34 @@ const ROUTE_STRUCTURE = {
   sdk: {
     title: "SDK",
     url: "sdk",
-    icon: "code" as IconName,
+    icon: "code",
     component: SDK,
   },
   slackApp: {
     title: "Slack App (alpha)",
     url: "slack-app",
-    icon: "slack" as IconName,
+    icon: "slack",
     component: SlackApp,
   },
   uploadOpenAPI: {
     title: "Upload OpenAPI",
     url: "onboarding",
-    icon: "upload" as IconName,
+    icon: "upload",
     component: Onboarding,
   },
   settings: {
     title: "Settings",
     url: "settings",
-    icon: "settings" as IconName,
+    icon: "settings",
     component: Settings,
   },
   docs: {
     title: "Docs",
     url: "https://docs.getgram.ai",
-    icon: "book-open" as IconName,
+    icon: "book-open",
     external: true,
   },
-};
+} satisfies Record<string, RouteEntry>;
 
 type RouteStructure = typeof ROUTE_STRUCTURE;
 

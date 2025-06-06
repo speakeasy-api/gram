@@ -51,7 +51,8 @@ import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { useEnvironment } from "../environments/Environment";
 import { useEnvironments } from "../environments/Environments";
-import { CreateThingCard, useToolsets } from "./Toolsets";
+import { useToolsets } from "./Toolsets";
+import { CreateThingCard } from "@/components/create-thing-card";
 
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();

@@ -1,4 +1,5 @@
 import { AddButton } from "@/components/add-button";
+import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,6 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet } from "react-router";
-import { CreateThingCard } from "../toolsets/Toolsets";
 
 export function EnvironmentsRoot() {
   return <Outlet />;
@@ -42,7 +42,7 @@ export default function Environments() {
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
   const [environmentName, setEnvironmentName] = useState("");
-  
+
   const createEnvironmentMutation = useCreateEnvironmentMutation({
     onSuccess: async (data) => {
       telemetry.capture("environment_event", {

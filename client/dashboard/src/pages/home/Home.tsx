@@ -28,8 +28,8 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
 import { Suspense, useState } from "react";
 import { OnboardingContent } from "../onboarding/Onboarding";
-import { CreateThingCard } from "../toolsets/Toolsets";
 import { HTTPToolDefinition } from "@gram/client/models/components";
+import { CreateThingCard } from "@/components/create-thing-card";
 
 function DeploymentCards() {
   const { data: deployment, refetch, isLoading } = useLatestDeployment();
