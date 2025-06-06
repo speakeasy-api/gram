@@ -18,10 +18,10 @@ import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, Trash2, Check } from "lucide-react";
 import { useState } from "react";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization } from "@/contexts/Auth";
 
 export default function Settings() {
-  const project = useProject();
+  const organization = useOrganization();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
@@ -34,7 +34,7 @@ export default function Settings() {
   const CNAME_VALUE = "cname.getgram.ai.";
   const SUBDOMAIN = "sub.yourdomain.com";
   const TXT_NAME = `_gram.${SUBDOMAIN}`;
-  const TXT_VALUE = `gram-domain-verify=${SUBDOMAIN},${project.id}`;
+  const TXT_VALUE = `gram-domain-verify=${SUBDOMAIN},${organization.id}`;
   const handleCopyCname = async () => {
     await navigator.clipboard.writeText(CNAME_VALUE);
     setIsCnameCopied(true);
