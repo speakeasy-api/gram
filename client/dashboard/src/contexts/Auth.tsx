@@ -278,6 +278,9 @@ export const useUser = () => {
 
 export const useIsAdmin = () => {
   const { isAdmin } = useUser();
-  const isLocal = getServerURL().includes("localhost");
+  const devHostnames = import.meta.env.VITE_DEV_HOSTNAMES?.split(",") ?? [
+    "localhost",
+  ];
+  const isLocal = devHostnames.some((h) => getServerURL().includes(h));
   return isAdmin || isLocal;
 };

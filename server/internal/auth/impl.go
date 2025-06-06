@@ -61,19 +61,8 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	}
 }
 
-func FormSignInRedirectURL(env string) string {
-	switch env {
-	case "local":
-		return "http://localhost:5173/"
-	case "minikube":
-		return "http://localhost:8080/"
-	case "dev":
-		return "https://dev.getgram.ai"
-	case "prod":
-		return "https://app.getgram.ai"
-	default:
-		return ""
-	}
+func FormSignInRedirectURL(siteURL string) string {
+	return siteURL
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

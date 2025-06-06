@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -63,10 +64,28 @@ func newStartCommand() *cli.Command {
 				EnvVars: []string{"GRAM_SERVER_ADDRESS"},
 			},
 			&cli.StringFlag{
+				Name:     "server-url",
+				Usage:    "The public URL of the server",
+				EnvVars:  []string{"GRAM_SERVER_URL"},
+				Required: true,
+			},
+			&cli.StringFlag{
 				Name:     "environment",
 				Usage:    "The current server environment", // local, dev, prod
 				Required: true,
 				EnvVars:  []string{"GRAM_ENVIRONMENT"},
+			},
+			&cli.StringFlag{
+				Name:     "ssl-key-file",
+				Usage:    "The SSL key file path to use for the server",
+				Required: false,
+				EnvVars:  []string{"GRAM_SSL_KEY_FILE"},
+			},
+			&cli.StringFlag{
+				Name:     "ssl-cert-file",
+				Usage:    "The SSL certifate file path to use for the server",
+				Required: false,
+				EnvVars:  []string{"GRAM_SSL_CERT_FILE"},
 			},
 			&cli.StringFlag{
 				Name:    "control-address",
@@ -78,6 +97,12 @@ func newStartCommand() *cli.Command {
 				Name:    "unsafe-local-env-path",
 				Usage:   "The path to the local environment file used for session auth in local development",
 				EnvVars: []string{"GRAM_UNSAFE_LOCAL_ENV_PATH"},
+			},
+			&cli.StringFlag{
+				Name:     "site-url",
+				Usage:    "The URL of the site",
+				EnvVars:  []string{"GRAM_SITE_URL"},
+				Required: true,
 			},
 			&cli.StringFlag{
 				Name:     "database-url",
@@ -314,16 +339,9 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			var serverURL string
-			switch c.String("environment") {
-			case "local", "minikube":
-				serverURL = fmt.Sprintf("http://localhost%s", c.String("address"))
-			case "dev":
-				serverURL = "https://dev.getgram.ai"
-			case "prod":
-				serverURL = "https://app.getgram.ai"
-			default:
-				return fmt.Errorf("invalid environment: %s", c.String("environment"))
+			serverURL, err := url.Parse(c.String("server-url"))
+			if err != nil {
+				return fmt.Errorf("failed to parse server url: %w", err)
 			}
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
@@ -331,16 +349,16 @@ func newStartCommand() *cli.Command {
 			chatClient := chat.NewChatClient(logger, db, openRouter, baseChatClient, encryptionClient)
 			mux := goahttp.NewMuxer()
 
-			mux.Use(middleware.DevCORSMiddleware)
+			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
-			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment")))
+			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
 			auth.Attach(mux, auth.NewService(logger.With(slog.String("component", "auth")), db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
-				GramServerURL:          serverURL,
-				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("environment")),
+				GramServerURL:          c.String("server-url"),
+				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
 			}))
 			projects.Attach(mux, projects.NewService(logger.With(slog.String("component", "projects")), db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger.With(slog.String("component", "packages")), db, sessionManager))
@@ -356,8 +374,8 @@ func newStartCommand() *cli.Command {
 			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), db, sessionManager, encryptionClient))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
-				GramServerURL:      serverURL,
-				SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("environment")),
+				GramServerURL:      c.String("server-url"),
+				SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
 				SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 				SlackSigningSecret: c.String("slack-signing-secret"),
 			}))
@@ -406,8 +424,16 @@ func newStartCommand() *cli.Command {
 			})
 
 			logger.InfoContext(ctx, "server started", slog.String("address", c.String("address")))
-			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))
+
+			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
+			if tlsEnabled {
+				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))
+				}
+			} else {
+				if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))
+				}
 			}
 
 			cancel()

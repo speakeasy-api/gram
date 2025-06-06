@@ -3,23 +3,14 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
-	"slices"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	domainsRepo "github.com/speakeasy-api/gram/internal/customdomains/repo"
 )
 
-// TODO: Running with custom domains in general should be a config
-var GramDomains = []string{
-	"app.getgram.ai",
-	"prod.getgram.ai",
-	"api.getgram.ai",
-	"getgram.ai",
-	"dev.getgram.ai",
-}
-
-func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string) func(next http.Handler) http.Handler {
+func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +21,7 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string) 
 				return
 			}
 
-			if slices.Contains(GramDomains, host) {
+			if host == serverURL.Host {
 				next.ServeHTTP(w, r)
 				return
 			}

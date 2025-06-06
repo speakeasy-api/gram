@@ -1,13 +1,28 @@
+import path from "node:path";
+import fs from "node:fs";
+import process from "node:process";
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import path from "path";
+
+let key: Buffer | undefined;
+let cert: Buffer | undefined;
+
+if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
+  key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
+  cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
+}
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __GRAM_SERVER_URL__: JSON.stringify(process.env["GRAM_SERVER_URL"]),
+  },
   server: {
     host: true,
     allowedHosts: ["localhost", "127.0.0.1", "devbox"],
+    https: key && cert ? { key, cert } : void 0,
   },
   plugins: [react(), tailwindcss()],
   resolve: {

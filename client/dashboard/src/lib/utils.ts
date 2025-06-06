@@ -7,11 +7,11 @@ export function cn(...inputs: ClassValue[]) {
 
 // TODO: Will potentitally map to a specific separate API URL if we deploy through Vercel
 export function getServerURL(): string {
-  const origin = window.location.origin;
-  if (origin.includes("localhost")) {
-    return "http://localhost:8080";
+  if (__GRAM_SERVER_URL__) {
+    return __GRAM_SERVER_URL__;
   }
-  return origin;
+
+  return window.location.origin;
 }
 
 export function titleCase(str: string) {

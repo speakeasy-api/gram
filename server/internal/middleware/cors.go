@@ -5,27 +5,17 @@ import (
 	"net/url"
 )
 
-func CORSMiddleware(env string) func(next http.Handler) http.Handler {
+func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch env {
-			case "minikube":
-				fallthrough
-			case "local":
-				w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-				// Make this work on different ports
+			case "local", "minikube":
 				origin := r.Header.Get("Origin")
-				if origin != "" {
-					originURL, err := url.Parse(origin)
-					if err == nil && originURL.Hostname() == "localhost" {
-						w.Header().Set("Access-Control-Allow-Origin", origin)
-					}
+				if _, err := url.Parse(origin); err == nil {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
 				}
-			case "dev":
-				w.Header().Set("Access-Control-Allow-Origin", "https://dev.getgram.ai")
-			case "prod":
-				w.Header().Set("Access-Control-Allow-Origin", "https://prod.getgram.ai")
-				w.Header().Set("Access-Control-Allow-Origin", "https://app.getgram.ai")
+			case "dev", "prod":
+				w.Header().Set("Access-Control-Allow-Origin", serverURL)
 			default:
 				// No CORS headers set for unspecified environments
 			}
@@ -43,29 +33,4 @@ func CORSMiddleware(env string) func(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func DevCORSMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-		// Make this work on different ports
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			originURL, err := url.Parse(origin)
-			if err == nil && originURL.Hostname() == "localhost" {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-			}
-		}
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, Gram-Session, Gram-Project, Gram-Token, idempotency-key, Gram-Admin-Override, Gram-Chat-ID")
-		w.Header().Set("Access-Control-Expose-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Gram-Session, Gram-Chat-ID")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }

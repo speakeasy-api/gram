@@ -11,6 +11,7 @@ junit-report.xml
 /server/goa*
 /server/gram
 /scratch
+/local/ssl
 .speakeasy/temp
 mprocs.log
 __debug_bin*
