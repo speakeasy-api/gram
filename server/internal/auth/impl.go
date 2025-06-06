@@ -113,7 +113,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if len(userInfo.Organizations) == 0 {
-		return redirectWithError(errors.New("You currently don't have access to any speakeasy organizations, ask to be added to a speakeasy account."))
+		return redirectWithError(errors.New("you currently don't have access to a speakeasy organization, ask to be added to a speakeasy account"))
 	}
 	activeOrganizationID := userInfo.Organizations[0].ID
 

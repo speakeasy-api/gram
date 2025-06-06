@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -221,6 +222,61 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	return reverseProxyRequest(ctx, tracer, logger, metrics, toolExecutionInfo.Tool, w, req)
 }
 
+type retryConfig struct {
+	initialInterval time.Duration
+	maxInterval     time.Duration
+	maxAttempts     int
+	backoffFactor   float64
+	statusCodes     []int    // HTTP status codes to retry on
+	methods         []string // HTTP methods to retry on
+}
+
+func retryWithBackoff(
+	ctx context.Context,
+	retryBackoff retryConfig,
+	doRequest func() (*http.Response, error),
+) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	delayInterval := retryBackoff.initialInterval
+	for attempt := 0; attempt < retryBackoff.maxAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-time.After(delayInterval):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+
+			delayInterval = min(time.Duration(float64(delayInterval)*retryBackoff.backoffFactor), retryBackoff.maxInterval)
+		}
+		resp, err = doRequest()
+		// retry by default on gateway errors
+		if err != nil {
+			continue
+		}
+
+		if !slices.Contains(retryBackoff.methods, resp.Request.Method) || !slices.Contains(retryBackoff.statusCodes, resp.StatusCode) {
+			return resp, err
+		}
+
+		if retryAfter := resp.Header.Get("retry-after"); retryAfter != "" {
+			if parsedNumber, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && parsedNumber > 0 {
+				retryAfterDuration := time.Duration(parsedNumber) * time.Second
+				delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
+				continue
+			}
+
+			if parsedDate, err := time.Parse(time.RFC1123, retryAfter); err == nil {
+				retryAfterDuration := time.Until(parsedDate)
+				if retryAfterDuration > 0 {
+					delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
+				}
+			}
+		}
+	}
+	return resp, err
+}
+
 func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, tool tools_repo.HttpToolDefinition, w http.ResponseWriter, req *http.Request) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -239,11 +295,50 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 		ForceAttemptHTTP2:     true,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
+
 	client := &http.Client{
 		Timeout:   60 * time.Second,
 		Transport: transport,
 	}
-	resp, err := client.Do(req)
+
+	executeRequest := func() (*http.Response, error) {
+		// Clone the request for each retry attempt
+		retryReq := req.Clone(ctx)
+
+		// Set fresh body on the cloned request
+		if req.Body != nil && req.GetBody != nil {
+			freshBody, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			retryReq.Body = freshBody
+		}
+
+		return client.Do(retryReq)
+	}
+	resp, err := retryWithBackoff(ctx, retryConfig{
+		initialInterval: 500 * time.Millisecond,
+		maxInterval:     5 * time.Second,
+		maxAttempts:     3,
+		backoffFactor:   2,
+		statusCodes: []int{ // reasonable status code presets
+			408, // Request Timeout
+			429, // Rate Limit Exceeded
+			500, // Internal Server Error
+			502, // Bad Gateway
+			503, // Service Unavailable
+			504, // Gateway Timeout
+			509, // Bandwidth Limit Exceeded
+			521, // Web Server Is Down (Cloudflare)
+			522, // Connection Timed Out (Cloudflare)
+			523, // Origin Is Unreachable (Cloudflare)
+			524, // A Timeout Occurred (Cloudflare)
+		},
+		methods: []string{
+			http.MethodGet,
+		},
+	}, executeRequest)
+
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
