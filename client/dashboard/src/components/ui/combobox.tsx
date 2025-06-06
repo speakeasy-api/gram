@@ -13,8 +13,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { Stack } from "@speakeasy-api/moonshine";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ReactNode, useState } from "react";
+import { Type } from "./type";
 
 export type DropdownItem = {
   value: string;
@@ -23,7 +25,7 @@ export type DropdownItem = {
   onClick?: () => void;
 };
 
-export function Combobox({
+export function Combobox<T extends DropdownItem>({
   items,
   children,
   selected,
@@ -31,14 +33,18 @@ export function Combobox({
   onOpenChange,
   variant = "outline",
   className,
+  label,
+  disabledMessage,
 }: {
-  items: DropdownItem[];
-  selected: DropdownItem | string | undefined;
-  onSelectionChange: (value: DropdownItem) => void;
+  items: T[];
+  selected: T | string | undefined;
+  onSelectionChange: (value: T) => void;
   onOpenChange?: (open: boolean) => void;
   children: ReactNode;
   className?: string;
   variant?: Parameters<typeof Button>[0]["variant"];
+  label?: string;
+  disabledMessage?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -47,21 +53,42 @@ export function Combobox({
     onOpenChange?.(open);
   };
 
+  let trigger = (
+    <PopoverTrigger asChild>
+      <Button
+        variant={variant}
+        role="combobox"
+        aria-expanded={open}
+        className={cn("w-full px-2", className)}
+        disabled={!!disabledMessage}
+        tooltip={disabledMessage}
+      >
+        <div className="flex items-center justify-between w-full gap-2">
+          <div className="truncate font-medium">{children}</div>
+          <ChevronsUpDown className="opacity-50" />
+        </div>
+      </Button>
+    </PopoverTrigger>
+  );
+
+  if (label) {
+    trigger = (
+      <Stack
+        direction="horizontal"
+        align="center"
+        className="bg-stone-200 dark:bg-stone-800 rounded-md"
+      >
+        <Type variant="small" className="px-2">
+          {label}
+        </Type>
+        {trigger}
+      </Stack>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          variant={variant}
-          role="combobox"
-          aria-expanded={open}
-          className={cn("w-full px-2", className)}
-        >
-          <div className="flex items-center justify-between w-full gap-2">
-            <div className="truncate">{children}</div>
-            <ChevronsUpDown className="opacity-50" />
-          </div>
-        </Button>
-      </PopoverTrigger>
+      {trigger}
       <PopoverContent className="w-[200px] p-0">
         <Command>
           {items.length > 4 && (

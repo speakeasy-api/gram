@@ -55,7 +55,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-const SUMMARIZE_BREAKPOINT_BYTES = 4 * 50_000 // 4 bytes per token, 50k token limit
+const SUMMARIZE_BREAKPOINT_BYTES = 4 * 5_000 // 4 bytes per token, 5k token limit
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
 	envRepo := environments_repo.New(db)

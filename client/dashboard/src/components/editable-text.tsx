@@ -6,9 +6,10 @@ interface EditableTextProps {
   label: string;
   description?: string;
   value: string | undefined;
-  onSubmit: (newValue: string) => void;
+  onSubmit: (newValue: string) => void | Promise<void>;
   validate?: (newValue: string) => string | boolean;
   lines?: number;
+  placeholder?: string;
   children: ReactNode;
 }
 
@@ -19,12 +20,13 @@ export function EditableText({
   onSubmit,
   validate,
   lines,
+  placeholder = label,
   children,
 }: EditableTextProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedValue, setEditedValue] = useState(value);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!editedValue) {
       return;
     }
@@ -33,7 +35,7 @@ export function EditableText({
       return;
     }
     if (editedValue !== value) {
-      onSubmit(editedValue);
+      await onSubmit(editedValue);
     }
   };
 
@@ -51,7 +53,9 @@ export function EditableText({
 
   return (
     <>
-      <Editable onClick={() => handleOpenChange(true)}>{children}</Editable>
+      <Editable onClick={() => handleOpenChange(true)} className="w-fit">
+        {children}
+      </Editable>
       <InputDialog
         open={isEditing}
         onOpenChange={handleOpenChange}
@@ -60,8 +64,8 @@ export function EditableText({
         submitButtonText="Update"
         inputs={{
           label,
-          placeholder: label,
-          value: editedValue ?? "Loading...",
+          placeholder,
+          value: editedValue ?? (!placeholder ? "Loading..." : ""),
           onChange: setEditedValue,
           onSubmit: handleSubmit,
           validate: validate ?? (() => true),

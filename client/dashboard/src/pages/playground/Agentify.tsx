@@ -5,6 +5,7 @@ import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { getServerURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
@@ -12,10 +13,16 @@ import { generateObject } from "ai";
 import { Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { z } from "zod";
-import { AGENT_EXAMPLES, FRAMEWORKS, OPENAI_AGENTS_SDK, SdkFramework, SdkLanguage } from "../sdk/examples";
-import { useChatMessages } from "./Playground";
-import { useTelemetry } from "@/contexts/Telemetry";
+import {
+  AGENT_EXAMPLES,
+  FRAMEWORKS,
+  OPENAI_AGENTS_SDK,
+  SdkFramework,
+  SdkLanguage,
+} from "../sdk/examples";
 import { SdkLanguageDropdown } from "../sdk/SDK";
+import { useChatMessages } from "./ChatContext";
+import { useMiniModel } from "./Openrouter";
 
 export const useAgentify = () => {
   return useContext(AgentifyContext);
@@ -52,7 +59,6 @@ export const AgentifyProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const session = useSession();
   const project = useProject();
   const messages = useChatMessages();
   const telemetry = useTelemetry();
@@ -72,14 +78,7 @@ export const AgentifyProvider = ({
     number | undefined
   >();
 
-  const openrouter = createOpenRouter({
-    apiKey: "this is required",
-    baseURL: getServerURL(),
-    headers: {
-      "Gram-Session": session.session,
-      "Gram-Project": project.slug,
-    },
-  });
+  const model = useMiniModel();
 
   useEffect(() => {
     if (!Object.keys(FRAMEWORKS[lang]).includes(framework)) {
@@ -107,7 +106,7 @@ export const AgentifyProvider = ({
     const example = await fetch(exampleUrl!).then((res) => res.text());
 
     const result = await generateObject({
-      model: openrouter.chat("openai/gpt-4o-mini"),
+      model,
       prompt: `
 <instructions>
   You will be given a chat history, a statement of intent, and a basic skeleton of an agent. 

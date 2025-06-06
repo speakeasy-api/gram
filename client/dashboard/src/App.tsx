@@ -34,13 +34,16 @@ export default function App() {
       faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
     }
 
+    localStorage.setItem("preferred-theme", theme);
+
     setTheme(theme);
   };
 
   useEffect(() => {
-    const prefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)"
-    ).matches;
+    const prefersDark =
+      window.matchMedia("(prefers-color-scheme: dark)").matches &&
+      localStorage.getItem("preferred-theme") !== "light";
+
     applyTheme(prefersDark ? "dark" : "light");
 
     // Listen for system preference changes
@@ -48,6 +51,7 @@ export default function App() {
     const handleChange = (e: MediaQueryListEvent) => {
       applyTheme(e.matches ? "dark" : "light");
     };
+
 
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);

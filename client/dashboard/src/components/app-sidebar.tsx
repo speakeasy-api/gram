@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useIsAdmin } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -18,31 +19,35 @@ import * as React from "react";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
 import { Type } from "./ui/type";
-import { useIsAdmin } from "@/contexts/Auth";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const isAdmin = useIsAdmin();
 
-  const navGroups = {
-    configure: [
-      routes.home,
-      routes.toolsets,
-      // routes.toolBuilder,
-      ...(isAdmin ? [routes.prompts] : []),
-      routes.environments,
-      routes.integrations,
-    ],
-    connect: [routes.mcp, routes.sdk, routes.slackApp],
-    manage: [routes.settings, routes.docs],
-  };
+  const topNavGroups = isAdmin
+    ? {
+        create: [routes.home, routes.toolBuilder, routes.prompts],
+        curate: [routes.toolsets, routes.environments, routes.integrations],
+        connect: [routes.mcp, routes.sdk, routes.slackApp],
+      }
+    : {
+        configure: [
+          routes.home,
+          routes.toolsets,
+          routes.environments,
+          routes.integrations,
+        ],
+        connect: [routes.mcp, routes.sdk, routes.slackApp],
+      };
+
+  const bottomNav = [routes.settings, routes.docs];
 
   const playgroundCTA = (
     <SidebarMenuButton
       tooltip={routes.playground.title}
       className={cn(
         "bg-primary! text-primary-foreground! hover:bg-primary/90 hover:text-primary-foreground min-w-8 trans",
-        routes.playground.active && "border-violet-300 border-2 scale-105"
+        routes.playground.active && "border-violet-300 border-2 scale-105" // TODO rainbow
       )}
       onClick={() => {
         routes.playground.goTo();
@@ -68,7 +73,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <GramLogo className="text-3xl" />
                 </routes.home.Link>
                 <Type variant="small" muted className="self-end">
-                  v0.4.1 (alpha)
+                  v0.5.0 (alpha)
                 </Type>
               </Stack>
             </SidebarMenuButton>
@@ -85,21 +90,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Configure</SidebarGroupLabel>
-          <SidebarGroupContent className="flex flex-col gap-6">
-            <NavMenu items={navGroups.configure} />
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Connect</SidebarGroupLabel>
-          <SidebarGroupContent className="flex flex-col gap-6">
-            <NavMenu items={navGroups.connect} />
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {Object.entries(topNavGroups).map(([label, items]) => (
+          <SidebarGroup key={label}>
+            <SidebarGroupLabel>{label}</SidebarGroupLabel>
+            <SidebarGroupContent className="flex flex-col gap-6">
+              <NavMenu items={items} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
         <SidebarGroup className="mt-auto">
           <SidebarGroupContent>
-            <NavMenu items={navGroups.manage} />
+            <NavMenu items={bottomNav} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

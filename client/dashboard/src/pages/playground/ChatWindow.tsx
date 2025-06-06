@@ -1,18 +1,12 @@
 import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { HttpRoute } from "@/components/http-route";
 import { ProjectAvatar } from "@/components/project-menu";
-import { Heading } from "@/components/ui/heading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
-import {
-  useInstance,
-  useToolsetSuspense,
-} from "@gram/client/react-query/index.js";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { useInstance } from "@gram/client/react-query/index.js";
 import {
   AIChatContainer,
   Stack,
@@ -30,11 +24,9 @@ import Ajv from "ajv";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
-import { McpToolsetCard } from "../mcp/MCP";
-import { SdkContent } from "../sdk/SDK";
-import { AgentifyButton } from "./Agentify";
+import { useChatContext } from "./ChatContext";
 import { useChatHistory } from "./ChatHistory";
-import { PanelHeader, useChatContext } from "./Playground";
+import { useMiniModel, useModel } from "./Openrouter";
 
 // Ignore int32 format instead of erroring out
 const ajv = new Ajv({ formats: { int32: true } });
@@ -59,10 +51,14 @@ export type ChatConfig = React.RefObject<{
 
 export function ChatWindow({
   configRef,
-  dynamicToolset,
+  dynamicToolset = false,
+  additionalActions,
+  initialMessages,
 }: {
   configRef: ChatConfig;
-  dynamicToolset: boolean;
+  dynamicToolset?: boolean;
+  additionalActions?: React.ReactNode;
+  initialMessages?: Message[];
 }) {
   const [model, setModel] = useState(availableModels[0]?.value ?? "");
   const chatKey = `chat-${model}`;
@@ -75,6 +71,8 @@ export function ChatWindow({
       setModel={setModel}
       configRef={configRef}
       dynamicToolset={dynamicToolset}
+      initialMessages={initialMessages}
+      additionalActions={additionalActions}
     />
   );
 }
@@ -89,11 +87,15 @@ function ChatInner({
   setModel,
   configRef,
   dynamicToolset,
+  initialMessages,
+  additionalActions,
 }: {
   model: string;
   setModel: (model: string) => void;
   configRef: ChatConfig;
   dynamicToolset: boolean;
+  initialMessages?: Message[];
+  additionalActions?: React.ReactNode;
 }) {
   const session = useSession();
   const project = useProject();
@@ -160,24 +162,11 @@ function ChatInner({
     [instance.data?.tools]
   );
 
-  const openrouterChat = createOpenRouter({
-    apiKey: "this is required",
-    baseURL: getServerURL(),
-    headers: {
-      "Gram-Session": session.session,
-      "Gram-Project": project.slug,
-      "Gram-Chat-ID": chat.id,
-    },
+  const openrouterChat = useModel(model, {
+    "Gram-Chat-ID": chat.id,
   });
 
-  const openrouterBasic = createOpenRouter({
-    apiKey: "this is required",
-    baseURL: getServerURL(),
-    headers: {
-      "Gram-Session": session.session,
-      "Gram-Project": project.slug,
-    },
-  });
+  const openrouterBasic = useMiniModel();
 
   const updateToolsTool = {
     id: "refresh_tools",
@@ -200,7 +189,7 @@ function ChatInner({
       .join("\n");
 
     const result = await generateObject({
-      model: openrouterBasic.chat(model),
+      model: openrouterBasic,
       prompt: `Below is a list of tools and a description of the task I want to complete. Please return a list of tool names that you think are relevant to the task.
       Include any tools that you think might be useful for answering follow-up questions, taking into account the conversation history.
       Try to return between 5 and 25 tools.
@@ -254,7 +243,7 @@ function ChatInner({
     }
 
     const result = streamText({
-      model: openrouterChat.chat(model),
+      model: openrouterChat,
       messages,
       tools,
       temperature: 0.5,
@@ -308,16 +297,7 @@ function ChatInner({
     return result.toDataStreamResponse();
   };
 
-  const initialMessages: Message[] = configRef.current.isOnboarding
-    ? [
-        {
-          id: "1",
-          role: "assistant",
-          content:
-            "Welcome to Gram! Upload an OpenAPI document to get started.",
-        },
-      ]
-    : chatHistory ?? [];
+  const initialMessagesInner: Message[] = initialMessages ?? chatHistory ?? [];
 
   const toolCallApproval = useToolCallApproval({
     executeToolCall: async (toolCall) => {
@@ -392,7 +372,7 @@ function ChatInner({
       });
     },
     maxSteps: 5,
-    initialMessages,
+    initialMessages: initialMessagesInner,
     onToolCall: (toolCall) => {
       try {
         const validationError = validateArgs(toolCall.toolCall);
@@ -427,6 +407,11 @@ function ChatInner({
     [append]
   );
 
+  // This needs to be set so that the chat provider can append messages
+  useEffect(() => {
+    chat.setAppendMessage(append);
+  }, []);
+
   useEffect(() => {
     setMessages(chatMessages);
   }, [chatMessages]);
@@ -447,103 +432,36 @@ function ChatInner({
     return 0;
   });
 
-  const agentifyButton = (
-    <AgentifyButton
-      toolsetSlug={configRef.current.toolsetSlug ?? ""}
-      environmentSlug={configRef.current.environmentSlug ?? ""}
-      key="agentify-button"
-      onAgentify={() => setActiveTab("agents")}
-    />
-  );
-
-  const [activeTab, setActiveTab] = useState<"chat" | "agents" | "mcp">("chat");
-
   // TODO: fix this
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const m = messagesToDisplay as any;
 
   return (
-    <Tabs
-      value={activeTab}
-      onValueChange={(value) =>
-        setActiveTab(value as "chat" | "agents" | "mcp")
-      }
-      className="h-full relative"
-    >
-      <PanelHeader side="right">
-        <Stack direction="horizontal" gap={2} align="center">
-          <Type className="font-medium">Use with: </Type>
-          <TabsList className="bg-stone-200 dark:bg-stone-800">
-            <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="mcp">MCP</TabsTrigger>
-            <TabsTrigger value="agents">Agents</TabsTrigger>
-          </TabsList>
-        </Stack>
-      </PanelHeader>
-      <div className="h-[calc(100%-61px)] pl-8 pr-4 pt-4">
-        <TabsContent value="chat" className="h-full">
-          <AIChatContainer
-            messages={m}
-            isLoading={status === "streaming" || isChatHistoryLoading}
-            onSendMessage={handleSend}
-            className={"pb-4"}
-            toolCallApproval={toolCallApproval}
-            components={{
-              composer: {
-                additionalActions: [agentifyButton],
-              },
-              message: {
-                avatar: {
-                  user: () => (
-                    <ProjectAvatar project={project} className="h-6 w-6" />
-                  ),
-                },
-                toolCall: toolCallComponents(allTools),
-              },
-            }}
-            modelSelector={{
-              model,
-              onModelChange: setModel,
-              availableModels,
-            }}
-          />
-        </TabsContent>
-        <TabsContent
-          value="agents"
-          className="h-full overflow-scroll pb-4 pr-4"
-        >
-          <SdkContent
-            toolset={configRef.current.toolsetSlug ?? undefined}
-            environment={configRef.current.environmentSlug ?? undefined}
-          />
-        </TabsContent>
-        <TabsContent value="mcp">
-          {configRef.current.toolsetSlug ? (
-            <McpTab toolsetSlug={configRef.current.toolsetSlug} />
-          ) : (
-            <div className="text-muted-foreground">No toolset selected</div>
-          )}
-        </TabsContent>
-      </div>
-    </Tabs>
+    <AIChatContainer
+      messages={m}
+      isLoading={status === "streaming" || isChatHistoryLoading}
+      onSendMessage={handleSend}
+      className={"pb-4"}
+      toolCallApproval={toolCallApproval}
+      components={{
+        composer: {
+          additionalActions,
+        },
+        message: {
+          avatar: {
+            user: () => <ProjectAvatar project={project} className="h-6 w-6" />,
+          },
+          toolCall: toolCallComponents(allTools),
+        },
+      }}
+      modelSelector={{
+        model,
+        onModelChange: setModel,
+        availableModels,
+      }}
+    />
   );
 }
-
-const McpTab = ({ toolsetSlug }: { toolsetSlug: string }) => {
-  const { data: toolset, refetch } = useToolsetSuspense({ slug: toolsetSlug });
-
-  return (
-    <Stack gap={8}>
-      <div>
-        <Heading variant="h2">Hosted MCP Servers</Heading>
-        <Type className="text-muted-foreground mt-2">
-          Expose this toolset as a hosted MCP server
-        </Type>
-      </div>
-      <McpToolsetCard toolset={toolset} onUpdate={refetch} />
-    </Stack>
-  );
-};
 
 const toolCallComponents = (tools: Toolset) => {
   const JsonDisplay = ({ json }: { json: string }) => {

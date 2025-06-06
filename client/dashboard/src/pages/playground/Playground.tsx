@@ -6,7 +6,6 @@ import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
-  useRegisterChatTelemetry,
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
   useTelemetry,
@@ -20,14 +19,16 @@ import {
   useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
-import { UIMessage } from "ai";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { v7 as uuidv7 } from "uuid";
 import { OnboardingContent } from "../onboarding/Onboarding";
 import { ToolsetView } from "../toolsets/Toolset";
+import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { AgentifyProvider } from "./Agentify";
-import { ChatConfig, ChatWindow } from "./ChatWindow";
+import { ChatProvider, useChatContext } from "./ChatContext";
+import { ChatConfig } from "./ChatWindow";
+import { PlaygroundRHS } from "./PlaygroundRHS";
 
 export default function Playground() {
   return (
@@ -140,7 +141,7 @@ function PlaygroundInner() {
       <Page.Body className="max-w-full p-0">
         <ResizablePanel
           direction="horizontal"
-          className="h-full [&>[role='separator']]:border-border"
+          className="h-full [&>[role='separator']]:border-border [&>[role='separator']]:border-1"
         >
           <ResizablePanel.Pane minSize={35}>
             <ToolsetPanel
@@ -152,7 +153,7 @@ function PlaygroundInner() {
             />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
-            <ChatWindow
+            <PlaygroundRHS
               configRef={chatConfigRef}
               dynamicToolset={dynamicToolset}
             />
@@ -251,26 +252,6 @@ export function ToolsetPanel({
     setDynamicToolset(!!isDynamic);
   }, [toolset, isAdmin, setDynamicToolset]);
 
-  const toolsetDropdownItems =
-    toolsets?.map((toolset) => ({
-      ...toolset,
-      label: toolset.name,
-      value: toolset.slug,
-    })) ?? [];
-
-  const toolsetDropdown = (
-    <Combobox
-      items={toolsetDropdownItems}
-      selected={toolsetDropdownItems.find(
-        (item) => item.value === selectedToolset
-      )}
-      onSelectionChange={(value) => setSelectedToolset(value.value)}
-      className="max-w-fit"
-    >
-      <Type variant="small">{toolset?.name}</Type>
-    </Combobox>
-  );
-
   const environmentDropdownItems =
     environments?.map((environment) => ({
       ...environment,
@@ -307,10 +288,10 @@ export function ToolsetPanel({
       <PanelHeader side="left">
         <Stack direction="horizontal" gap={2} justify="space-between">
           <Stack direction="horizontal" gap={2} align="center">
-            <Heading variant="h5" className="font-medium">
-              Toolset:{" "}
-            </Heading>
-            {toolsetDropdown}
+            <ToolsetDropdown
+              selectedToolset={toolset}
+              setSelectedToolset={(toolset) => setSelectedToolset(toolset.slug)}
+            />
             {isAdmin && (
               <Stack direction="horizontal" align="center">
                 <Button
@@ -362,61 +343,5 @@ export const PanelHeader = ({
     >
       {children}
     </div>
-  );
-};
-
-const ChatContext = createContext<{
-  id: string;
-  setId: (id: string) => void;
-  url: string;
-  messages: UIMessage[];
-  setMessages: (messages: UIMessage[]) => void;
-}>({
-  id: "",
-  setId: () => {},
-  url: "",
-  messages: [],
-  setMessages: () => {},
-});
-
-export const useChatContext = () => {
-  return useContext(ChatContext);
-};
-
-export const useChatMessages = () => {
-  return useChatContext().messages;
-};
-
-const ChatProvider = ({ children }: { children: React.ReactNode }) => {
-  const telemetry = useTelemetry();
-  const [searchParams] = useSearchParams();
-  const [id, setId] = useState<string>(searchParams.get("chatId") ?? uuidv7());
-  const [messages, setMessages] = useState<UIMessage[]>([]);
-
-  const url = new URL(window.location.href);
-  url.searchParams.set("chatId", id);
-  const urlString = url.toString();
-
-  useRegisterChatTelemetry({
-    chatId: id,
-    chatUrl: urlString,
-  });
-
-  // This means a chat was explicitly loaded
-  const doSetId = (id: string) => {
-    setId(id);
-    telemetry.capture("chat_event", {
-      action: "chat_loaded",
-      num_messages: messages.length,
-      chat_id: id,
-    });
-  };
-
-  return (
-    <ChatContext.Provider
-      value={{ id, setId: doSetId, messages, setMessages, url: urlString }}
-    >
-      {children}
-    </ChatContext.Provider>
   );
 };

@@ -1,19 +1,22 @@
+import { cn } from "@/lib/utils";
+import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { Type } from "./type";
-import { Pencil } from "lucide-react";
 
 export function Editable({
   onClick,
   children,
+  className,
 }: {
   onClick?: () => void;
+  className?: string;
   children: React.ReactNode;
 }) {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
     <div
-      className="relative group cursor-pointer"
+      className={cn("relative group cursor-pointer", className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onClick?.()}
@@ -27,9 +30,7 @@ export function Editable({
       {isHovered && (
         <div className="absolute inset-0 flex items-center justify-center">
           <Pencil className="w-4 h-4 text-muted-foreground mr-1" />
-          <Type className="font-medium text-inherit">
-            Edit
-          </Type>
+          <Type className="font-medium text-inherit">Edit</Type>
         </div>
       )}
     </div>

@@ -12,6 +12,7 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { Tool, useGroupedTools } from "@/lib/toolNames";
+import { HTTPToolDefinition } from "@gram/client/models/components";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
@@ -265,20 +266,24 @@ export function ToolSelect() {
 }
 
 export function ToolsTable({
+  tools,
+  isLoading,
   additionalColumns,
+  onRowClick,
 }: {
+  tools: HTTPToolDefinition[];
+  isLoading: boolean;
   additionalColumns?: Column<Tool>[];
+  onRowClick?: (row: Tool) => void;
 }) {
-  const { data: tools, isLoading: isLoadingTools } = useListTools();
+  const toolGroups = useGroupedTools(tools ?? []);
 
-  const toolGroups = useGroupedTools(tools?.tools ?? []);
-
-  return !isLoadingTools ? (
+  return !isLoading ? (
     <Table
       columns={groupColumns}
       data={toolGroups}
       rowKey={(row) => row.key}
-      className="mb-6 overflow-y-auto"
+      className="mb-6 overflow-y-auto bg-card"
       hideHeader
       renderExpandedContent={(group) => (
         <Table
@@ -286,7 +291,8 @@ export function ToolsTable({
           data={group.tools}
           rowKey={(row) => row.id}
           hideHeader
-          className="bg-card max-h-[600px] overflow-y-auto"
+          className="bg-stone-100 dark:bg-background max-h-[600px] overflow-y-auto"
+          {...(onRowClick ? { onRowClick } : {})}
         />
       )}
     />

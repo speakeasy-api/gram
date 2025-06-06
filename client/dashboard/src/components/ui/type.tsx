@@ -11,12 +11,14 @@ export function Type({
   className,
   italic,
   mono,
+  small,
 }: {
   variant?: "subheading" | "body" | "small";
   className?: string;
   muted?: boolean;
   italic?: boolean;
   mono?: boolean;
+  small?: boolean;
   skeleton?: "word" | "phrase" | "line" | "paragraph";
   children: React.ReactNode;
 }) {
@@ -74,11 +76,21 @@ export function Type({
 
   if (muted) {
     baseClass += " text-muted-foreground";
+  } else {
+    baseClass += " text-stone-800 dark:text-stone-200";
+  }
+
+  if (small) {
+    baseClass += " text-sm";
   }
 
   switch (variant) {
     case "subheading":
-      return <p className={`text-md font-medium ${baseClass} ${className}`}>{children}</p>;
+      return (
+        <p className={`text-md font-medium ${baseClass} ${className}`}>
+          {children}
+        </p>
+      );
     case "body":
       return (
         <p className={`text-base ${baseClass} ${className}`}>{children}</p>

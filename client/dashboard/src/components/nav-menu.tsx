@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
+import { Type } from "./ui/type";
 
 export function NavMenu({
   items,
@@ -69,7 +70,7 @@ export function NavButton({
           )}
         />
       )}
-      <span>{title}</span>
+      <Type variant="small">{title}</Type>
     </SidebarMenuButton>
   );
 }

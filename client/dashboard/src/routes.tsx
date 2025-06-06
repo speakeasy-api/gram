@@ -12,14 +12,14 @@ import { EnvironmentsRoot } from "./pages/environments/Environments";
 import EnvironmentPage from "./pages/environments/Environment";
 import Login from "./pages/login/Login";
 import SDK from "./pages/sdk/SDK";
-import { useSlugs } from "./contexts/Sdk";
-import { useNavigate, useLocation, Link } from "react-router";
-import { useMemo } from "react";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
-import { ToolSelect } from "./pages/toolsets/ToolSelect";
-import SlackApp from "./pages/slackapp/SlackApp";
+import { useMemo } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { useSlugs } from "./contexts/Sdk";
 import MCP from "./pages/mcp/MCP";
+import SlackApp from "./pages/slackapp/SlackApp";
 import ToolBuilder from "./pages/toolBuilder/ToolBuilder";
+import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import NewPromptPage, { NewPromptPageRoot } from "./pages/prompts/NewPrompt";
 
 type AppRouteBasic = {
@@ -97,7 +97,7 @@ const ROUTE_STRUCTURE = {
   integrations: {
     title: "Integrations",
     url: "integrations",
-    icon: "blocks",
+    icon: "package",
     component: Integrations,
   },
   toolBuilder: {
@@ -109,7 +109,7 @@ const ROUTE_STRUCTURE = {
   toolsets: {
     title: "Toolsets",
     url: "toolsets",
-    icon: "pencil-ruler",
+    icon: "blocks",
     component: ToolsetsRoot,
     indexComponent: Toolsets,
     subPages: {
