@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, MotionValue, useMotionValue, useSpring } from "framer-motion";
 import SpeakeasyLogo from "./components/SpeakeasyLogo";
 
 interface Dot {
@@ -10,12 +10,131 @@ interface Dot {
   y: number;
   size: number;
   delay: number;
+  row: number;
+  col: number;
 }
+
+const distance = (
+  pointA: { x: number; y: number },
+  pointB: { x: number; y: number }
+) => {
+  const xDiff = pointB.x - pointA.x;
+  const yDiff = pointB.y - pointA.y;
+  return Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+};
+
+interface DotComponentProps {
+  dot: Dot;
+  active: { row: number; col: number };
+  setActive: (active: { row: number; col: number }) => void;
+  dragX: MotionValue<number>;
+  dragY: MotionValue<number>;
+  allDots: Dot[];
+}
+
+const DotComponent = ({
+  dot,
+  active,
+  setActive,
+  dragX,
+  dragY,
+  allDots,
+}: DotComponentProps) => {
+  const isDragging = dot.col === active.col && dot.row === active.row;
+
+  const activeDot = allDots.find(
+    (d) => d.row === active.row && d.col === active.col
+  );
+  const d = activeDot
+    ? distance({ x: activeDot.x, y: activeDot.y }, { x: dot.x, y: dot.y })
+    : 0;
+
+  const maxDistance = 2000;
+  const normalizedDistance = d / maxDistance;
+
+  const falloff = Math.exp(-normalizedDistance * 2);
+
+  const springConfig = {
+    stiffness: 100 + falloff * 600,
+    damping: 20 + (1 - falloff) * 40,
+  };
+
+  const dx = useSpring(dragX, springConfig);
+  const dy = useSpring(dragY, springConfig);
+
+  return (
+    <motion.div
+      drag
+      dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+      dragTransition={{ bounceStiffness: 500, bounceDamping: 20 }}
+      dragElastic={1}
+      onDragStart={() => setActive({ row: dot.row, col: dot.col })}
+      onDragEnd={() => {
+        dragX.set(0);
+        dragY.set(0);
+      }}
+      className="absolute cursor-grab active:cursor-grabbing select-none"
+      style={{
+        width: dot.size,
+        height: dot.size,
+        left: dot.x,
+        top: dot.y,
+        x: isDragging ? dragX : dx,
+        y: isDragging ? dragY : dy,
+        translateX: "-50%",
+        translateY: "-50%",
+        zIndex: isDragging ? 10 : 1,
+      }}
+      initial={{ opacity: 0, scale: 0.5 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{
+        duration: 0.6,
+        delay: dot.delay,
+        ease: "easeOut",
+      }}
+    >
+      <svg
+        width={dot.size}
+        height={dot.size}
+        viewBox={`0 0 ${dot.size} ${dot.size}`}
+        fill="none"
+        className="transition-all duration-300"
+      >
+        <defs>
+          <linearGradient
+            id={`gradient-${dot.id}`}
+            x1="0"
+            y1="0"
+            x2={dot.size}
+            y2="0"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop stopOpacity="0" />
+            <stop offset="1" stopOpacity="0.2" />
+          </linearGradient>
+        </defs>
+        <circle
+          cx={dot.size / 2}
+          cy={dot.size / 2}
+          r={dot.size / 2 - 0.5}
+          fill="white"
+          stroke={`url(#gradient-${dot.id})`}
+          strokeWidth="1"
+          className="transition-all duration-200"
+        />
+      </svg>
+    </motion.div>
+  );
+};
 
 export default function Home() {
   const [dots, setDots] = useState<Dot[]>([]);
   const [isResizing, setIsResizing] = useState(false);
+  const [active, setActive] = useState({ row: 0, col: 0 });
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
 
   const introducingRef = useRef<HTMLHeadingElement>(null);
   const gramRef = useRef<HTMLHeadingElement>(null);
@@ -162,6 +281,8 @@ export default function Home() {
           y,
           size: dotSize,
           delay,
+          row,
+          col,
         });
       }
     }
@@ -220,57 +341,15 @@ export default function Home() {
           }`}
         >
           {dots.map((dot) => (
-            <motion.div
+            <DotComponent
               key={dot.id}
-              className="absolute"
-              style={{
-                width: dot.size,
-                height: dot.size,
-                left: dot.x,
-                top: dot.y,
-                x: "-50%",
-                y: "-50%",
-              }}
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{
-                duration: 0.6,
-                delay: dot.delay,
-                ease: "easeOut",
-              }}
-              whileHover={{ scale: 1.1 }}
-            >
-              <svg
-                width={dot.size}
-                height={dot.size}
-                viewBox={`0 0 ${dot.size} ${dot.size}`}
-                fill="none"
-                className="transition-all duration-300"
-              >
-                <defs>
-                  <linearGradient
-                    id={`gradient-${dot.id}`}
-                    x1="0"
-                    y1="0"
-                    x2={dot.size}
-                    y2="0"
-                    gradientUnits="userSpaceOnUse"
-                  >
-                    <stop stopOpacity="0" />
-                    <stop offset="1" stopOpacity="0.2" />
-                  </linearGradient>
-                </defs>
-                <circle
-                  cx={dot.size / 2}
-                  cy={dot.size / 2}
-                  r={dot.size / 2 - 0.5}
-                  fill="white"
-                  stroke={`url(#gradient-${dot.id})`}
-                  strokeWidth="1"
-                  className="hover:fill-neutral-50"
-                />
-              </svg>
-            </motion.div>
+              dot={dot}
+              active={active}
+              setActive={setActive}
+              dragX={dragX}
+              dragY={dragY}
+              allDots={dots}
+            />
           ))}
         </div>
 
