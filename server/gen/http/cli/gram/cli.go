@@ -1933,18 +1933,18 @@ Create a new prompt template.
 Example:
     %[1]s templates create-template --body '{
       "arguments": "{\"name\":\"example\",\"email\":\"mail@example.com\"}",
-      "description": "Delectus saepe qui tempore.",
+      "description": "Necessitatibus delectus.",
       "engine": "mustache",
       "kind": "higher_order_tool",
-      "name": "Natus culpa.",
-      "predecessor_id": "Et ut numquam sed.",
-      "prompt": "Ut inventore voluptates vitae ducimus.",
+      "name": "e9x",
+      "predecessor_id": "Distinctio et laborum quasi et ut numquam.",
+      "prompt": "Inventore voluptates vitae.",
       "tools_hint": [
-         "Itaque vel dolorum possimus.",
-         "Eaque aut deleniti earum.",
-         "Quis sunt eos et consequatur odit."
+         "Blanditiis itaque vel dolorum.",
+         "Eum eaque aut deleniti earum exercitationem quis.",
+         "Eos et consequatur."
       ]
-   }' --apikey-token "Vitae est." --session-token "Sed ut quasi laboriosam eum." --project-slug-input "Quam blanditiis dicta illum non deserunt in."
+   }' --apikey-token "Id vitae est nostrum." --session-token "Ut quasi laboriosam eum ad quam." --project-slug-input "Dicta illum non deserunt."
 `, os.Args[0])
 }
 

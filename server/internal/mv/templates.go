@@ -100,7 +100,7 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		ID:            row.ID.String(),
 		HistoryID:     row.HistoryID.String(),
 		PredecessorID: conv.FromNullableUUID(row.PredecessorID),
-		Name:          row.Name,
+		Name:          types.Slug(row.Name),
 		Prompt:        row.Prompt,
 		Description:   conv.FromPGText[string](row.Description),
 		Arguments:     args,

@@ -63,7 +63,7 @@ type CreateTemplatePayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The name of the prompt template
-	Name string
+	Name types.Slug
 	// The template content
 	Prompt string
 	// The description of the prompt template

@@ -8,7 +8,10 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	templates "github.com/speakeasy-api/gram/gen/templates"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -1415,7 +1418,7 @@ func NewDeleteTemplateGatewayErrorResponseBody(res *goa.ServiceError) *DeleteTem
 // payload.
 func NewCreateTemplatePayload(body *CreateTemplateRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *templates.CreateTemplatePayload {
 	v := &templates.CreateTemplatePayload{
-		Name:          *body.Name,
+		Name:          types.Slug(*body.Name),
 		Prompt:        *body.Prompt,
 		Description:   body.Description,
 		Arguments:     body.Arguments,
@@ -1487,6 +1490,14 @@ func ValidateCreateTemplateRequestBody(body *CreateTemplateRequestBody) (err err
 	}
 	if body.Kind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Name != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 40, false))
+		}
 	}
 	if body.Arguments != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))

@@ -121,7 +121,7 @@ var _ = Service("templates", func() {
 var CreatePromptTemplateForm = Type("CreatePromptTemplateForm", func() {
 	Required("name", "prompt", "engine", "kind")
 
-	Attribute("name", String, "The name of the prompt template")
+	Attribute("name", shared.Slug, "The name of the prompt template")
 	Attribute("prompt", String, "The template content")
 
 	Attribute("description", String, "The description of the prompt template")

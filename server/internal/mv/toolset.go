@@ -196,7 +196,7 @@ func DescribeToolset(
 			ID:            pt.PromptTemplate.ID.String(),
 			HistoryID:     pt.PromptTemplate.HistoryID.String(),
 			PredecessorID: conv.FromNullableUUID(pt.PromptTemplate.PredecessorID),
-			Name:          pt.PromptTemplate.Name,
+			Name:          types.Slug(pt.PromptTemplate.Name),
 			Prompt:        pt.PromptTemplate.Prompt,
 			Description:   conv.FromPGText[string](pt.PromptTemplate.Description),
 			Arguments:     args,

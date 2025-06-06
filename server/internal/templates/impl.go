@@ -126,7 +126,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 			UUID:  predecessorID,
 			Valid: predecessorID != uuid.Nil,
 		},
-		Name:        payload.Name,
+		Name:        string(payload.Name),
 		Prompt:      payload.Prompt,
 		Description: conv.PtrToPGTextEmpty(payload.Description),
 		Arguments:   args,

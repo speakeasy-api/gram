@@ -15,7 +15,7 @@ type PromptTemplate struct {
 	// The previous version of the prompt template to use as predecessor
 	PredecessorID *string
 	// The name of the prompt template
-	Name string
+	Name Slug
 	// The template content
 	Prompt string
 	// The description of the prompt template

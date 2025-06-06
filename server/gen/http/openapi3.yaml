@@ -5753,7 +5753,9 @@ components:
                         - higher_order_tool
                 name:
                     type: string
-                    description: The name of the prompt template
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 predecessor_id:
                     type: string
                     description: The previous version of the prompt template to use as predecessor
@@ -6965,7 +6967,9 @@ components:
                         - higher_order_tool
                 name:
                     type: string
-                    description: The name of the prompt template
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
                 predecessor_id:
                     type: string
                     description: The previous version of the prompt template to use as predecessor

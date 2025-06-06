@@ -1221,7 +1221,7 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 		ID:            v.ID,
 		HistoryID:     v.HistoryID,
 		PredecessorID: v.PredecessorID,
-		Name:          v.Name,
+		Name:          string(v.Name),
 		Prompt:        v.Prompt,
 		Description:   v.Description,
 		Arguments:     v.Arguments,

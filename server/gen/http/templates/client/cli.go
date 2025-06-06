@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	templates "github.com/speakeasy-api/gram/gen/templates"
+	types "github.com/speakeasy-api/gram/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -23,7 +25,11 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 	{
 		err = json.Unmarshal([]byte(templatesCreateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Delectus saepe qui tempore.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"Natus culpa.\",\n      \"predecessor_id\": \"Et ut numquam sed.\",\n      \"prompt\": \"Ut inventore voluptates vitae ducimus.\",\n      \"tools_hint\": [\n         \"Itaque vel dolorum possimus.\",\n         \"Eaque aut deleniti earum.\",\n         \"Quis sunt eos et consequatur odit.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Necessitatibus delectus.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"e9x\",\n      \"predecessor_id\": \"Distinctio et laborum quasi et ut numquam.\",\n      \"prompt\": \"Inventore voluptates vitae.\",\n      \"tools_hint\": [\n         \"Blanditiis itaque vel dolorum.\",\n         \"Eum eaque aut deleniti earum exercitationem quis.\",\n         \"Eos et consequatur.\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(body.Name) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
 		}
 		if body.Arguments != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
@@ -60,7 +66,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 		}
 	}
 	v := &templates.CreateTemplatePayload{
-		Name:          body.Name,
+		Name:          types.Slug(body.Name),
 		Prompt:        body.Prompt,
 		Description:   body.Description,
 		Arguments:     body.Arguments,

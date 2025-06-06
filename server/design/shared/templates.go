@@ -11,7 +11,7 @@ var PromptTemplate = Type("PromptTemplate", func() {
 	Attribute("history_id", String, "The revision tree ID for the prompt template")
 	Attribute("predecessor_id", String, "The previous version of the prompt template to use as predecessor")
 
-	Attribute("name", String, "The name of the prompt template")
+	Attribute("name", Slug, "The name of the prompt template")
 	Attribute("prompt", String, "The template content")
 	Attribute("description", String, "The description of the prompt template")
 	Attribute("arguments", String, func() {

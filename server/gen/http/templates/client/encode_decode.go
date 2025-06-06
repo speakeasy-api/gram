@@ -985,7 +985,7 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 		ID:            *v.ID,
 		HistoryID:     *v.HistoryID,
 		PredecessorID: v.PredecessorID,
-		Name:          *v.Name,
+		Name:          types.Slug(*v.Name),
 		Prompt:        *v.Prompt,
 		Description:   v.Description,
 		Arguments:     v.Arguments,
