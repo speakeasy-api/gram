@@ -14,7 +14,7 @@ import (
 
 const createCustomDomain = `-- name: CreateCustomDomain :one
 INSERT INTO custom_domains (
-    project_id,
+    organization_id,
     domain,
     ingress_name,
     cert_secret_name
@@ -24,11 +24,11 @@ INSERT INTO custom_domains (
     $3,
     $4
 )
-RETURNING id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCustomDomainParams struct {
-	ProjectID      uuid.UUID
+	OrganizationID string
 	Domain         string
 	IngressName    pgtype.Text
 	CertSecretName pgtype.Text
@@ -36,7 +36,7 @@ type CreateCustomDomainParams struct {
 
 func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomainParams) (CustomDomain, error) {
 	row := q.db.QueryRow(ctx, createCustomDomain,
-		arg.ProjectID,
+		arg.OrganizationID,
 		arg.Domain,
 		arg.IngressName,
 		arg.CertSecretName,
@@ -44,7 +44,7 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
-		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Domain,
 		&i.Verified,
 		&i.Activated,
@@ -61,17 +61,17 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 const deleteCustomDomain = `-- name: DeleteCustomDomain :exec
 UPDATE custom_domains
 SET deleted_at = clock_timestamp()
-WHERE id = $1
+WHERE organization_id = $1
   AND deleted IS FALSE
 `
 
-func (q *Queries) DeleteCustomDomain(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteCustomDomain, id)
+func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, deleteCustomDomain, organizationID)
 	return err
 }
 
 const getActiveCustomDomainByDomain = `-- name: GetActiveCustomDomainByDomain :one
-SELECT id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE domain = $1
   AND activated IS TRUE
@@ -84,7 +84,7 @@ func (q *Queries) GetActiveCustomDomainByDomain(ctx context.Context, domain stri
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
-		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Domain,
 		&i.Verified,
 		&i.Activated,
@@ -98,20 +98,20 @@ func (q *Queries) GetActiveCustomDomainByDomain(ctx context.Context, domain stri
 	return i, err
 }
 
-const getCustomDomainsByProject = `-- name: GetCustomDomainsByProject :one
-SELECT id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+const getCustomDomainsByOrganization = `-- name: GetCustomDomainsByOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
-WHERE project_id = $1
+WHERE organization_id = $1
   AND deleted IS FALSE
 LIMIT 1
 `
 
-func (q *Queries) GetCustomDomainsByProject(ctx context.Context, projectID uuid.UUID) (CustomDomain, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainsByProject, projectID)
+func (q *Queries) GetCustomDomainsByOrganization(ctx context.Context, organizationID string) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainsByOrganization, organizationID)
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
-		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Domain,
 		&i.Verified,
 		&i.Activated,
@@ -135,7 +135,7 @@ SET
     updated_at = clock_timestamp()
 WHERE id = $5
   AND deleted IS FALSE
-RETURNING id, project_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainParams struct {
@@ -157,7 +157,7 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
-		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Domain,
 		&i.Verified,
 		&i.Activated,

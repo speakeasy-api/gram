@@ -321,7 +321,7 @@ CREATE TABLE IF NOT EXISTS environment_entries (
 
 CREATE TABLE IF NOT EXISTS custom_domains (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
   domain TEXT NOT NULL,
   verified BOOLEAN NOT NULL DEFAULT FALSE,
   activated BOOLEAN NOT NULL DEFAULT FALSE,
@@ -332,16 +332,15 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   
-  CONSTRAINT custom_domains_pkey PRIMARY KEY (id),
-  CONSTRAINT custom_domains_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  CONSTRAINT custom_domains_pkey PRIMARY KEY (id)
   
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_domain_key
 ON custom_domains (domain);
 
-CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_project_id_key
-ON custom_domains (project_id)
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
+ON custom_domains (organization_id)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolsets (

@@ -24,8 +24,8 @@ type CreateDomainRequestBody struct {
 type GetDomainResponseBody struct {
 	// The ID of the custom domain
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the project this domain belongs to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the organization this domain belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The custom domain name
 	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
 	// Whether the domain is verified
@@ -43,8 +43,8 @@ type GetDomainResponseBody struct {
 type CreateDomainResponseBody struct {
 	// The ID of the custom domain
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the project this domain belongs to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the organization this domain belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The custom domain name
 	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
 	// Whether the domain is verified
@@ -614,13 +614,13 @@ func NewCreateDomainRequestBody(p *domains.CreateDomainPayload) *CreateDomainReq
 // result from a HTTP "OK" response.
 func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDomain {
 	v := &domains.CustomDomain{
-		ID:        *body.ID,
-		ProjectID: *body.ProjectID,
-		Domain:    *body.Domain,
-		Verified:  *body.Verified,
-		Activated: *body.Activated,
-		CreatedAt: *body.CreatedAt,
-		UpdatedAt: *body.UpdatedAt,
+		ID:             *body.ID,
+		OrganizationID: *body.OrganizationID,
+		Domain:         *body.Domain,
+		Verified:       *body.Verified,
+		Activated:      *body.Activated,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
 	}
 
 	return v
@@ -780,13 +780,13 @@ func NewGetDomainGatewayError(body *GetDomainGatewayErrorResponseBody) *goa.Serv
 // endpoint result from a HTTP "OK" response.
 func NewCreateDomainCustomDomainOK(body *CreateDomainResponseBody) *domains.CustomDomain {
 	v := &domains.CustomDomain{
-		ID:        *body.ID,
-		ProjectID: *body.ProjectID,
-		Domain:    *body.Domain,
-		Verified:  *body.Verified,
-		Activated: *body.Activated,
-		CreatedAt: *body.CreatedAt,
-		UpdatedAt: *body.UpdatedAt,
+		ID:             *body.ID,
+		OrganizationID: *body.OrganizationID,
+		Domain:         *body.Domain,
+		Verified:       *body.Verified,
+		Activated:      *body.Activated,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
 	}
 
 	return v
@@ -1098,8 +1098,8 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
 	if body.Domain == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))
@@ -1131,8 +1131,8 @@ func ValidateCreateDomainResponseBody(body *CreateDomainResponseBody) (err error
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
 	if body.Domain == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))

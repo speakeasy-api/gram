@@ -1383,7 +1383,7 @@ Usage:
 
 COMMAND:
     get-domain: Get the custom domain for a project
-    create-domain: Create a custom domain for a project
+    create-domain: Create a custom domain for a organization
     delete-domain: Delete a custom domain
 
 Additional help:
@@ -1405,7 +1405,7 @@ Example:
 func domainsCreateDomainUsage() {
 	fmt.Fprintf(os.Stderr, `%[1]s [flags] domains create-domain -body JSON -session-token STRING -project-slug-input STRING
 
-Create a custom domain for a project
+Create a custom domain for a organization
     -body JSON: 
     -session-token STRING: 
     -project-slug-input STRING: 

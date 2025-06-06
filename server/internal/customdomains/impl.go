@@ -54,23 +54,23 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) (res *gen.CustomDomain, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	domain, err := s.repo.GetCustomDomainsByProject(ctx, *authCtx.ProjectID)
+	domain, err := s.repo.GetCustomDomainsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for project").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}
 
 	return &gen.CustomDomain{
-		ID:        domain.ID.String(),
-		ProjectID: domain.ProjectID.String(),
-		Domain:    domain.Domain,
-		Verified:  domain.Verified,
-		Activated: domain.Activated,
-		CreatedAt: domain.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt: domain.UpdatedAt.Time.Format(time.RFC3339),
+		ID:             domain.ID.String(),
+		OrganizationID: domain.OrganizationID,
+		Domain:         domain.Domain,
+		Verified:       domain.Verified,
+		Activated:      domain.Activated,
+		CreatedAt:      domain.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      domain.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 

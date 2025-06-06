@@ -1870,7 +1870,7 @@ paths:
                 name: getDomain
     /rpc/domain.register:
         post:
-            description: Create a custom domain for a project
+            description: Create a custom domain for a organization
             operationId: registerDomain
             parameters:
                 - allowEmptyValue: true
@@ -5840,9 +5840,9 @@ components:
                 id:
                     type: string
                     description: The ID of the custom domain
-                project_id:
+                organization_id:
                     type: string
-                    description: The ID of the project this domain belongs to
+                    description: The ID of the organization this domain belongs to
                 updated_at:
                     type: string
                     description: When the custom domain was last updated.
@@ -5852,7 +5852,7 @@ components:
                     description: Whether the domain is verified
             required:
                 - id
-                - project_id
+                - organization_id
                 - domain
                 - verified
                 - activated

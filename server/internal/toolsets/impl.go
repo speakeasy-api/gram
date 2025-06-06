@@ -205,7 +205,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	var activeCustomDomainID *uuid.UUID
 	toolsetDomainID := conv.FromNullableUUID(existingToolset.CustomDomainID)
-	if domain, err := s.domainsRepo.GetCustomDomainsByProject(ctx, *authCtx.ProjectID); err == nil && domain.Activated && domain.Verified {
+	if domain, err := s.domainsRepo.GetCustomDomainsByOrganization(ctx, authCtx.ActiveOrganizationID); err == nil && domain.Activated && domain.Verified {
 		activeCustomDomainID = &domain.ID
 	}
 

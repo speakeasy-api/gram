@@ -9,7 +9,7 @@ import (
 // CustomDomain represents a custom domain associated with a project.
 var CustomDomain = Type("CustomDomain", func() {
 	Attribute("id", String, "The ID of the custom domain")
-	Attribute("project_id", String, "The ID of the project this domain belongs to")
+	Attribute("organization_id", String, "The ID of the organization this domain belongs to")
 	Attribute("domain", String, "The custom domain name")
 	Attribute("verified", Boolean, "Whether the domain is verified")
 	Attribute("activated", Boolean, "Whether the domain is activated in ingress")
@@ -22,7 +22,7 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "domain", "verified", "activated", "created_at", "updated_at")
+	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at")
 })
 
 var _ = Service("domains", func() {
@@ -53,7 +53,7 @@ var _ = Service("domains", func() {
 	})
 
 	Method("createDomain", func() {
-		Description("Create a custom domain for a project")
+		Description("Create a custom domain for a organization")
 
 		Payload(func() {
 			security.SessionPayload()

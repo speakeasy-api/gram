@@ -18,7 +18,7 @@ import (
 type Service interface {
 	// Get the custom domain for a project
 	GetDomain(context.Context, *GetDomainPayload) (res *CustomDomain, err error)
-	// Create a custom domain for a project
+	// Create a custom domain for a organization
 	CreateDomain(context.Context, *CreateDomainPayload) (res *CustomDomain, err error)
 	// Delete a custom domain
 	DeleteDomain(context.Context, *DeleteDomainPayload) (err error)
@@ -59,8 +59,8 @@ type CreateDomainPayload struct {
 type CustomDomain struct {
 	// The ID of the custom domain
 	ID string
-	// The ID of the project this domain belongs to
-	ProjectID string
+	// The ID of the organization this domain belongs to
+	OrganizationID string
 	// The custom domain name
 	Domain string
 	// Whether the domain is verified

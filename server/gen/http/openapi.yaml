@@ -1434,7 +1434,7 @@ paths:
                         $ref: '#/definitions/CustomDomain'
                         required:
                             - id
-                            - project_id
+                            - organization_id
                             - domain
                             - verified
                             - activated
@@ -1489,7 +1489,7 @@ paths:
                 name: getDomain
     /rpc/domain.register:
         post:
-            description: Create a custom domain for a project
+            description: Create a custom domain for a organization
             operationId: domains#createDomain
             parameters:
                 - description: Session header
@@ -1516,7 +1516,7 @@ paths:
                         $ref: '#/definitions/CustomDomain'
                         required:
                             - id
-                            - project_id
+                            - organization_id
                             - domain
                             - verified
                             - activated
@@ -9244,9 +9244,9 @@ definitions:
                 type: string
                 description: The ID of the custom domain
                 example: Non nemo rerum.
-            project_id:
+            organization_id:
                 type: string
-                description: The ID of the project this domain belongs to
+                description: The ID of the organization this domain belongs to
                 example: Quos minus ea minus cupiditate dignissimos repudiandae.
             updated_at:
                 type: string
@@ -9262,12 +9262,12 @@ definitions:
             created_at: "1978-07-27T17:03:36Z"
             domain: Veniam et.
             id: Neque et repudiandae ab velit cupiditate voluptas.
-            project_id: Asperiores beatae saepe.
+            organization_id: Asperiores beatae saepe.
             updated_at: "2001-10-05T02:27:55Z"
             verified: true
         required:
             - id
-            - project_id
+            - organization_id
             - domain
             - verified
             - activated

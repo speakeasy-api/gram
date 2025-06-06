@@ -40,9 +40,9 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, 
 			}
 
 			ctx := contextvalues.SetCustomDomainContext(r.Context(), &contextvalues.CustomDomainContext{
-				ProjectID: domain.ProjectID,
-				Domain:    domain.Domain,
-				DomainID:  domain.ID,
+				OrganizationID: domain.OrganizationID,
+				Domain:         domain.Domain,
+				DomainID:       domain.ID,
 			})
 
 			next.ServeHTTP(w, r.WithContext(ctx))

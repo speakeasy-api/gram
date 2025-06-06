@@ -24,8 +24,8 @@ type CreateDomainRequestBody struct {
 type GetDomainResponseBody struct {
 	// The ID of the custom domain
 	ID string `form:"id" json:"id" xml:"id"`
-	// The ID of the project this domain belongs to
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the organization this domain belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The custom domain name
 	Domain string `form:"domain" json:"domain" xml:"domain"`
 	// Whether the domain is verified
@@ -43,8 +43,8 @@ type GetDomainResponseBody struct {
 type CreateDomainResponseBody struct {
 	// The ID of the custom domain
 	ID string `form:"id" json:"id" xml:"id"`
-	// The ID of the project this domain belongs to
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the organization this domain belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The custom domain name
 	Domain string `form:"domain" json:"domain" xml:"domain"`
 	// Whether the domain is verified
@@ -605,13 +605,13 @@ type DeleteDomainGatewayErrorResponseBody struct {
 // the "getDomain" endpoint of the "domains" service.
 func NewGetDomainResponseBody(res *domains.CustomDomain) *GetDomainResponseBody {
 	body := &GetDomainResponseBody{
-		ID:        res.ID,
-		ProjectID: res.ProjectID,
-		Domain:    res.Domain,
-		Verified:  res.Verified,
-		Activated: res.Activated,
-		CreatedAt: res.CreatedAt,
-		UpdatedAt: res.UpdatedAt,
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		Domain:         res.Domain,
+		Verified:       res.Verified,
+		Activated:      res.Activated,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
 	}
 	return body
 }
@@ -620,13 +620,13 @@ func NewGetDomainResponseBody(res *domains.CustomDomain) *GetDomainResponseBody 
 // the "createDomain" endpoint of the "domains" service.
 func NewCreateDomainResponseBody(res *domains.CustomDomain) *CreateDomainResponseBody {
 	body := &CreateDomainResponseBody{
-		ID:        res.ID,
-		ProjectID: res.ProjectID,
-		Domain:    res.Domain,
-		Verified:  res.Verified,
-		Activated: res.Activated,
-		CreatedAt: res.CreatedAt,
-		UpdatedAt: res.UpdatedAt,
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		Domain:         res.Domain,
+		Verified:       res.Verified,
+		Activated:      res.Activated,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
 	}
 	return body
 }

@@ -16,9 +16,9 @@ type AuthContext struct {
 }
 
 type CustomDomainContext struct {
-	ProjectID uuid.UUID
-	Domain    string
-	DomainID  uuid.UUID
+	OrganizationID string
+	Domain         string
+	DomainID       uuid.UUID
 }
 
 const (

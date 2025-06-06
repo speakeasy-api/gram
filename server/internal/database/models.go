@@ -70,7 +70,7 @@ type ChatMessage struct {
 
 type CustomDomain struct {
 	ID             uuid.UUID
-	ProjectID      uuid.UUID
+	OrganizationID string
 	Domain         string
 	Verified       bool
 	Activated      bool

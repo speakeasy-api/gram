@@ -1,21 +1,21 @@
 -- name: CreateCustomDomain :one
 INSERT INTO custom_domains (
-    project_id,
+    organization_id,
     domain,
     ingress_name,
     cert_secret_name
 ) VALUES (
-    @project_id,
+    @organization_id,
     @domain,
     @ingress_name,
     @cert_secret_name
 )
 RETURNING *;
 
--- name: GetCustomDomainsByProject :one
+-- name: GetCustomDomainsByOrganization :one
 SELECT *
 FROM custom_domains
-WHERE project_id = @project_id
+WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
@@ -42,5 +42,5 @@ RETURNING *;
 -- name: DeleteCustomDomain :exec
 UPDATE custom_domains
 SET deleted_at = clock_timestamp()
-WHERE id = @id
+WHERE organization_id = @organization_id
   AND deleted IS FALSE;
