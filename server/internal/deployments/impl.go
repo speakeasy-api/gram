@@ -723,6 +723,8 @@ func (s *Service) startDeploymentTemporal(ctx context.Context, logger *slog.Logg
 		return "", oops.E(oops.CodeUnexpected, err, "error getting deployment status").Log(ctx, logger)
 	}
 
+	logger.InfoContext(ctx, "processed deployment", slog.String("deployment_id", deploymentID.String()), slog.String("status", res.Status), slog.String("project_id", projectID.String()))
+
 	return res.Status, nil
 }
 

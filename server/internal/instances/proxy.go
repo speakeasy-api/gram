@@ -30,6 +30,13 @@ import (
 	"github.com/speakeasy-api/gram/internal/toolsets"
 )
 
+type ToolCallSource string
+
+const (
+	ToolCallSourceDirect ToolCallSource = "direct"
+	ToolCallSourceMCP    ToolCallSource = "mcp"
+)
+
 var proxiedHeaders = []string{
 	"Cache-Control",
 	"Content-Language",
@@ -68,7 +75,7 @@ func (c *caseInsensitiveEnv) Set(key, value string) {
 	c.data[strings.ToLower(key)] = value
 }
 
-func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo) error {
+func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, toolCallSource ToolCallSource) error {
 	ciEnv := newCaseInsensitiveEnv(envVars)
 	var toolCallBody ToolCallBody
 	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
@@ -219,7 +226,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
 	}
 
-	return reverseProxyRequest(ctx, tracer, logger, metrics, toolExecutionInfo.Tool, w, req)
+	return reverseProxyRequest(ctx, tracer, logger, metrics, toolExecutionInfo.Tool, w, req, toolCallSource)
 }
 
 type retryConfig struct {
@@ -277,7 +284,7 @@ func retryWithBackoff(
 	return resp, err
 }
 
-func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, tool tools_repo.HttpToolDefinition, w http.ResponseWriter, req *http.Request) error {
+func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, tool tools_repo.HttpToolDefinition, w http.ResponseWriter, req *http.Request, toolCallSource ToolCallSource) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
 
@@ -341,11 +348,14 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
+		logger.InfoContext(ctx, "tool call", slog.String("tool", tool.Name), slog.String("source", string(toolCallSource)), slog.String("error", err.Error()), slog.String("status_code", "0"), slog.String("project_id", tool.ProjectID.String()), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")), slog.String("path", tool.Path))
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return resp.Body.Close()
 	})
+
+	logger.InfoContext(ctx, "tool call", slog.String("tool", tool.Name), slog.String("source", string(toolCallSource)), slog.String("status_code", fmt.Sprintf("%d", resp.StatusCode)), slog.String("project_id", tool.ProjectID.String()), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")), slog.String("path", tool.Path))
 
 	if len(resp.Trailer) > 0 {
 		var trailerKeys []string
