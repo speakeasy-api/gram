@@ -8,27 +8,47 @@ import { ListToolsetsResult } from "@gram/client/models/components";
 let value: ListToolsetsResult = {
   toolsets: [
     {
-      createdAt: new Date("2025-10-23T12:10:12.732Z"),
-      httpTools: [],
+      createdAt: new Date("2025-09-20T12:21:57.178Z"),
+      httpTools: [
+        {
+          confirm: "<value>",
+          createdAt: new Date("2025-10-23T12:10:12.732Z"),
+          deploymentId: "<id>",
+          description: "revoke aw blah upside-down gah greatly",
+          httpMethod: "<value>",
+          id: "<id>",
+          name: "<value>",
+          path: "/selinux",
+          projectId: "<id>",
+          schema: "<value>",
+          summary: "<value>",
+          tags: [
+            "<value>",
+          ],
+          updatedAt: new Date("2024-11-14T21:37:54.702Z"),
+        },
+      ],
       id: "<id>",
       name: "<value>",
       organizationId: "<id>",
       projectId: "<id>",
       promptTemplates: [
         {
-          createdAt: new Date("2024-04-18T10:37:41.805Z"),
+          createdAt: new Date("2025-10-26T13:44:01.494Z"),
           engine: "mustache",
           historyId: "<id>",
           id: "<id>",
-          kind: "higher_order_tool",
+          kind: "prompt",
           name: "<value>",
           prompt: "<value>",
-          toolsHint: [],
-          updatedAt: new Date("2024-10-27T10:52:08.281Z"),
+          toolsHint: [
+            "<value>",
+          ],
+          updatedAt: new Date("2023-11-25T20:01:26.084Z"),
         },
       ],
       slug: "<value>",
-      updatedAt: new Date("2025-12-23T11:52:23.236Z"),
+      updatedAt: new Date("2023-02-09T02:06:35.798Z"),
     },
   ],
 };

@@ -45,7 +45,7 @@ export function Badge({
 }: React.ComponentProps<"span"> &
   VariantProps<typeof badgeVariants> & {
     asChild?: boolean;
-    tooltip?: string;
+    tooltip?: React.ReactNode;
     size?: "sm" | "md";
     isLoading?: boolean;
   }) {

@@ -12,11 +12,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { Outlet, useParams } from "react-router";
-
-export function PromptRoot() {
-  return <Outlet />;
-}
+import { useParams } from "react-router";
 
 export default function PromptPage() {
   const { promptName } = useParams();

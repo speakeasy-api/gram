@@ -1,26 +1,31 @@
-import Integrations from "./pages/integrations/Integrations";
-import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
-import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
-import Home from "./pages/home/Home";
-import Onboarding from "./pages/onboarding/Onboarding";
-import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
-import PromptPage, { PromptRoot } from "./pages/prompts/Prompt";
-import Playground from "./pages/playground/Playground";
-import Settings from "./pages/settings/Settings";
-import Environments from "./pages/environments/Environments";
-import { EnvironmentsRoot } from "./pages/environments/Environments";
-import EnvironmentPage from "./pages/environments/Environment";
-import Login from "./pages/login/Login";
-import SDK from "./pages/sdk/SDK";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
+import EnvironmentPage from "./pages/environments/Environment";
+import Environments, {
+  EnvironmentsRoot,
+} from "./pages/environments/Environments";
+import Home from "./pages/home/Home";
+import Integrations from "./pages/integrations/Integrations";
+import Login from "./pages/login/Login";
 import MCP from "./pages/mcp/MCP";
+import Onboarding from "./pages/onboarding/Onboarding";
+import Playground from "./pages/playground/Playground";
+import NewPromptPage from "./pages/prompts/NewPrompt";
+import PromptPage from "./pages/prompts/Prompt";
+import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
+import SDK from "./pages/sdk/SDK";
+import Settings from "./pages/settings/Settings";
 import SlackApp from "./pages/slackapp/SlackApp";
-import ToolBuilder from "./pages/toolBuilder/ToolBuilder";
+import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
+import {
+  ToolBuilderNew,
+  ToolBuilderPage,
+} from "./pages/toolBuilder/ToolBuilder";
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
-import NewPromptPage, { NewPromptPageRoot } from "./pages/prompts/NewPrompt";
+import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
+import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 
 type AppRouteBasic = {
   title: string;
@@ -100,11 +105,43 @@ const ROUTE_STRUCTURE = {
     icon: "package",
     component: Integrations,
   },
-  toolBuilder: {
-    title: "Tool Builder",
-    url: "tool-builder",
+  customTools: {
+    title: "Custom Tools",
+    url: "custom-tools",
     icon: "pencil-ruler",
-    component: ToolBuilder,
+    component: CustomToolsRoot,
+    indexComponent: CustomTools,
+    subPages: {
+      toolBuilderNew: {
+        title: "Tool Builder",
+        url: "new",
+        component: ToolBuilderNew,
+      },
+      toolBuilder: {
+        title: "Tool Builder",
+        url: ":toolName",
+        component: ToolBuilderPage,
+      },
+    },
+  },
+  prompts: {
+    title: "Prompts",
+    url: "prompts",
+    icon: "newspaper",
+    component: PromptsRoot,
+    indexComponent: Prompts,
+    subPages: {
+      newPrompt: {
+        title: "New Prompt",
+        url: "new",
+        component: NewPromptPage,
+      },
+      prompt: {
+        title: "Edit Prompt",
+        url: ":promptName",
+        component: PromptPage,
+      },
+    },
   },
   toolsets: {
     title: "Toolsets",
@@ -125,27 +162,6 @@ const ROUTE_STRUCTURE = {
             component: ToolSelect,
           },
         },
-      },
-    },
-  },
-  prompts: {
-    title: "Prompts",
-    url: "prompts",
-    icon: "newspaper",
-    component: PromptsRoot,
-    indexComponent: Prompts,
-    subPages: {
-      newPrompt: {
-        title: "New Prompt",
-        url: "new",
-        component: NewPromptPageRoot,
-        indexComponent: NewPromptPage,
-      },
-      prompt: {
-        title: "Edit Prompt",
-        url: "edit/:promptName",
-        component: PromptRoot,
-        indexComponent: PromptPage,
       },
     },
   },

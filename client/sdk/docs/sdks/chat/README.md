@@ -24,6 +24,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.chat.list();
 
+  // Handle the result
   console.log(result);
 }
 
@@ -44,12 +45,15 @@ const gram = new GramCore();
 
 async function run() {
   const res = await chatList(gram);
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("chatList failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -121,6 +125,7 @@ async function run() {
     id: "<id>",
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -143,12 +148,15 @@ async function run() {
   const res = await chatLoad(gram, {
     id: "<id>",
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("chatLoad failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();

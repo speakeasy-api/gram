@@ -9,6 +9,7 @@ interface EditableTextProps {
   onSubmit: (newValue: string) => void | Promise<void>;
   validate?: (newValue: string) => string | boolean;
   lines?: number;
+  disabled?: boolean;
   placeholder?: string;
   children: ReactNode;
 }
@@ -20,6 +21,7 @@ export function EditableText({
   onSubmit,
   validate,
   lines,
+  disabled,
   placeholder = label,
   children,
 }: EditableTextProps) {
@@ -53,7 +55,11 @@ export function EditableText({
 
   return (
     <>
-      <Editable onClick={() => handleOpenChange(true)} className="w-fit">
+      <Editable
+        disabled={disabled}
+        onClick={() => handleOpenChange(true)}
+        className="w-fit"
+      >
         {children}
       </Editable>
       <InputDialog
@@ -66,6 +72,7 @@ export function EditableText({
           label,
           placeholder,
           value: editedValue ?? (!placeholder ? "Loading..." : ""),
+          disabled,
           onChange: setEditedValue,
           onSubmit: handleSubmit,
           validate: validate ?? (() => true),

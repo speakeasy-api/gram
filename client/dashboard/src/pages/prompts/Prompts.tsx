@@ -1,27 +1,18 @@
-import { Page } from "@/components/page-layout";
-import {
-  useTemplatesSuspense,
-  useToolsetSuspense,
-} from "@gram/client/react-query/index.js";
-import { Outlet, useParams } from "react-router";
 import { AddButton } from "@/components/add-button";
+import { CreateThingCard } from "@/components/create-thing-card";
+import { Page } from "@/components/page-layout";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { PromptTemplate } from "@gram/client/models/components";
-import { Stack } from "@speakeasy-api/moonshine";
-import { useRoutes } from "@/routes";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
-import { Button } from "@/components/ui/button";
-
-export const useToolset = () => {
-  const { toolsetSlug } = useParams();
-
-  const { data: toolset, refetch: refetchToolset } = useToolsetSuspense({
-    slug: toolsetSlug ?? "",
-  });
-
-  return Object.assign(toolset, { refetch: refetchToolset });
-};
+import { useRoutes } from "@/routes";
+import {
+  PromptTemplate,
+  PromptTemplateKind,
+} from "@gram/client/models/components";
+import { useTemplatesSuspense } from "@gram/client/react-query/index.js";
+import { Stack } from "@speakeasy-api/moonshine";
+import { Outlet } from "react-router";
 
 export function PromptsRoot() {
   return <Outlet />;
@@ -30,6 +21,10 @@ export function PromptsRoot() {
 export default function Prompts() {
   const { data } = useTemplatesSuspense();
   const routes = useRoutes();
+
+  const prompts = data.templates.filter(
+    (template) => template.kind === PromptTemplateKind.Prompt
+  );
 
   return (
     <Page>
@@ -43,23 +38,24 @@ export default function Prompts() {
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
-        {data.templates.map((template) => {
+        {prompts.map((template) => {
           return <PromptTemplateCard key={template.id} template={template} />;
         })}
+        <CreateThingCard onClick={() => routes.prompts.newPrompt.goTo()}>
+          + New Prompt Template
+        </CreateThingCard>
       </Page.Body>
     </Page>
   );
 }
 
-function PromptTemplateCard({ template }: { template: PromptTemplate }) {
+export function PromptTemplateCard({ template }: { template: PromptTemplate }) {
   const routes = useRoutes();
 
   return (
     <Card>
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Card.Title className="normal-case">{template.name}</Card.Title>
-        </Stack>
+        <Card.Title className="normal-case">{template.name}</Card.Title>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           {template.description ? (
             <Card.Description className="max-w-2/3">
@@ -73,13 +69,9 @@ function PromptTemplateCard({ template }: { template: PromptTemplate }) {
         </Stack>
       </Card.Header>
       <Card.Content>
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2">
-            <routes.prompts.prompt.Link params={[template.name]}>
-              <Button variant="outline">Edit</Button>
-            </routes.prompts.prompt.Link>
-          </div>
-        </div>
+        <routes.prompts.prompt.Link params={[template.name]}>
+          <Button variant="outline">Edit</Button>
+        </routes.prompts.prompt.Link>
       </Card.Content>
     </Card>
   );

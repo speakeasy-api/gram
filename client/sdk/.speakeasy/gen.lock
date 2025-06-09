@@ -3,14 +3,14 @@ id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
   docChecksum: 403935319afd89e0dd5c7613464e78d3
   docVersion: 0.0.1
-  speakeasyVersion: 1.557.1
-  generationVersion: 2.623.2
-  releaseVersion: 0.12.11
-  configChecksum: f706c03caaa0f11ce0f178639a263bad
+  speakeasyVersion: 1.554.1
+  generationVersion: 2.616.1
+  releaseVersion: 0.12.12
+  configChecksum: 93a2209b74215411552d2d1009a58ffd
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.10
+    core: 3.21.9
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -470,10 +470,8 @@ generatedFiles:
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/errors/apierror.ts
-  - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
-  - src/models/errors/responsevalidationerror.ts
   - src/models/errors/sdkvalidationerror.ts
   - src/models/errors/serviceerror.ts
   - src/models/operations/authcallback.ts

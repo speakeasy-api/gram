@@ -6,7 +6,21 @@
 import { ListPromptTemplatesResult } from "@gram/client/models/components";
 
 let value: ListPromptTemplatesResult = {
-  templates: [],
+  templates: [
+    {
+      createdAt: new Date("2023-12-12T07:43:42.447Z"),
+      engine: "mustache",
+      historyId: "<id>",
+      id: "<id>",
+      kind: "prompt",
+      name: "<value>",
+      prompt: "<value>",
+      toolsHint: [
+        "<value>",
+      ],
+      updatedAt: new Date("2025-03-07T04:16:04.500Z"),
+    },
+  ],
 };
 ```
 

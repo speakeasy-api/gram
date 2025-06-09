@@ -6,7 +6,13 @@
 import { ListProjectsResult } from "@gram/client/models/components";
 
 let value: ListProjectsResult = {
-  projects: [],
+  projects: [
+    {
+      id: "<id>",
+      name: "<value>",
+      slug: "<value>",
+    },
+  ],
 };
 ```
 

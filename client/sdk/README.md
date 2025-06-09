@@ -111,6 +111,7 @@ async function run() {
     projectSlug: "<value>",
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -413,6 +414,7 @@ async function run() {
     },
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -442,6 +444,7 @@ async function run() {
     projectSlug: "<value>",
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -453,46 +456,54 @@ run();
 <!-- Start Error Handling [errors] -->
 ## Error Handling
 
-[`GramError`](./src/models/errors/gramerror.ts) is the base class for all HTTP error responses. It has the following properties:
+Some methods specify known errors which can be thrown. All the known errors are enumerated in the `models/errors/errors.ts` module. The known errors for a method are documented under the *Errors* tables in SDK docs. For example, the `slackLogin` method may throw the following errors:
 
-| Property            | Type       | Description                                                                             |
-| ------------------- | ---------- | --------------------------------------------------------------------------------------- |
-| `error.message`     | `string`   | Error message                                                                           |
-| `error.statusCode`  | `number`   | HTTP response status code eg `404`                                                      |
-| `error.headers`     | `Headers`  | HTTP response headers                                                                   |
-| `error.body`        | `string`   | HTTP body. Can be empty string if no body is returned.                                  |
-| `error.rawResponse` | `Response` | Raw HTTP response                                                                       |
-| `error.data$`       |            | Optional. Some errors may contain structured data. [See Error Classes](#error-classes). |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
-### Example
+If the method throws an error and it is not captured by the known errors, it will default to throwing a `APIError`.
+
 ```typescript
 import { Gram } from "@gram/client";
-import * as errors from "@gram/client/models/errors";
+import { SDKValidationError, ServiceError } from "@gram/client/models/errors";
 
 const gram = new Gram();
 
 async function run() {
+  let result;
   try {
-    const result = await gram.slack.slackLogin({
+    result = await gram.slack.slackLogin({
       projectSlug: "<value>",
     });
 
+    // Handle the result
     console.log(result);
-  } catch (error) {
-    // The base class for HTTP error responses
-    if (error instanceof errors.GramError) {
-      console.log(error.message);
-      console.log(error.statusCode);
-      console.log(error.body);
-      console.log(error.headers);
-
-      // Depending on the method different errors may be thrown
-      if (error instanceof errors.ServiceError) {
-        console.log(error.data$.fault); // boolean
-        console.log(error.data$.id); // string
-        console.log(error.data$.message); // string
-        console.log(error.data$.name); // string
-        console.log(error.data$.temporary); // boolean
+  } catch (err) {
+    switch (true) {
+      // The server response does not match the expected SDK schema
+      case (err instanceof SDKValidationError): {
+        // Pretty-print will provide a human-readable multi-line error message
+        console.error(err.pretty());
+        // Raw value may also be inspected
+        console.error(err.rawValue);
+        return;
+      }
+      case (err instanceof ServiceError): {
+        // Handle err.data$: ServiceErrorData
+        console.error(err);
+        return;
+      }
+      case (err instanceof ServiceError): {
+        // Handle err.data$: ServiceErrorData
+        console.error(err);
+        return;
+      }
+      default: {
+        // Other errors such as network errors, see HTTPClientErrors for more details
+        throw err;
       }
     }
   }
@@ -502,27 +513,17 @@ run();
 
 ```
 
-### Error Classes
-**Primary errors:**
-* [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
+Validation errors can also occur when either method arguments or data returned from the server do not match the expected format. The `SDKValidationError` that is thrown as a result will capture the raw value that failed validation in an attribute called `rawValue`. Additionally, a `pretty()` method is available on this error that can be used to log a nicely formatted multi-line string since validation errors can list many issues and the plain error string may be difficult read when debugging.
 
-<details><summary>Less common errors (6)</summary>
+In some rare cases, the SDK can fail to get a response from the server or even make the request due to unexpected circumstances such as network conditions. These types of errors are captured in the `models/errors/httpclienterrors.ts` module:
 
-<br />
-
-**Network errors:**
-* [`ConnectionError`](./src/models/errors/httpclienterrors.ts): HTTP client was unable to make a request to a server.
-* [`RequestTimeoutError`](./src/models/errors/httpclienterrors.ts): HTTP request timed out due to an AbortSignal signal.
-* [`RequestAbortedError`](./src/models/errors/httpclienterrors.ts): HTTP request was aborted by the client.
-* [`InvalidRequestError`](./src/models/errors/httpclienterrors.ts): Any input used to create a request is invalid.
-* [`UnexpectedClientError`](./src/models/errors/httpclienterrors.ts): Unrecognised or unexpected error.
-
-
-**Inherit from [`GramError`](./src/models/errors/gramerror.ts)**:
-* [`ResponseValidationError`](./src/models/errors/responsevalidationerror.ts): Type mismatch between the data returned from the server and the structure expected by the SDK. See `error.rawValue` for the raw value and `error.pretty()` for a nicely formatted multi-line string.
-
-</details>
+| HTTP Client Error                                    | Description                                          |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| RequestAbortedError                                  | HTTP request was aborted by the client               |
+| RequestTimeoutError                                  | HTTP request timed out due to an AbortSignal signal  |
+| ConnectionError                                      | HTTP client was unable to make a request to a server |
+| InvalidRequestError                                  | Any input used to create a request is invalid        |
+| UnexpectedClientError                                | Unrecognised or unexpected error                     |
 <!-- End Error Handling [errors] -->
 
 <!-- Start Server Selection [server] -->
@@ -543,6 +544,7 @@ async function run() {
     projectSlug: "<value>",
   });
 
+  // Handle the result
   console.log(result);
 }
 

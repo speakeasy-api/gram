@@ -35,6 +35,7 @@ async function run() {
     },
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -62,12 +63,15 @@ async function run() {
       prompt: "<value>",
     },
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("templatesCreate failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -146,12 +150,14 @@ const gram = new GramCore();
 
 async function run() {
   const res = await templatesDelete(gram);
-  if (res.ok) {
-    const { value: result } = res;
-    
-  } else {
-    console.log("templatesDelete failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  
 }
 
 run();
@@ -210,6 +216,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.templates.get();
 
+  // Handle the result
   console.log(result);
 }
 
@@ -230,12 +237,15 @@ const gram = new GramCore();
 
 async function run() {
   const res = await templatesGet(gram);
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("templatesGet failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -305,6 +315,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.templates.list();
 
+  // Handle the result
   console.log(result);
 }
 
@@ -325,12 +336,15 @@ const gram = new GramCore();
 
 async function run() {
   const res = await templatesList(gram);
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("templatesList failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -407,6 +421,7 @@ async function run() {
     },
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -434,12 +449,15 @@ async function run() {
       },
     },
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("templatesRender failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -513,6 +531,7 @@ async function run() {
     },
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -537,12 +556,15 @@ async function run() {
       id: "<id>",
     },
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("templatesUpdate failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();

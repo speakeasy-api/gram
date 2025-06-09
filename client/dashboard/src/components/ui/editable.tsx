@@ -7,10 +7,12 @@ export function Editable({
   onClick,
   children,
   className,
+  disabled,
 }: {
   onClick?: () => void;
   className?: string;
   children: React.ReactNode;
+  disabled?: boolean;
 }) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -19,18 +21,32 @@ export function Editable({
       className={cn("relative group cursor-pointer", className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={() => onClick?.()}
+      onClick={() => !disabled && onClick?.()}
     >
       <div
         className={`transition-all duration-200 ${isHovered ? "blur-xs" : ""}`}
       >
         {children}
       </div>
-
       {isHovered && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <Pencil className="w-4 h-4 text-muted-foreground mr-1" />
-          <Type className="font-medium text-inherit">Edit</Type>
+          {disabled ? (
+            <Type muted italic>
+              Can't edit
+            </Type>
+          ) : (
+            <>
+              <Pencil className="w-4 h-4 text-muted-foreground mr-1" />
+              <Type
+                className={cn(
+                  "font-medium text-inherit",
+                  disabled && "text-muted-foreground"
+                )}
+              >
+                Edit
+              </Type>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -19,36 +19,44 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useGroupedTools } from "@/lib/toolNames";
 import { capitalize, cn } from "@/lib/utils";
-import { HTTPToolDefinition, Toolset } from "@gram/client/models/components";
-import { useToolset } from "@gram/client/react-query";
+import { useRoutes } from "@/routes";
+import {
+  HTTPToolDefinition,
+  PromptTemplateKind,
+  Toolset,
+} from "@gram/client/models/components";
+import {
+  invalidateTemplate,
+  useTemplateSuspense,
+  useToolset,
+  useUpdateTemplateMutation,
+} from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { Message } from "ai";
 import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router";
 import { v4 as uuidv4 } from "uuid";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
+import { Block, Input, instructionsPlaceholder, Step } from "./components";
 
-type Input = {
-  name: string;
-  description?: string;
-};
+export function ToolBuilderNew() {
+  const newTemplate = {
+    name: "new_composite_tool",
+    description:
+      "Do a series of steps using the tools in a toolset to accomplish a task",
+    purpose:
+      "Do a series of steps using the tools in a toolset to accomplish a task",
+    inputs: [],
+    steps: [],
+  };
 
-type Step = {
-  id: string;
-  tool: string;
-  instructions: string;
-  inputs?: string[];
-  update: (step: Step) => void;
-};
-
-const instructionsPlaceholder =
-  "Interpret what to do with this tool based on the <purpose />, the chat history, and the output of previous steps.";
-
-export default function ToolBuilderPage() {
   return (
     <Page>
       <Page.Header>
@@ -56,22 +64,67 @@ export default function ToolBuilderPage() {
       </Page.Header>
       <Page.Body>
         <ChatProvider>
-          <ToolBuilder />
+          <ToolBuilder initial={newTemplate} />
         </ChatProvider>
       </Page.Body>
     </Page>
   );
 }
 
-function ToolBuilder() {
-  const [name, setName] = useState("New Composite Tool");
-  const [description, setDescription] = useState("A new composite tool");
-  const [purpose, setPurpose] = useState(
-    "Do a series of steps using the tools in a toolset to accomplish a task"
+export function ToolBuilderPage() {
+  const { toolName } = useParams();
+
+  const { data: template } = useTemplateSuspense({
+    name: toolName,
+  });
+
+  const parsed = parsePrompt(template.template.prompt);
+
+  //   const parsed = parsePrompt(template.template.prompt);
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <ChatProvider>
+          <ToolBuilder
+            initial={{
+              id: template.template.id,
+              historyId: template.template.historyId,
+              name: template.template.name,
+              description: template.template.description ?? "",
+              ...parsed,
+            }}
+          />
+        </ChatProvider>
+      </Page.Body>
+    </Page>
   );
-  const [steps, setSteps] = useState<Step[]>([]);
-  const [inputs, setInputs] = useState<Input[]>([]);
+}
+
+function ToolBuilder({
+  initial,
+}: {
+  initial: {
+    id?: string;
+    historyId?: string;
+    name: string;
+    description: string;
+    purpose: string;
+    inputs: Input[];
+    steps: Step[];
+  };
+}) {
+  const queryClient = useQueryClient();
+  const client = useSdkClient();
   const chat = useChatContext();
+  const routes = useRoutes();
+
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description);
+  const [purpose, setPurpose] = useState(initial.purpose);
+  const [inputs, setInputs] = useState<Input[]>(initial.inputs);
 
   const setStep = (step: Step) => {
     const newInputs = step.instructions.match(/(\{\{[^}]+\}\})/g);
@@ -84,6 +137,26 @@ function ToolBuilder() {
       return newSteps;
     });
   };
+
+  const [steps, setSteps] = useState<Step[]>(
+    initial.steps.map((step) => ({
+      ...step,
+      update: (step) => setStep(step),
+    }))
+  );
+
+  useEffect(() => {
+    setName(initial.name);
+    setDescription(initial.description);
+    setPurpose(initial.purpose);
+    setInputs(initial.inputs);
+    setSteps(
+      initial.steps.map((step) => ({
+        ...step,
+        update: (step) => setStep(step),
+      }))
+    );
+  }, [initial]);
 
   const [toolsetFilter, setToolset] = useState<Toolset>();
 
@@ -134,25 +207,33 @@ function ToolBuilder() {
   const maybeFilteredTools = toolsetData?.httpTools ?? tools?.tools ?? [];
 
   useEffect(() => {
-    const inputs = steps.flatMap((step) => {
+    // Need to do it this way to preserve descriptions
+    const inputsFromSteps = steps.flatMap((step) => {
       const inputs = step.instructions.match(/(\{\{[^}]+\}\})/g);
       if (inputs) {
         return inputs.map((input) => ({ name: input.slice(2, -2) }));
       }
       return [];
     });
-    setInputs(inputs);
+    const currentInputs = inputs.map((input) => input.name);
+    const newInputs = inputsFromSteps.filter(
+      (input) => !currentInputs.includes(input.name)
+    );
+    setInputs([...inputs, ...newInputs]);
   }, [steps]);
 
   const validateName = (v: string) => {
-    if (v.length < 3) {
-      return "Tool name must be at least 3 characters long";
+    if (v.length < 4) {
+      return "Tool name must be at least 4 characters long";
     }
     if (v.length > 100) {
       return "Tool name must be less than 100 characters long";
     }
     if (tools?.tools.some((t) => t.name.toLowerCase() === v.toLowerCase())) {
       return "Tool name must be unique";
+    }
+    if (!v.match(/^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$/)) {
+      return "Tool name must contain only lowercase letters, numbers, underscores, and hyphens";
     }
     return true;
   };
@@ -167,9 +248,6 @@ function ToolBuilder() {
 
   const AddStepButton = () => {
     const [open, setOpen] = useState(false);
-    if (!maybeFilteredTools) {
-      return null;
-    }
 
     return (
       <ToolSelectPopover
@@ -204,12 +282,127 @@ function ToolBuilder() {
         chat.appendMessage({
           id: uuidv4(),
           role: "user",
-          content: buildPrompt(purpose, inputs, steps),
+          content: `\`\`\`xml\n${buildPrompt(purpose, inputs, steps)}\n\`\`\``,
         })
       }
     >
       Try Now
     </Button>
+  );
+
+  const anyChanges =
+    description !== initial.description ||
+    purpose !== initial.purpose ||
+    inputs.length !== initial.inputs.length ||
+    steps.length !== initial.steps.length ||
+    inputs.some(
+      (input) =>
+        input.description !==
+        initial.inputs.find((i) => i.name === input.name)?.description
+    ) ||
+    steps.some(
+      (step) =>
+        step.instructions !==
+        initial.steps.find((s) => s.id === step.id)?.instructions
+    );
+
+  const revertButton = anyChanges && (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => {
+        setName(initial.name);
+        setDescription(initial.description);
+        setPurpose(initial.purpose);
+        setInputs(initial.inputs);
+        setSteps(initial.steps);
+      }}
+    >
+      Revert
+    </Button>
+  );
+
+  const { mutate: updatePrompt } = useUpdateTemplateMutation({
+    onSettled: () => {
+      invalidateTemplate(queryClient, [{ name }]);
+    },
+  });
+
+  const saveButton = (
+    <Button
+      icon="save"
+      disabled={!anyChanges}
+      onClick={async () => {
+        const argsJsonSchema = {
+          type: "object",
+          properties: Object.fromEntries(
+            inputs.map((input) => [
+              input.name,
+              {
+                type: "string",
+                ...(input.description && {
+                  description: input.description,
+                }),
+              },
+            ])
+          ),
+          required: inputs.map((input) => input.name),
+        };
+
+        if (initial.id) {
+          await updatePrompt({
+            request: {
+              updatePromptTemplateForm: {
+                id: initial.id,
+                description,
+                prompt: buildPrompt(purpose, inputs, steps),
+                arguments: JSON.stringify(argsJsonSchema),
+                toolsHint: steps.map((step) => step.tool),
+              },
+            },
+          });
+        } else {
+          await client.templates.create({
+            createPromptTemplateForm: {
+              name,
+              description,
+              kind: PromptTemplateKind.HigherOrderTool,
+              prompt: buildPrompt(purpose, inputs, steps),
+              arguments: JSON.stringify(argsJsonSchema),
+              toolsHint: steps.map((step) => step.tool),
+              engine: "mustache",
+            },
+          });
+
+          routes.customTools.toolBuilder.goTo(name);
+        }
+      }}
+    >
+      Save
+    </Button>
+  );
+
+  const toolName = initial.id ? (
+    <Heading
+      variant="h3"
+      className={cn("normal-case w-fit", initial.id && "text-muted-foreground")}
+      tooltip="Can't change name after tool is created"
+    >
+      {name}
+    </Heading>
+  ) : (
+    <EditableText
+      label="Tool Name"
+      description="Give your tool a name. This influences tool selection."
+      value={name}
+      onSubmit={setName}
+      validate={validateName}
+      disabled={!!initial.id}
+    >
+      <Heading variant="h3" className="normal-case">
+        {name}
+      </Heading>
+    </EditableText>
   );
 
   return (
@@ -221,17 +414,7 @@ function ToolBuilder() {
         <Stack gap={1}>
           <Stack direction="horizontal" align="center" className="w-full">
             <Block label="Tool name" className="w-2/3">
-              <BlockInner>
-                <EditableText
-                  label="Tool Name"
-                  description="Give your tool a name. This influences tool selection."
-                  value={name}
-                  onSubmit={setName}
-                  validate={validateName}
-                >
-                  <Heading variant="h3">{name}</Heading>
-                </EditableText>
-              </BlockInner>
+              <BlockInner>{toolName}</BlockInner>
             </Block>
             <Block label="Toolset" className="w-1/3">
               <BlockInner>
@@ -321,9 +504,8 @@ function ToolBuilder() {
           <Block label="Steps" labelRHS={`${steps.length} / 10`}>
             <Stack direction="vertical">
               {steps.map((step, index) => (
-                <>
+                <div key={index}>
                   <StepCard
-                    key={index}
                     step={step}
                     tools={maybeFilteredTools}
                     removeStep={() =>
@@ -331,11 +513,21 @@ function ToolBuilder() {
                     }
                   />
                   <StepSeparator />
-                </>
+                </div>
               ))}
               <AddStepButton />
             </Stack>
           </Block>
+          <Stack
+            direction="horizontal"
+            align="center"
+            justify="end"
+            gap={1}
+            className="mt-4"
+          >
+            {revertButton}
+            {saveButton}
+          </Stack>
         </Stack>
       </ResizablePanel.Pane>
       <ResizablePanel.Pane minSize={35}>
@@ -350,51 +542,6 @@ function ToolBuilder() {
 }
 
 const blockBackground = "bg-stone-100 dark:bg-stone-900";
-const Block = ({
-  label,
-  labelRHS,
-  className,
-  children,
-}: {
-  label: string;
-  labelRHS?: string;
-  className?: string;
-  children: React.ReactNode;
-}) => {
-  return (
-    <Stack
-      className={cn("p-1 rounded-md w-full", className)}
-      align={labelRHS ? "stretch" : "start"}
-    >
-      <Stack
-        direction="horizontal"
-        align="center"
-        justify="space-between"
-        className={cn(
-          "px-2 pt-1 rounded-sm rounded-b-none",
-          blockBackground,
-          !labelRHS && "mb-[-3px]"
-        )}
-      >
-        <Type variant="small">{label}</Type>
-        {labelRHS && (
-          <Type muted variant="small">
-            {labelRHS}
-          </Type>
-        )}
-      </Stack>
-      <div
-        className={cn(
-          "h-full w-full p-1 rounded-md rounded-tl-none",
-          blockBackground,
-          labelRHS && "rounded-tr-none"
-        )}
-      >
-        {children}
-      </div>
-    </Stack>
-  );
-};
 
 const BlockInner = ({
   className,
@@ -576,16 +723,21 @@ const buildPrompt = (purpose: string, inputs: Input[], steps: Step[]) => {
     .join("\n");
 
   const stepsPortion = steps
-    .map(
-      (step) => `  <CallTool tool_name="${step.tool}">
-    <Instruction>${step.instructions.trim()}</Instruction>
-    ${step.inputs?.map((input) => `<Input name="${input}" />`).join("\n")}
-  </CallTool>`
-    )
+    .map((step) => {
+      let stepInputs = step.inputs
+        ?.map((input) => `<Input name="${input}" />`)
+        .join("\n");
+      if (stepInputs) {
+        stepInputs = `\n    ${stepInputs}`;
+      }
+
+      return `  <CallTool tool_name="${step.tool}">
+    <Instruction>${step.instructions.trim()}</Instruction>${stepInputs}
+  </CallTool>`;
+    })
     .join("\n");
 
   return `
-\`\`\`xml
 <Purpose>
   <Instruction>
     You will be provided with a <Purpose>, a list of <Inputs>, and a <Plan>. Your goal is to use the <Plan> and <Inputs> to complete the <Purpose>.
@@ -600,12 +752,75 @@ const buildPrompt = (purpose: string, inputs: Input[], steps: Step[]) => {
     If there is existing context to fill them out then go with that and only ask me for what is missing.
     Before executing the plan ask me to confirm all the provided details.
   </Instruction>
-${inputsPortion || "No inputs needed"}
+  ${inputsPortion.trim() || "No inputs needed"}
 </Inputs>
 <Plan>
-${stepsPortion}
-</Plan>
-\`\`\``;
+  ${stepsPortion.trim()}
+</Plan>`;
+};
+
+const parsePrompt = (
+  prompt: string
+): { purpose: string; inputs: Input[]; steps: Step[] } => {
+  // Remove markdown backticks and xml tag if present
+  const cleanPrompt = prompt.replace(/```xml\n|\n```/g, "").trim();
+
+  // Extract purpose
+  const purposeMatch = cleanPrompt.match(
+    /<Purpose>\s*<Instruction>.*?<\/Instruction>\s*<Purpose>\s*(.*?)\s*<\/Purpose>\s*<\/Purpose>/s
+  );
+  const purpose = purposeMatch?.[1]?.trim() || "";
+
+  // Extract inputs
+  const inputsSection = cleanPrompt.match(/<Inputs>.*?<\/Inputs>/s)?.[0] || "";
+  const inputMatches = [
+    ...inputsSection.matchAll(
+      /<Input name="([^"]+)"(?:\s+description="([^"]*)")?\s*\/>/g
+    ),
+  ];
+  const inputs: Input[] = [];
+
+  for (const match of inputMatches) {
+    const name = match[1];
+    if (name) {
+      inputs.push({
+        name,
+        ...(match[2] && { description: match[2] }),
+      });
+    }
+  }
+
+  // Extract steps
+  const planSection = cleanPrompt.match(/<Plan>(.*?)<\/Plan>/s)?.[0] || "";
+  const stepMatches = [
+    ...planSection.matchAll(
+      /<CallTool tool_name="([^"]+)">\s*<Instruction>(.*?)<\/Instruction>(.*?)<\/CallTool>/gs
+    ),
+  ];
+  const steps: Step[] = [];
+
+  for (const match of stepMatches) {
+    const [, tool, instructions, inputSection] = match;
+    if (tool && instructions) {
+      const stepInputs = [
+        ...(inputSection || "").matchAll(/<Input name="([^"]+)"\s*\/>/g),
+      ]
+        .map((m) => m[1])
+        .filter((input): input is string => !!input);
+
+      steps.push({
+        id: uuidv4(),
+        tool,
+        instructions: instructions.trim(),
+        inputs: stepInputs,
+        update: () => {
+          console.error("update not implemented");
+        }, // This will be replaced by the component when used
+      });
+    }
+  }
+
+  return { purpose, inputs, steps };
 };
 
 // TODO: do something with this

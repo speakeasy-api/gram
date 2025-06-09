@@ -143,6 +143,7 @@ WHERE
   pt.project_id = $1
   AND pt.name = $2
   AND pt.deleted IS FALSE
+ORDER BY pt.created_at DESC
 LIMIT 1
 `
 

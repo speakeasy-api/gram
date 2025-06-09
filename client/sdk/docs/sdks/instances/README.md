@@ -25,6 +25,7 @@ async function run() {
     toolsetSlug: "<value>",
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -47,12 +48,15 @@ async function run() {
   const res = await instancesGetBySlug(gram, {
     toolsetSlug: "<value>",
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("instancesGetBySlug failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();

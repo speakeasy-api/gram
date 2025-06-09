@@ -92,6 +92,7 @@ WHERE
   pt.project_id = @project_id
   AND pt.name = @name
   AND pt.deleted IS FALSE
+ORDER BY pt.created_at DESC
 LIMIT 1;
 
 -- name: ListTemplates :many

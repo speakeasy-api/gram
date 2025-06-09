@@ -1,21 +1,16 @@
 import { Page } from "@/components/page-layout";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Outlet } from "react-router";
 import { TextArea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { assert } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import {
   invalidateAllTemplates,
   useCreateTemplateMutation,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRoutes } from "@/routes";
 import { Loader2 } from "lucide-react";
-import { assert } from "@/lib/utils";
-
-export function NewPromptPageRoot() {
-  return <Outlet />;
-}
 
 export default function NewPromptPage() {
   const queryClient = useQueryClient();

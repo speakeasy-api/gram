@@ -12,7 +12,7 @@ export type ToolGroup = {
 };
 
 export const useGroupedTools = (tools: HTTPToolDefinition[]): ToolGroup[] => {
-  const { data: deployment } = useLatestDeployment(undefined, undefined);
+  const { data: deployment } = useLatestDeployment();
 
   const documentIdToSlug = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce((acc, asset) => {

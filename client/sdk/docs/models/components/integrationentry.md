@@ -8,9 +8,11 @@ import { IntegrationEntry } from "@gram/client/models/components";
 let value: IntegrationEntry = {
   packageId: "<id>",
   packageName: "<value>",
-  toolNames: [],
+  toolNames: [
+    "<value>",
+  ],
   version: "<value>",
-  versionCreatedAt: new Date("2025-11-21T22:12:24.981Z"),
+  versionCreatedAt: new Date("2023-06-28T20:35:33.025Z"),
 };
 ```
 

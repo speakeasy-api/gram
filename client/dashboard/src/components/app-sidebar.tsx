@@ -26,7 +26,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const topNavGroups = isAdmin
     ? {
-        create: [routes.home, routes.toolBuilder, routes.prompts],
+        create: [routes.home, routes.customTools, routes.prompts],
         curate: [routes.toolsets, routes.environments, routes.integrations],
         connect: [routes.mcp, routes.sdk, routes.slackApp],
       }

@@ -96,12 +96,14 @@ function Input({
     );
 
   return (
-    <Stack gap={1}>
+    <Stack gap={1} className="mb-[-8px]">
       {input}
-      {error && error !== DEFAULT_ERROR && (
-        <Type variant="small" className="text-destructive!">
+      {error && error !== DEFAULT_ERROR ? (
+        <Type variant="small" className="text-destructive! h-4">
           {error}
         </Type>
+      ) : (
+        <div className="h-4" />
       )}
     </Stack>
   );

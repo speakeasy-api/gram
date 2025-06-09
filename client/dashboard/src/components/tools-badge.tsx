@@ -2,12 +2,6 @@ import { useGroupedTools } from "@/lib/toolNames";
 import { HTTPToolDefinition } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge } from "./ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
 
 export const ToolsBadge = ({
   tools,
@@ -41,16 +35,9 @@ export const ToolsBadge = ({
   );
 
   return tools && tools.length > 0 ? (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge size={size} variant={variant}>
-            {tools.length} Tool{tools.length === 1 ? "" : "s"}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Badge size={size} variant={variant} tooltip={tooltipContent}>
+      {tools.length} Tool{tools.length === 1 ? "" : "s"}
+    </Badge>
   ) : (
     <Badge size={size} variant={variant}>
       No Tools

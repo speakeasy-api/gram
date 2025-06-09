@@ -7,10 +7,14 @@ import { UpdateEnvironmentRequestBody } from "@gram/client/models/components";
 
 let value: UpdateEnvironmentRequestBody = {
   entriesToRemove: [
-    "<value 1>",
-    "<value 2>",
+    "<value>",
   ],
-  entriesToUpdate: [],
+  entriesToUpdate: [
+    {
+      name: "<value>",
+      value: "<value>",
+    },
+  ],
 };
 ```
 

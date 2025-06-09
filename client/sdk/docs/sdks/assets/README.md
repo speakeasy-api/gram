@@ -27,6 +27,7 @@ async function run() {
     id: "<id>",
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -49,12 +50,15 @@ async function run() {
   const res = await assetsServeImage(gram, {
     id: "<id>",
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("assetsServeImage failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -126,6 +130,7 @@ async function run() {
     contentLength: 768839,
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -148,12 +153,15 @@ async function run() {
   const res = await assetsUploadImage(gram, {
     contentLength: 768839,
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("assetsUploadImage failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -214,6 +222,7 @@ async function run() {
     contentLength: 513080,
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -236,12 +245,15 @@ async function run() {
   const res = await assetsUploadOpenAPIv3(gram, {
     contentLength: 513080,
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("assetsUploadOpenAPIv3 failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
