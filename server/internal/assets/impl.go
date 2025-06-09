@@ -268,7 +268,6 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		file:          result.file,
 	})
 	if err != nil {
-		s.logger.InfoContext(ctx, "uploading asset", slog.String("project_id", authCtx.ProjectID.String()), slog.String("file", filename), slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -282,11 +281,8 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		s.logger.InfoContext(ctx, "uploading asset", slog.String("project_id", authCtx.ProjectID.String()), slog.String("file", filename), slog.String("error", err.Error()))
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
 	}
-
-	s.logger.InfoContext(ctx, "uploading asset", slog.String("project_id", authCtx.ProjectID.String()), slog.String("file", filename))
 
 	return &gen.UploadOpenAPIv3Result{
 		Asset: &gen.Asset{
