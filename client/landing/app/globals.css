@@ -172,6 +172,8 @@
   --background-pure: var(--color-base-white);
   --background: var(--color-neutral-100);
   --foreground: var(--color-base-black);
+
+  --color-navbar-border: oklch(0.927 0 0);
 }
 
 @theme inline {
@@ -180,6 +182,7 @@
   --color-foreground: var(--foreground);
   --color-gradient-primary: var(--gradient-brand-primary);
   --color-border: var(--color-neutral-200);
+  --color-navbar-border: var(--color-navbar-border);
 
   --font-display: var(--font-tobias), serif;
   --font-sans: var(--font-diatype), var(--font-diatype-mono), sans-serif;
