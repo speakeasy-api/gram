@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// Create a new prompt template.
 	CreateTemplate(context.Context, *CreateTemplatePayload) (res *CreatePromptTemplateResult, err error)
+	// Update a prompt template.
+	UpdateTemplate(context.Context, *UpdateTemplatePayload) (res *UpdatePromptTemplateResult, err error)
 	// Get prompt template by its ID or name.
 	GetTemplate(context.Context, *GetTemplatePayload) (res *GetPromptTemplateResult, err error)
 	// List available prompt template.
@@ -47,7 +49,7 @@ const ServiceName = "templates"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"createTemplate", "getTemplate", "listTemplates", "deleteTemplate"}
+var MethodNames = [5]string{"createTemplate", "updateTemplate", "getTemplate", "listTemplates", "deleteTemplate"}
 
 // CreatePromptTemplateResult is the result type of the templates service
 // createTemplate method.
@@ -74,8 +76,6 @@ type CreateTemplatePayload struct {
 	Engine string
 	// The kind of prompt the template is used for
 	Kind string
-	// The previous version of the prompt template to use as predecessor
-	PredecessorID *string
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string
 }
@@ -124,6 +124,35 @@ type ListTemplatesPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// UpdatePromptTemplateResult is the result type of the templates service
+// updateTemplate method.
+type UpdatePromptTemplateResult struct {
+	// The updated prompt template
+	Template *types.PromptTemplate
+}
+
+// UpdateTemplatePayload is the payload type of the templates service
+// updateTemplate method.
+type UpdateTemplatePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the prompt template to update
+	ID string
+	// The template content
+	Prompt *string
+	// The description of the prompt template
+	Description *string
+	// The JSON Schema defining the placeholders found in the prompt template
+	Arguments *string
+	// The template engine
+	Engine *string
+	// The kind of prompt the template is used for
+	Kind *string
+	// The suggested tool names associated with the prompt template
+	ToolsHint []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

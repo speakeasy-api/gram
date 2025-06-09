@@ -90,4 +90,5 @@ INSERT INTO toolset_prompts (
   , toolset_id
   , prompt_history_id
   , prompt_template_id
-) VALUES (@project_id, @toolset_id, @prompt_history_id, @prompt_template_id);
+  , prompt_name
+) VALUES (@project_id, @toolset_id, @prompt_history_id, @prompt_template_id, @prompt_name);

@@ -10,6 +10,7 @@ export function TextArea({
   className,
   rows = 3,
   required,
+  defaultValue,
 }: {
   id?: string;
   name?: string;
@@ -20,6 +21,7 @@ export function TextArea({
   className?: string;
   rows?: number;
   required?: boolean;
+  defaultValue?: string | undefined;
 }) {
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange?.(e.target.value);
@@ -36,6 +38,7 @@ export function TextArea({
       placeholder={placeholder}
       rows={rows}
       required={required}
+      defaultValue={defaultValue}
     />
   );
 }

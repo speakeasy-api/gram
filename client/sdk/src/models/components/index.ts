@@ -73,6 +73,8 @@ export * from "./toolvariation.js";
 export * from "./updateenvironmentrequestbody.js";
 export * from "./updatepackageform.js";
 export * from "./updatepackageresult.js";
+export * from "./updateprompttemplateform.js";
+export * from "./updateprompttemplateresult.js";
 export * from "./updateslackconnectionrequestbody.js";
 export * from "./updatetoolsetrequestbody.js";
 export * from "./uploadimageresult.js";

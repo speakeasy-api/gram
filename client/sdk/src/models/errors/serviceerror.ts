@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod";
+import { GramError } from "./gramerror.js";
 
 /**
  * unauthorized access
@@ -37,7 +38,7 @@ export type ServiceErrorData = {
 /**
  * unauthorized access
  */
-export class ServiceError extends Error {
+export class ServiceError extends GramError {
   /**
    * Is the error a server-side fault?
    */
@@ -58,13 +59,15 @@ export class ServiceError extends Error {
   /** The original data that was passed to this error instance. */
   data$: ServiceErrorData;
 
-  constructor(err: ServiceErrorData) {
+  constructor(
+    err: ServiceErrorData,
+    httpMeta: { response: Response; request: Request; body: string },
+  ) {
     const message = "message" in err && typeof err.message === "string"
       ? err.message
       : `API error occurred: ${JSON.stringify(err)}`;
-    super(message);
+    super(message, httpMeta);
     this.data$ = err;
-
     this.fault = err.fault;
     this.id = err.id;
     this.temporary = err.temporary;
@@ -86,9 +89,16 @@ export const ServiceError$inboundSchema: z.ZodType<
   name: z.string(),
   temporary: z.boolean(),
   timeout: z.boolean(),
+  request$: z.instanceof(Request),
+  response$: z.instanceof(Response),
+  body$: z.string(),
 })
   .transform((v) => {
-    return new ServiceError(v);
+    return new ServiceError(v, {
+      request: v.request$,
+      response: v.response$,
+      body: v.body$,
+    });
   });
 
 /** @internal */

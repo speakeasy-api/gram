@@ -21,6 +21,10 @@ type Client struct {
 	// createTemplate endpoint.
 	CreateTemplateDoer goahttp.Doer
 
+	// UpdateTemplate Doer is the HTTP client used to make requests to the
+	// updateTemplate endpoint.
+	UpdateTemplateDoer goahttp.Doer
+
 	// GetTemplate Doer is the HTTP client used to make requests to the getTemplate
 	// endpoint.
 	GetTemplateDoer goahttp.Doer
@@ -54,6 +58,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CreateTemplateDoer:  doer,
+		UpdateTemplateDoer:  doer,
 		GetTemplateDoer:     doer,
 		ListTemplatesDoer:   doer,
 		DeleteTemplateDoer:  doer,
@@ -84,6 +89,30 @@ func (c *Client) CreateTemplate() goa.Endpoint {
 		resp, err := c.CreateTemplateDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("templates", "createTemplate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateTemplate returns an endpoint that makes HTTP requests to the templates
+// service updateTemplate server.
+func (c *Client) UpdateTemplate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateTemplateRequest(c.encoder)
+		decodeResponse = DecodeUpdateTemplateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateTemplateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateTemplateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("templates", "updateTemplate", err)
 		}
 		return decodeResponse(resp)
 	}

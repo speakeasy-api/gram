@@ -82,50 +82,13 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	tr := s.repo.WithTx(dbtx)
 
-	var predecessorID uuid.UUID
-	var historyID uuid.UUID
-
-	if payload.PredecessorID != nil && *payload.PredecessorID != "" {
-		parsed, err := uuid.Parse(*payload.PredecessorID)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid predecessor id")
-		}
-
-		if parsed == uuid.Nil {
-			return nil, oops.E(oops.CodeInvalid, nil, "invalid predecessor id")
-		}
-
-		predRow, err := tr.PeekTemplateByID(ctx, repo.PeekTemplateByIDParams{
-			ProjectID: projectID,
-			ID:        parsed,
-		})
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, oops.E(oops.CodeInvalid, nil, "previous revision not found")
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "error reading previous revision").Log(ctx, s.logger)
-		}
-
-		predecessorID = predRow.ID
-		historyID = predRow.HistoryID
-	}
-
-	if historyID == uuid.Nil {
-		historyID = uuid.New()
-	}
-
 	var args []byte
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
 	}
 
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
-		ProjectID: projectID,
-		HistoryID: historyID,
-		PredecessorID: uuid.NullUUID{
-			UUID:  predecessorID,
-			Valid: predecessorID != uuid.Nil,
-		},
+		ProjectID:   projectID,
 		Name:        string(payload.Name),
 		Prompt:      payload.Prompt,
 		Description: conv.PtrToPGTextEmpty(payload.Description),
@@ -155,6 +118,84 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 	}
 
 	return &gen.CreatePromptTemplateResult{Template: pt}, nil
+}
+
+func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplatePayload) (*gen.UpdatePromptTemplateResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(slog.String("project_id", projectID.String()))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin update operation").Log(ctx, s.logger)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid template id")
+	}
+
+	peek, err := tr.PeekTemplateByID(ctx, repo.PeekTemplateByIDParams{
+		ProjectID: projectID,
+		ID:        id,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to peek template").Log(ctx, logger)
+	}
+
+	nextid := peek.ID
+
+	var args []byte
+	if payload.Arguments != nil {
+		args = []byte(*payload.Arguments)
+	}
+
+	newid, err := tr.UpdateTemplate(ctx, repo.UpdateTemplateParams{
+		ProjectID:   uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
+		ID:          uuid.NullUUID{UUID: id, Valid: id != uuid.Nil},
+		Prompt:      conv.PtrToPGTextEmpty(payload.Prompt),
+		Description: conv.PtrToPGTextEmpty(payload.Description),
+		Arguments:   args,
+		Engine:      conv.PtrToPGTextEmpty(payload.Engine),
+		Kind:        conv.PtrToPGTextEmpty(payload.Kind),
+		ToolsHint:   payload.ToolsHint,
+	})
+	switch {
+	case err == nil:
+		nextid = newid
+	case errors.Is(err, sql.ErrNoRows):
+		// No change, so we can use the existing id
+	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated template").Log(ctx, s.logger)
+	}
+
+	pt, err := mv.DescribePromptTemplate(ctx, logger, s.db,
+		mv.ProjectID(projectID),
+		mv.PromptTemplateID(uuid.NullUUID{UUID: nextid, Valid: true}),
+		mv.PromptTemplateName(nil),
+	)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "updated template not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read updated template").Log(ctx, logger)
+	}
+
+	return &gen.UpdatePromptTemplateResult{Template: pt}, nil
 }
 
 func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplatePayload) error {

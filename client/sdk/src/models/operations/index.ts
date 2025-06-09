@@ -52,6 +52,7 @@ export * from "./switchauthscopes.js";
 export * from "./updateenvironment.js";
 export * from "./updatepackage.js";
 export * from "./updateslackconnection.js";
+export * from "./updatetemplate.js";
 export * from "./updatetoolset.js";
 export * from "./uploadimage.js";
 export * from "./uploadopenapiv3asset.js";

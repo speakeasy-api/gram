@@ -33,6 +33,7 @@ func (r iteratorForAddToolsetPromptTemplates) Values() ([]interface{}, error) {
 		r.rows[0].ToolsetID,
 		r.rows[0].PromptHistoryID,
 		r.rows[0].PromptTemplateID,
+		r.rows[0].PromptName,
 	}, nil
 }
 
@@ -41,5 +42,5 @@ func (r iteratorForAddToolsetPromptTemplates) Err() error {
 }
 
 func (q *Queries) AddToolsetPromptTemplates(ctx context.Context, arg []AddToolsetPromptTemplatesParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"toolset_prompts"}, []string{"project_id", "toolset_id", "prompt_history_id", "prompt_template_id"}, &iteratorForAddToolsetPromptTemplates{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"toolset_prompts"}, []string{"project_id", "toolset_id", "prompt_history_id", "prompt_template_id", "prompt_name"}, &iteratorForAddToolsetPromptTemplates{rows: arg})
 }

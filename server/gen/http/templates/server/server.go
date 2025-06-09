@@ -21,6 +21,7 @@ import (
 type Server struct {
 	Mounts         []*MountPoint
 	CreateTemplate http.Handler
+	UpdateTemplate http.Handler
 	GetTemplate    http.Handler
 	ListTemplates  http.Handler
 	DeleteTemplate http.Handler
@@ -54,11 +55,13 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateTemplate", "POST", "/rpc/templates.create"},
+			{"UpdateTemplate", "POST", "/rpc/templates.update"},
 			{"GetTemplate", "GET", "/rpc/templates.get"},
 			{"ListTemplates", "GET", "/rpc/templates.list"},
 			{"DeleteTemplate", "DELETE", "/rpc/templates.delete"},
 		},
 		CreateTemplate: NewCreateTemplateHandler(e.CreateTemplate, mux, decoder, encoder, errhandler, formatter),
+		UpdateTemplate: NewUpdateTemplateHandler(e.UpdateTemplate, mux, decoder, encoder, errhandler, formatter),
 		GetTemplate:    NewGetTemplateHandler(e.GetTemplate, mux, decoder, encoder, errhandler, formatter),
 		ListTemplates:  NewListTemplatesHandler(e.ListTemplates, mux, decoder, encoder, errhandler, formatter),
 		DeleteTemplate: NewDeleteTemplateHandler(e.DeleteTemplate, mux, decoder, encoder, errhandler, formatter),
@@ -71,6 +74,7 @@ func (s *Server) Service() string { return "templates" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateTemplate = m(s.CreateTemplate)
+	s.UpdateTemplate = m(s.UpdateTemplate)
 	s.GetTemplate = m(s.GetTemplate)
 	s.ListTemplates = m(s.ListTemplates)
 	s.DeleteTemplate = m(s.DeleteTemplate)
@@ -82,6 +86,7 @@ func (s *Server) MethodNames() []string { return templates.MethodNames[:] }
 // Mount configures the mux to serve the templates endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateTemplateHandler(mux, h.CreateTemplate)
+	MountUpdateTemplateHandler(mux, h.UpdateTemplate)
 	MountGetTemplateHandler(mux, h.GetTemplate)
 	MountListTemplatesHandler(mux, h.ListTemplates)
 	MountDeleteTemplateHandler(mux, h.DeleteTemplate)
@@ -122,6 +127,57 @@ func NewCreateTemplateHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createTemplate")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "templates")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
+// MountUpdateTemplateHandler configures the mux to serve the "templates"
+// service "updateTemplate" endpoint.
+func MountUpdateTemplateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/templates.update", otelhttp.WithRouteTag("/rpc/templates.update", f).ServeHTTP)
+}
+
+// NewUpdateTemplateHandler creates a HTTP handler which loads the HTTP request
+// and calls the "templates" service "updateTemplate" endpoint.
+func NewUpdateTemplateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateTemplateRequest(mux, decoder)
+		encodeResponse = EncodeUpdateTemplateResponse(encoder)
+		encodeError    = EncodeUpdateTemplateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateTemplate")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "templates")
 		payload, err := decodeRequest(r)
 		if err != nil {

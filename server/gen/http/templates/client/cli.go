@@ -25,7 +25,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 	{
 		err = json.Unmarshal([]byte(templatesCreateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Necessitatibus delectus.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"e9x\",\n      \"predecessor_id\": \"Distinctio et laborum quasi et ut numquam.\",\n      \"prompt\": \"Inventore voluptates vitae.\",\n      \"tools_hint\": [\n         \"Blanditiis itaque vel dolorum.\",\n         \"Eum eaque aut deleniti earum exercitationem quis.\",\n         \"Eos et consequatur.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Ut inventore voluptates vitae ducimus.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"1tq\",\n      \"prompt\": \"Natus culpa.\",\n      \"tools_hint\": [\n         \"Repellat distinctio et laborum quasi et.\",\n         \"Numquam sed maxime blanditiis itaque vel dolorum.\",\n         \"Eum eaque aut deleniti earum exercitationem quis.\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 40 {
@@ -66,13 +66,81 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 		}
 	}
 	v := &templates.CreateTemplatePayload{
-		Name:          types.Slug(body.Name),
-		Prompt:        body.Prompt,
-		Description:   body.Description,
-		Arguments:     body.Arguments,
-		Engine:        body.Engine,
-		Kind:          body.Kind,
-		PredecessorID: body.PredecessorID,
+		Name:        types.Slug(body.Name),
+		Prompt:      body.Prompt,
+		Description: body.Description,
+		Arguments:   body.Arguments,
+		Engine:      body.Engine,
+		Kind:        body.Kind,
+	}
+	if body.ToolsHint != nil {
+		v.ToolsHint = make([]string, len(body.ToolsHint))
+		for i, val := range body.ToolsHint {
+			v.ToolsHint[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateTemplatePayload builds the payload for the templates
+// updateTemplate endpoint from CLI flags.
+func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpdateTemplateApikeyToken string, templatesUpdateTemplateSessionToken string, templatesUpdateTemplateProjectSlugInput string) (*templates.UpdateTemplatePayload, error) {
+	var err error
+	var body UpdateTemplateRequestBody
+	{
+		err = json.Unmarshal([]byte(templatesUpdateTemplateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Sit sed placeat aperiam doloribus minus ea.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Voluptatem voluptatem tempore cupiditate cumque eos consequatur.\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"Magni reiciendis excepturi.\",\n      \"tools_hint\": [\n         \"Quos sed natus quidem harum ex.\",\n         \"Eius repellendus eius alias.\",\n         \"Laborum culpa id et quis eaque.\"\n      ]\n   }'")
+		}
+		if body.Arguments != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
+		}
+		if body.Engine != nil {
+			if !(*body.Engine == "mustache") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.engine", *body.Engine, []any{"mustache"}))
+			}
+		}
+		if body.Kind != nil {
+			if !(*body.Kind == "prompt" || *body.Kind == "higher_order_tool") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt", "higher_order_tool"}))
+			}
+		}
+		if len(body.ToolsHint) > 20 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools_hint", body.ToolsHint, len(body.ToolsHint), 20, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if templatesUpdateTemplateApikeyToken != "" {
+			apikeyToken = &templatesUpdateTemplateApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if templatesUpdateTemplateSessionToken != "" {
+			sessionToken = &templatesUpdateTemplateSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if templatesUpdateTemplateProjectSlugInput != "" {
+			projectSlugInput = &templatesUpdateTemplateProjectSlugInput
+		}
+	}
+	v := &templates.UpdateTemplatePayload{
+		ID:          body.ID,
+		Prompt:      body.Prompt,
+		Description: body.Description,
+		Arguments:   body.Arguments,
+		Engine:      body.Engine,
+		Kind:        body.Kind,
 	}
 	if body.ToolsHint != nil {
 		v.ToolsHint = make([]string, len(body.ToolsHint))

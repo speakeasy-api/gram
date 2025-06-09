@@ -17,6 +17,7 @@ type AddToolsetPromptTemplatesParams struct {
 	ToolsetID        uuid.UUID
 	PromptHistoryID  uuid.UUID
 	PromptTemplateID uuid.NullUUID
+	PromptName       string
 }
 
 const clearToolsetPromptTemplates = `-- name: ClearToolsetPromptTemplates :exec

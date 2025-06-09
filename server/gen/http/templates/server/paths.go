@@ -12,6 +12,11 @@ func CreateTemplateTemplatesPath() string {
 	return "/rpc/templates.create"
 }
 
+// UpdateTemplateTemplatesPath returns the URL path to the templates service updateTemplate HTTP endpoint.
+func UpdateTemplateTemplatesPath() string {
+	return "/rpc/templates.update"
+}
+
 // GetTemplateTemplatesPath returns the URL path to the templates service getTemplate HTTP endpoint.
 func GetTemplateTemplatesPath() string {
 	return "/rpc/templates.get"

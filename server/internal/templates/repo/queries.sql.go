@@ -16,7 +16,6 @@ const createTemplate = `-- name: CreateTemplate :one
 INSERT INTO prompt_templates (
   project_id,
   history_id,
-  predecessor_id,
   name,
   prompt,
   description,
@@ -24,39 +23,34 @@ INSERT INTO prompt_templates (
   engine,
   kind,
   tools_hint
-) VALUES (
+)
+SELECT
   $1,
+  generate_uuidv7(),
   $2,
   $3,
-  $4,
+  NULLIF($4, ''),
   $5,
   $6,
   $7,
-  $8,
-  $9,
-  $10
-)
+  $8
 RETURNING id
 `
 
 type CreateTemplateParams struct {
-	ProjectID     uuid.UUID
-	HistoryID     uuid.UUID
-	PredecessorID uuid.NullUUID
-	Name          string
-	Prompt        string
-	Description   pgtype.Text
-	Arguments     []byte
-	Engine        pgtype.Text
-	Kind          pgtype.Text
-	ToolsHint     []string
+	ProjectID   uuid.UUID
+	Name        string
+	Prompt      string
+	Description pgtype.Text
+	Arguments   []byte
+	Engine      pgtype.Text
+	Kind        pgtype.Text
+	ToolsHint   []string
 }
 
 func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createTemplate,
 		arg.ProjectID,
-		arg.HistoryID,
-		arg.PredecessorID,
 		arg.Name,
 		arg.Prompt,
 		arg.Description,
@@ -225,7 +219,7 @@ func (q *Queries) ListTemplates(ctx context.Context, projectID uuid.UUID) ([]Pro
 }
 
 const peekTemplateByID = `-- name: PeekTemplateByID :one
-SELECT id, history_id
+SELECT id, history_id, name
 FROM prompt_templates
 WHERE project_id = $1
   AND id = $2
@@ -242,17 +236,18 @@ type PeekTemplateByIDParams struct {
 type PeekTemplateByIDRow struct {
 	ID        uuid.UUID
 	HistoryID uuid.UUID
+	Name      string
 }
 
 func (q *Queries) PeekTemplateByID(ctx context.Context, arg PeekTemplateByIDParams) (PeekTemplateByIDRow, error) {
 	row := q.db.QueryRow(ctx, peekTemplateByID, arg.ProjectID, arg.ID)
 	var i PeekTemplateByIDRow
-	err := row.Scan(&i.ID, &i.HistoryID)
+	err := row.Scan(&i.ID, &i.HistoryID, &i.Name)
 	return i, err
 }
 
 const peekTemplatesByNames = `-- name: PeekTemplatesByNames :many
-SELECT DISTINCT ON (pt.project_id, pt.name) pt.id, pt.history_id
+SELECT DISTINCT ON (pt.project_id, pt.name) pt.id, pt.history_id, pt.name
 FROM prompt_templates pt
 WHERE pt.project_id = $1
   AND pt.name = ANY($2::TEXT[])
@@ -268,6 +263,7 @@ type PeekTemplatesByNamesParams struct {
 type PeekTemplatesByNamesRow struct {
 	ID        uuid.UUID
 	HistoryID uuid.UUID
+	Name      string
 }
 
 func (q *Queries) PeekTemplatesByNames(ctx context.Context, arg PeekTemplatesByNamesParams) ([]PeekTemplatesByNamesRow, error) {
@@ -279,7 +275,7 @@ func (q *Queries) PeekTemplatesByNames(ctx context.Context, arg PeekTemplatesByN
 	var items []PeekTemplatesByNamesRow
 	for rows.Next() {
 		var i PeekTemplatesByNamesRow
-		if err := rows.Scan(&i.ID, &i.HistoryID); err != nil {
+		if err := rows.Scan(&i.ID, &i.HistoryID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -288,4 +284,69 @@ func (q *Queries) PeekTemplatesByNames(ctx context.Context, arg PeekTemplatesByN
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateTemplate = `-- name: UpdateTemplate :one
+INSERT INTO prompt_templates (
+  project_id,
+  history_id,
+  predecessor_id,
+  name,
+  prompt,
+  description,
+  arguments,
+  engine,
+  kind,
+  tools_hint
+)
+SELECT
+  c.project_id,
+  c.history_id,
+  c.id,
+  c.name,
+  COALESCE($1, c.prompt),
+  COALESCE(NULLIF($2, ''), c.description),
+  COALESCE($3, c.arguments),
+  COALESCE(NULLIF($4, ''), c.engine),
+  COALESCE(NULLIF($5, ''), c.kind),
+  COALESCE($6, c.tools_hint)
+FROM prompt_templates c
+WHERE project_id = $7
+  AND id = $8
+  AND (
+    (NULLIF($1, '') IS NOT NULL AND $1 != c.prompt)
+    OR (NULLIF($2, '') IS NOT NULL AND $2 != c.description)
+    OR ($3 IS NOT NULL AND $3 != c.arguments)
+    OR (NULLIF($4, '') IS NOT NULL AND $4 != c.engine)
+    OR (NULLIF($5, '') IS NOT NULL AND NULLIF($5, '') != c.kind)
+    OR ($6 IS NOT NULL AND $6 IS DISTINCT FROM c.tools_hint)
+  )
+RETURNING id
+`
+
+type UpdateTemplateParams struct {
+	Prompt      pgtype.Text
+	Description pgtype.Text
+	Arguments   []byte
+	Engine      pgtype.Text
+	Kind        pgtype.Text
+	ToolsHint   []string
+	ProjectID   uuid.NullUUID
+	ID          uuid.NullUUID
+}
+
+func (q *Queries) UpdateTemplate(ctx context.Context, arg UpdateTemplateParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, updateTemplate,
+		arg.Prompt,
+		arg.Description,
+		arg.Arguments,
+		arg.Engine,
+		arg.Kind,
+		arg.ToolsHint,
+		arg.ProjectID,
+		arg.ID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

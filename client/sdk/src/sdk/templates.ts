@@ -6,6 +6,7 @@ import { templatesCreate } from "../funcs/templatesCreate.js";
 import { templatesDelete } from "../funcs/templatesDelete.js";
 import { templatesGet } from "../funcs/templatesGet.js";
 import { templatesList } from "../funcs/templatesList.js";
+import { templatesUpdate } from "../funcs/templatesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -81,6 +82,25 @@ export class Templates extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListPromptTemplatesResult> {
     return unwrapAsync(templatesList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateTemplate templates
+   *
+   * @remarks
+   * Update a prompt template.
+   */
+  async update(
+    request: operations.UpdateTemplateRequest,
+    security?: operations.UpdateTemplateSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.UpdatePromptTemplateResult> {
+    return unwrapAsync(templatesUpdate(
       this,
       request,
       security,

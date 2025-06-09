@@ -261,6 +261,248 @@ func DecodeCreateTemplateResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildUpdateTemplateRequest instantiates a HTTP request object with method
+// and path set to call the "templates" service "updateTemplate" endpoint
+func (c *Client) BuildUpdateTemplateRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateTemplateTemplatesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("templates", "updateTemplate", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateTemplateRequest returns an encoder for requests sent to the
+// templates updateTemplate server.
+func EncodeUpdateTemplateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*templates.UpdateTemplatePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("templates", "updateTemplate", "*templates.UpdateTemplatePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateTemplateRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("templates", "updateTemplate", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateTemplateResponse returns a decoder for responses returned by the
+// templates updateTemplate endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeUpdateTemplateResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateTemplateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateTemplateResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			res := NewUpdateTemplateUpdatePromptTemplateResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateTemplateUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateTemplateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateTemplateBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateTemplateNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateTemplateConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateTemplateUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateTemplateInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateTemplateInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+				}
+				err = ValidateUpdateTemplateInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+				}
+				return nil, NewUpdateTemplateInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateTemplateUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+				}
+				err = ValidateUpdateTemplateUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+				}
+				return nil, NewUpdateTemplateUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("templates", "updateTemplate", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateTemplateGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
+			}
+			err = ValidateUpdateTemplateGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("templates", "updateTemplate", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetTemplateRequest instantiates a HTTP request object with method and
 // path set to call the "templates" service "getTemplate" endpoint
 func (c *Client) BuildGetTemplateRequest(ctx context.Context, v any) (*http.Request, error) {

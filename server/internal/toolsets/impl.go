@@ -274,6 +274,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 				ToolsetID:        existingToolset.ID,
 				PromptHistoryID:  ptrow.HistoryID,
 				PromptTemplateID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				PromptName:       ptrow.Name,
 			})
 		}
 

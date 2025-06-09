@@ -56,10 +56,6 @@ export type CreatePromptTemplateForm = {
    */
   name: string;
   /**
-   * The previous version of the prompt template to use as predecessor
-   */
-  predecessorId?: string | undefined;
-  /**
    * The template content
    */
   prompt: string;
@@ -120,12 +116,10 @@ export const CreatePromptTemplateForm$inboundSchema: z.ZodType<
   engine: Engine$inboundSchema,
   kind: CreatePromptTemplateFormKind$inboundSchema,
   name: z.string(),
-  predecessor_id: z.string().optional(),
   prompt: z.string(),
   tools_hint: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
-    "predecessor_id": "predecessorId",
     "tools_hint": "toolsHint",
   });
 });
@@ -137,7 +131,6 @@ export type CreatePromptTemplateForm$Outbound = {
   engine: string;
   kind: string;
   name: string;
-  predecessor_id?: string | undefined;
   prompt: string;
   tools_hint?: Array<string> | undefined;
 };
@@ -153,12 +146,10 @@ export const CreatePromptTemplateForm$outboundSchema: z.ZodType<
   engine: Engine$outboundSchema,
   kind: CreatePromptTemplateFormKind$outboundSchema,
   name: z.string(),
-  predecessorId: z.string().optional(),
   prompt: z.string(),
   toolsHint: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
-    predecessorId: "predecessor_id",
     toolsHint: "tools_hint",
   });
 });

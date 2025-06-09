@@ -1,5 +1,5 @@
 -- name: PeekTemplateByID :one
-SELECT id, history_id
+SELECT id, history_id, name
 FROM prompt_templates
 WHERE project_id = @project_id
   AND id = @id
@@ -8,7 +8,7 @@ ORDER BY id DESC
 LIMIT 1;
 
 -- name: PeekTemplatesByNames :many
-SELECT DISTINCT ON (pt.project_id, pt.name) pt.id, pt.history_id
+SELECT DISTINCT ON (pt.project_id, pt.name) pt.id, pt.history_id, pt.name
 FROM prompt_templates pt
 WHERE pt.project_id = @project_id
   AND pt.name = ANY(@names::TEXT[])
@@ -16,6 +16,30 @@ WHERE pt.project_id = @project_id
 ORDER BY pt.project_id, pt.name, pt.id DESC;
 
 -- name: CreateTemplate :one
+INSERT INTO prompt_templates (
+  project_id,
+  history_id,
+  name,
+  prompt,
+  description,
+  arguments,
+  engine,
+  kind,
+  tools_hint
+)
+SELECT
+  @project_id,
+  generate_uuidv7(),
+  @name,
+  @prompt,
+  NULLIF(@description, ''),
+  @arguments,
+  @engine,
+  @kind,
+  @tools_hint
+RETURNING id;
+
+-- name: UpdateTemplate :one
 INSERT INTO prompt_templates (
   project_id,
   history_id,
@@ -27,18 +51,29 @@ INSERT INTO prompt_templates (
   engine,
   kind,
   tools_hint
-) VALUES (
-  @project_id,
-  @history_id,
-  @predecessor_id,
-  @name,
-  @prompt,
-  @description,
-  @arguments,
-  @engine,
-  @kind,
-  @tools_hint
 )
+SELECT
+  c.project_id,
+  c.history_id,
+  c.id,
+  c.name,
+  COALESCE(sqlc.narg(prompt), c.prompt),
+  COALESCE(NULLIF(sqlc.narg(description), ''), c.description),
+  COALESCE(sqlc.narg(arguments), c.arguments),
+  COALESCE(NULLIF(sqlc.narg(engine), ''), c.engine),
+  COALESCE(NULLIF(sqlc.narg(kind), ''), c.kind),
+  COALESCE(sqlc.narg(tools_hint), c.tools_hint)
+FROM prompt_templates c
+WHERE project_id = @project_id
+  AND id = @id
+  AND (
+    (NULLIF(sqlc.narg(prompt), '') IS NOT NULL AND sqlc.narg(prompt) != c.prompt)
+    OR (NULLIF(sqlc.narg(description), '') IS NOT NULL AND sqlc.narg(description) != c.description)
+    OR (sqlc.narg(arguments) IS NOT NULL AND sqlc.narg(arguments) != c.arguments)
+    OR (NULLIF(sqlc.narg(engine), '') IS NOT NULL AND sqlc.narg(engine) != c.engine)
+    OR (NULLIF(sqlc.narg(kind), '') IS NOT NULL AND NULLIF(sqlc.narg(kind), '') != c.kind)
+    OR (sqlc.narg(tools_hint) IS NOT NULL AND sqlc.narg(tools_hint) IS DISTINCT FROM c.tools_hint)
+  )
 RETURNING id;
 
 -- name: GetTemplateByID :one

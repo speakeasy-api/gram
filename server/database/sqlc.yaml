@@ -181,6 +181,8 @@ sql:
   - schema: schema.sql
     queries: ../internal/templates/queries.sql
     engine: postgresql
+    database:
+      managed: true
     gen:
       go:
         package: "repo"

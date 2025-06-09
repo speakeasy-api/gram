@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 3ca7ac19-8422-43b3-a69b-9adc0836b177
 management:
-  docChecksum: 94660e58b2e33372db5f6ef15a27984a
+  docChecksum: a60f4af4f10820516eca55f283cd1eee
   docVersion: 0.0.1
-  speakeasyVersion: 1.556.2
-  generationVersion: 2.621.3
-  releaseVersion: 0.12.6
-  configChecksum: 9e61b286642a52bf4009edc24ff92819
+  speakeasyVersion: 1.557.1
+  generationVersion: 2.623.2
+  releaseVersion: 0.12.7
+  configChecksum: c881be7b5507d315a99c5a0b86f7580c
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -113,6 +113,10 @@ generatedFiles:
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatepackageform.md
   - docs/models/components/updatepackageresult.md
+  - docs/models/components/updateprompttemplateform.md
+  - docs/models/components/updateprompttemplateformengine.md
+  - docs/models/components/updateprompttemplateformkind.md
+  - docs/models/components/updateprompttemplateresult.md
   - docs/models/components/updateslackconnectionrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
   - docs/models/components/uploadimageresult.md
@@ -262,6 +266,10 @@ generatedFiles:
   - docs/models/operations/updatepackagesecurityoption2.md
   - docs/models/operations/updateslackconnectionrequest.md
   - docs/models/operations/updateslackconnectionsecurity.md
+  - docs/models/operations/updatetemplaterequest.md
+  - docs/models/operations/updatetemplatesecurity.md
+  - docs/models/operations/updatetemplatesecurityoption1.md
+  - docs/models/operations/updatetemplatesecurityoption2.md
   - docs/models/operations/updatetoolsetrequest.md
   - docs/models/operations/updatetoolsetsecurity.md
   - docs/models/operations/uploadimagerequest.md
@@ -342,6 +350,7 @@ generatedFiles:
   - src/funcs/templatesDelete.ts
   - src/funcs/templatesGet.ts
   - src/funcs/templatesList.ts
+  - src/funcs/templatesUpdate.ts
   - src/funcs/toolsList.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
@@ -443,6 +452,8 @@ generatedFiles:
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatepackageform.ts
   - src/models/components/updatepackageresult.ts
+  - src/models/components/updateprompttemplateform.ts
+  - src/models/components/updateprompttemplateresult.ts
   - src/models/components/updateslackconnectionrequestbody.ts
   - src/models/components/updatetoolsetrequestbody.ts
   - src/models/components/uploadimageresult.ts
@@ -450,8 +461,10 @@ generatedFiles:
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/errors/apierror.ts
+  - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
+  - src/models/errors/responsevalidationerror.ts
   - src/models/errors/sdkvalidationerror.ts
   - src/models/errors/serviceerror.ts
   - src/models/operations/authcallback.ts
@@ -505,6 +518,7 @@ generatedFiles:
   - src/models/operations/updateenvironment.ts
   - src/models/operations/updatepackage.ts
   - src/models/operations/updateslackconnection.ts
+  - src/models/operations/updatetemplate.ts
   - src/models/operations/updatetoolset.ts
   - src/models/operations/uploadimage.ts
   - src/models/operations/uploadopenapiv3asset.ts
@@ -558,6 +572,7 @@ generatedFiles:
   - src/react-query/updateEnvironment.ts
   - src/react-query/updatePackage.ts
   - src/react-query/updateSlackConnection.ts
+  - src/react-query/updateTemplate.ts
   - src/react-query/updateToolset.ts
   - src/react-query/uploadImage.ts
   - src/react-query/uploadOpenAPIv3.ts
@@ -1201,5 +1216,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateTemplate:
+    speakeasy-default-update-template:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"template": {"created_at": "2023-08-04T16:54:18.293Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tools_hint": [], "updated_at": "2023-03-25T20:37:57.210Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

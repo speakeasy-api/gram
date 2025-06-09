@@ -4404,6 +4404,110 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: Templates
+    /rpc/templates.update:
+        post:
+            description: Update a prompt template.
+            operationId: updateTemplate
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePromptTemplateForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdatePromptTemplateResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateTemplate templates
+            tags:
+                - templates
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateTemplate
     /rpc/tools.list:
         get:
             description: List all tools for a project
@@ -5756,9 +5860,6 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                     maxLength: 40
-                predecessor_id:
-                    type: string
-                    description: The previous version of the prompt template to use as predecessor
                 prompt:
                     type: string
                     description: The template content
@@ -7265,6 +7366,48 @@ components:
                     $ref: '#/components/schemas/Package'
             required:
                 - package
+        UpdatePromptTemplateForm:
+            type: object
+            properties:
+                arguments:
+                    type: string
+                    description: The JSON Schema defining the placeholders found in the prompt template
+                    format: json
+                description:
+                    type: string
+                    description: The description of the prompt template
+                engine:
+                    type: string
+                    description: The template engine
+                    enum:
+                        - mustache
+                id:
+                    type: string
+                    description: The ID of the prompt template to update
+                kind:
+                    type: string
+                    description: The kind of prompt the template is used for
+                    enum:
+                        - prompt
+                        - higher_order_tool
+                prompt:
+                    type: string
+                    description: The template content
+                tools_hint:
+                    type: array
+                    items:
+                        type: string
+                    description: The suggested tool names associated with the prompt template
+                    maxItems: 20
+            required:
+                - id
+        UpdatePromptTemplateResult:
+            type: object
+            properties:
+                template:
+                    $ref: '#/components/schemas/PromptTemplate'
+            required:
+                - template
         UpdateSlackConnectionRequestBody:
             type: object
             properties:

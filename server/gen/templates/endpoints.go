@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "templates" service endpoints.
 type Endpoints struct {
 	CreateTemplate goa.Endpoint
+	UpdateTemplate goa.Endpoint
 	GetTemplate    goa.Endpoint
 	ListTemplates  goa.Endpoint
 	DeleteTemplate goa.Endpoint
@@ -28,6 +29,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		CreateTemplate: NewCreateTemplateEndpoint(s, a.APIKeyAuth),
+		UpdateTemplate: NewUpdateTemplateEndpoint(s, a.APIKeyAuth),
 		GetTemplate:    NewGetTemplateEndpoint(s, a.APIKeyAuth),
 		ListTemplates:  NewListTemplatesEndpoint(s, a.APIKeyAuth),
 		DeleteTemplate: NewDeleteTemplateEndpoint(s, a.APIKeyAuth),
@@ -37,6 +39,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "templates" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateTemplate = m(e.CreateTemplate)
+	e.UpdateTemplate = m(e.UpdateTemplate)
 	e.GetTemplate = m(e.GetTemplate)
 	e.ListTemplates = m(e.ListTemplates)
 	e.DeleteTemplate = m(e.DeleteTemplate)
@@ -98,6 +101,65 @@ func NewCreateTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.CreateTemplate(ctx, p)
+	}
+}
+
+// NewUpdateTemplateEndpoint returns an endpoint function that calls the method
+// "updateTemplate" of service "templates".
+func NewUpdateTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateTemplatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateTemplate(ctx, p)
 	}
 }
 
