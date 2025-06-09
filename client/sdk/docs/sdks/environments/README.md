@@ -31,10 +31,6 @@ async function run() {
           name: "<value>",
           value: "<value>",
         },
-        {
-          name: "<value>",
-          value: "<value>",
-        },
       ],
       name: "<value>",
       organizationId: "<id>",
@@ -63,10 +59,6 @@ async function run() {
   const res = await environmentsCreate(gram, {
     createEnvironmentForm: {
       entries: [
-        {
-          name: "<value>",
-          value: "<value>",
-        },
         {
           name: "<value>",
           value: "<value>",
@@ -334,10 +326,6 @@ async function run() {
           name: "<value>",
           value: "<value>",
         },
-        {
-          name: "<value>",
-          value: "<value>",
-        },
       ],
     },
   });
@@ -370,10 +358,6 @@ async function run() {
         "<value 3>",
       ],
       entriesToUpdate: [
-        {
-          name: "<value>",
-          value: "<value>",
-        },
         {
           name: "<value>",
           value: "<value>",

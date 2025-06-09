@@ -39,6 +39,7 @@ var _ = Service("templates", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateTemplate"}`)
 	})
+
 	Method("updateTemplate", func() {
 		Description("Update a prompt template.")
 
@@ -140,6 +141,34 @@ var _ = Service("templates", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteTemplate"}`)
 	})
+
+	Method("renderTemplate", func() {
+		Description("Render a prompt template given some input data.")
+
+		Payload(func() {
+			Required("id", "arguments")
+			Attribute("id", String, "The ID of the prompt template to render")
+			Attribute("arguments", MapOf(String, Any), "The input data to render the template with")
+
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(RenderTemplateResult)
+
+		HTTP(func() {
+			POST("/rpc/templates.render")
+			Param("id")
+
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "renderTemplate")
+		Meta("openapi:extension:x-speakeasy-name-override", "render")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RenderTemplate", "type": "query"}`)
+	})
 })
 
 var CreatePromptTemplateForm = Type("CreatePromptTemplateForm", func() {
@@ -213,4 +242,10 @@ var ListPromptTemplatesResult = Type("ListPromptTemplatesResult", func() {
 	Required("templates")
 
 	Attribute("templates", ArrayOf(shared.PromptTemplate), "The created prompt template")
+})
+
+var RenderTemplateResult = Type("RenderTemplateResult", func() {
+	Required("prompt")
+
+	Attribute("prompt", String, "The rendered prompt")
 })

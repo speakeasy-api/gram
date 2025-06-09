@@ -25,7 +25,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 	{
 		err = json.Unmarshal([]byte(templatesCreateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Ut inventore voluptates vitae ducimus.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"1tq\",\n      \"prompt\": \"Natus culpa.\",\n      \"tools_hint\": [\n         \"Repellat distinctio et laborum quasi et.\",\n         \"Numquam sed maxime blanditiis itaque vel dolorum.\",\n         \"Eum eaque aut deleniti earum exercitationem quis.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Et qui ab dolor et.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"t8d\",\n      \"prompt\": \"Fuga earum sint.\",\n      \"tools_hint\": [\n         \"Animi voluptate culpa fugit vel quia omnis.\",\n         \"Iste cumque pariatur et qui sequi.\",\n         \"Incidunt quas modi.\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 40 {
@@ -94,7 +94,7 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 	{
 		err = json.Unmarshal([]byte(templatesUpdateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Sit sed placeat aperiam doloribus minus ea.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Voluptatem voluptatem tempore cupiditate cumque eos consequatur.\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"Magni reiciendis excepturi.\",\n      \"tools_hint\": [\n         \"Quos sed natus quidem harum ex.\",\n         \"Eius repellendus eius alias.\",\n         \"Laborum culpa id et quis eaque.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Neque est.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Omnis non rem exercitationem.\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"Enim consequatur quia saepe.\",\n      \"tools_hint\": [\n         \"Quod ut.\",\n         \"Labore sed veniam cum facere reprehenderit incidunt.\",\n         \"Iure ipsam.\"\n      ]\n   }'")
 		}
 		if body.Arguments != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
@@ -263,6 +263,62 @@ func BuildDeleteTemplatePayload(templatesDeleteTemplateID string, templatesDelet
 	v := &templates.DeleteTemplatePayload{}
 	v.ID = id
 	v.Name = name
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRenderTemplatePayload builds the payload for the templates
+// renderTemplate endpoint from CLI flags.
+func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRenderTemplateID string, templatesRenderTemplateApikeyToken string, templatesRenderTemplateSessionToken string, templatesRenderTemplateProjectSlugInput string) (*templates.RenderTemplatePayload, error) {
+	var err error
+	var body RenderTemplateRequestBody
+	{
+		err = json.Unmarshal([]byte(templatesRenderTemplateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Rerum error velit voluptates unde.\": \"Tempore perferendis ut.\"\n      }\n   }'")
+		}
+		if body.Arguments == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var id string
+	{
+		id = templatesRenderTemplateID
+	}
+	var apikeyToken *string
+	{
+		if templatesRenderTemplateApikeyToken != "" {
+			apikeyToken = &templatesRenderTemplateApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if templatesRenderTemplateSessionToken != "" {
+			sessionToken = &templatesRenderTemplateSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if templatesRenderTemplateProjectSlugInput != "" {
+			projectSlugInput = &templatesRenderTemplateProjectSlugInput
+		}
+	}
+	v := &templates.RenderTemplatePayload{}
+	if body.Arguments != nil {
+		v.Arguments = make(map[string]any, len(body.Arguments))
+		for key, val := range body.Arguments {
+			tk := key
+			tv := val
+			v.Arguments[tk] = tv
+		}
+	}
+	v.ID = id
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -27,6 +27,8 @@ type Service interface {
 	ListTemplates(context.Context, *ListTemplatesPayload) (res *ListPromptTemplatesResult, err error)
 	// Delete prompt template by its ID or name.
 	DeleteTemplate(context.Context, *DeleteTemplatePayload) (err error)
+	// Render a prompt template given some input data.
+	RenderTemplate(context.Context, *RenderTemplatePayload) (res *RenderTemplateResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -49,7 +51,7 @@ const ServiceName = "templates"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createTemplate", "updateTemplate", "getTemplate", "listTemplates", "deleteTemplate"}
+var MethodNames = [6]string{"createTemplate", "updateTemplate", "getTemplate", "listTemplates", "deleteTemplate", "renderTemplate"}
 
 // CreatePromptTemplateResult is the result type of the templates service
 // createTemplate method.
@@ -124,6 +126,25 @@ type ListTemplatesPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// RenderTemplatePayload is the payload type of the templates service
+// renderTemplate method.
+type RenderTemplatePayload struct {
+	// The ID of the prompt template to render
+	ID string
+	// The input data to render the template with
+	Arguments        map[string]any
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// RenderTemplateResult is the result type of the templates service
+// renderTemplate method.
+type RenderTemplateResult struct {
+	// The rendered prompt
+	Prompt string
 }
 
 // UpdatePromptTemplateResult is the result type of the templates service

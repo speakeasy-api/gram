@@ -4404,6 +4404,119 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: Templates
+    /rpc/templates.render:
+        post:
+            description: Render a prompt template given some input data.
+            operationId: renderTemplate
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the prompt template to render
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the prompt template to render
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RenderTemplateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RenderTemplateResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: renderTemplate templates
+            tags:
+                - templates
+            x-speakeasy-name-override: render
+            x-speakeasy-react-hook:
+                name: RenderTemplate
+                type: query
     /rpc/templates.update:
         post:
             description: Update a prompt template.
@@ -7130,6 +7243,23 @@ components:
             required:
                 - package
                 - version
+        RenderTemplateRequestBody:
+            type: object
+            properties:
+                arguments:
+                    type: object
+                    description: The input data to render the template with
+                    additionalProperties: true
+            required:
+                - arguments
+        RenderTemplateResult:
+            type: object
+            properties:
+                prompt:
+                    type: string
+                    description: The rendered prompt
+            required:
+                - prompt
         ServeImageForm:
             type: object
             properties:

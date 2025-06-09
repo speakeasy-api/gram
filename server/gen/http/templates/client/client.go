@@ -37,6 +37,10 @@ type Client struct {
 	// deleteTemplate endpoint.
 	DeleteTemplateDoer goahttp.Doer
 
+	// RenderTemplate Doer is the HTTP client used to make requests to the
+	// renderTemplate endpoint.
+	RenderTemplateDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -62,6 +66,7 @@ func NewClient(
 		GetTemplateDoer:     doer,
 		ListTemplatesDoer:   doer,
 		DeleteTemplateDoer:  doer,
+		RenderTemplateDoer:  doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -185,6 +190,30 @@ func (c *Client) DeleteTemplate() goa.Endpoint {
 		resp, err := c.DeleteTemplateDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("templates", "deleteTemplate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RenderTemplate returns an endpoint that makes HTTP requests to the templates
+// service renderTemplate server.
+func (c *Client) RenderTemplate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRenderTemplateRequest(c.encoder)
+		decodeResponse = DecodeRenderTemplateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRenderTemplateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RenderTemplateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("templates", "renderTemplate", err)
 		}
 		return decodeResponse(resp)
 	}

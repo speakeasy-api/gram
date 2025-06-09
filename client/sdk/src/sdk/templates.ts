@@ -6,6 +6,7 @@ import { templatesCreate } from "../funcs/templatesCreate.js";
 import { templatesDelete } from "../funcs/templatesDelete.js";
 import { templatesGet } from "../funcs/templatesGet.js";
 import { templatesList } from "../funcs/templatesList.js";
+import { templatesRender } from "../funcs/templatesRender.js";
 import { templatesUpdate } from "../funcs/templatesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -82,6 +83,25 @@ export class Templates extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListPromptTemplatesResult> {
     return unwrapAsync(templatesList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * renderTemplate templates
+   *
+   * @remarks
+   * Render a prompt template given some input data.
+   */
+  async render(
+    request: operations.RenderTemplateRequest,
+    security?: operations.RenderTemplateSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RenderTemplateResult> {
+    return unwrapAsync(templatesRender(
       this,
       request,
       security,

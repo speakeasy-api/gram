@@ -31,3 +31,8 @@ func ListTemplatesTemplatesPath() string {
 func DeleteTemplateTemplatesPath() string {
 	return "/rpc/templates.delete"
 }
+
+// RenderTemplateTemplatesPath returns the URL path to the templates service renderTemplate HTTP endpoint.
+func RenderTemplateTemplatesPath() string {
+	return "/rpc/templates.render"
+}

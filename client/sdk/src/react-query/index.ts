@@ -41,6 +41,7 @@ export * from "./loadChat.js";
 export * from "./logout.js";
 export * from "./publishPackage.js";
 export * from "./registerDomain.js";
+export * from "./renderTemplate.js";
 export * from "./revokeAPIKey.js";
 export * from "./serveImage.js";
 export * from "./sessionInfo.js";

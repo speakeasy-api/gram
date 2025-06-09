@@ -1,9 +1,9 @@
-# gram
+# @gram/client
 
-Developer-friendly & type-safe Typescript SDK specifically catered to leverage *gram* API.
+Developer-friendly & type-safe Typescript SDK specifically catered to leverage *@gram/client* API.
 
 <div align="left">
-    <a href="https://www.speakeasy.com/?utm_source=gram&utm_campaign=typescript"><img src="https://custom-icon-badges.demolab.com/badge/-Built%20By%20Speakeasy-212015?style=for-the-badge&logoColor=FBE331&logo=speakeasy&labelColor=545454" /></a>
+    <a href="https://www.speakeasy.com/?utm_source=@gram/client&utm_campaign=typescript"><img src="https://custom-icon-badges.demolab.com/badge/-Built%20By%20Speakeasy-212015?style=for-the-badge&logoColor=FBE331&logo=speakeasy&labelColor=545454" /></a>
     <a href="https://opensource.org/licenses/MIT">
         <img src="https://img.shields.io/badge/License-MIT-blue.svg" style="width: 100px; height: 28px;" />
     </a>
@@ -23,7 +23,7 @@ Gram API Description: Gram is the tools platform for AI agents
 <!-- Start Table of Contents [toc] -->
 ## Table of Contents
 <!-- $toc-max-depth=2 -->
-* [gram](#gram)
+* [@gram/client](#gramclient)
   * [SDK Installation](#sdk-installation)
   * [Requirements](#requirements)
   * [SDK Example Usage](#sdk-example-usage)
@@ -209,6 +209,7 @@ run();
 * [delete](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 * [get](docs/sdks/templates/README.md#get) - getTemplate templates
 * [list](docs/sdks/templates/README.md#list) - listTemplates templates
+* [render](docs/sdks/templates/README.md#render) - renderTemplate templates
 * [update](docs/sdks/templates/README.md#update) - updateTemplate templates
 
 ### [tools](docs/sdks/tools/README.md)
@@ -292,6 +293,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`templatesDelete`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`templatesGet`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`templatesList`](docs/sdks/templates/README.md#list) - listTemplates templates
+- [`templatesRender`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`templatesUpdate`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
@@ -364,6 +366,7 @@ To learn about this feature and how to get started, check
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+- [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
@@ -631,4 +634,4 @@ looking for the latest version.
 While we value open-source contributions to this SDK, this library is generated programmatically. Any manual changes added to internal files will be overwritten on the next generation. 
 We look forward to hearing your feedback. Feel free to open a PR or an issue with a proof of concept and we'll do our best to include it in a future release. 
 
-### SDK Created by [Speakeasy](https://www.speakeasy.com/?utm_source=gram&utm_campaign=typescript)
+### SDK Created by [Speakeasy](https://www.speakeasy.com/?utm_source=@gram/client&utm_campaign=typescript)

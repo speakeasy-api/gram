@@ -19,8 +19,9 @@ generation:
   auth:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
+  sdkHooksConfigAccess: true
 typescript:
-  version: 0.12.7
+  version: 0.12.11
   additionalDependencies:
     dependencies: {}
     devDependencies:

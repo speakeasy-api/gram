@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/cbroglie/mustache"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -282,4 +283,45 @@ func (s *Service) ListTemplates(ctx context.Context, payload *gen.ListTemplatesP
 	}
 
 	return &gen.ListPromptTemplatesResult{Templates: pt}, nil
+}
+
+func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplatePayload) (*gen.RenderTemplateResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(slog.String("project_id", projectID.String()))
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid template id")
+	}
+
+	pt, err := s.repo.GetTemplateByID(ctx, repo.GetTemplateByIDParams{
+		ProjectID: projectID,
+		ID:        id,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
+	}
+
+	var data string
+	switch pt.Engine.String {
+	case "":
+		data = pt.Prompt
+	case "mustache":
+		data, err = mustache.Render(pt.Prompt, payload.Arguments)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+		}
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported template engine").Log(ctx, logger)
+	}
+
+	return &gen.RenderTemplateResult{Prompt: data}, nil
 }
