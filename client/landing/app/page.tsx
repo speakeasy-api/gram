@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, MotionValue, useMotionValue, useSpring } from "framer-motion";
 import SpeakeasyLogo from "./components/SpeakeasyLogo";
+import { Button } from "./components/Button";
 
 interface Dot {
   id: string;
@@ -323,13 +324,16 @@ export default function Home() {
     <>
       <header className="header-base backdrop-blur-[10px]">
         <div className="absolute top-0 left-0 right-0 h-1 w-full bg-gradient-primary" />
-        <div className="flex items-center px-6 md:px-10 lg:px-40 pt-1">
+        <div className="flex justify-between items-center px-6 md:px-10 lg:px-24 pt-1 w-full">
           <a
             href="https://www.speakeasy.com/"
             className="transition-opacity hover:opacity-80"
           >
             <SpeakeasyLogo className="h-5 w-auto text-foreground" />
           </a>
+          <Button variant="primary-inverted" href="https://docs.getgram.ai/">
+            View docs
+          </Button>
         </div>
       </header>
 
@@ -385,22 +389,20 @@ export default function Home() {
               ref={buttonsRef}
               className="flex flex-col md:flex-row gap-3 w-full md:w-auto"
             >
-              <a
-                className="relative rounded-full flex items-center justify-center h-[52px] px-5 font-mono font-light text-sm tracking-[0.03em] uppercase bg-[#FAFAFA] text-black transition-all hover:-translate-y-0.5 whitespace-nowrap overflow-hidden group"
+              <Button
+                size="chunky"
+                variant="rainbow-light"
                 href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
               >
-                <span className="absolute inset-0 rounded-full bg-gradient-primary p-[1px]">
-                  <span className="flex h-full w-full items-center justify-center rounded-full bg-[#FAFAFA] group-hover:bg-[#F0F0F0]" />
-                </span>
-                <span className="relative z-10">Join the waitlist</span>
-              </a>
-              <a
-                className="rounded-full flex items-center justify-center h-[52px] px-5 font-mono font-light text-sm tracking-[0.03em] uppercase bg-[#2F2F2F] text-white shadow-[inset_0px_2px_1px_#414141,inset_0px_-2px_1px_rgba(0,0,0,0.05)] transition-all hover:-translate-y-0.5 hover:bg-[#252525] whitespace-nowrap"
-                style={{ textShadow: "0px 1px 1px rgba(26, 26, 26, 0.8)" }}
+                Join the waitlist
+              </Button>
+              <Button
+                size="chunky"
+                variant="primary-dark"
                 href="https://calendly.com/sagar-speakeasy/30min"
               >
                 Book a demo
-              </a>
+              </Button>
             </div>
           </div>
         </div>

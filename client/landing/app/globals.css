@@ -167,7 +167,7 @@
   --color-link-visited-secondary: oklch(0.693 0.02 248.2);
 
   /* Dimensions */
-  --header-height: 40px;
+  --header-height: 65px;
 
   --background-pure: var(--color-base-white);
   --background: var(--color-neutral-100);
