@@ -1,4 +1,4 @@
-h1:LMJeYcGErnNqSinFp/2wOReKnaBnVbWKaGiyw9mmlaw=
+h1:4/ej5hdjWzfsCD2o/oCG/BSNqsxJCzdKYUNnpowYp3o=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -26,3 +26,4 @@ h1:LMJeYcGErnNqSinFp/2wOReKnaBnVbWKaGiyw9mmlaw=
 20250606121720_toolset-prompts.sql h1:EYOifW1HWBYdy4+6TOsYTYVKVEG4gL1vios4Wi7V92E=
 20250606124753_prompt-templates-description-length.sql h1:0+HysD4jJ2Jzkj93NuBmyW9Odo6a7mDc/Fx/6m3g4Cc=
 20250606221826_make-custom-domains-org-scoped.sql h1:eep0arfvo6LxwxKFpermR0MqWnvkMfTQTOzg+im0NNc=
+20250609124758_prompt-templates-drop-unique-idx.sql h1:HeZun4XGK2ScSBMqt5yFSZv8RsrmS4rliOTq5MzUOBg=

@@ -589,8 +589,7 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
 
   CONSTRAINT prompt_templates_pkey PRIMARY KEY (id),
   CONSTRAINT prompt_templates_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT prompt_templates_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES prompt_templates (id) ON DELETE SET NULL,
-  CONSTRAINT prompt_templates_project_id_history_id_key UNIQUE (project_id, history_id)
+  CONSTRAINT prompt_templates_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES prompt_templates (id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS prompt_templates_project_id_idx
@@ -608,13 +607,14 @@ CREATE TABLE IF NOT EXISTS toolset_prompts (
   prompt_history_id UUID NOT NULL,
   -- allows pinning to a specific version of prompt template
   prompt_template_id UUID,
+  prompt_name TEXT NOT NULL CHECK (prompt_name <> '' AND CHAR_LENGTH(prompt_name) <= 40),
 
   CONSTRAINT toolset_prompts_pkey PRIMARY KEY (id),
   CONSTRAINT toolset_prompts_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT toolset_prompts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT toolset_prompts_prompt_history_id_fkey FOREIGN KEY (project_id, prompt_history_id) REFERENCES prompt_templates (project_id, history_id) ON DELETE CASCADE,
   CONSTRAINT toolset_prompts_prompt_template_id_fkey FOREIGN KEY (prompt_template_id) REFERENCES prompt_templates (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS toolset_prompts_project_id_history_id_key
-ON toolset_prompts (project_id, prompt_history_id);
+-- Ensure a toolset can only have one prompt template per name
+CREATE UNIQUE INDEX IF NOT EXISTS toolset_prompts_toolset_id_prompt_name_key
+ON toolset_prompts (toolset_id, prompt_name);

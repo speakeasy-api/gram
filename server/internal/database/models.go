@@ -349,4 +349,5 @@ type ToolsetPrompt struct {
 	ToolsetID        uuid.UUID
 	PromptHistoryID  uuid.UUID
 	PromptTemplateID uuid.NullUUID
+	PromptName       string
 }
