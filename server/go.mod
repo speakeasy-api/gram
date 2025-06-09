@@ -47,8 +47,8 @@ require (
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	go.uber.org/automaxprocs v1.6.0
 	goa.design/clue v1.2.0
-	goa.design/goa/v3 v3.21.0
-	goa.design/plugins/v3 v3.21.0
+	goa.design/goa/v3 v3.21.1
+	goa.design/plugins/v3 v3.21.1
 )
 
 require (
