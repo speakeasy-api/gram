@@ -139,7 +139,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	var err error
 	if strings.HasPrefix(toolExecutionInfo.Tool.RequestContentType.String, "application/x-www-form-urlencoded") {
 		encoded := ""
-		if toolCallBody.Body != nil && len(toolCallBody.Body) > 0 {
+		if len(toolCallBody.Body) > 0 {
 			// Assume toolCallBody.Body is a JSON object (map[string]interface{})
 			var formMap map[string]interface{}
 			if err := json.Unmarshal(toolCallBody.Body, &formMap); err != nil {
