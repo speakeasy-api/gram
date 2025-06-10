@@ -19,7 +19,10 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { CustomDomain, Toolset } from "@gram/client/models/components";
-import { useUpdateToolsetMutation, useGetDomain } from "@gram/client/react-query/index.js";
+import {
+  useUpdateToolsetMutation,
+  useGetDomain,
+} from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Check, Lock, Pencil } from "lucide-react";
 import React, { useState } from "react";
@@ -107,11 +110,7 @@ export function McpToolsetCard({
 
   // Determine which server URL to use
   let customServerURL: string | undefined;
-  if (
-    domain &&
-    toolset.customDomainId &&
-    domain.id == toolset.customDomainId
-  ) {
+  if (domain && toolset.customDomainId && domain.id == toolset.customDomainId) {
     customServerURL = `https://${domain.domain}`;
   }
 
@@ -142,14 +141,18 @@ export function McpToolsetCard({
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  const mcpUrl = `${toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()}/mcp/${urlSuffix}`;
+  const mcpUrl = `${
+    toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
+  }/mcp/${urlSuffix}`;
 
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [
     "mcp-remote",
     mcpUrl,
-    "--allow-http",
-    ...envHeaders.flatMap((header) => ["--header", `MCP-${header.replace(/_/g, "-")}:${"${VALUE}"}`]),
+    ...envHeaders.flatMap((header) => [
+      "--header",
+      `MCP-${header.replace(/_/g, "-")}:${"${VALUE}"}`,
+    ]),
   ];
   // Indent each line of the header args array by 8 spaces for alignment
   const INDENT = " ".repeat(8);
@@ -177,9 +180,8 @@ export function McpToolsetCard({
         "args": [
           "mcp-remote",
           "${mcpUrl}",
-          "--allow-http",
           "--header",
-          "Authorization:${"${GRAM_KEY}"}"
+          "Authorization: \${GRAM_KEY}"
         ],
         "env": {
           "GRAM_KEY": "Bearer <your-key-here>"
@@ -218,7 +220,9 @@ export function McpToolsetCard({
             <label className="block mb-1 font-medium">MCP Slug</label>
             <Stack direction="horizontal" align="start">
               <Type muted mono variant="small" className="mt-2">
-                {toolset.mcpSlug && customServerURL ? `${customServerURL}/mcp/` : `${getServerURL()}/mcp/`}
+                {toolset.mcpSlug && customServerURL
+                  ? `${customServerURL}/mcp/`
+                  : `${getServerURL()}/mcp/`}
               </Type>
               <div className="w-full">
                 <input
@@ -403,16 +407,22 @@ export function McpToolsetCard({
                     Link Domain
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {domain.domain}
-                </TooltipContent>
+                <TooltipContent>{domain.domain}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
-          <Button icon="braces" className="ml-auto" onClick={() => setMcpModalOpen(true)}>
+          <Button
+            icon="braces"
+            className="ml-auto"
+            onClick={() => setMcpModalOpen(true)}
+          >
             MCP Config
           </Button>
-          <Button icon="package" className="ml-2" onClick={() => setPublishModalOpen(true)}>
+          <Button
+            icon="package"
+            className="ml-2"
+            onClick={() => setPublishModalOpen(true)}
+          >
             {toolset.mcpIsPublic ? "Publish Settings" : "Publish"}
           </Button>
         </div>
