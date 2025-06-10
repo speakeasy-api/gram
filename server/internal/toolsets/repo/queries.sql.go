@@ -161,27 +161,53 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 }
 
 const getPromptTemplatesForToolset = `-- name: GetPromptTemplatesForToolset :many
-SELECT rel.id, pt.id, pt.project_id, pt.history_id, pt.predecessor_id, pt.name, pt.description, pt.arguments, pt.prompt, pt.engine, pt.kind, pt.tools_hint, pt.created_at, pt.updated_at, pt.deleted_at, pt.deleted
+WITH ranked_templates AS (
+  SELECT 
+    pt.id, pt.project_id, pt.history_id, pt.predecessor_id, pt.name, pt.description, pt.arguments, pt.prompt, pt.engine, pt.kind, pt.tools_hint, pt.created_at, pt.updated_at, pt.deleted_at, pt.deleted,
+    ROW_NUMBER() OVER (PARTITION BY pt.history_id ORDER BY pt.id DESC) as rn
+  FROM prompt_templates pt
+  WHERE project_id = $2
+    AND pt.deleted IS FALSE
+)
+SELECT rel.id as tp_id, rt.id, rt.project_id, rt.history_id, rt.predecessor_id, rt.name, rt.description, rt.arguments, rt.prompt, rt.engine, rt.kind, rt.tools_hint, rt.created_at, rt.updated_at, rt.deleted_at, rt.deleted, rt.rn
 FROM toolset_prompts rel
-INNER JOIN prompt_templates pt ON rel.project_id = pt.project_id AND rel.prompt_history_id = pt.history_id
-WHERE 
-  rel.project_id = $1
-  AND rel.toolset_id = $2
-  AND (rel.prompt_template_id IS NULL OR pt.id = rel.prompt_template_id)
+JOIN ranked_templates rt ON (
+  (rel.prompt_template_id IS NOT NULL AND rt.id = rel.prompt_template_id)
+  OR 
+  (rel.prompt_template_id IS NULL AND rt.history_id = rel.prompt_history_id AND rt.rn = 1)
+)
+WHERE rel.toolset_id = $1
+  AND rel.project_id = $2
+ORDER BY rel.prompt_name
 `
 
 type GetPromptTemplatesForToolsetParams struct {
-	ProjectID uuid.UUID
 	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
 }
 
 type GetPromptTemplatesForToolsetRow struct {
-	ID             uuid.UUID
-	PromptTemplate PromptTemplate
+	TpID          uuid.UUID
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	HistoryID     uuid.UUID
+	PredecessorID uuid.NullUUID
+	Name          string
+	Description   pgtype.Text
+	Arguments     []byte
+	Prompt        string
+	Engine        pgtype.Text
+	Kind          pgtype.Text
+	ToolsHint     []string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+	Rn            int64
 }
 
 func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromptTemplatesForToolsetParams) ([]GetPromptTemplatesForToolsetRow, error) {
-	rows, err := q.db.Query(ctx, getPromptTemplatesForToolset, arg.ProjectID, arg.ToolsetID)
+	rows, err := q.db.Query(ctx, getPromptTemplatesForToolset, arg.ToolsetID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -190,22 +216,23 @@ func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromp
 	for rows.Next() {
 		var i GetPromptTemplatesForToolsetRow
 		if err := rows.Scan(
+			&i.TpID,
 			&i.ID,
-			&i.PromptTemplate.ID,
-			&i.PromptTemplate.ProjectID,
-			&i.PromptTemplate.HistoryID,
-			&i.PromptTemplate.PredecessorID,
-			&i.PromptTemplate.Name,
-			&i.PromptTemplate.Description,
-			&i.PromptTemplate.Arguments,
-			&i.PromptTemplate.Prompt,
-			&i.PromptTemplate.Engine,
-			&i.PromptTemplate.Kind,
-			&i.PromptTemplate.ToolsHint,
-			&i.PromptTemplate.CreatedAt,
-			&i.PromptTemplate.UpdatedAt,
-			&i.PromptTemplate.DeletedAt,
-			&i.PromptTemplate.Deleted,
+			&i.ProjectID,
+			&i.HistoryID,
+			&i.PredecessorID,
+			&i.Name,
+			&i.Description,
+			&i.Arguments,
+			&i.Prompt,
+			&i.Engine,
+			&i.Kind,
+			&i.ToolsHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.Rn,
 		); err != nil {
 			return nil, err
 		}

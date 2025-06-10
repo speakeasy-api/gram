@@ -70,13 +70,24 @@ WHERE mcp_slug = @mcp_slug
   AND deleted IS FALSE;
 
 -- name: GetPromptTemplatesForToolset :many
-SELECT rel.id, sqlc.embed(pt)
+WITH ranked_templates AS (
+  SELECT 
+    pt.*,
+    ROW_NUMBER() OVER (PARTITION BY pt.history_id ORDER BY pt.id DESC) as rn
+  FROM prompt_templates pt
+  WHERE project_id = @project_id
+    AND pt.deleted IS FALSE
+)
+SELECT rel.id as tp_id, rt.*
 FROM toolset_prompts rel
-INNER JOIN prompt_templates pt ON rel.project_id = pt.project_id AND rel.prompt_history_id = pt.history_id
-WHERE 
-  rel.project_id = @project_id
-  AND rel.toolset_id = @toolset_id
-  AND (rel.prompt_template_id IS NULL OR pt.id = rel.prompt_template_id);
+JOIN ranked_templates rt ON (
+  (rel.prompt_template_id IS NOT NULL AND rt.id = rel.prompt_template_id)
+  OR 
+  (rel.prompt_template_id IS NULL AND rt.history_id = rel.prompt_history_id AND rt.rn = 1)
+)
+WHERE rel.toolset_id = @toolset_id
+  AND rel.project_id = @project_id
+ORDER BY rel.prompt_name;
 
 -- name: ClearToolsetPromptTemplates :exec
 DELETE FROM toolset_prompts

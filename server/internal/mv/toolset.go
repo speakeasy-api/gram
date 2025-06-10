@@ -183,28 +183,28 @@ func DescribeToolset(
 	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
 	for _, pt := range ptrows {
 		var args *string
-		if len(pt.PromptTemplate.Arguments) > 0 {
-			args = conv.PtrEmpty(string(pt.PromptTemplate.Arguments))
+		if len(pt.Arguments) > 0 {
+			args = conv.PtrEmpty(string(pt.Arguments))
 		}
 
-		hint := pt.PromptTemplate.ToolsHint
+		hint := pt.ToolsHint
 		if hint == nil {
 			hint = []string{}
 		}
 
 		promptTemplates = append(promptTemplates, &types.PromptTemplate{
-			ID:            pt.PromptTemplate.ID.String(),
-			HistoryID:     pt.PromptTemplate.HistoryID.String(),
-			PredecessorID: conv.FromNullableUUID(pt.PromptTemplate.PredecessorID),
-			Name:          types.Slug(pt.PromptTemplate.Name),
-			Prompt:        pt.PromptTemplate.Prompt,
-			Description:   conv.FromPGText[string](pt.PromptTemplate.Description),
+			ID:            pt.ID.String(),
+			HistoryID:     pt.HistoryID.String(),
+			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
+			Name:          types.Slug(pt.Name),
+			Prompt:        pt.Prompt,
+			Description:   conv.FromPGText[string](pt.Description),
 			Arguments:     args,
-			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.PromptTemplate.Engine), "none"),
-			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.PromptTemplate.Kind), "prompt"),
+			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
+			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
 			ToolsHint:     hint,
-			CreatedAt:     pt.PromptTemplate.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:     pt.PromptTemplate.UpdatedAt.Time.Format(time.RFC3339),
+			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
 
