@@ -592,12 +592,12 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
   CONSTRAINT prompt_templates_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES prompt_templates (id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS prompt_templates_project_id_idx
-ON prompt_templates (project_id, history_id)
-WHERE deleted IS FALSE;
-
 CREATE UNIQUE INDEX IF NOT EXISTS prompt_templates_project_id_name_key
 ON prompt_templates (project_id, name, predecessor_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS prompt_templates_latest_revision
+ON prompt_templates (project_id, history_id, id DESC)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolset_prompts (
