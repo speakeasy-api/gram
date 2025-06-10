@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -86,6 +87,15 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 	var args []byte
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
+
+		var jsErr *jsonSchemaValidationError
+		err := validateInputSchema(bytes.NewReader(args))
+		switch {
+		case errors.As(err, &jsErr):
+			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, s.logger)
+		case err != nil:
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, s.logger)
+		}
 	}
 
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
@@ -159,6 +169,15 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	var args []byte
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
+
+		var jsErr *jsonSchemaValidationError
+		err := validateInputSchema(bytes.NewReader(args))
+		switch {
+		case errors.As(err, &jsErr):
+			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, s.logger)
+		case err != nil:
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, s.logger)
+		}
 	}
 
 	newid, err := tr.UpdateTemplate(ctx, repo.UpdateTemplateParams{
