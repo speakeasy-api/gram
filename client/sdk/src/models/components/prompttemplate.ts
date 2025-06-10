@@ -12,13 +12,13 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * The template engine
  */
-export const PromptTemplateEngine = {
+export const Engine = {
   Mustache: "mustache",
 } as const;
 /**
  * The template engine
  */
-export type PromptTemplateEngine = ClosedEnum<typeof PromptTemplateEngine>;
+export type Engine = ClosedEnum<typeof Engine>;
 
 /**
  * The kind of prompt the template is used for
@@ -48,7 +48,7 @@ export type PromptTemplate = {
   /**
    * The template engine
    */
-  engine: PromptTemplateEngine;
+  engine: Engine;
   /**
    * The revision tree ID for the prompt template
    */
@@ -84,24 +84,22 @@ export type PromptTemplate = {
 };
 
 /** @internal */
-export const PromptTemplateEngine$inboundSchema: z.ZodNativeEnum<
-  typeof PromptTemplateEngine
-> = z.nativeEnum(PromptTemplateEngine);
+export const Engine$inboundSchema: z.ZodNativeEnum<typeof Engine> = z
+  .nativeEnum(Engine);
 
 /** @internal */
-export const PromptTemplateEngine$outboundSchema: z.ZodNativeEnum<
-  typeof PromptTemplateEngine
-> = PromptTemplateEngine$inboundSchema;
+export const Engine$outboundSchema: z.ZodNativeEnum<typeof Engine> =
+  Engine$inboundSchema;
 
 /**
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace PromptTemplateEngine$ {
-  /** @deprecated use `PromptTemplateEngine$inboundSchema` instead. */
-  export const inboundSchema = PromptTemplateEngine$inboundSchema;
-  /** @deprecated use `PromptTemplateEngine$outboundSchema` instead. */
-  export const outboundSchema = PromptTemplateEngine$outboundSchema;
+export namespace Engine$ {
+  /** @deprecated use `Engine$inboundSchema` instead. */
+  export const inboundSchema = Engine$inboundSchema;
+  /** @deprecated use `Engine$outboundSchema` instead. */
+  export const outboundSchema = Engine$outboundSchema;
 }
 
 /** @internal */
@@ -134,7 +132,7 @@ export const PromptTemplate$inboundSchema: z.ZodType<
   arguments: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   description: z.string().optional(),
-  engine: PromptTemplateEngine$inboundSchema,
+  engine: Engine$inboundSchema,
   history_id: z.string(),
   id: z.string(),
   kind: PromptTemplateKind$inboundSchema,
@@ -178,7 +176,7 @@ export const PromptTemplate$outboundSchema: z.ZodType<
   arguments: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
   description: z.string().optional(),
-  engine: PromptTemplateEngine$outboundSchema,
+  engine: Engine$outboundSchema,
   historyId: z.string(),
   id: z.string(),
   kind: PromptTemplateKind$outboundSchema,

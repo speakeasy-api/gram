@@ -361,6 +361,37 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 	return res
 }
 
+// marshalTypesPromptTemplateToPromptTemplateResponseBody builds a value of
+// type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
+func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &PromptTemplateResponseBody{
+		ID:            v.ID,
+		HistoryID:     v.HistoryID,
+		PredecessorID: v.PredecessorID,
+		Name:          string(v.Name),
+		Prompt:        v.Prompt,
+		Description:   v.Description,
+		Arguments:     v.Arguments,
+		Engine:        v.Engine,
+		Kind:          v.Kind,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	if v.ToolsHint != nil {
+		res.ToolsHint = make([]string, len(v.ToolsHint))
+		for i, val := range v.ToolsHint {
+			res.ToolsHint[i] = val
+		}
+	} else {
+		res.ToolsHint = []string{}
+	}
+
+	return res
+}
+
 // marshalTypesEnvironmentToEnvironmentResponseBody builds a value of type
 // *EnvironmentResponseBody from a value of type *types.Environment.
 func marshalTypesEnvironmentToEnvironmentResponseBody(v *types.Environment) *EnvironmentResponseBody {

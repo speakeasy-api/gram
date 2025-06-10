@@ -143,6 +143,24 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		UpdatedAt:      envModel.UpdatedAt.Time.Format(time.RFC3339),
 	}
 
+	promptTemplates := make([]*types.PromptTemplate, len(toolset.PromptTemplates))
+	for i, template := range toolset.PromptTemplates {
+		promptTemplates[i] = &types.PromptTemplate{
+			ID:            template.ID,
+			Name:          template.Name,
+			HistoryID:     template.HistoryID,
+			PredecessorID: template.PredecessorID,
+			Prompt:        template.Prompt,
+			Description:   template.Description,
+			Arguments:     template.Arguments,
+			Engine:        template.Engine,
+			Kind:          template.Kind,
+			ToolsHint:     template.ToolsHint,
+			CreatedAt:     template.CreatedAt,
+			UpdatedAt:     template.UpdatedAt,
+		}
+	}
+
 	httpTools := make([]*types.HTTPToolDefinition, len(toolset.HTTPTools))
 	for i, tool := range toolset.HTTPTools {
 		schema, err := s.getToolSchema(ctx, tool)
@@ -181,6 +199,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		Description:                  toolset.Description,
 		RelevantEnvironmentVariables: toolset.RelevantEnvironmentVariables,
 		Tools:                        httpTools,
+		PromptTemplates:              promptTemplates,
 		Environment:                  environment,
 	}, nil
 }

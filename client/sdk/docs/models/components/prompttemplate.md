@@ -14,9 +14,10 @@ let value: PromptTemplate = {
   name: "<value>",
   prompt: "<value>",
   toolsHint: [
-    "<value>",
+    "<value 1>",
+    "<value 2>",
   ],
-  updatedAt: new Date("2024-11-07T17:04:28.929Z"),
+  updatedAt: new Date("2025-05-11T16:12:34.391Z"),
 };
 ```
 
@@ -27,7 +28,7 @@ let value: PromptTemplate = {
 | `arguments`                                                                                   | *string*                                                                                      | :heavy_minus_sign:                                                                            | The JSON Schema defining the placeholders found in the prompt template                        |
 | `createdAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The creation date of the prompt template.                                                     |
 | `description`                                                                                 | *string*                                                                                      | :heavy_minus_sign:                                                                            | The description of the prompt template                                                        |
-| `engine`                                                                                      | [components.PromptTemplateEngine](../../models/components/prompttemplateengine.md)            | :heavy_check_mark:                                                                            | The template engine                                                                           |
+| `engine`                                                                                      | [components.Engine](../../models/components/engine.md)                                        | :heavy_check_mark:                                                                            | The template engine                                                                           |
 | `historyId`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | The revision tree ID for the prompt template                                                  |
 | `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the prompt template                                                                 |
 | `kind`                                                                                        | [components.PromptTemplateKind](../../models/components/prompttemplatekind.md)                | :heavy_check_mark:                                                                            | The kind of prompt the template is used for                                                   |

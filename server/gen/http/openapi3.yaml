@@ -6490,6 +6490,11 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: The list of prompt templates
                 relevant_environment_variables:
                     type: array
                     items:

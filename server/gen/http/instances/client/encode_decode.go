@@ -357,6 +357,33 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 	return res
 }
 
+// unmarshalPromptTemplateResponseBodyToTypesPromptTemplate builds a value of
+// type *types.PromptTemplate from a value of type *PromptTemplateResponseBody.
+func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateResponseBody) *types.PromptTemplate {
+	if v == nil {
+		return nil
+	}
+	res := &types.PromptTemplate{
+		ID:            *v.ID,
+		HistoryID:     *v.HistoryID,
+		PredecessorID: v.PredecessorID,
+		Name:          types.Slug(*v.Name),
+		Prompt:        *v.Prompt,
+		Description:   v.Description,
+		Arguments:     v.Arguments,
+		Engine:        *v.Engine,
+		Kind:          *v.Kind,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
+	}
+	res.ToolsHint = make([]string, len(v.ToolsHint))
+	for i, val := range v.ToolsHint {
+		res.ToolsHint[i] = val
+	}
+
+	return res
+}
+
 // unmarshalEnvironmentResponseBodyToTypesEnvironment builds a value of type
 // *types.Environment from a value of type *EnvironmentResponseBody.
 func unmarshalEnvironmentResponseBodyToTypesEnvironment(v *EnvironmentResponseBody) *types.Environment {

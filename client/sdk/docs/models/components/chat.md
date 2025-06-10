@@ -10,15 +10,15 @@ let value: Chat = {
   id: "<id>",
   messages: [
     {
-      createdAt: new Date("2025-06-11T17:17:58.548Z"),
+      createdAt: new Date("2024-01-23T04:53:42.435Z"),
       id: "<id>",
-      model: "Cruze",
+      model: "Durango",
       role: "<value>",
     },
   ],
-  numMessages: 374358,
+  numMessages: 338963,
   title: "<value>",
-  updatedAt: new Date("2024-01-07T12:05:25.433Z"),
+  updatedAt: new Date("2024-06-25T13:21:36.855Z"),
   userId: "<id>",
 };
 ```

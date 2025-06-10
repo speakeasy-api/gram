@@ -22,6 +22,8 @@ type GetInstanceResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The list of tools
 	Tools []*HTTPToolDefinitionResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The list of prompt templates
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The environment variables that are relevant to the toolset
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The environment
@@ -308,6 +310,34 @@ type ToolVariationResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// PromptTemplateResponseBody is used to define fields on response body types.
+type PromptTemplateResponseBody struct {
+	// The ID of the prompt template
+	ID string `form:"id" json:"id" xml:"id"`
+	// The revision tree ID for the prompt template
+	HistoryID string `form:"history_id" json:"history_id" xml:"history_id"`
+	// The previous version of the prompt template to use as predecessor
+	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
+	// The name of the prompt template
+	Name string `form:"name" json:"name" xml:"name"`
+	// The template content
+	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
+	// The description of the prompt template
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The JSON Schema defining the placeholders found in the prompt template
+	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	// The template engine
+	Engine string `form:"engine" json:"engine" xml:"engine"`
+	// The kind of prompt the template is used for
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The suggested tool names associated with the prompt template
+	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
+	// The creation date of the prompt template.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the prompt template.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // EnvironmentResponseBody is used to define fields on response body types.
 type EnvironmentResponseBody struct {
 	// The ID of the environment
@@ -356,6 +386,12 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 		}
 	} else {
 		body.Tools = []*HTTPToolDefinitionResponseBody{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
 	}
 	if res.RelevantEnvironmentVariables != nil {
 		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))

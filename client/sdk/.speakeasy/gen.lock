@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 403935319afd89e0dd5c7613464e78d3
+  docChecksum: 9fa6597c9f258ca1fa1f1b9cc77d640e
   docVersion: 0.0.1
-  speakeasyVersion: 1.554.1
-  generationVersion: 2.616.1
-  releaseVersion: 0.12.12
-  configChecksum: 93a2209b74215411552d2d1009a58ffd
+  speakeasyVersion: 1.559.0
+  generationVersion: 2.624.0
+  releaseVersion: 0.12.13
+  configChecksum: 6ad5156f34dfc5d37020bf7e30933bf4
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.9
+    core: 3.21.10
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -55,6 +55,7 @@ generatedFiles:
   - docs/models/components/createprojectrequestbody.md
   - docs/models/components/createprojectresult.md
   - docs/models/components/createprompttemplateform.md
+  - docs/models/components/createprompttemplateformengine.md
   - docs/models/components/createprompttemplateformkind.md
   - docs/models/components/createprompttemplateresult.md
   - docs/models/components/createtoolsetrequestbody.md
@@ -104,7 +105,6 @@ generatedFiles:
   - docs/models/components/project.md
   - docs/models/components/projectentry.md
   - docs/models/components/prompttemplate.md
-  - docs/models/components/prompttemplateengine.md
   - docs/models/components/prompttemplatekind.md
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
@@ -470,8 +470,10 @@ generatedFiles:
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/errors/apierror.ts
+  - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
+  - src/models/errors/responsevalidationerror.ts
   - src/models/errors/sdkvalidationerror.ts
   - src/models/errors/serviceerror.ts
   - src/models/operations/authcallback.ts

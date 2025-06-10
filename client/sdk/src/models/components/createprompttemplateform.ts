@@ -12,13 +12,15 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * The template engine
  */
-export const Engine = {
+export const CreatePromptTemplateFormEngine = {
   Mustache: "mustache",
 } as const;
 /**
  * The template engine
  */
-export type Engine = ClosedEnum<typeof Engine>;
+export type CreatePromptTemplateFormEngine = ClosedEnum<
+  typeof CreatePromptTemplateFormEngine
+>;
 
 /**
  * The kind of prompt the template is used for
@@ -46,7 +48,7 @@ export type CreatePromptTemplateForm = {
   /**
    * The template engine
    */
-  engine: Engine;
+  engine: CreatePromptTemplateFormEngine;
   /**
    * The kind of prompt the template is used for
    */
@@ -66,22 +68,24 @@ export type CreatePromptTemplateForm = {
 };
 
 /** @internal */
-export const Engine$inboundSchema: z.ZodNativeEnum<typeof Engine> = z
-  .nativeEnum(Engine);
+export const CreatePromptTemplateFormEngine$inboundSchema: z.ZodNativeEnum<
+  typeof CreatePromptTemplateFormEngine
+> = z.nativeEnum(CreatePromptTemplateFormEngine);
 
 /** @internal */
-export const Engine$outboundSchema: z.ZodNativeEnum<typeof Engine> =
-  Engine$inboundSchema;
+export const CreatePromptTemplateFormEngine$outboundSchema: z.ZodNativeEnum<
+  typeof CreatePromptTemplateFormEngine
+> = CreatePromptTemplateFormEngine$inboundSchema;
 
 /**
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace Engine$ {
-  /** @deprecated use `Engine$inboundSchema` instead. */
-  export const inboundSchema = Engine$inboundSchema;
-  /** @deprecated use `Engine$outboundSchema` instead. */
-  export const outboundSchema = Engine$outboundSchema;
+export namespace CreatePromptTemplateFormEngine$ {
+  /** @deprecated use `CreatePromptTemplateFormEngine$inboundSchema` instead. */
+  export const inboundSchema = CreatePromptTemplateFormEngine$inboundSchema;
+  /** @deprecated use `CreatePromptTemplateFormEngine$outboundSchema` instead. */
+  export const outboundSchema = CreatePromptTemplateFormEngine$outboundSchema;
 }
 
 /** @internal */
@@ -113,7 +117,7 @@ export const CreatePromptTemplateForm$inboundSchema: z.ZodType<
 > = z.object({
   arguments: z.string().optional(),
   description: z.string().optional(),
-  engine: Engine$inboundSchema,
+  engine: CreatePromptTemplateFormEngine$inboundSchema,
   kind: CreatePromptTemplateFormKind$inboundSchema,
   name: z.string(),
   prompt: z.string(),
@@ -143,7 +147,7 @@ export const CreatePromptTemplateForm$outboundSchema: z.ZodType<
 > = z.object({
   arguments: z.string().optional(),
   description: z.string().optional(),
-  engine: Engine$outboundSchema,
+  engine: CreatePromptTemplateFormEngine$outboundSchema,
   kind: CreatePromptTemplateFormKind$outboundSchema,
   name: z.string(),
   prompt: z.string(),

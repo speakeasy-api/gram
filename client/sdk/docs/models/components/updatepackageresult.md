@@ -7,12 +7,12 @@ import { UpdatePackageResult } from "@gram/client/models/components";
 
 let value: UpdatePackageResult = {
   package: {
-    createdAt: new Date("2024-06-06T09:18:15.708Z"),
+    createdAt: new Date("2025-04-29T19:32:19.315Z"),
     id: "<id>",
     name: "<value>",
     organizationId: "<id>",
     projectId: "<id>",
-    updatedAt: new Date("2023-08-25T11:16:01.596Z"),
+    updatedAt: new Date("2023-02-03T19:41:53.384Z"),
   },
 };
 ```

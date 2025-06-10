@@ -51,6 +51,7 @@ var GetInstanceResult = Type("GetInstanceResult", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "The description of the toolset")
 	Attribute("tools", ArrayOf(shared.HTTPToolDefinition), "The list of tools")
+	Attribute("prompt_templates", ArrayOf(shared.PromptTemplate), "The list of prompt templates")
 	Attribute("relevant_environment_variables", ArrayOf(String), "The environment variables that are relevant to the toolset")
 	Attribute("environment", shared.Environment, "The environment")
 	Required("name", "tools", "environment")

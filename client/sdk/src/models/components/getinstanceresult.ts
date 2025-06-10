@@ -19,6 +19,12 @@ import {
   HTTPToolDefinition$Outbound,
   HTTPToolDefinition$outboundSchema,
 } from "./httptooldefinition.js";
+import {
+  PromptTemplate,
+  PromptTemplate$inboundSchema,
+  PromptTemplate$Outbound,
+  PromptTemplate$outboundSchema,
+} from "./prompttemplate.js";
 
 export type GetInstanceResult = {
   /**
@@ -33,6 +39,10 @@ export type GetInstanceResult = {
    * The name of the toolset
    */
   name: string;
+  /**
+   * The list of prompt templates
+   */
+  promptTemplates?: Array<PromptTemplate> | undefined;
   /**
    * The environment variables that are relevant to the toolset
    */
@@ -52,10 +62,12 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
   description: z.string().optional(),
   environment: Environment$inboundSchema,
   name: z.string(),
+  prompt_templates: z.array(PromptTemplate$inboundSchema).optional(),
   relevant_environment_variables: z.array(z.string()).optional(),
   tools: z.array(HTTPToolDefinition$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    "prompt_templates": "promptTemplates",
     "relevant_environment_variables": "relevantEnvironmentVariables",
   });
 });
@@ -65,6 +77,7 @@ export type GetInstanceResult$Outbound = {
   description?: string | undefined;
   environment: Environment$Outbound;
   name: string;
+  prompt_templates?: Array<PromptTemplate$Outbound> | undefined;
   relevant_environment_variables?: Array<string> | undefined;
   tools: Array<HTTPToolDefinition$Outbound>;
 };
@@ -78,10 +91,12 @@ export const GetInstanceResult$outboundSchema: z.ZodType<
   description: z.string().optional(),
   environment: Environment$outboundSchema,
   name: z.string(),
+  promptTemplates: z.array(PromptTemplate$outboundSchema).optional(),
   relevantEnvironmentVariables: z.array(z.string()).optional(),
   tools: z.array(HTTPToolDefinition$outboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    promptTemplates: "prompt_templates",
     relevantEnvironmentVariables: "relevant_environment_variables",
   });
 });

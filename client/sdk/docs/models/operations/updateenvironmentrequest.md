@@ -7,17 +7,6 @@ import { UpdateEnvironmentRequest } from "@gram/client/models/operations";
 
 let value: UpdateEnvironmentRequest = {
   slug: "<value>",
-  updateEnvironmentRequestBody: {
-    entriesToRemove: [
-      "<value>",
-    ],
-    entriesToUpdate: [
-      {
-        name: "<value>",
-        value: "<value>",
-      },
-    ],
-  },
 };
 ```
 
