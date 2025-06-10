@@ -155,11 +155,13 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()), slog.String("toolset_slug", string(payload.Slug)))
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	tr := s.repo.WithTx(dbtx)
 	tplr := tplRepo.New(dbtx)
@@ -170,7 +172,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	}
 
 	// Convert update params
@@ -247,7 +249,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").Log(ctx, logger)
 	}
 
 	if payload.PromptTemplateNames != nil {
@@ -256,7 +258,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			Names:     payload.PromptTemplateNames,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error validating prompt templates").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error validating prompt templates").Log(ctx, logger)
 		}
 
 		err = tr.ClearToolsetPromptTemplates(ctx, repo.ClearToolsetPromptTemplatesParams{
@@ -264,7 +266,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			ToolsetID: existingToolset.ID,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error resetting prompt templates for toolset").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error resetting prompt templates for toolset").Log(ctx, logger)
 		}
 
 		additions := make([]repo.AddToolsetPromptTemplatesParams, 0, len(ptrows))
@@ -280,17 +282,17 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 		_, err = tr.AddToolsetPromptTemplates(ctx, additions)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error adding prompt templates to toolset").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error adding prompt templates to toolset").Log(ctx, logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").Log(ctx, logger)
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug))
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, logger)
 	}
 
 	return toolsetDetails, nil

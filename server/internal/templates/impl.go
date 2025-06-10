@@ -77,10 +77,10 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
 	}
 
-	defer o11y.LogDefer(ctx, logger, func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	tr := s.repo.WithTx(dbtx)
 
@@ -92,9 +92,9 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		err := validateInputSchema(bytes.NewReader(args))
 		switch {
 		case errors.As(err, &jsErr):
-			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, logger)
 		}
 	}
 
@@ -116,16 +116,16 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		}
 		return nil, err
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create template").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create template").Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template").Log(ctx, logger)
 	}
 
-	pt, err := mv.DescribePromptTemplate(ctx, s.logger, s.db, mv.ProjectID(projectID), mv.PromptTemplateID(uuid.NullUUID{UUID: id, Valid: true}), mv.PromptTemplateName(nil))
+	pt, err := mv.DescribePromptTemplate(ctx, logger, s.db, mv.ProjectID(projectID), mv.PromptTemplateID(uuid.NullUUID{UUID: id, Valid: true}), mv.PromptTemplateName(nil))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to read template").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read template").Log(ctx, logger)
 	}
 
 	return &gen.CreatePromptTemplateResult{Template: pt}, nil
