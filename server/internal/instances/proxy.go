@@ -138,16 +138,19 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	var req *http.Request
 	var err error
 	if strings.HasPrefix(toolExecutionInfo.Tool.RequestContentType.String, "application/x-www-form-urlencoded") {
-		// Assume toolCallBody.Body is a JSON object (map[string]interface{})
-		var formMap map[string]interface{}
-		if err := json.Unmarshal(toolCallBody.Body, &formMap); err != nil {
-			return oops.E(oops.CodeBadRequest, err, "failed to parse form body").Log(ctx, logger)
+		encoded := ""
+		if toolCallBody.Body != nil && len(toolCallBody.Body) > 0 {
+			// Assume toolCallBody.Body is a JSON object (map[string]interface{})
+			var formMap map[string]interface{}
+			if err := json.Unmarshal(toolCallBody.Body, &formMap); err != nil {
+				return oops.E(oops.CodeBadRequest, err, "failed to parse form body").Log(ctx, logger)
+			}
+			values := url.Values{}
+			for k, v := range formMap {
+				values.Set(k, fmt.Sprintf("%v", v))
+			}
+			encoded = values.Encode()
 		}
-		values := url.Values{}
-		for k, v := range formMap {
-			values.Set(k, fmt.Sprintf("%v", v))
-		}
-		encoded := values.Encode()
 		req, err = http.NewRequestWithContext(
 			ctx,
 			toolExecutionInfo.Tool.HttpMethod,
