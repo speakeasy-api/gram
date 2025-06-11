@@ -26,6 +26,10 @@ export type HTTPToolDefinition = {
    */
   canonical?: CanonicalToolAttributes | undefined;
   /**
+   * The canonical name of the tool. Will be the same as the name if there is no variation.
+   */
+  canonicalName: string;
+  /**
    * Confirmation mode for the tool
    */
   confirm: string;
@@ -115,6 +119,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
+  canonical_name: z.string(),
   confirm: z.string(),
   confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
@@ -138,6 +143,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    "canonical_name": "canonicalName",
     "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
     "deployment_id": "deploymentId",
@@ -154,6 +160,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
 /** @internal */
 export type HTTPToolDefinition$Outbound = {
   canonical?: CanonicalToolAttributes$Outbound | undefined;
+  canonical_name: string;
   confirm: string;
   confirm_prompt?: string | undefined;
   created_at: string;
@@ -184,6 +191,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   HTTPToolDefinition
 > = z.object({
   canonical: CanonicalToolAttributes$outboundSchema.optional(),
+  canonicalName: z.string(),
   confirm: z.string(),
   confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
@@ -207,6 +215,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    canonicalName: "canonical_name",
     confirmPrompt: "confirm_prompt",
     createdAt: "created_at",
     deploymentId: "deployment_id",

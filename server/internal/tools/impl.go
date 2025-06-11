@@ -161,11 +161,17 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 		confirm, _ := mv.SanitizeConfirm(confirmRaw)
 
+		canonicalName := name
+		if canonical != nil {
+			canonicalName = canonical.Name
+		}
+
 		result.Tools[i] = &types.HTTPToolDefinition{
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
 			ProjectID:           authCtx.ProjectID.String(),
 			Name:                name,
+			CanonicalName:       canonicalName,
 			Summary:             summary,
 			Description:         description,
 			Confirm:             string(confirm),

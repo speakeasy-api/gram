@@ -11,7 +11,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useIsAdmin } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -22,23 +21,12 @@ import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
-  const isAdmin = useIsAdmin();
 
-  const topNavGroups = isAdmin
-    ? {
-        create: [routes.home, routes.customTools, routes.prompts],
-        curate: [routes.toolsets, routes.environments, routes.integrations],
-        connect: [routes.mcp, routes.sdk, routes.slackApp],
-      }
-    : {
-        configure: [
-          routes.home,
-          routes.toolsets,
-          routes.environments,
-          routes.integrations,
-        ],
-        connect: [routes.mcp, routes.sdk, routes.slackApp],
-      };
+  const topNavGroups = {
+    create: [routes.openapi, routes.customTools, routes.prompts],
+    curate: [routes.toolsets, routes.environments, routes.integrations],
+    connect: [routes.mcp, routes.sdk, routes.slackApp],
+  };
 
   const bottomNav = [routes.settings, routes.docs];
 
@@ -69,9 +57,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
             >
               <Stack direction={"horizontal"} gap={2}>
-                <routes.home.Link>
+                <routes.openapi.Link>
                   <GramLogo className="text-3xl" />
-                </routes.home.Link>
+                </routes.openapi.Link>
                 <Type variant="small" muted className="self-end">
                   v0.5.0 (alpha)
                 </Type>

@@ -1,12 +1,13 @@
 import { AddButton } from "@/components/add-button";
 import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
+import { CreateThingCard } from "@/components/create-thing-card";
 import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { HttpRoute } from "@/components/http-route";
 import { InputDialog } from "@/components/input-dialog";
 import { NameAndSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { ToolsBadge } from "@/components/tools-badge";
+import { ToolsetToolsBadge } from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
@@ -37,6 +38,7 @@ import {
 } from "@gram/client/models/components";
 import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition";
 import {
+  invalidateTemplate,
   queryKeyInstance,
   useDeleteToolsetMutation,
   useDeployment,
@@ -52,7 +54,7 @@ import { Outlet, useParams } from "react-router";
 import { useEnvironment } from "../environments/Environment";
 import { useEnvironments } from "../environments/Environments";
 import { useToolsets } from "./Toolsets";
-import { CreateThingCard } from "@/components/create-thing-card";
+import { ToolDefinition, useToolDefinitions } from "./types";
 
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
@@ -144,6 +146,7 @@ export function ToolsetView({
   const { data: toolset, refetch } = useToolset({
     slug: toolsetSlug,
   });
+  const toolDefinitions = useToolDefinitions(toolset);
 
   useRegisterToolsetTelemetry({
     toolsetSlug: toolsetSlug ?? "",
@@ -353,9 +356,9 @@ export function ToolsetView({
         {groupFilterItems.length > 1 && filterButton}
         {missingEnvVarsAlert}
         <Cards loading={!toolset}>
-          {toolsToDisplay.map((tool) => (
+          {toolDefinitions.map((tool) => (
             <ToolCard
-              key={tool.id}
+              key={tool.canonicalName}
               tool={tool}
               onRemove={() => removeToolFromToolset(tool.name)}
               onUpdate={onUpdate}
@@ -435,7 +438,7 @@ export const ToolsetHeader = ({
           </Type>
         </EditableText>
         <Stack direction="horizontal" gap={2}>
-          <ToolsBadge tools={toolset?.httpTools} size="md" variant="outline" />
+          <ToolsetToolsBadge toolset={toolset} size="md" variant="outline" />
           <ToolsetEnvironmentBadge
             toolset={toolset}
             size="md"
@@ -447,19 +450,23 @@ export const ToolsetHeader = ({
   );
 };
 
-function useToolSourceName(deploymentId: string, tool: HTTPToolDefinition) {
+function useToolSourceName(tool: ToolDefinition) {
   const { data: deployment } = useDeployment(
     {
-      id: deploymentId,
+      id: (tool as HTTPToolDefinition).deploymentId,
     },
     undefined,
     {
-      enabled: !tool.packageName,
+      enabled: tool.type === "http" && !tool.packageName,
     }
   );
 
   if (tool.packageName) {
     return tool.packageName;
+  }
+
+  if (tool.type === "prompt") {
+    return "Custom";
   }
 
   return deployment?.openapiv3Assets.find(
@@ -472,12 +479,13 @@ function ToolCard({
   onRemove,
   onUpdate,
 }: {
-  tool: HTTPToolDefinition;
+  tool: ToolDefinition;
   onRemove: () => void;
   onUpdate: () => void;
 }) {
+  const queryClient = useQueryClient();
   const client = useSdkClient();
-  const sourceName = useToolSourceName(tool.deploymentId, tool);
+  const sourceName = useToolSourceName(tool);
   const telemetry = useTelemetry();
   const toolNameDisplay = sourceName
     ? tool.name.replace(sourceName + "_", "")
@@ -486,14 +494,24 @@ function ToolCard({
   const updateVariation = async (
     vals: Partial<UpsertGlobalToolVariationForm>
   ) => {
-    await client.variations.upsertGlobal({
-      upsertGlobalToolVariationForm: {
-        srcToolName: tool.name,
-        ...tool.variation,
-        confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
-        ...vals,
-      },
-    });
+    if (tool.type === "http") {
+      await client.variations.upsertGlobal({
+        upsertGlobalToolVariationForm: {
+          srcToolName: tool.name,
+          ...tool.variation,
+          confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
+          ...vals,
+        },
+      });
+    } else {
+      await client.templates.update({
+        updatePromptTemplateForm: {
+          ...tool,
+          ...vals,
+        },
+      });
+      invalidateTemplate(queryClient, [{ name: tool.name }]);
+    }
 
     telemetry.capture("toolset_event", {
       action: "tool_variation_updated",
@@ -504,6 +522,8 @@ function ToolCard({
     onUpdate();
   };
 
+  const autoSummarizeEnabled = tool.type === "http" && tool.summarizer;
+
   const header = (
     <Stack direction="horizontal" gap={2} align="center">
       <EditableText
@@ -511,6 +531,7 @@ function ToolCard({
         onSubmit={(newValue) => updateVariation({ name: newValue })}
         label={"Tool Name"}
         description={`Update the name of tool '${tool.name}'`}
+        disabled={tool.type === "prompt"}
       >
         <Stack direction="horizontal" gap={2} align="center">
           <Heading
@@ -524,7 +545,7 @@ function ToolCard({
           <Heading variant="h4">{toolNameDisplay}</Heading>
         </Stack>
       </EditableText>
-      {tool.summarizer && <AutoSummarizeBadge />}
+      {autoSummarizeEnabled && <AutoSummarizeBadge />}
     </Stack>
   );
 
@@ -540,17 +561,17 @@ function ToolCard({
 
   const autoSummarizeButton = (
     <Button
-      icon={tool.summarizer ? "check" : "sparkles"}
+      icon={autoSummarizeEnabled ? "check" : "sparkles"}
       variant="ghost"
       size="sm"
       tooltip="An experimental feature. Attempt to Auto-summarize the tool's response via separate LLM and prevent large data from overwhelming the context window."
       onClick={() => {
         updateVariation({
-          summarizer: tool.summarizer ? undefined : "auto",
+          summarizer: autoSummarizeEnabled ? undefined : "auto",
         });
       }}
     >
-      {tool.summarizer ? "Auto-Summarize" : "Auto-Summarize (alpha)"}
+      {autoSummarizeEnabled ? "Auto-Summarize" : "Auto-Summarize (alpha)"}
     </Button>
   );
 
@@ -560,10 +581,16 @@ function ToolCard({
         <Card.Title>{header}</Card.Title>
         <Card.Info>{tags}</Card.Info>
         <Card.Description>
-          <HttpRoute method={tool.httpMethod} path={tool.path} />
+          {tool.type === "http" ? (
+            <HttpRoute method={tool.httpMethod} path={tool.path} />
+          ) : (
+            <Type small mono muted>
+              {tool.toolsHint.join(", ")}
+            </Type>
+          )}
         </Card.Description>
         <Card.Actions>
-          {autoSummarizeButton}
+          {tool.type === "http" && autoSummarizeButton}
           <DeleteButton
             size="sm"
             tooltip="Remove tool from this toolset"

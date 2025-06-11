@@ -30,6 +30,7 @@ export type Input = {
 export type Step = {
   id: string;
   tool: string;
+  canonicalTool: string;
   instructions: string;
   inputs?: string[];
   update: (step: Step) => void;

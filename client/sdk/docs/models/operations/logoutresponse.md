@@ -5,7 +5,13 @@
 ```typescript
 import { LogoutResponse } from "@gram/client/models/operations";
 
-let value: LogoutResponse = {};
+let value: LogoutResponse = {
+  headers: {
+    "key": [
+      "<value>",
+    ],
+  },
+};
 ```
 
 ## Fields

@@ -105,6 +105,7 @@ WHERE
   pt.project_id = $1
   AND pt.id = $2
   AND pt.deleted IS FALSE
+ORDER BY pt.created_at DESC
 LIMIT 1
 `
 
@@ -180,7 +181,7 @@ SELECT DISTINCT ON (pt.project_id, pt.name) id, project_id, history_id, predeces
 FROM prompt_templates pt
 WHERE pt.project_id = $1
   AND pt.deleted IS FALSE
-ORDER BY pt.project_id, pt.name, pt.id
+ORDER BY pt.project_id, pt.name, pt.created_at DESC, pt.id DESC
 `
 
 func (q *Queries) ListTemplates(ctx context.Context, projectID uuid.UUID) ([]PromptTemplate, error) {

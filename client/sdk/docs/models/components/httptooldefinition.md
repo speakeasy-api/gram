@@ -6,6 +6,7 @@
 import { HTTPToolDefinition } from "@gram/client/models/components";
 
 let value: HTTPToolDefinition = {
+  canonicalName: "<value>",
   confirm: "<value>",
   createdAt: new Date("2025-03-04T09:26:20.697Z"),
   deploymentId: "<id>",
@@ -18,8 +19,10 @@ let value: HTTPToolDefinition = {
   projectId: "<id>",
   schema: "<value>",
   summary: "<value>",
-  tags: [],
-  updatedAt: new Date("2025-05-22T21:11:55.475Z"),
+  tags: [
+    "<value>",
+  ],
+  updatedAt: new Date("2023-01-25T17:59:41.729Z"),
 };
 ```
 
@@ -28,6 +31,7 @@ let value: HTTPToolDefinition = {
 | Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `canonical`                                                                                   | [components.CanonicalToolAttributes](../../models/components/canonicaltoolattributes.md)      | :heavy_minus_sign:                                                                            | The original details of a tool                                                                |
+| `canonicalName`                                                                               | *string*                                                                                      | :heavy_check_mark:                                                                            | The canonical name of the tool. Will be the same as the name if there is no variation.        |
 | `confirm`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | Confirmation mode for the tool                                                                |
 | `confirmPrompt`                                                                               | *string*                                                                                      | :heavy_minus_sign:                                                                            | Prompt for the confirmation                                                                   |
 | `createdAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The creation date of the tool.                                                                |

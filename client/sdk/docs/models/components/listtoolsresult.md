@@ -8,21 +8,22 @@ import { ListToolsResult } from "@gram/client/models/components";
 let value: ListToolsResult = {
   tools: [
     {
+      canonicalName: "<value>",
       confirm: "<value>",
-      createdAt: new Date("2023-08-05T21:57:17.116Z"),
+      createdAt: new Date("2024-07-22T19:54:53.930Z"),
       deploymentId: "<id>",
-      description: "sheepishly like to fooey why",
+      description: "ack shoddy soliloquy cleaner drag catalog",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/etc/ppp",
+      path: "/usr/lib",
       projectId: "<id>",
       schema: "<value>",
       summary: "<value>",
       tags: [
-        "<value 1>",
+        "<value>",
       ],
-      updatedAt: new Date("2025-03-13T06:28:48.216Z"),
+      updatedAt: new Date("2025-06-28T14:34:38.671Z"),
     },
   ],
 };

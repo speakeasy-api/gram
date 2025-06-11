@@ -13,9 +13,22 @@ let value: Deployment = {
   githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
   id: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
   idempotencyKey: "01jqq0ajmb4qh9eppz48dejr2m",
-  openapiv3Assets: [],
+  openapiv3Assets: [
+    {
+      assetId: "<id>",
+      id: "<id>",
+      name: "<value>",
+      slug: "<value>",
+    },
+  ],
   organizationId: "<id>",
-  packages: [],
+  packages: [
+    {
+      id: "<id>",
+      name: "<value>",
+      version: "<value>",
+    },
+  ],
   projectId: "<id>",
   status: "<value>",
   userId: "<id>",

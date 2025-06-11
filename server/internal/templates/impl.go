@@ -93,7 +93,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		switch {
 		case errors.As(err, &jsErr):
 			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, logger)
-		case err != nil:
+		case err != nil && !errors.Is(err, errSchemaHasNoProperties):
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, logger)
 		}
 	}
@@ -175,7 +175,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		switch {
 		case errors.As(err, &jsErr):
 			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, s.logger)
-		case err != nil:
+		case err != nil && !errors.Is(err, errSchemaHasNoProperties):
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, s.logger)
 		}
 	}

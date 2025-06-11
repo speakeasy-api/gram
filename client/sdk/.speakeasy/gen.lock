@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 9fa6597c9f258ca1fa1f1b9cc77d640e
+  docChecksum: 3dfe226d68992090626981678b200997
   docVersion: 0.0.1
-  speakeasyVersion: 1.559.0
-  generationVersion: 2.624.0
-  releaseVersion: 0.12.13
-  configChecksum: 6ad5156f34dfc5d37020bf7e30933bf4
+  speakeasyVersion: 1.554.1
+  generationVersion: 2.616.1
+  releaseVersion: 0.12.14
+  configChecksum: c5ef10a28d0fd5f72b328740f78d2b89
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.10
+    core: 3.21.9
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -470,10 +470,8 @@ generatedFiles:
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/errors/apierror.ts
-  - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
   - src/models/errors/index.ts
-  - src/models/errors/responsevalidationerror.ts
   - src/models/errors/sdkvalidationerror.ts
   - src/models/errors/serviceerror.ts
   - src/models/operations/authcallback.ts
@@ -1126,7 +1124,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

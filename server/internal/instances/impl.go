@@ -174,6 +174,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			DeploymentID:        tool.DeploymentID,
 			Openapiv3DocumentID: tool.Openapiv3DocumentID,
 			Name:                tool.Name,
+			CanonicalName:       tool.CanonicalName,
 			Summary:             tool.Summary,
 			Description:         tool.Description,
 			Confirm:             tool.Confirm,

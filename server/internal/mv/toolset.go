@@ -138,6 +138,11 @@ func DescribeToolset(
 				}
 			}
 
+			canonicalName := name
+			if canonical != nil {
+				canonicalName = canonical.Name
+			}
+
 			confirm, _ := SanitizeConfirm(confirmRaw)
 
 			httpTools = append(httpTools, &types.HTTPToolDefinition{
@@ -146,6 +151,7 @@ func DescribeToolset(
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
 				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
 				Name:                name,
+				CanonicalName:       canonicalName,
 				Summary:             summary,
 				Description:         description,
 				Confirm:             string(confirm),

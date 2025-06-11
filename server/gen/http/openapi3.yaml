@@ -6567,6 +6567,9 @@ components:
             properties:
                 canonical:
                     $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
+                    type: string
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
                 confirm:
                     type: string
                     description: Confirmation mode for the tool
@@ -6638,6 +6641,7 @@ components:
                 - project_id
                 - deployment_id
                 - name
+                - canonical_name
                 - summary
                 - description
                 - confirm

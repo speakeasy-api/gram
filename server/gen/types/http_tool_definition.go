@@ -16,6 +16,9 @@ type HTTPToolDefinition struct {
 	DeploymentID string
 	// The name of the tool
 	Name string
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string
 	// Summary of the tool
 	Summary string
 	// Description of the tool

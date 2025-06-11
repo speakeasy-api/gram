@@ -29,7 +29,9 @@ import {
   Toolset,
 } from "@gram/client/models/components";
 import {
+  invalidateAllListToolsets,
   invalidateTemplate,
+  useListToolsetsSuspense,
   useTemplateSuspense,
   useToolset,
   useUpdateTemplateMutation,
@@ -44,7 +46,13 @@ import { v4 as uuidv4 } from "uuid";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { Block, Input, instructionsPlaceholder, Step } from "./components";
+import {
+  Block,
+  BlockInner,
+  Input,
+  instructionsPlaceholder,
+  Step,
+} from "./components";
 
 export function ToolBuilderNew() {
   const newTemplate = {
@@ -74,6 +82,15 @@ export function ToolBuilderNew() {
 export function ToolBuilderPage() {
   const { toolName } = useParams();
 
+  const { data: toolsets } = useListToolsetsSuspense();
+
+  const toolset =
+    toolsets?.toolsets.find((t) =>
+      t.promptTemplates.some((pt) => pt.name === toolName)
+    ) ?? undefined;
+
+  console.log(toolset, toolsets);
+
   const { data: template } = useTemplateSuspense({
     name: toolName,
   });
@@ -91,6 +108,7 @@ export function ToolBuilderPage() {
           <ToolBuilder
             initial={{
               id: template.template.id,
+              toolset,
               historyId: template.template.historyId,
               name: template.template.name,
               description: template.template.description ?? "",
@@ -114,6 +132,7 @@ function ToolBuilder({
     purpose: string;
     inputs: Input[];
     steps: Step[];
+    toolset?: Toolset;
   };
 }) {
   const queryClient = useQueryClient();
@@ -125,54 +144,9 @@ function ToolBuilder({
   const [description, setDescription] = useState(initial.description);
   const [purpose, setPurpose] = useState(initial.purpose);
   const [inputs, setInputs] = useState<Input[]>(initial.inputs);
-
-  const setStep = (step: Step) => {
-    const newInputs = step.instructions.match(/(\{\{[^}]+\}\})/g);
-    step.inputs = newInputs?.map((input) => input.slice(2, -2));
-
-    setSteps((prev) => {
-      const newSteps = [...prev];
-      const index = newSteps.findIndex((s) => s.id === step.id);
-      newSteps[index] = step;
-      return newSteps;
-    });
-  };
-
-  const [steps, setSteps] = useState<Step[]>(
-    initial.steps.map((step) => ({
-      ...step,
-      update: (step) => setStep(step),
-    }))
+  const [toolsetFilter, setToolset] = useState<Toolset | undefined>(
+    initial.toolset
   );
-
-  useEffect(() => {
-    setName(initial.name);
-    setDescription(initial.description);
-    setPurpose(initial.purpose);
-    setInputs(initial.inputs);
-    setSteps(
-      initial.steps.map((step) => ({
-        ...step,
-        update: (step) => setStep(step),
-      }))
-    );
-  }, [initial]);
-
-  const [toolsetFilter, setToolset] = useState<Toolset>();
-
-  const insertTool = (tool: { name: string }) => {
-    if (steps.length >= 10) {
-      return;
-    }
-    const newSteps = [...steps];
-    newSteps.push({
-      id: uuidv4(),
-      tool: tool.name,
-      instructions: instructionsPlaceholder,
-      update: (step) => setStep(step),
-    });
-    setSteps(newSteps);
-  };
 
   const { data: tools } = useListTools();
   const { data: toolsetData } = useToolset(
@@ -184,6 +158,59 @@ function ToolBuilder({
       enabled: !!toolsetFilter?.slug,
     }
   );
+
+  const parseInputs = (s: string): string[] => {
+    const inputs = s.match(/(\{\{[^}]+\}\})/g);
+    return inputs?.map((input) => input.slice(2, -2)) ?? [];
+  };
+
+  const setStep = (step: Step) => {
+    step.inputs = parseInputs(step.instructions);
+
+    setSteps((prev) => {
+      const newSteps = [...prev];
+      const index = newSteps.findIndex((s) => s.id === step.id);
+      newSteps[index] = step;
+      return newSteps;
+    });
+  };
+
+  // Ensures that the canonical tool and update function is set for the step
+  const makeStep = (step: Step) => ({
+    ...step,
+    update: (s: Step) => setStep(s),
+    canonicalTool:
+      step.canonicalTool ??
+      tools?.tools.find((t) => t.name === step.tool)?.canonicalName ??
+      step.tool,
+  });
+
+  const [steps, setSteps] = useState<Step[]>(initial.steps.map(makeStep));
+
+  useEffect(() => {
+    setName(initial.name);
+    setDescription(initial.description);
+    setPurpose(initial.purpose);
+    setInputs(initial.inputs);
+    setSteps(initial.steps.map(makeStep));
+  }, [initial]);
+
+  console.log(steps);
+
+  const insertTool = (tool: { name: string; canonicalName: string }) => {
+    if (steps.length >= 10) {
+      return;
+    }
+    const newSteps = [...steps];
+    newSteps.push({
+      id: uuidv4(),
+      tool: tool.name,
+      canonicalTool: tool.canonicalName,
+      instructions: instructionsPlaceholder,
+      update: (step) => setStep(step),
+    });
+    setSteps(newSteps);
+  };
 
   const chatConfigRef: ChatConfig = useRef({
     toolsetSlug: toolsetFilter?.slug ?? null,
@@ -206,21 +233,25 @@ function ToolBuilder({
 
   const maybeFilteredTools = toolsetData?.httpTools ?? tools?.tools ?? [];
 
-  useEffect(() => {
-    // Need to do it this way to preserve descriptions
-    const inputsFromSteps = steps.flatMap((step) => {
-      const inputs = step.instructions.match(/(\{\{[^}]+\}\})/g);
-      if (inputs) {
-        return inputs.map((input) => ({ name: input.slice(2, -2) }));
-      }
-      return [];
-    });
+  // Merges inputs, preserving descriptions and preventing duplicates
+  const mergeInputs = (newInputs: string[]) => {
     const currentInputs = inputs.map((input) => input.name);
-    const newInputs = inputsFromSteps.filter(
-      (input) => !currentInputs.includes(input.name)
+    const toInsert = newInputs.filter(
+      (input) => !currentInputs.includes(input)
     );
-    setInputs([...inputs, ...newInputs]);
+    setInputs([...inputs, ...toInsert.map((input) => ({ name: input }))]);
+  };
+
+  useEffect(() => {
+    const inputsFromSteps = steps.flatMap((step) =>
+      parseInputs(step.instructions)
+    );
+    mergeInputs(inputsFromSteps);
   }, [steps]);
+
+  useEffect(() => {
+    mergeInputs(parseInputs(purpose));
+  }, [purpose]);
 
   const validateName = (v: string) => {
     if (v.length < 4) {
@@ -350,14 +381,14 @@ function ToolBuilder({
         };
 
         if (initial.id) {
-          await updatePrompt({
+          updatePrompt({
             request: {
               updatePromptTemplateForm: {
                 id: initial.id,
                 description,
                 prompt: buildPrompt(purpose, inputs, steps),
                 arguments: JSON.stringify(argsJsonSchema),
-                toolsHint: steps.map((step) => step.tool),
+                toolsHint: steps.map((step) => step.canonicalTool),
               },
             },
           });
@@ -369,11 +400,23 @@ function ToolBuilder({
               kind: PromptTemplateKind.HigherOrderTool,
               prompt: buildPrompt(purpose, inputs, steps),
               arguments: JSON.stringify(argsJsonSchema),
-              toolsHint: steps.map((step) => step.tool),
+              toolsHint: steps.map((step) => step.canonicalTool),
               engine: "mustache",
             },
           });
 
+          // Automatically add to the toolset
+          await client.toolsets.updateBySlug({
+            slug: toolsetFilter?.slug ?? "",
+            updateToolsetRequestBody: {
+              promptTemplateNames: [
+                ...(toolsetData?.promptTemplates ?? []).map((t) => t.name),
+                name,
+              ],
+            },
+          });
+
+          invalidateAllListToolsets(queryClient);
           routes.customTools.toolBuilder.goTo(name);
         }
       }}
@@ -542,25 +585,6 @@ function ToolBuilder({
 }
 
 const blockBackground = "bg-stone-100 dark:bg-stone-900";
-
-const BlockInner = ({
-  className,
-  children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) => {
-  return (
-    <div
-      className={cn(
-        "bg-card dark:bg-background rounded-sm p-2 border-1 border-stone-300 dark:border-stone-700",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-};
 
 const inputStyles =
   "bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-1 rounded";
@@ -811,6 +835,7 @@ const parsePrompt = (
       steps.push({
         id: uuidv4(),
         tool,
+        canonicalTool: tool,
         instructions: instructions.trim(),
         inputs: stepInputs,
         update: () => {

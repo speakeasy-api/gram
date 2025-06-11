@@ -1,11 +1,13 @@
 import { AddButton } from "@/components/add-button";
+import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { NameAndSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { ToolsBadge } from "@/components/tools-badge";
+import { ToolsetToolsBadge } from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
@@ -18,8 +20,6 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { ToolsetEnvironmentBadge } from "./Toolset";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { CreateThingCard } from "@/components/create-thing-card";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -125,7 +125,7 @@ function ToolsetCard({ toolset }: { toolset: Toolset }) {
           </Card.Title>
           <Stack direction="horizontal" gap={2} align="center">
             <ToolsetEnvironmentBadge toolset={toolset} />
-            <ToolsBadge tools={toolset.httpTools} />
+            <ToolsetToolsBadge toolset={toolset} />
           </Stack>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>

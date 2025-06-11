@@ -82,7 +82,7 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
           <Card.Title className="normal-case">{template.name}</Card.Title>
           <Stack direction="horizontal" gap={2}>
             {inputsBadge}
-            <ToolsBadge tools={template.toolsHint} />
+            <ToolsBadge toolNames={template.toolsHint} />
           </Stack>
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>

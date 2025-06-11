@@ -29,6 +29,7 @@ async function run() {
     },
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -54,12 +55,15 @@ async function run() {
       organizationId: "<id>",
     },
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("projectsCreate failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -120,6 +124,7 @@ async function run() {
     organizationId: "<id>",
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -142,12 +147,15 @@ async function run() {
   const res = await projectsList(gram, {
     organizationId: "<id>",
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("projectsList failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();

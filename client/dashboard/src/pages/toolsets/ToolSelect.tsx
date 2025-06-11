@@ -2,8 +2,10 @@ import { HttpRoute } from "@/components/http-route";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dot } from "@/components/ui/dot";
+import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
@@ -11,11 +13,21 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { HumanizeDateTime } from "@/lib/dates";
 import { Tool, useGroupedTools } from "@/lib/toolNames";
-import { HTTPToolDefinition } from "@gram/client/models/components";
-import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
+import {
+  HTTPToolDefinition,
+  PromptTemplate,
+  PromptTemplateKind,
+} from "@gram/client/models/components";
+import {
+  useTemplates,
+  useToolset,
+  useUpdateToolsetMutation,
+} from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
-import { Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { Column, Grid, Stack, Table } from "@speakeasy-api/moonshine";
+import { AlertTriangleIcon, Check, CheckCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { ToolsetHeader } from "./Toolset";
@@ -158,7 +170,13 @@ export function ToolSelect() {
     slug: toolsetSlug ?? "",
   });
   const { data: tools, isLoading: isLoadingTools } = useListTools();
+  const { data: templates } = useTemplates();
+  const customTools = templates?.templates?.filter(
+    (t) => t.kind === PromptTemplateKind.HigherOrderTool
+  );
+
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
+
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", {
@@ -169,8 +187,8 @@ export function ToolSelect() {
   });
 
   useEffect(() => {
-    setSelectedTools(toolset?.httpTools.map((t) => t.name) ?? []);
-  }, [toolset]);
+    setSelectedTools(toolset?.httpTools.map((t) => t.canonicalName) ?? []);
+  }, [toolset, templates]);
 
   const setToolsEnabled = (tools: string[], enabled: boolean) => {
     setSelectedTools((prev) => {
@@ -184,10 +202,31 @@ export function ToolSelect() {
           slug: toolsetSlug ?? "",
           updateToolsetRequestBody: {
             httpToolNames: updated,
+            promptTemplateNames:
+              toolset?.promptTemplates.map((t) => t.name) ?? [],
           },
         },
       });
       return updated;
+    });
+  };
+
+  const toggleTemplateEnabled = (template: string) => {
+    const cur = toolset?.promptTemplates.map((t) => t.name) ?? [];
+    const updated = cur.includes(template)
+      ? cur.filter((t) => t !== template)
+      : [...cur, template];
+
+    console.log(updated);
+
+    updateToolsetMutation.mutate({
+      request: {
+        slug: toolsetSlug ?? "",
+        updateToolsetRequestBody: {
+          httpToolNames: selectedTools,
+          promptTemplateNames: updated,
+        },
+      },
     });
   };
 
@@ -196,7 +235,7 @@ export function ToolSelect() {
   const toolGroups = useMemo(() => {
     const toggleAll = (tools: ToggleableTool[]) => {
       setToolsEnabled(
-        tools.map((t) => t.name),
+        tools.map((t) => t.canonicalName),
         tools.some((t) => !t.enabled) // Disable iff all are already enabled
       );
     };
@@ -205,8 +244,9 @@ export function ToolSelect() {
       ...group,
       tools: group.tools.map((tool) => ({
         ...tool,
-        enabled: selectedTools.includes(tool.name),
-        setEnabled: (enabled: boolean) => setToolsEnabled([tool.name], enabled),
+        enabled: selectedTools.includes(tool.canonicalName),
+        setEnabled: (enabled: boolean) =>
+          setToolsEnabled([tool.canonicalName], enabled),
       })),
     }));
 
@@ -261,6 +301,23 @@ export function ToolSelect() {
       ) : (
         <SkeletonTable />
       )}
+      {customTools && (
+        <>
+          <Heading variant="h3">Custom Tools</Heading>
+          <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={4}>
+            {customTools?.map((template) => (
+              <Grid.Item key={template.id}>
+                <CustomToolCard
+                  template={template}
+                  currentTools={toolset?.httpTools ?? []}
+                  currentTemplates={toolset?.promptTemplates ?? []}
+                  toggleEnabled={() => toggleTemplateEnabled(template.name)}
+                />
+              </Grid.Item>
+            ))}
+          </Grid>
+        </>
+      )}
     </Page.Body>
   );
 }
@@ -298,5 +355,104 @@ export function ToolsTable({
     />
   ) : (
     <SkeletonTable />
+  );
+}
+
+function CustomToolCard({
+  template,
+  currentTools,
+  currentTemplates,
+  toggleEnabled,
+}: {
+  template: PromptTemplate;
+  currentTools: HTTPToolDefinition[];
+  currentTemplates: PromptTemplate[];
+  toggleEnabled: () => void;
+}) {
+  const { data: tools } = useListTools();
+
+  const isToolInToolset = (t: string) =>
+    currentTools.some((t2) => t2.canonicalName === t);
+
+  const templateIsInToolset = currentTemplates.some(
+    (t) => t.name === template.name
+  );
+
+  const allToolsAvailable = template.toolsHint.every(isToolInToolset);
+
+  const addButton = (
+    <Button
+      variant="outline"
+      disabled={!templateIsInToolset && !allToolsAvailable}
+      onClick={toggleEnabled}
+    >
+      {templateIsInToolset && <Check className="w-4 h-4 text-emerald-500" />}
+      {templateIsInToolset ? "Added" : "Add to toolset"}
+    </Button>
+  );
+
+  const variedNames = template.toolsHint.map(
+    (t) => tools?.tools.find((t2) => t2.canonicalName === t)?.name ?? t
+  );
+
+  const badge = allToolsAvailable ? (
+    <Badge
+      variant="secondary"
+      tooltip={
+        <Stack>
+          <p>
+            All tools required by this custom tool are available in your
+            toolset:
+          </p>
+          {variedNames.map((t) => (
+            <p key={t}>- {t}</p>
+          ))}
+        </Stack>
+      }
+    >
+      <CheckCircleIcon className="w-4 h-4 text-emerald-500" />
+      Ready to use
+    </Badge>
+  ) : (
+    <Badge
+      variant="warning"
+      tooltip={
+        <Stack>
+          <p>
+            This custom tool requires tools that are not currently in your
+            toolset:
+          </p>
+          {variedNames
+            .filter((t) => !isToolInToolset(t))
+            .map((t) => (
+              <p key={t}>- {t}</p>
+            ))}
+        </Stack>
+      }
+    >
+      <AlertTriangleIcon className="w-4 h-4" />
+      Missing tools
+    </Badge>
+  );
+
+  return (
+    <Card>
+      <Card.Header>
+        <Stack direction="horizontal" gap={2} justify={"space-between"}>
+          <Card.Title className="normal-case">{template.name}</Card.Title>
+          {badge}
+        </Stack>
+        <Type variant="body" muted className="text-sm italic">
+          {"Updated "}
+          <HumanizeDateTime date={new Date(template.updatedAt)} />
+        </Type>
+        {template.description ? (
+          <Card.Description>{template.description}</Card.Description>
+        ) : null}
+      </Card.Header>
+      <Card.Content>
+        <div className="flex justify-end">{addButton}</div>
+      </Card.Content>
+    </Card>
   );
 }

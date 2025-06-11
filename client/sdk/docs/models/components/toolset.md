@@ -7,14 +7,47 @@ import { Toolset } from "@gram/client/models/components";
 
 let value: Toolset = {
   createdAt: new Date("2025-09-03T11:41:50.334Z"),
-  httpTools: [],
+  httpTools: [
+    {
+      canonicalName: "<value>",
+      confirm: "<value>",
+      createdAt: new Date("2024-05-12T19:09:07.564Z"),
+      deploymentId: "<id>",
+      description: "stabilise mutate gadzooks wherever pantyhose vice",
+      httpMethod: "<value>",
+      id: "<id>",
+      name: "<value>",
+      path: "/etc/defaults",
+      projectId: "<id>",
+      schema: "<value>",
+      summary: "<value>",
+      tags: [
+        "<value>",
+      ],
+      updatedAt: new Date("2023-11-29T09:56:04.014Z"),
+    },
+  ],
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
   projectId: "<id>",
-  promptTemplates: [],
+  promptTemplates: [
+    {
+      createdAt: new Date("2025-10-01T20:02:31.731Z"),
+      engine: "mustache",
+      historyId: "<id>",
+      id: "<id>",
+      kind: "prompt",
+      name: "<value>",
+      prompt: "<value>",
+      toolsHint: [
+        "<value>",
+      ],
+      updatedAt: new Date("2025-01-20T08:30:25.407Z"),
+    },
+  ],
   slug: "<value>",
-  updatedAt: new Date("2023-03-17T16:58:47.552Z"),
+  updatedAt: new Date("2023-06-08T09:16:07.191Z"),
 };
 ```
 

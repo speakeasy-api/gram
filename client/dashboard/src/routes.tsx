@@ -6,11 +6,11 @@ import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
-import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import MCP from "./pages/mcp/MCP";
 import Onboarding from "./pages/onboarding/Onboarding";
+import OpenAPIDocuments from "./pages/openapi/OpenAPI";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -87,11 +87,11 @@ const ROUTE_STRUCTURE = {
     component: Login,
     unauthenticated: true,
   },
-  home: {
-    title: "Home",
+  openapi: {
+    title: "Your APIs",
     url: "",
-    icon: "circle-gauge",
-    component: Home,
+    icon: "file-json-2",
+    component: OpenAPIDocuments,
   },
   playground: {
     title: "Playground",

@@ -9,7 +9,7 @@ export default function Login() {
 
   if (session.session !== "") {
     // we are logged in, redirect to the home page
-    routes.home.goTo();
+    routes.openapi.goTo();
   }
 
   return (

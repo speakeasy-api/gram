@@ -1125,6 +1125,7 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 		ProjectID:           v.ProjectID,
 		DeploymentID:        v.DeploymentID,
 		Name:                v.Name,
+		CanonicalName:       v.CanonicalName,
 		Summary:             v.Summary,
 		Description:         v.Description,
 		Confirm:             v.Confirm,

@@ -212,6 +212,9 @@ type HTTPToolDefinitionResponseBody struct {
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 	// The name of the tool
 	Name string `form:"name" json:"name" xml:"name"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
 	// Summary of the tool
 	Summary string `form:"summary" json:"summary" xml:"summary"`
 	// Description of the tool

@@ -1,6 +1,6 @@
 import { NameAndSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { ToolsBadge } from "@/components/tools-badge";
+import { ToolsetToolsBadge } from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
@@ -20,8 +20,8 @@ import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { CustomDomain, Toolset } from "@gram/client/models/components";
 import {
-  useUpdateToolsetMutation,
   useGetDomain,
+  useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Check, Lock, Pencil } from "lucide-react";
@@ -377,7 +377,7 @@ export function McpToolsetCard({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <ToolsBadge tools={toolset.httpTools} variant="outline" />
+            <ToolsetToolsBadge toolset={toolset} variant="outline" />
           </Stack>
         </Stack>
       </Card.Header>

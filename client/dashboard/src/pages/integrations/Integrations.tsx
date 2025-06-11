@@ -275,7 +275,7 @@ export function IntegrationCard({
               </span>
             </Card.Title>
           </Stack>
-          <ToolsBadge tools={integration.toolNames} />
+          <ToolsBadge toolNames={integration.toolNames} />
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           <Card.Description className="max-w-2/3">

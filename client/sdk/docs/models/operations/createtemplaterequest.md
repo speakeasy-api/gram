@@ -5,7 +5,14 @@
 ```typescript
 import { CreateTemplateRequest } from "@gram/client/models/operations";
 
-let value: CreateTemplateRequest = {};
+let value: CreateTemplateRequest = {
+  createPromptTemplateForm: {
+    engine: "mustache",
+    kind: "higher_order_tool",
+    name: "<value>",
+    prompt: "<value>",
+  },
+};
 ```
 
 ## Fields

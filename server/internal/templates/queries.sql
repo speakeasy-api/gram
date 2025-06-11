@@ -83,6 +83,7 @@ WHERE
   pt.project_id = @project_id
   AND pt.id = @id
   AND pt.deleted IS FALSE
+ORDER BY pt.created_at DESC
 LIMIT 1;
 
 -- name: GetTemplateByName :one
@@ -100,7 +101,7 @@ SELECT DISTINCT ON (pt.project_id, pt.name) *
 FROM prompt_templates pt
 WHERE pt.project_id = @project_id
   AND pt.deleted IS FALSE
-ORDER BY pt.project_id, pt.name, pt.id;
+ORDER BY pt.project_id, pt.name, pt.created_at DESC, pt.id DESC;
 
 -- name: DeleteTemplateByName :exec
 UPDATE prompt_templates

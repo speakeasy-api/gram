@@ -1,7 +1,7 @@
+import { CreateThingCard } from "@/components/create-thing-card";
 import { NameAndSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
 import { ToolsBadge } from "@/components/tools-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -14,22 +14,18 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { DeploymentPackage } from "@gram/client/models/components/deploymentpackage.js";
+import { HTTPToolDefinition } from "@gram/client/models/components";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
 import {
   useDeploymentSuspense,
   useLatestDeployment,
-  useListIntegrations,
   useListToolsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
 import { Suspense, useState } from "react";
 import { OnboardingContent } from "../onboarding/Onboarding";
-import { HTTPToolDefinition } from "@gram/client/models/components";
-import { CreateThingCard } from "@/components/create-thing-card";
 
 function DeploymentCards() {
   const { data: deployment, refetch, isLoading } = useLatestDeployment();
@@ -66,7 +62,6 @@ function DeploymentTools({
   deploymentId: string;
   onNewDeployment: () => void;
 }) {
-  const routes = useRoutes();
   const client = useSdkClient();
   const { data: deployment } = useDeploymentSuspense({
     id: deploymentId,
@@ -134,21 +129,6 @@ function DeploymentTools({
           + New OpenAPI Source
         </CreateThingCard>
       </Cards>
-      <Heading variant="h3" className="mt-4">
-        Third Party Integrations
-      </Heading>
-      <Cards>
-        {deployment.packages.map((pkg) => (
-          <PackageCard
-            key={pkg.id}
-            deploymentPackage={pkg}
-            onUpdate={onNewDeployment}
-          />
-        ))}
-        <CreateThingCard onClick={() => routes.integrations.goTo()}>
-          + Add Integration
-        </CreateThingCard>
-      </Cards>
       <Dialog
         open={newDocumentDialogOpen}
         onOpenChange={setNewDocumentDialogOpen}
@@ -206,7 +186,7 @@ function DeploymentTools({
   );
 }
 
-export default function Home() {
+export default function OpenAPIDocuments() {
   return (
     <Page>
       <Page.Header>
@@ -244,7 +224,7 @@ function DeploymentCard({
           <Card.Title>
             <NameAndSlug name={asset.name} slug={asset.slug} />
           </Card.Title>
-          <ToolsBadge tools={tools} />
+          <ToolsBadge toolNames={tools.map((tool) => tool.name)} />
         </Stack>
         {latestToolTimestamp && (
           <Type variant="body" muted className="text-sm italic">
@@ -297,90 +277,90 @@ function DeploymentCard({
   );
 }
 
-function PackageCard({
-  deploymentPackage,
-  onUpdate,
-}: {
-  deploymentPackage: DeploymentPackage;
-  onUpdate: () => void;
-}) {
-  const routes = useRoutes();
-  const client = useSdkClient();
-  const { data: integrations } = useListIntegrations();
+// function PackageCard({
+//   deploymentPackage,
+//   onUpdate,
+// }: {
+//   deploymentPackage: DeploymentPackage;
+//   onUpdate: () => void;
+// }) {
+//   const routes = useRoutes();
+//   const client = useSdkClient();
+//   const { data: integrations } = useListIntegrations();
 
-  const pkg = integrations?.integrations?.find(
-    (i) => i.packageId === deploymentPackage.id
-  );
+//   const pkg = integrations?.integrations?.find(
+//     (i) => i.packageId === deploymentPackage.id
+//   );
 
-  if (!pkg) {
-    return null;
-  }
+//   if (!pkg) {
+//     return null;
+//   }
 
-  const handleDisable = () => {
-    routes.integrations.goTo();
-  };
+//   const handleDisable = () => {
+//     routes.integrations.goTo();
+//   };
 
-  const handleUpdate = async () => {
-    const confirmed = confirm(
-      "Update from " + deploymentPackage.version + " to " + pkg.version + "?"
-    );
-    if (!confirmed) {
-      return;
-    }
+//   const handleUpdate = async () => {
+//     const confirmed = confirm(
+//       "Update from " + deploymentPackage.version + " to " + pkg.version + "?"
+//     );
+//     if (!confirmed) {
+//       return;
+//     }
 
-    await client.deployments.evolveDeployment({
-      evolveForm: {
-        upsertPackages: [
-          {
-            name: pkg.packageName,
-            version: pkg.version,
-          },
-        ],
-      },
-    });
+//     await client.deployments.evolveDeployment({
+//       evolveForm: {
+//         upsertPackages: [
+//           {
+//             name: pkg.packageName,
+//             version: pkg.version,
+//           },
+//         ],
+//       },
+//     });
 
-    onUpdate();
-  };
+//     onUpdate();
+//   };
 
-  // TODO: Potentially a little weird that we show the latest summary etc. even if you haven't updated to the latest version
-  return (
-    <Card>
-      <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Card.Title>
-            {pkg.packageTitle}
-            <span className="text-sm text-muted-foreground ml-2">
-              v{deploymentPackage.version}
-            </span>
-          </Card.Title>
-          <div className="flex gap-2 items-center">
-            <Badge>Third Party</Badge>
-            <ToolsBadge tools={pkg.toolNames} />
-          </div>
-        </Stack>
-        <Stack direction="horizontal" gap={3} justify={"space-between"}>
-          <Card.Description className="max-w-2/3">
-            {pkg.packageSummary}
-          </Card.Description>
-          <Type variant="body" muted className="text-sm italic">
-            {"Updated "}
-            <HumanizeDateTime date={new Date(pkg.versionCreatedAt)} />
-          </Type>
-        </Stack>
-      </Card.Header>
-      <Card.Footer>
-        {pkg.version !== deploymentPackage.version && (
-          <Button onClick={handleUpdate} icon="circle-alert">
-            Update Available
-          </Button>
-        )}
-        <Button variant="outline" onClick={handleDisable} icon="check">
-          Enabled
-        </Button>
-      </Card.Footer>
-    </Card>
-  );
-}
+//   // TODO: Potentially a little weird that we show the latest summary etc. even if you haven't updated to the latest version
+//   return (
+//     <Card>
+//       <Card.Header>
+//         <Stack direction="horizontal" gap={2} justify={"space-between"}>
+//           <Card.Title>
+//             {pkg.packageTitle}
+//             <span className="text-sm text-muted-foreground ml-2">
+//               v{deploymentPackage.version}
+//             </span>
+//           </Card.Title>
+//           <div className="flex gap-2 items-center">
+//             <Badge>Third Party</Badge>
+//             <ToolsBadge toolNames={pkg.toolNames} />
+//           </div>
+//         </Stack>
+//         <Stack direction="horizontal" gap={3} justify={"space-between"}>
+//           <Card.Description className="max-w-2/3">
+//             {pkg.packageSummary}
+//           </Card.Description>
+//           <Type variant="body" muted className="text-sm italic">
+//             {"Updated "}
+//             <HumanizeDateTime date={new Date(pkg.versionCreatedAt)} />
+//           </Type>
+//         </Stack>
+//       </Card.Header>
+//       <Card.Footer>
+//         {pkg.version !== deploymentPackage.version && (
+//           <Button onClick={handleUpdate} icon="circle-alert">
+//             Update Available
+//           </Button>
+//         )}
+//         <Button variant="outline" onClick={handleDisable} icon="check">
+//           Enabled
+//         </Button>
+//       </Card.Footer>
+//     </Card>
+//   );
+// }
 
 function groupToolsByDocument(tools: HTTPToolDefinition[]) {
   return tools.reduce<Record<string, HTTPToolDefinition[]>>((groups, tool) => {

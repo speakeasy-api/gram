@@ -1,42 +1,55 @@
 import { useGroupedTools } from "@/lib/toolNames";
-import { HTTPToolDefinition } from "@gram/client/models/components";
+import { Toolset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge } from "./ui/badge";
 
-export const ToolsBadge = ({
-  tools,
+export const ToolsetToolsBadge = ({
+  toolset,
   size = "md",
   variant = "default",
 }: {
-  tools: (HTTPToolDefinition | string)[] | undefined;
+  toolset: Toolset | undefined;
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {
-  const isStrings = tools?.every((tool) => typeof tool === "string");
-  const groupedTools = useGroupedTools(
-    !isStrings && tools ? (tools as HTTPToolDefinition[]) : []
-  );
+  const groupedTools = useGroupedTools(toolset?.httpTools ?? []);
 
   const groupedToolNames =
     groupedTools.length == 1
       ? groupedTools[0]!.tools.map((tool) => tool.displayName)
       : groupedTools.flatMap((group) => group.tools.map((tool) => tool.name));
 
-  const toolNames = isStrings ? tools : groupedToolNames;
+  groupedToolNames.push(
+    ...(toolset?.promptTemplates ?? []).map((template) => template.name)
+  );
 
+  return (
+    <ToolsBadge toolNames={groupedToolNames} size={size} variant={variant} />
+  );
+};
+
+export const ToolsBadge = ({
+  toolNames,
+  size = "md",
+  variant = "default",
+}: {
+  toolNames: string[] | undefined;
+  size?: "sm" | "md";
+  variant?: "outline" | "default";
+}) => {
   const tooltipContent = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
-        {toolNames.map((tool, i) => (
+        {toolNames?.map((tool, i) => (
           <p key={i}>{tool}</p>
         ))}
       </Stack>
     </div>
   );
 
-  return tools && tools.length > 0 ? (
+  return toolNames && toolNames.length > 0 ? (
     <Badge size={size} variant={variant} tooltip={tooltipContent}>
-      {tools.length} Tool{tools.length === 1 ? "" : "s"}
+      {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
     </Badge>
   ) : (
     <Badge size={size} variant={variant}>

@@ -6,6 +6,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
+import { HTTPToolDefinition } from "@gram/client/models/components";
 import { useInstance } from "@gram/client/react-query/index.js";
 import {
   AIChatContainer,
@@ -77,10 +78,7 @@ export function ChatWindow({
   );
 }
 
-type Toolset = Record<
-  string,
-  Tool & { id: string; method?: string; path?: string }
->;
+type Toolset = Record<string, Tool & { method?: string; path?: string }>;
 
 function ChatInner({
   model,
@@ -142,25 +140,53 @@ function ChatInner({
     []
   );
 
-  const allTools: Toolset = useMemo(
-    () =>
-      Object.fromEntries(
-        instance.data?.tools.map((tool) => {
-          return [
-            tool.name,
-            {
-              id: tool.id,
-              method: tool.httpMethod,
-              path: tool.path,
-              parameters: jsonSchema(
-                tool.schema ? JSON.parse(tool.schema) : {}
-              ),
-            },
-          ];
-        }) ?? []
-      ),
-    [instance.data?.tools]
-  );
+  const executeHttpToolFn =
+    (tool: HTTPToolDefinition) => async (args: unknown) => {
+      const response = await fetch(
+        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
+          tool.id
+        }&environment_slug=${configRef.current.environmentSlug}`,
+        {
+          method: "POST",
+          headers: {
+            "gram-session": session.session,
+            "gram-project": project.slug,
+          },
+          body: JSON.stringify(args),
+        }
+      );
+
+      const result = await response.text();
+
+      return result || `status code: ${response.status}`;
+    };
+
+  const allTools: Toolset = useMemo(() => {
+    const tools: Toolset = Object.fromEntries(
+      instance.data?.tools.map((tool) => {
+        return [
+          tool.name,
+          {
+            method: tool.httpMethod,
+            path: tool.path,
+            description: tool.description,
+            parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
+            execute: executeHttpToolFn(tool),
+          },
+        ];
+      }) ?? []
+    );
+
+    instance.data?.promptTemplates?.forEach((pt) => {
+      tools[pt.name] = {
+        description: pt.description ?? "",
+        parameters: jsonSchema(JSON.parse(pt.arguments ?? "{}")),
+        execute: () => Promise.resolve(pt.prompt), // TODO use api
+      };
+    });
+
+    return tools;
+  }, [instance.data]);
 
   const openrouterChat = useModel(model, {
     "Gram-Chat-ID": chat.id,
@@ -168,8 +194,7 @@ function ChatInner({
 
   const openrouterBasic = useMiniModel();
 
-  const updateToolsTool = {
-    id: "refresh_tools",
+  const updateToolsTool: Tool & { name: string } = {
     name: "refresh_tools",
     description: `If you are unable to fulfill the user's request with the current set of tools, use this tool to get a new set of tools.
     The request is a description of the task you are trying to complete based on the conversation history. 
@@ -179,6 +204,11 @@ function ChatInner({
       previouslyUsedTools: z.array(z.string()),
       newRequest: z.string(),
     }),
+    execute: async (args) => {
+      const parsedArgs = updateToolsTool.parameters.parse(args);
+      await updateSelectedTools(JSON.stringify(parsedArgs));
+      return `Updated tool list: ${selectedTools.current.join(", ")}`;
+    },
   };
 
   const updateSelectedTools = async (task: string) => {
@@ -302,9 +332,8 @@ function ChatInner({
   const toolCallApproval = useToolCallApproval({
     executeToolCall: async (toolCall) => {
       if (toolCall.toolName === updateToolsTool.name) {
-        const args = updateToolsTool.parameters.parse(toolCall.args);
-        await updateSelectedTools(JSON.stringify(args));
-        return `Updated tool list: ${selectedTools.current.join(", ")}`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return updateToolsTool.execute!(toolCall.args, {} as any);
       }
 
       const tool = allTools[toolCall.toolName];
@@ -312,23 +341,8 @@ function ChatInner({
         throw new Error(`Tool ${toolCall.toolName} not found`);
       }
 
-      const response = await fetch(
-        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
-          tool.id
-        }&environment_slug=${configRef.current.environmentSlug}`,
-        {
-          method: "POST",
-          headers: {
-            "gram-session": session.session,
-            "gram-project": project.slug,
-          },
-          body: JSON.stringify(toolCall.args),
-        }
-      );
-
-      const result = await response.text();
-
-      return result || `status code: ${response.status}`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return tool.execute!(toolCall.args, {} as any);
     },
     requiresApproval: (toolCall) => {
       const tool = allTools[toolCall.toolName];

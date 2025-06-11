@@ -1081,6 +1081,9 @@ type HTTPToolDefinitionResponseBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// The name of the tool
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
 	// Summary of the tool
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Description of the tool
@@ -3628,6 +3631,9 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.CanonicalName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
 	}
 	if body.Summary == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))

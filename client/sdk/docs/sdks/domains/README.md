@@ -45,12 +45,14 @@ const gram = new GramCore();
 
 async function run() {
   const res = await domainsDeleteDomain(gram);
-  if (res.ok) {
-    const { value: result } = res;
-    
-  } else {
-    console.log("domainsDeleteDomain failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  
 }
 
 run();
@@ -109,6 +111,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.domains.getDomain();
 
+  // Handle the result
   console.log(result);
 }
 
@@ -129,12 +132,15 @@ const gram = new GramCore();
 
 async function run() {
   const res = await domainsGetDomain(gram);
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("domainsGetDomain failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();
@@ -208,6 +214,7 @@ async function run() {
     },
   });
 
+  // Handle the result
   console.log(result);
 }
 
@@ -232,12 +239,15 @@ async function run() {
       domain: "cooperative-partridge.name",
     },
   });
-  if (res.ok) {
-    const { value: result } = res;
-    console.log(result);
-  } else {
-    console.log("domainsRegisterDomain failed:", res.error);
+
+  if (!res.ok) {
+    throw res.error;
   }
+
+  const { value: result } = res;
+
+  // Handle the result
+  console.log(result);
 }
 
 run();

@@ -11,6 +11,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("project_id", String, "The ID of the project")
 	Attribute("deployment_id", String, "The ID of the deployment")
 	Attribute("name", String, "The name of the tool")
+	Attribute("canonical_name", String, "The canonical name of the tool. Will be the same as the name if there is no variation.")
 	Attribute("summary", String, "Summary of the tool")
 	Attribute("description", String, "Description of the tool")
 
@@ -40,7 +41,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 
-	Required("id", "project_id", "deployment_id", "name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "created_at", "updated_at")
+	Required("id", "project_id", "deployment_id", "name", "canonical_name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "created_at", "updated_at")
 })
 
 var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {
