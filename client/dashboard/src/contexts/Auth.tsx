@@ -1,5 +1,3 @@
-import { GramLogo } from "@/components/gram-logo";
-import { MinimumSuspense } from "@/components/ui/minimum-suspense";
 import { getServerURL } from "@/lib/utils";
 import {
   InfoResponseBody,
@@ -12,7 +10,7 @@ import {
   useListToolsetsSuspense,
   useSessionInfo,
 } from "@gram/client/react-query";
-import { createContext, useContext, useState } from "react";
+import { createContext, Suspense, useContext, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useNavigate } from "react-router";
 import { useSlugs } from "./Sdk";
@@ -162,30 +160,20 @@ const ErrorFallback = ({ error }: { error: Error }) => {
   );
 };
 
-const FullScreenLoader = () => {
-  return (
-    <div className="flex justify-center items-center h-screen">
-      <GramLogo />
-    </div>
-  );
-};
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <MinimumSuspense fallback={<FullScreenLoader />}>
-        <AuthHandler>{children}</AuthHandler>
-      </MinimumSuspense>
+      <AuthHandler>{children}</AuthHandler>
     </ErrorBoundary>
   );
 };
 
 // Prefetch any queries while we're in the top-level loading state
-const PrefetchedQueries = ({ children }: { children: React.ReactNode }) => {
+const PrefetchedQueries = () => {
   useListToolsetsSuspense();
   useListEnvironmentsSuspense();
 
-  return children;
+  return null;
 };
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
@@ -239,7 +227,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // you need something like this so you don't redirect with empty session too soon
   if (isLoading) {
-    return <FullScreenLoader />;
+    return null;
   }
 
   if (error || !session || !session.session || !session.organization) {
@@ -266,7 +254,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <SessionContext.Provider value={session}>
-      <PrefetchedQueries>{children}</PrefetchedQueries>
+      <Suspense fallback={null}>
+        <PrefetchedQueries />
+      </Suspense>
+      {children}
     </SessionContext.Provider>
   );
 };
