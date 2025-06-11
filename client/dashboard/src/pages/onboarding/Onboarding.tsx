@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
 import { useProject, useSession } from "@/contexts/Auth";
@@ -211,12 +212,13 @@ export function OnboardingContent({
     {
       heading: "Generate Tools",
       description: "Gram will generate tools for your API.",
-      display: numTools ? (
-        <Type>✓ Created {numTools} tools</Type>
-      ) : (
-        <Type>
-          Gram is generating tools for your API. This may take a few seconds.
-        </Type>
+      display: (
+        <>
+          <Type>
+            Gram is generating tools for your API. This may take a few seconds.
+          </Type>
+          <Spinner />
+        </>
       ),
       displayComplete: (
         <div>
@@ -284,5 +286,9 @@ function DeploymentLogs(props: { deploymentId: string }) {
     );
   });
 
-  return <div className="font-mono text-sm">{lines}</div>;
+  return (
+    <div className="font-mono text-sm max-h-[250px] overflow-y-auto">
+      {lines}
+    </div>
+  );
 }

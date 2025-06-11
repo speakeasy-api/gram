@@ -14,6 +14,7 @@ import { Card, Cards } from "@/components/ui/card";
 import { Dot } from "@/components/ui/dot";
 import { Heading } from "@/components/ui/heading";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +34,7 @@ import { useRoutes } from "@/routes";
 import {
   Confirm,
   EnvironmentEntryInput,
+  PromptTemplate,
   Toolset,
   UpsertGlobalToolVariationForm,
 } from "@gram/client/models/components";
@@ -53,6 +55,9 @@ import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { useEnvironment } from "../environments/Environment";
 import { useEnvironments } from "../environments/Environments";
+import { PromptTemplateCard, usePrompts } from "../prompts/Prompts";
+import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
+import { ToolSelectDialog } from "./ToolSelectDialog";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
 
@@ -135,10 +140,12 @@ export function ToolsetView({
   toolsetSlug,
   className,
   environmentSlug,
+  addToolsStyle = "link",
 }: {
   toolsetSlug: string;
   className?: string;
   environmentSlug?: string;
+  addToolsStyle?: "link" | "modal";
 }) {
   const queryClient = useQueryClient();
   const routes = useRoutes();
@@ -146,7 +153,13 @@ export function ToolsetView({
   const { data: toolset, refetch } = useToolset({
     slug: toolsetSlug,
   });
+
+  const prompts = usePrompts();
   const toolDefinitions = useToolDefinitions(toolset);
+
+  const [activeTab, setActiveTab] = useState<"tools" | "prompts">("tools");
+  const [promptSelectPopoverOpen, setPromptSelectPopoverOpen] = useState(false);
+  const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);
 
   useRegisterToolsetTelemetry({
     toolsetSlug: toolsetSlug ?? "",
@@ -181,6 +194,7 @@ export function ToolsetView({
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
+      onUpdate();
     },
     onError: (error) => {
       telemetry.capture("toolset_event", {
@@ -219,6 +233,9 @@ export function ToolsetView({
           httpToolNames: toolset.httpTools
             .filter((tool) => tool.name !== toolName)
             .map((tool) => tool.name),
+          promptTemplateNames: toolset.promptTemplates
+            .filter((template) => template.name !== toolName)
+            .map((template) => template.name),
         },
       },
     });
@@ -309,11 +326,16 @@ export function ToolsetView({
     </Alert>
   );
 
+  const gotoAddTools = () => {
+    if (addToolsStyle === "modal") {
+      setAddToolsDialogOpen(true);
+    } else {
+      routes.toolsets.toolset.update.goTo(toolsetSlug);
+    }
+  };
+
   const actions = (
-    <Button
-      icon="plus"
-      onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
-    >
+    <Button icon="plus" onClick={gotoAddTools}>
       Add/Remove Tools
     </Button>
   );
@@ -348,6 +370,38 @@ export function ToolsetView({
     toolsToDisplay = toolset?.httpTools || [];
   }
 
+  const addPromptToToolset = (prompt: PromptTemplate) => {
+    const currentPromptNames =
+      toolset?.promptTemplates.map((t) => t.name) ?? [];
+    if (currentPromptNames.includes(prompt.name)) {
+      return;
+    }
+
+    updateToolsetMutation.mutate({
+      request: {
+        slug: toolsetSlug,
+        updateToolsetRequestBody: {
+          promptTemplateNames: [...currentPromptNames, prompt.name],
+        },
+      },
+    });
+  };
+
+  const removePromptFromToolset = (promptName: string) => {
+    const currentPromptNames =
+      toolset?.promptTemplates.map((t) => t.name) ?? [];
+    updateToolsetMutation.mutate({
+      request: {
+        slug: toolsetSlug,
+        updateToolsetRequestBody: {
+          promptTemplateNames: currentPromptNames.filter(
+            (name) => name !== promptName
+          ),
+        },
+      },
+    });
+  };
+
   return (
     <Page.Body className={className}>
       {/* This div is so that the scrollbox still extends the width of the page */}
@@ -355,22 +409,87 @@ export function ToolsetView({
         <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
         {groupFilterItems.length > 1 && filterButton}
         {missingEnvVarsAlert}
-        <Cards loading={!toolset}>
-          {toolDefinitions.map((tool) => (
-            <ToolCard
-              key={tool.canonicalName}
-              tool={tool}
-              onRemove={() => removeToolFromToolset(tool.name)}
-              onUpdate={onUpdate}
-            />
-          ))}
-          <CreateThingCard
-            onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
-          >
-            + Add Tool
-          </CreateThingCard>
-        </Cards>
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as "tools" | "prompts")}
+          className="h-full relative"
+        >
+          <TabsList className="mb-4">
+            <TabsTrigger value="tools">Tools</TabsTrigger>
+            <TabsTrigger value="prompts">Prompts</TabsTrigger>
+          </TabsList>
+          <TabsContent value="tools">
+            <Cards loading={!toolset}>
+              {toolDefinitions.map((tool) => (
+                <ToolCard
+                  key={tool.canonicalName}
+                  tool={tool}
+                  onRemove={() => removeToolFromToolset(tool.name)}
+                  onUpdate={onUpdate}
+                />
+              ))}
+              <CreateThingCard onClick={gotoAddTools}>
+                + Add Tool
+              </CreateThingCard>
+            </Cards>
+          </TabsContent>
+          <TabsContent value="prompts">
+            <Cards loading={!toolset}>
+              {toolset?.promptTemplates.map((prompt) => (
+                <PromptTemplateCard
+                  key={prompt.name}
+                  template={prompt}
+                  actions={
+                    <DeleteButton
+                      size="sm"
+                      tooltip="Remove prompt from this toolset"
+                      onClick={() => removePromptFromToolset(prompt.name)}
+                    />
+                  }
+                />
+              ))}
+            </Cards>
+            <Stack
+              gap={3}
+              direction={"horizontal"}
+              align={"center"}
+              className="w-full"
+            >
+              {prompts && prompts?.length > 0 && (
+                <>
+                  <PromptSelectPopover
+                    open={promptSelectPopoverOpen}
+                    setOpen={setPromptSelectPopoverOpen}
+                    onSelect={(prompt) => addPromptToToolset(prompt)}
+                  >
+                    {/* For some reason the popover doesnt show up in the right place without this div */}
+                    <div className="w-full">
+                      <CreateThingCard className="mb-0!">
+                        + Add Prompt
+                      </CreateThingCard>
+                    </div>
+                  </PromptSelectPopover>
+                  <Type muted>or</Type>
+                </>
+              )}
+              <div className="w-full">
+                <routes.prompts.newPrompt.Link>
+                  <CreateThingCard className="mb-0!">
+                    + Create Prompt
+                  </CreateThingCard>
+                </routes.prompts.newPrompt.Link>
+              </div>
+            </Stack>
+          </TabsContent>
+        </Tabs>
       </div>
+      {addToolsStyle === "modal" && (
+        <ToolSelectDialog
+          toolsetSlug={toolsetSlug}
+          open={addToolsDialogOpen}
+          onOpenChange={setAddToolsDialogOpen}
+        />
+      )}
     </Page.Body>
   );
 }

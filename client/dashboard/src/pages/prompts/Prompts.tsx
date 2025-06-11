@@ -10,7 +10,7 @@ import {
   PromptTemplate,
   PromptTemplateKind,
 } from "@gram/client/models/components";
-import { useTemplatesSuspense } from "@gram/client/react-query/index.js";
+import { useTemplates } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
 
@@ -18,13 +18,16 @@ export function PromptsRoot() {
   return <Outlet />;
 }
 
-export default function Prompts() {
-  const { data } = useTemplatesSuspense();
-  const routes = useRoutes();
-
-  const prompts = data.templates.filter(
+export function usePrompts() {
+  const { data } = useTemplates();
+  return data?.templates.filter(
     (template) => template.kind === PromptTemplateKind.Prompt
   );
+}
+
+export default function Prompts() {
+  const prompts = usePrompts();
+  const routes = useRoutes();
 
   return (
     <Page>
@@ -38,7 +41,7 @@ export default function Prompts() {
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
-        {prompts.map((template) => {
+        {prompts?.map((template) => {
           return <PromptTemplateCard key={template.id} template={template} />;
         })}
         <CreateThingCard onClick={() => routes.prompts.newPrompt.goTo()}>
@@ -49,7 +52,13 @@ export default function Prompts() {
   );
 }
 
-export function PromptTemplateCard({ template }: { template: PromptTemplate }) {
+export function PromptTemplateCard({
+  template,
+  actions,
+}: {
+  template: PromptTemplate;
+  actions?: React.ReactNode;
+}) {
   const routes = useRoutes();
 
   return (
@@ -67,6 +76,7 @@ export function PromptTemplateCard({ template }: { template: PromptTemplate }) {
             <HumanizeDateTime date={new Date(template.updatedAt)} />
           </Type>
         </Stack>
+        {actions && <Card.Actions>{actions}</Card.Actions>}
       </Card.Header>
       <Card.Content>
         <routes.prompts.prompt.Link params={[template.name]}>

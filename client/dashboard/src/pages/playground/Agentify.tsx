@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
@@ -10,7 +11,6 @@ import { getServerURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
-import { Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { z } from "zod";
 import {
@@ -326,7 +326,7 @@ export const AgentifyButton = ({
               Back
             </Button>
             <Button onClick={agentifyFn} disabled={!prompt || inProgress}>
-              {inProgress && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {inProgress && <Spinner />}
               {inProgress ? "Generating..." : "Agentify"}
             </Button>
           </Dialog.Footer>

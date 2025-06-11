@@ -1,5 +1,3 @@
-import { PromptTemplate } from "@gram/client/models/components";
-
 import { AddButton } from "@/components/add-button";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { Page } from "@/components/page-layout";
@@ -10,22 +8,28 @@ import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { PromptTemplateKind } from "@gram/client/models/components";
-import { useTemplatesSuspense } from "@gram/client/react-query";
+import {
+  PromptTemplate,
+  PromptTemplateKind,
+} from "@gram/client/models/components";
+import { useTemplates } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
+
+export function useCustomTools() {
+  const { data } = useTemplates();
+  return data?.templates.filter(
+    (template) => template.kind === PromptTemplateKind.HigherOrderTool
+  );
+}
 
 export function CustomToolsRoot() {
   return <Outlet />;
 }
 
 export default function CustomTools() {
-  const { data } = useTemplatesSuspense();
+  const customTools = useCustomTools();
   const routes = useRoutes();
-
-  const templates = data.templates.filter(
-    (template) => template.kind === PromptTemplateKind.HigherOrderTool
-  );
 
   const onNewCustomTool = () => {
     routes.customTools.toolBuilderNew.goTo();
@@ -40,7 +44,7 @@ export default function CustomTools() {
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
-        {templates.map((template) => {
+        {customTools?.map((template) => {
           return <CustomToolCard key={template.id} template={template} />;
         })}
         <CreateThingCard onClick={onNewCustomTool}>
