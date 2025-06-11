@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,14 +17,16 @@ import (
 )
 
 type VerifyCustomDomain struct {
-	domains *customdomainsRepo.Queries
-	logger  *slog.Logger
+	domains             *customdomainsRepo.Queries
+	logger              *slog.Logger
+	expectedTargetCNAME string
 }
 
-func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool) *VerifyCustomDomain {
+func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, expectedTargetCNAME string) *VerifyCustomDomain {
 	return &VerifyCustomDomain{
-		domains: customdomainsRepo.New(db),
-		logger:  logger,
+		domains:             customdomainsRepo.New(db),
+		logger:              logger,
+		expectedTargetCNAME: expectedTargetCNAME,
 	}
 }
 
@@ -32,9 +35,8 @@ type VerifyCustomDomainArgs struct {
 	Domain string
 }
 
-const expectedTargetCNAME = "cname.getgram.ai."
-
 var prohibitedDomainRoots = []string{"getgram.ai", "speakeasy.com", "speakeasyapi.dev"}
+var specialTestDomains = []string{"testmcp.speakeasy.com", "testmcp.dev.speakeasy.com"}
 var domainRegex = regexp.MustCompile(`^(?i)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$`)
 
 func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs) error {
@@ -43,7 +45,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 	}
 
 	for _, root := range prohibitedDomainRoots {
-		if strings.Contains(args.Domain, root) && args.Domain != "testmcp.speakeasy.com" { // Temporarily allowed test domain
+		if strings.Contains(args.Domain, root) && !slices.Contains(specialTestDomains, args.Domain) { // Temporarily allowed test domain
 			return oops.E(oops.CodeBadRequest, errors.New("domain is prohibited"), "domain %s is prohibited", args.Domain).Log(ctx, d.logger)
 		}
 	}
@@ -75,7 +77,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 	} else {
 		actualCNAMEFQDN := strings.TrimSuffix(cname, ".") + "."
 
-		if actualCNAMEFQDN != expectedTargetCNAME {
+		if actualCNAMEFQDN != d.expectedTargetCNAME {
 			return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, expectedTargetCNAME).Log(ctx, d.logger)
 		}
 	}

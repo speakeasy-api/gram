@@ -27,7 +27,7 @@ type Activities struct {
 	customDomainIngress    *activities.CustomDomainIngress
 }
 
-func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients) *Activities {
+func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients, expectedTargetCNAME string) *Activities {
 	return &Activities{
 		processDeployment:      activities.NewProcessDeployment(logger, db, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
@@ -35,7 +35,7 @@ func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.Bl
 		postSlackMessage:       activities.NewPostSlackMessageActivity(logger, slackClient),
 		slackChatCompletion:    activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		refreshOpenRouterKey:   activities.NewRefreshOpenRouterKey(logger, db, openrouter),
-		verifyCustomDomain:     activities.NewVerifyCustomDomain(logger, db),
+		verifyCustomDomain:     activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		customDomainIngress:    activities.NewCustomDomainIngress(logger, db, k8sClient),
 	}
 }

@@ -180,7 +180,7 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 	}, nil
 }
 
-func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openRouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients) worker.Worker {
+func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openRouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients, expectedTargetCNAME string) worker.Worker {
 	temporalWorker := worker.New(client, string(background.TaskQueueMain), worker.Options{
 		Interceptors: []interceptor.WorkerInterceptor{
 			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
@@ -189,7 +189,7 @@ func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Po
 		},
 	})
 
-	activities := background.NewActivities(logger, db, assetStorage, slackClient, chatClient, openRouter, k8sClient)
+	activities := background.NewActivities(logger, db, assetStorage, slackClient, chatClient, openRouter, k8sClient, expectedTargetCNAME)
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
 	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)

@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/background"
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
+	"github.com/speakeasy-api/gram/internal/customdomains"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/k8s"
 	"github.com/speakeasy-api/gram/internal/o11y"
@@ -211,7 +212,7 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, db, openRouter, baseChatClient, encryptionClient)
 
-			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient, chatClient, openRouter, k8sClient)
+			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient, chatClient, openRouter, k8sClient, customdomains.GetCustomDomainCNAME(c.String("environment")))
 
 			return temporalWorker.Run(worker.InterruptCh())
 		},
