@@ -39,7 +39,7 @@ func (s *Auth) Authorize(ctx context.Context, key string, schema *security.APIKe
 
 	switch schema.Name {
 	case KeySecurityScheme:
-		return s.keys.KeyBasedAuth(ctx, s.logger, key, schema.RequiredScopes)
+		return s.keys.KeyBasedAuth(ctx, key, schema.RequiredScopes)
 	case SessionSecurityScheme:
 		return s.sessions.Authenticate(ctx, key, false)
 	case ProjectSlugSecuritySchema:

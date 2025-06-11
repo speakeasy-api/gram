@@ -153,8 +153,8 @@ var _ = Service("templates", func() {
 	Method("renderTemplate", func() {
 		Description("Render a prompt template given some input data.")
 
-		// You can't easily add an additional OR in security for a goa method
-		// If you would like to add an additional accepted scope to the service level security, you need to redefine everything within the method
+		// This allows us to accept multiple key scopes for a particular method
+		// One downside of this is it does duplicate the same security scheme into the openapi spec
 		Security(security.Session, security.ProjectSlug)
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
