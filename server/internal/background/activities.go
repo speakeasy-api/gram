@@ -22,6 +22,7 @@ type Activities struct {
 	postSlackMessage       *activities.PostSlackMessage
 	slackChatCompletion    *activities.SlackChatCompletion
 	refreshOpenRouterKey   *activities.RefreshOpenRouterKey
+	verifyCustomDomain     *activities.VerifyCustomDomain
 }
 
 func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner) *Activities {
@@ -32,6 +33,7 @@ func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.Bl
 		postSlackMessage:       activities.NewPostSlackMessageActivity(logger, slackClient),
 		slackChatCompletion:    activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		refreshOpenRouterKey:   activities.NewRefreshOpenRouterKey(logger, db, openrouter),
+		verifyCustomDomain:     activities.NewVerifyCustomDomain(logger, db),
 	}
 }
 
@@ -57,4 +59,8 @@ func (a *Activities) SlackChatCompletion(ctx context.Context, input activities.S
 
 func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.RefreshOpenRouterKeyArgs) error {
 	return a.refreshOpenRouterKey.Do(ctx, input)
+}
+
+func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) error {
+	return a.verifyCustomDomain.Do(ctx, input)
 }

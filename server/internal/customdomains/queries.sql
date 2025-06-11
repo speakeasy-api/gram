@@ -19,12 +19,10 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
--- name: GetActiveCustomDomainByDomain :one
+-- name: GetCustomDomainByDomain :one
 SELECT *
 FROM custom_domains
 WHERE domain = @domain
-  AND activated IS TRUE
-  AND verified IS TRUE
   AND deleted IS FALSE;
 
 -- name: UpdateCustomDomain :one

@@ -26,14 +26,14 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, 
 				return
 			}
 
-			domain, err := domainsRepo.GetActiveCustomDomainByDomain(r.Context(), host)
+			domain, err := domainsRepo.GetCustomDomainByDomain(r.Context(), host)
 			if err != nil {
 				logger.ErrorContext(r.Context(), "failed to get custom domain", slog.String("host", host), slog.String("error", err.Error()))
 				http.Error(w, "invalid domain", http.StatusForbidden)
 				return
 			}
 
-			if !domain.Activated && !domain.Verified {
+			if !domain.Activated || !domain.Verified {
 				http.Error(w, "invalid domain", http.StatusForbidden)
 				logger.ErrorContext(r.Context(), "domain not activated", slog.String("host", host))
 				return

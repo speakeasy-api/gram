@@ -195,10 +195,12 @@ func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Po
 	temporalWorker.RegisterActivity(activities.PostSlackMessage)
 	temporalWorker.RegisterActivity(activities.SlackChatCompletion)
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
+	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 
 	temporalWorker.RegisterWorkflow(background.ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(background.SlackEventWorkflow)
 	temporalWorker.RegisterWorkflow(background.OpenrouterKeyRefreshWorkflow)
+	temporalWorker.RegisterWorkflow(background.CustomDomainRegistrationWorkflow)
 
 	return temporalWorker
 }
