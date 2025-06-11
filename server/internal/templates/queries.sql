@@ -58,21 +58,21 @@ SELECT
   c.id,
   c.name,
   COALESCE(sqlc.narg(prompt), c.prompt),
-  COALESCE(NULLIF(sqlc.narg(description), ''), c.description),
-  COALESCE(sqlc.narg(arguments), c.arguments),
+  NULLIF(sqlc.narg(description), ''),
+  sqlc.narg(arguments),
   COALESCE(NULLIF(sqlc.narg(engine), ''), c.engine),
   COALESCE(NULLIF(sqlc.narg(kind), ''), c.kind),
-  COALESCE(sqlc.narg(tools_hint), c.tools_hint)
+  COALESCE(sqlc.narg(tools_hint), ARRAY[]::TEXT[])
 FROM prompt_templates c
 WHERE project_id = @project_id
   AND id = @id
   AND (
     (NULLIF(sqlc.narg(prompt), '') IS NOT NULL AND sqlc.narg(prompt) != c.prompt)
     OR (NULLIF(sqlc.narg(description), '') IS NOT NULL AND sqlc.narg(description) != c.description)
-    OR (sqlc.narg(arguments) IS NOT NULL AND sqlc.narg(arguments) != c.arguments)
+    OR (sqlc.narg(arguments) != c.arguments)
     OR (NULLIF(sqlc.narg(engine), '') IS NOT NULL AND sqlc.narg(engine) != c.engine)
     OR (NULLIF(sqlc.narg(kind), '') IS NOT NULL AND NULLIF(sqlc.narg(kind), '') != c.kind)
-    OR (sqlc.narg(tools_hint) IS NOT NULL AND sqlc.narg(tools_hint) IS DISTINCT FROM c.tools_hint)
+    OR (sqlc.narg(tools_hint) IS DISTINCT FROM c.tools_hint)
   )
 RETURNING id;
 

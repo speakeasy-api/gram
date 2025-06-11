@@ -1,5 +1,8 @@
 import { cn } from "@/lib/utils";
 
+export const textAreaClassNames =
+  "w-full border-2 rounded-lg py-1 px-2 resize-y";
+
 export function TextArea({
   id,
   name,
@@ -33,7 +36,7 @@ export function TextArea({
       name={name}
       value={value}
       onChange={handleChange}
-      className={cn("w-full border-2 rounded-lg py-1 px-2 resize-y", className)}
+      className={cn(textAreaClassNames, className)}
       disabled={disabled}
       placeholder={placeholder}
       rows={rows}

@@ -307,21 +307,21 @@ SELECT
   c.id,
   c.name,
   COALESCE($1, c.prompt),
-  COALESCE(NULLIF($2, ''), c.description),
-  COALESCE($3, c.arguments),
+  NULLIF($2, ''),
+  $3,
   COALESCE(NULLIF($4, ''), c.engine),
   COALESCE(NULLIF($5, ''), c.kind),
-  COALESCE($6, c.tools_hint)
+  COALESCE($6, ARRAY[]::TEXT[])
 FROM prompt_templates c
 WHERE project_id = $7
   AND id = $8
   AND (
     (NULLIF($1, '') IS NOT NULL AND $1 != c.prompt)
     OR (NULLIF($2, '') IS NOT NULL AND $2 != c.description)
-    OR ($3 IS NOT NULL AND $3 != c.arguments)
+    OR ($3 != c.arguments)
     OR (NULLIF($4, '') IS NOT NULL AND $4 != c.engine)
     OR (NULLIF($5, '') IS NOT NULL AND NULLIF($5, '') != c.kind)
-    OR ($6 IS NOT NULL AND $6 IS DISTINCT FROM c.tools_hint)
+    OR ($6 IS DISTINCT FROM c.tools_hint)
   )
 RETURNING id
 `
