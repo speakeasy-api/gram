@@ -168,7 +168,7 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 
-			k8sClient, err := k8s.InitializeK8sClient()
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {
 				return err
 			}

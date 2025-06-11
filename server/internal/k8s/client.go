@@ -1,8 +1,9 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 
 	"k8s.io/client-go/dynamic"
@@ -13,6 +14,8 @@ import (
 type KubernetesClients struct {
 	Clientset     *kubernetes.Clientset
 	DynamicClient dynamic.Interface
+	logger        *slog.Logger
+	enabled       bool
 }
 
 var (
@@ -21,7 +24,17 @@ var (
 )
 
 // InitializeK8sClient initializes and returns KubernetesClients singleton.
-func InitializeK8sClient() (*KubernetesClients, error) {
+func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (*KubernetesClients, error) {
+	// not supporting k8s client in local dev mode currently
+	if env == "local" {
+		return &KubernetesClients{
+			Clientset:     nil,
+			DynamicClient: nil,
+			logger:        logger,
+			enabled:       false,
+		}, nil
+	}
+
 	var initErr error
 	initOnce.Do(func() {
 		config, err := rest.InClusterConfig()
@@ -44,9 +57,11 @@ func InitializeK8sClient() (*KubernetesClients, error) {
 		k8sClients = &KubernetesClients{
 			Clientset:     clientset,
 			DynamicClient: dynamicClient,
+			logger:        logger,
+			enabled:       true,
 		}
 
-		log.Println("Kubernetes clients initialized successfully.")
+		logger.InfoContext(ctx, "Kubernetes clients initialized successfully.")
 	})
 
 	return k8sClients, initErr

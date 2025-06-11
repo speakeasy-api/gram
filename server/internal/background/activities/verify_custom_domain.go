@@ -78,7 +78,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		actualCNAMEFQDN := strings.TrimSuffix(cname, ".") + "."
 
 		if actualCNAMEFQDN != d.expectedTargetCNAME {
-			return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, expectedTargetCNAME).Log(ctx, d.logger)
+			return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, d.expectedTargetCNAME).Log(ctx, d.logger)
 		}
 	}
 
