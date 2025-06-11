@@ -4,6 +4,6 @@ info:
   title: Modify OpenAPI to generate consumer-facing SDKs
   version: 0.0.0
 actions:
-  - target: $.paths.*[?(@.operationId != 'getInstance' && @.operationId != 'renderTemplate')]
+  - target: $.paths.*[?(@.operationId != 'getInstance' && @.operationId != 'renderTemplate' && @.operationId != 'getTemplate')]
     update:
       x-speakeasy-ignore: true
