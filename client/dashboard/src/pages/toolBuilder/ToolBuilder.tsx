@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useGroupedTools } from "@/lib/toolNames";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -42,7 +43,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Message } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
@@ -139,6 +140,7 @@ function ToolBuilder({
   const client = useSdkClient();
   const chat = useChatContext();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
 
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -203,13 +205,19 @@ function ToolBuilder({
     }
     const newSteps = [...steps];
     newSteps.push({
-      id: uuidv4(),
+      id: uuidv7(),
       tool: tool.name,
       canonicalTool: tool.canonicalName,
       instructions: instructionsPlaceholder,
       update: (step) => setStep(step),
     });
+
     setSteps(newSteps);
+
+    telemetry.capture("tool_builder_event", {
+      event: "add_step",
+      tool: tool.name,
+    });
   };
 
   const chatConfigRef: ChatConfig = useRef({
@@ -233,25 +241,20 @@ function ToolBuilder({
 
   const maybeFilteredTools = toolsetData?.httpTools ?? tools?.tools ?? [];
 
-  // Merges inputs, preserving descriptions and preventing duplicates
-  const mergeInputs = (newInputs: string[]) => {
+  // When purpose or steps change, recompute inputs
+  useEffect(() => {
+    const allInputs = steps.flatMap((step) => parseInputs(step.instructions));
+    allInputs.push(...parseInputs(purpose));
     const currentInputs = inputs.map((input) => input.name);
-    const toInsert = newInputs.filter(
+
+    const curFiltered = inputs.filter((input) =>
+      allInputs.includes(input.name)
+    );
+    const toInsert = allInputs.filter(
       (input) => !currentInputs.includes(input)
     );
-    setInputs([...inputs, ...toInsert.map((input) => ({ name: input }))]);
-  };
-
-  useEffect(() => {
-    const inputsFromSteps = steps.flatMap((step) =>
-      parseInputs(step.instructions)
-    );
-    mergeInputs(inputsFromSteps);
-  }, [steps]);
-
-  useEffect(() => {
-    mergeInputs(parseInputs(purpose));
-  }, [purpose]);
+    setInputs([...curFiltered, ...toInsert.map((input) => ({ name: input }))]);
+  }, [steps, purpose]);
 
   const validateName = (v: string) => {
     if (v.length < 4) {
@@ -309,13 +312,16 @@ function ToolBuilder({
     <Button
       icon="play"
       size="sm"
-      onClick={() =>
+      onClick={() => {
+        telemetry.capture("tool_builder_event", {
+          event: "try_now",
+        });
         chat.appendMessage({
-          id: uuidv4(),
+          id: uuidv7(),
           role: "user",
           content: `\`\`\`xml\n${buildPrompt(purpose, inputs, steps)}\n\`\`\``,
-        })
-      }
+        });
+      }}
     >
       Try Now
     </Button>
@@ -392,6 +398,10 @@ function ToolBuilder({
               },
             },
           });
+
+          telemetry.capture("tool_builder_event", {
+            event: "update_tool",
+          });
         } else {
           await client.templates.create({
             createPromptTemplateForm: {
@@ -403,6 +413,10 @@ function ToolBuilder({
               toolsHint: steps.map((step) => step.canonicalTool),
               engine: "mustache",
             },
+          });
+
+          telemetry.capture("tool_builder_event", {
+            event: "create_tool",
           });
 
           // Automatically add to the toolset
@@ -498,7 +512,7 @@ function ToolBuilder({
                 onSubmit={setPurpose}
                 lines={4}
               >
-                <Type variant="subheading">{purpose}</Type>
+                <MustacheHighlight>{purpose}</MustacheHighlight>
               </EditableText>
             </BlockInner>
           </Block>
@@ -588,7 +602,7 @@ const blockBackground = "bg-stone-100 dark:bg-stone-900";
 
 const inputStyles =
   "bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-1 rounded";
-const SyntaxHighlight = ({ children }: { children: React.ReactNode }) => {
+export const MustacheHighlight = ({ children }: { children: React.ReactNode }) => {
   if (typeof children !== "string") return <>{children}</>;
 
   // Split by curly braces
@@ -679,7 +693,7 @@ const StepCard = ({
                   "italic text-muted-foreground!"
               )}
             >
-              <SyntaxHighlight>{step.instructions}</SyntaxHighlight>
+              <MustacheHighlight>{step.instructions}</MustacheHighlight>
             </Type>
           </EditableText>
         </div>
@@ -710,14 +724,22 @@ const ToolSelectPopover = ({
         <Command>
           <CommandInput placeholder="Search..." className="h-9" />
           <CommandList>
-            <CommandEmpty>No items found.</CommandEmpty>
+            <CommandEmpty>
+              {groupedTools.length === 0
+                ? "Toolset is empty."
+                : "No items found."}
+            </CommandEmpty>
             {groupedTools.map((group) => (
-              <CommandGroup key={group.key} heading={capitalize(group.key)}>
+              <CommandGroup
+                key={group.key}
+                heading={capitalize(group.key)}
+                className="overflow-x-scroll"
+              >
                 {group.tools.map((tool) => (
                   <CommandItem
                     key={tool.name}
                     value={tool.name}
-                    className="cursor-pointer truncate"
+                    className="cursor-pointer min-w-fit"
                     onSelect={() => onSelect(tool)}
                   >
                     {tool.displayName}
@@ -762,6 +784,8 @@ const buildPrompt = (purpose: string, inputs: Input[], steps: Step[]) => {
     .join("\n");
 
   return `
+Here are instructions on how to use the other tools in this toolset to complete the task:
+
 <Purpose>
   <Instruction>
     You will be provided with a <Purpose>, a list of <Inputs>, and a <Plan>. Your goal is to use the <Plan> and <Inputs> to complete the <Purpose>.
@@ -833,7 +857,7 @@ const parsePrompt = (
         .filter((input): input is string => !!input);
 
       steps.push({
-        id: uuidv4(),
+        id: uuidv7(),
         tool,
         canonicalTool: tool,
         instructions: instructions.trim(),

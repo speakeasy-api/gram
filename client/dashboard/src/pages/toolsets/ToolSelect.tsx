@@ -18,18 +18,15 @@ import { Tool, useGroupedTools } from "@/lib/toolNames";
 import {
   HTTPToolDefinition,
   PromptTemplate,
-  PromptTemplateKind,
 } from "@gram/client/models/components";
-import {
-  useTemplates,
-  useToolset,
-  useUpdateToolsetMutation,
-} from "@gram/client/react-query";
+import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Grid, Stack, Table } from "@speakeasy-api/moonshine";
 import { AlertTriangleIcon, Check, CheckCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
+import { useCustomTools } from "../toolBuilder/CustomTools";
+import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./Toolset";
 
 type ToggleableTool = Tool & {
@@ -161,19 +158,30 @@ const toggleableColumns: Column<ToggleableTool>[] = [
 
 export function ToolSelect() {
   const { toolsetSlug } = useParams();
+
+  if (!toolsetSlug) {
+    return <div>Toolset not found</div>;
+  }
+
+  return (
+    <Page.Body>
+      <ToolsetHeader toolsetSlug={toolsetSlug} />
+      <ToolSelector toolsetSlug={toolsetSlug} />
+    </Page.Body>
+  );
+}
+
+export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const telemetry = useTelemetry();
   useRegisterToolsetTelemetry({
-    toolsetSlug: toolsetSlug ?? "",
+    toolsetSlug: toolsetSlug,
   });
 
   const { data: toolset, refetch } = useToolset({
-    slug: toolsetSlug ?? "",
+    slug: toolsetSlug,
   });
   const { data: tools, isLoading: isLoadingTools } = useListTools();
-  const { data: templates } = useTemplates();
-  const customTools = templates?.templates?.filter(
-    (t) => t.kind === PromptTemplateKind.HigherOrderTool
-  );
+  const customTools = useCustomTools();
 
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
 
@@ -188,7 +196,7 @@ export function ToolSelect() {
 
   useEffect(() => {
     setSelectedTools(toolset?.httpTools.map((t) => t.canonicalName) ?? []);
-  }, [toolset, templates]);
+  }, [toolset]);
 
   const setToolsEnabled = (tools: string[], enabled: boolean) => {
     setSelectedTools((prev) => {
@@ -199,7 +207,7 @@ export function ToolSelect() {
 
       updateToolsetMutation.mutate({
         request: {
-          slug: toolsetSlug ?? "",
+          slug: toolsetSlug,
           updateToolsetRequestBody: {
             httpToolNames: updated,
             promptTemplateNames:
@@ -221,7 +229,7 @@ export function ToolSelect() {
 
     updateToolsetMutation.mutate({
       request: {
-        slug: toolsetSlug ?? "",
+        slug: toolsetSlug,
         updateToolsetRequestBody: {
           httpToolNames: selectedTools,
           promptTemplateNames: updated,
@@ -274,30 +282,27 @@ export function ToolSelect() {
     return toolGroupsFinal;
   }, [tools, selectedTools, toolsetSlug]);
 
-  if (!toolsetSlug) {
-    return <div>Toolset not found</div>;
-  }
-
   return (
-    <Page.Body>
-      <ToolsetHeader toolsetSlug={toolsetSlug} />
+    <Stack gap={4}>
       {!isLoadingTools ? (
-        <Table
-          columns={groupColumnsToggleable}
-          data={toolGroups}
-          rowKey={(row) => row.key}
-          className="mb-6 overflow-y-auto"
-          hideHeader
-          renderExpandedContent={(group) => (
-            <Table
-              columns={toggleableColumns}
-              data={group.tools}
-              rowKey={(row) => row.id}
-              hideHeader
-              className="bg-card max-h-[600px] overflow-y-auto"
-            />
-          )}
-        />
+        // This div is necessary to make sure the table gets the room it needs
+        <div className="min-h-fit mb-6">
+          <Table
+            columns={groupColumnsToggleable}
+            data={toolGroups}
+            rowKey={(row) => row.key}
+            hideHeader
+            renderExpandedContent={(group) => (
+              <Table
+                columns={toggleableColumns}
+                data={group.tools}
+                rowKey={(row) => row.id}
+                hideHeader
+                className="bg-stone-50 border-b-1 dark:bg-card max-h-[500px] overflow-y-auto"
+              />
+            )}
+          />
+        </div>
       ) : (
         <SkeletonTable />
       )}
@@ -306,7 +311,7 @@ export function ToolSelect() {
           <Heading variant="h3">Custom Tools</Heading>
           <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={4}>
             {customTools?.map((template) => (
-              <Grid.Item key={template.id}>
+              <Grid.Item key={template.id} className="h-52">
                 <CustomToolCard
                   template={template}
                   currentTools={toolset?.httpTools ?? []}
@@ -318,7 +323,7 @@ export function ToolSelect() {
           </Grid>
         </>
       )}
-    </Page.Body>
+    </Stack>
   );
 }
 
@@ -436,7 +441,7 @@ function CustomToolCard({
   );
 
   return (
-    <Card>
+    <Card className="h-52">
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
           <Card.Title className="normal-case">{template.name}</Card.Title>
@@ -447,11 +452,13 @@ function CustomToolCard({
           <HumanizeDateTime date={new Date(template.updatedAt)} />
         </Type>
         {template.description ? (
-          <Card.Description>{template.description}</Card.Description>
+          <Card.Description className="line-clamp-2">
+            <MustacheHighlight>{template.description}</MustacheHighlight>
+          </Card.Description>
         ) : null}
       </Card.Header>
-      <Card.Content>
-        <div className="flex justify-end">{addButton}</div>
+      <Card.Content className="h-full w-full flex items-end justify-end">
+        {addButton}
       </Card.Content>
     </Card>
   );

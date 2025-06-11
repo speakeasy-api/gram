@@ -321,6 +321,7 @@ export function ToolsetPanel({
         toolsetSlug={selectedToolset ?? ""}
         className="p-8 2xl:p-12"
         environmentSlug={selectedEnvironment ?? undefined}
+        addToolsStyle={"modal"}
       />
     </div>
   );

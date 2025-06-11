@@ -51,7 +51,7 @@ export function PlaygroundRHS({
       <PanelHeader side="right">
         <Stack direction="horizontal" gap={2} align="center">
           <Type className="font-medium">Use with: </Type>
-          <TabsList className="bg-stone-200 dark:bg-stone-800">
+          <TabsList>
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="mcp">MCP</TabsTrigger>
             <TabsTrigger value="agents">Agents</TabsTrigger>

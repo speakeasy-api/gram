@@ -3,6 +3,7 @@ import { HttpRoute } from "@/components/http-route";
 import { ProjectAvatar } from "@/components/project-menu";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
@@ -98,6 +99,7 @@ function ChatInner({
   const session = useSession();
   const project = useProject();
   const telemetry = useTelemetry();
+  const client = useSdkClient();
 
   const chat = useChatContext();
   const { setMessages } = useChatContext();
@@ -181,7 +183,16 @@ function ChatInner({
       tools[pt.name] = {
         description: pt.description ?? "",
         parameters: jsonSchema(JSON.parse(pt.arguments ?? "{}")),
-        execute: () => Promise.resolve(pt.prompt), // TODO use api
+        execute: async (args) => {
+          const res = await client.templates.render({
+            id: pt.id,
+            renderTemplateRequestBody: {
+              arguments: args,
+            },
+          });
+
+          return res.prompt;
+        },
       };
     });
 
