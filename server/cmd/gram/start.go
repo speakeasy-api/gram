@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/environments"
 	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/integrations"
+	"github.com/speakeasy-api/gram/internal/k8s"
 	"github.com/speakeasy-api/gram/internal/keys"
 	"github.com/speakeasy-api/gram/internal/mcp"
 	"github.com/speakeasy-api/gram/internal/middleware"
@@ -292,6 +293,11 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
+			k8sClient, err := k8s.InitializeK8sClient()
+			if err != nil {
+				return err
+			}
+
 			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
@@ -403,7 +409,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient, chatClient, openRouter)
+					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient, chatClient, openRouter, k8sClient)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", slog.String("error", err.Error()))
 					}

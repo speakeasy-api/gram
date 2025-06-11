@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/encryption"
+	"github.com/speakeasy-api/gram/internal/k8s"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
@@ -166,6 +167,11 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 
+			k8sClient, err := k8s.InitializeK8sClient()
+			if err != nil {
+				return err
+			}
+
 			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
 				assetsBackend: c.String("assets-backend"),
 				assetsURI:     c.String("assets-uri"),
@@ -205,7 +211,7 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, db, openRouter, baseChatClient, encryptionClient)
 
-			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient, chatClient, openRouter)
+			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient, chatClient, openRouter, k8sClient)
 
 			return temporalWorker.Run(worker.InterruptCh())
 		},

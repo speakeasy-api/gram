@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/background/activities"
 	"github.com/speakeasy-api/gram/internal/chat"
+	"github.com/speakeasy-api/gram/internal/k8s"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
@@ -23,9 +24,10 @@ type Activities struct {
 	slackChatCompletion    *activities.SlackChatCompletion
 	refreshOpenRouterKey   *activities.RefreshOpenRouterKey
 	verifyCustomDomain     *activities.VerifyCustomDomain
+	customDomainIngress    *activities.CustomDomainIngress
 }
 
-func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner) *Activities {
+func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients) *Activities {
 	return &Activities{
 		processDeployment:      activities.NewProcessDeployment(logger, db, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
@@ -34,6 +36,7 @@ func NewActivities(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.Bl
 		slackChatCompletion:    activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		refreshOpenRouterKey:   activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		verifyCustomDomain:     activities.NewVerifyCustomDomain(logger, db),
+		customDomainIngress:    activities.NewCustomDomainIngress(logger, db, k8sClient),
 	}
 }
 
@@ -63,4 +66,8 @@ func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.
 
 func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) error {
 	return a.verifyCustomDomain.Do(ctx, input)
+}
+
+func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.CustomDomainIngressArgs) error {
+	return a.customDomainIngress.Do(ctx, input)
 }
