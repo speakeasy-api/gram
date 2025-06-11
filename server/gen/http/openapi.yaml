@@ -3420,6 +3420,12 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
+
+                **Required security scopes for apikey**:
+                  * `consumer`
+
+                **Required security scopes for project_slug**:
+                  * `consumer`
             operationId: templates#getTemplate
             parameters:
                 - description: The ID of the prompt template
@@ -3495,6 +3501,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: getTemplate templates
@@ -3596,6 +3604,12 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
+
+                **Required security scopes for apikey**:
+                  * `consumer`
+
+                **Required security scopes for project_slug**:
+                  * `consumer`
             operationId: templates#renderTemplate
             parameters:
                 - description: The ID of the prompt template to render
@@ -3673,6 +3687,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: renderTemplate templates

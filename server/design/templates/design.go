@@ -68,6 +68,14 @@ var _ = Service("templates", func() {
 	Method("getTemplate", func() {
 		Description("Get prompt template by its ID or name.")
 
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+
 		Payload(func() {
 			Attribute("id", String, "The ID of the prompt template")
 			Attribute("name", String, "The name of the prompt template")
@@ -144,6 +152,16 @@ var _ = Service("templates", func() {
 
 	Method("renderTemplate", func() {
 		Description("Render a prompt template given some input data.")
+
+		// You can't easily add an additional OR in security for a goa method
+		// If you would like to add an additional accepted scope to the service level security, you need to redefine everything within the method
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
 
 		Payload(func() {
 			Required("id", "arguments")
