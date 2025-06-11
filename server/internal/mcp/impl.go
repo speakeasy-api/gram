@@ -347,6 +347,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handleToolsList(ctx, s.logger, s.db, payload, req)
 	case "tools/call":
 		return handleToolsCall(ctx, s.tracer, s.logger, s.metrics, s.db, s.enc, payload, req)
+	case "prompts/list":
+		return handlePromptsList(ctx, s.logger, s.db, payload, req)
+	case "prompts/get":
+		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,

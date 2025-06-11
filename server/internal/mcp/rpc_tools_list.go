@@ -28,7 +28,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 		return nil, err
 	}
 
-	tools := make([]*toolListEntry, 0, len(toolset.HTTPTools))
+	tools := make([]*toolListEntry, 0)
 
 	for _, tool := range toolset.HTTPTools {
 		tools = append(tools, &toolListEntry{
@@ -36,6 +36,24 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 			Description: tool.Description,
 			InputSchema: json.RawMessage(tool.Schema),
 		})
+	}
+
+	for _, prompt := range toolset.PromptTemplates {
+		promptArgs := "{}"
+		if prompt.Arguments != nil {
+			promptArgs = *prompt.Arguments
+		}
+		if prompt.Kind == "higher_order_tool" {
+			desc := ""
+			if prompt.Description != nil {
+				desc = *prompt.Description
+			}
+			tools = append(tools, &toolListEntry{
+				Name:        string(prompt.Name),
+				Description: desc,
+				InputSchema: json.RawMessage(promptArgs),
+			})
+		}
 	}
 
 	result := &result[toolsListResult]{

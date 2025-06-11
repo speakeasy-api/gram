@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
+	templates "github.com/speakeasy-api/gram/internal/templates/repo"
 	tr "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 	"go.opentelemetry.io/otel/trace"
@@ -44,6 +45,7 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").Log(ctx, logger)
 	}
 
+	templatesRepo := templates.New(db)
 	envRepo := er.New(db)
 	toolsRepo := tr.New(db)
 	projectID := mv.ProjectID(payload.projectID)
@@ -52,6 +54,8 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 
 	envSlug := payload.environment
 
+	var higherOrderTool templates.PromptTemplate
+	var hasHigherOrderTool bool
 	toolID, err := toolsRepo.PokeHTTPToolDefinitionByName(ctx, tr.PokeHTTPToolDefinitionByNameParams{
 		ProjectID: uuid.UUID(projectID),
 		Name:      params.Name,
@@ -60,7 +64,30 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 	case err != nil && !errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load tool").Log(ctx, logger)
 	case errors.Is(err, sql.ErrNoRows) || toolID == uuid.Nil:
-		return nil, oops.E(oops.CodeNotFound, err, "tool not found").Log(ctx, logger)
+		if prompt, promptErr := templatesRepo.GetTemplateByName(ctx, templates.GetTemplateByNameParams{
+			ProjectID: payload.projectID,
+			Name:      params.Name,
+		}); promptErr == nil && prompt.Kind.String == "higher_order_tool" {
+			higherOrderTool = prompt
+			hasHigherOrderTool = true
+		}
+		if !hasHigherOrderTool {
+			return nil, oops.E(oops.CodeNotFound, err, "tool not found").Log(ctx, logger)
+		}
+	}
+
+	if hasHigherOrderTool {
+		var args map[string]any
+		if err := json.Unmarshal(params.Arguments, &args); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse higher order tool arguments").Log(ctx, logger)
+		}
+
+		promptData, err := executePrompt(higherOrderTool, args)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
+		}
+
+		return formatHigherOrderToolResult(ctx, logger, req, promptData)
 	}
 
 	// Transform environment entries into a map
@@ -142,6 +169,26 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 
 var jsonRE = regexp.MustCompile(`\bjson\b`)
 var yamlRE = regexp.MustCompile(`\byaml\b`)
+
+func formatHigherOrderToolResult(ctx context.Context, logger *slog.Logger, req *rawRequest, promptData string) (json.RawMessage, error) {
+	content, err := json.Marshal(contentChunk[string, json.RawMessage]{
+		Type:     "text",
+		Text:     promptData,
+		MimeType: nil,
+		Data:     nil,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal content chunk").Log(ctx, logger)
+	}
+
+	return json.Marshal(result[toolCallResult]{
+		ID: req.ID,
+		Result: toolCallResult{
+			Content: []json.RawMessage{content},
+			IsError: false,
+		},
+	})
+}
 
 func formatResult(rw toolCallResponseWriter) (json.RawMessage, error) {
 	body := rw.body.Bytes()

@@ -20,7 +20,8 @@ func handleInitialize(req *rawRequest) (json.RawMessage, error) {
 		Result: initializeResult{
 			ProtocolVersion: "2024-11-05",
 			Capabilities: map[string]json.RawMessage{
-				"tools": json.RawMessage("{}"),
+				"tools":   json.RawMessage("{}"),
+				"prompts": json.RawMessage("{}"),
 			},
 			ServerInfo: serverInfo{
 				Name:    "Gram",
