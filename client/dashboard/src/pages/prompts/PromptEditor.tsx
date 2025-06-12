@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { textAreaClassNames } from "@/components/ui/textarea";
+import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components";
 import { MutationStatus } from "@tanstack/react-query";
@@ -63,9 +64,7 @@ export function PromptEditor({
         "Event target is not a textarea"
       );
 
-      const iter = el.value.matchAll(
-        /\{\{\{?\s*([a-zA-Z]+(?:[_][a-zA-Z0-9]+)*)\s*\}\}\}?/g
-      );
+      const iter = el.value.matchAll(MUSTACHE_VAR_REGEX);
 
       const names: string[] = [];
       for (const m of iter) {
@@ -134,7 +133,12 @@ export function PromptEditor({
               <Label className="mb-2" htmlFor="newprompt_name">
                 Name
               </Label>
-              <Input id="newprompt_name" name="name" required />
+              <Input
+                id="newprompt_name"
+                name="name"
+                required
+                pattern={PROMPT_NAME_PATTERN}
+              />
             </div>
           ) : null}
           <div>

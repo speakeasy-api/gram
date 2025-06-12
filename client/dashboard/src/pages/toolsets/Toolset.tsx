@@ -60,6 +60,7 @@ import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
 import { ToolSelectDialog } from "./ToolSelectDialog";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
+import { TOOL_NAME_REGEX } from "@/lib/constants";
 
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
@@ -647,6 +648,12 @@ function ToolCard({
     <Stack direction="horizontal" gap={2} align="center">
       <EditableText
         value={tool.name}
+        validate={(value) => {
+          if (!TOOL_NAME_REGEX.test(value)) {
+            return "Tool name may only contain letters, numbers, and underscores";
+          }
+          return true;
+        }}
         onSubmit={(newValue) => updateVariation({ name: newValue })}
         label={"Tool Name"}
         description={`Update the name of tool '${tool.name}'`}

@@ -54,6 +54,7 @@ import {
   instructionsPlaceholder,
   Step,
 } from "./components";
+import { MUSTACHE_VAR_REGEX, TOOL_NAME_REGEX } from "@/lib/constants";
 
 export function ToolBuilderNew() {
   const newTemplate = {
@@ -89,8 +90,6 @@ export function ToolBuilderPage() {
     toolsets?.toolsets.find((t) =>
       t.promptTemplates.some((pt) => pt.name === toolName)
     ) ?? undefined;
-
-  console.log(toolset, toolsets);
 
   const { data: template } = useTemplateSuspense({
     name: toolName,
@@ -197,8 +196,6 @@ function ToolBuilder({
     setSteps(initial.steps.map(makeStep));
   }, [initial]);
 
-  console.log(steps);
-
   const insertTool = (tool: { name: string; canonicalName: string }) => {
     if (steps.length >= 10) {
       return;
@@ -266,7 +263,7 @@ function ToolBuilder({
     if (tools?.tools.some((t) => t.name.toLowerCase() === v.toLowerCase())) {
       return "Tool name must be unique";
     }
-    if (!v.match(/^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$/)) {
+    if (!v.match(TOOL_NAME_REGEX)) {
       return "Tool name must contain only lowercase letters, numbers, underscores, and hyphens";
     }
     return true;
@@ -602,27 +599,34 @@ const blockBackground = "bg-stone-100 dark:bg-stone-900";
 
 const inputStyles =
   "bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-1 rounded";
-export const MustacheHighlight = ({ children }: { children: React.ReactNode }) => {
+
+export const MustacheHighlight = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   if (typeof children !== "string") return <>{children}</>;
 
-  // Split by curly braces
-  const parts = children.split(/(\{\{[^}]+\}\})/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.match(/^\{\{.*\}\}$/)) {
-          // Remove the curly braces and highlight the content
-          const content = part.slice(2, -2);
-          return (
-            <span key={i} className={inputStyles}>
-              {content}
-            </span>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </>
-  );
+  let start = 0;
+  const chunks: React.ReactNode[] = [];
+  for (const part of children.matchAll(MUSTACHE_VAR_REGEX)) {
+    const text = children.slice(start, part.index);
+    if (text) {
+      chunks.push(<span key={`text-${start}`}>{text}</span>);
+    }
+
+    chunks.push(
+      <span key={`var-${start}`} className={inputStyles}>
+        {part[0]}
+      </span>
+    );
+
+    start = part.index + part[0].length;
+  }
+
+  chunks.push(<span key={`text-${start}`}>{children.slice(start)}</span>);
+
+  return chunks;
 };
 
 const StepCard = ({
