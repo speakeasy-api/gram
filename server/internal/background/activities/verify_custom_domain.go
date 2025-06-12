@@ -64,6 +64,10 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		}
 	}
 
+	if domain.OrganizationID != args.OrgID {
+		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").Log(ctx, d.logger)
+	}
+
 	cname, err := net.LookupCNAME(domain.Domain)
 	if err != nil {
 		d.logger.InfoContext(ctx, "CNAME lookup failed for domain", slog.String("domain", domain.Domain), slog.String("error", err.Error()))

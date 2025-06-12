@@ -34,6 +34,22 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 		return fmt.Errorf("failed to verify custom domain: %w", err)
 	}
 
-	// TODO: Implement custom domain registration activity
+	ingressCreateCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 180 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1,
+		},
+	})
+
+	err = workflow.ExecuteActivity(
+		ingressCreateCtx,
+		a.CustomDomainIngress,
+		activities.CustomDomainIngressArgs{OrgID: params.OrgID, Domain: params.Domain, Action: activities.CustomDomainIngressActionSetup},
+	).Get(ingressCreateCtx, nil)
+	if err != nil {
+		logger.Error("failed to create custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
+		return fmt.Errorf("failed to create custom domain ingress: %w", err)
+	}
+
 	return nil
 }

@@ -2,11 +2,14 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/conv"
 	customdomainsRepo "github.com/speakeasy-api/gram/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/internal/k8s"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type CustomDomainIngressAction string
@@ -31,11 +34,50 @@ func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient *k8
 }
 
 type CustomDomainIngressArgs struct {
-	OrgID    string
-	DomainID string
-	Action   CustomDomainIngressAction
+	OrgID  string
+	Domain string
+	Action CustomDomainIngressAction
 }
 
 func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressArgs) error {
+	customDomain, err := c.domains.GetCustomDomainByDomain(ctx, args.Domain)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").Log(ctx, c.logger)
+	}
+
+	if customDomain.OrganizationID != args.OrgID {
+		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").Log(ctx, c.logger)
+	}
+
+	if args.Action == CustomDomainIngressActionSetup {
+		ingressName, secretName, _, err := c.k8s.CreateCustomDomainIngressCharts(customDomain.Domain)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to create custom domain ingress").Log(ctx, c.logger)
+		}
+
+		c.logger.InfoContext(ctx, "custom domain ingress",
+			slog.String("ingress_name", ingressName),
+			slog.String("secret_name", secretName),
+		)
+
+		_, err = c.k8s.GetIngress(ctx, ingressName)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to get custom domain ingress").Log(ctx, c.logger)
+		}
+	}
+
+	if args.Action == CustomDomainIngressActionDelete {
+		ingressName := conv.FromPGText[string](customDomain.IngressName)
+		secretName := conv.FromPGText[string](customDomain.CertSecretName)
+		if ingressName == nil || secretName == nil {
+			return oops.E(oops.CodeUnexpected, errors.New("ingress name or secret name is nil"), "ingress name or secret name is nil").Log(ctx, c.logger)
+		}
+
+		err := c.k8s.DeleteIngress(ctx, *ingressName, *secretName)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain ingress").Log(ctx, c.logger)
+		}
+	}
+
 	return nil
 }
