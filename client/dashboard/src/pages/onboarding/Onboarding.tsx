@@ -131,21 +131,26 @@ export function OnboardingContent({
 
     telemetry.capture("onboarding_event", {
       action: "deployment_created",
+      num_tools: deploymentNumTools(deployment.deployment),
     });
   };
 
-  const documentId = deployment?.openapiv3Assets.find(
-    (doc) => doc.assetId === asset?.asset.id
-  )?.id;
+  const deploymentNumTools = (deployment: Deployment | undefined) => {
+    const documentId = deployment?.openapiv3Assets.find(
+      (doc) => doc.assetId === asset?.asset.id
+    )?.id;
 
-  const numTools = documentId
-    ? tools?.tools.filter(
-        (tool) =>
-          tool.openapiv3DocumentId !== undefined &&
-          tool.deploymentId === deployment?.id &&
-          tool.openapiv3DocumentId === documentId
-      ).length
-    : 0;
+    return documentId
+      ? tools?.tools.filter(
+          (tool) =>
+            tool.openapiv3DocumentId !== undefined &&
+            tool.deploymentId === deployment?.id &&
+            tool.openapiv3DocumentId === documentId
+        ).length
+      : 0;
+  };
+
+  const numTools = deploymentNumTools(deployment);
 
   // If an existing document slug was NOT provided, then we need to make sure the provided slug
   // isn't accidentally overwriting an existing document slug.

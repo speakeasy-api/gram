@@ -5,9 +5,12 @@ import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { HttpRoute } from "@/components/http-route";
 import { InputDialog } from "@/components/input-dialog";
-import { NameAndSlug } from "@/components/name-and-slug";
+import { CopyableSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { ToolsetToolsBadge } from "@/components/tools-badge";
+import {
+  ToolsetPromptsBadge,
+  ToolsetToolsBadge,
+} from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
@@ -28,6 +31,7 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { useGroupedTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -60,7 +64,6 @@ import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
 import { ToolSelectDialog } from "./ToolSelectDialog";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
-import { TOOL_NAME_REGEX } from "@/lib/constants";
 
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
@@ -526,19 +529,16 @@ export const ToolsetHeader = ({
   return (
     <Stack gap={2} className="mb-4">
       <Stack direction="horizontal" justify="space-between" className="h-10">
-        <EditableText
-          value={toolset?.name}
-          onSubmit={(newValue) => updateToolset({ name: newValue })}
-          label={"Toolset Name"}
-          description={`Update the name of toolset '${toolset?.name}'`}
-        >
-          <Heading variant="h2">
-            <NameAndSlug
-              name={toolset?.name || ""}
-              slug={toolset?.slug || ""}
-            />
-          </Heading>
-        </EditableText>
+        <CopyableSlug slug={toolset?.slug || ""} hidden={false}>
+          <EditableText
+            value={toolset?.name}
+            onSubmit={(newValue) => updateToolset({ name: newValue })}
+            label={"Toolset Name"}
+            description={`Update the name of toolset '${toolset?.name}'`}
+          >
+            <Heading variant="h2">{toolset?.name}</Heading>
+          </EditableText>
+        </CopyableSlug>
         {actions}
       </Stack>
       <Stack direction="horizontal" gap={2} justify="space-between">
@@ -558,6 +558,7 @@ export const ToolsetHeader = ({
           </Type>
         </EditableText>
         <Stack direction="horizontal" gap={2}>
+          <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
           <ToolsetToolsBadge toolset={toolset} size="md" variant="outline" />
           <ToolsetEnvironmentBadge
             toolset={toolset}

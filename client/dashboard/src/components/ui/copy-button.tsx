@@ -8,11 +8,13 @@ export const CopyButton = ({
   absolute = false,
   size = "icon",
   className,
+  tooltip,
 }: {
   text: string;
   size?: "icon" | "icon-sm";
   absolute?: boolean;
   className?: string;
+  tooltip?: string;
 }) => {
   const [recentlyCopied, setRecentlyCopied] = useState(false);
 
@@ -29,6 +31,7 @@ export const CopyButton = ({
       variant={absolute ? "outline" : "ghost"}
       size={size}
       onClick={handleCopy}
+      tooltip={tooltip}
       className={cn(
         // "bg-background shadow-md border border-border hover:bg-accent",
         absolute && "absolute top-3 right-3 z-10 shadow-md",

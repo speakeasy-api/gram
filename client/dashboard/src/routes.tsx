@@ -313,7 +313,12 @@ export const useRoutes = (): RoutesWithGoTo => {
     }) => {
       const queryString = new URLSearchParams(queryParams).toString();
       return (
-        <Link to={`${resolveUrl(...params)}?${queryString}`}>{children}</Link>
+        <Link
+          to={`${resolveUrl(...params)}?${queryString}`}
+          className="hover:underline"
+        >
+          {children}
+        </Link>
       );
     };
 

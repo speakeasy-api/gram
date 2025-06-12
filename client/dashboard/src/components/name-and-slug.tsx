@@ -1,31 +1,28 @@
+import { cn } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Link } from "react-router";
+import { CopyButton } from "./ui/copy-button";
 
-export const NameAndSlug = ({
-  name,
+export const CopyableSlug = ({
   slug,
-  linkTo,
+  hidden = true,
+  children,
 }: {
-  name: string;
   slug: string;
-  linkTo?: string;
+  hidden?: boolean;
+  children?: React.ReactNode;
 }) => {
-  const title = linkTo ? (
-    <Link to={linkTo} className="hover:underline">
-      <span>{name}</span>
-    </Link>
-  ) : (
-    <span>{name}</span>
-  );
-
-  const slugEquivalent = slug.toLowerCase() === name.toLowerCase();
-
   return (
-    <Stack direction="horizontal" gap={2}>
-      {title}
-      {!slugEquivalent && (
-        <span className="text-muted-foreground">({slug})</span>
-      )}
+    <Stack direction="horizontal" gap={1} align="center" className="group">
+      {children}
+      <CopyButton
+        text={slug}
+        size="icon-sm"
+        tooltip="Copy slug"
+        className={cn(
+          "text-muted-foreground/80 hover:text-foreground",
+          hidden && "opacity-0 group-hover:opacity-100"
+        )}
+      />
     </Stack>
   );
 };

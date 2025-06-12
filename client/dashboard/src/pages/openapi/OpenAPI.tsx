@@ -1,5 +1,5 @@
 import { CreateThingCard } from "@/components/create-thing-card";
-import { NameAndSlug } from "@/components/name-and-slug";
+import { CopyableSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
 import { ToolsBadge } from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
@@ -222,7 +222,7 @@ function DeploymentCard({
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify="space-between">
           <Card.Title>
-            <NameAndSlug name={asset.name} slug={asset.slug} />
+            <CopyableSlug slug={asset.slug}>{asset.name}</CopyableSlug>
           </Card.Title>
           <ToolsBadge toolNames={tools.map((tool) => tool.name)} />
         </Stack>

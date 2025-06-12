@@ -3,6 +3,34 @@ import { Toolset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge } from "./ui/badge";
 
+export const ToolsetPromptsBadge = ({
+  toolset,
+  size = "md",
+  variant = "default",
+}: {
+  toolset: Toolset | undefined;
+  size?: "sm" | "md";
+  variant?: "outline" | "default";
+}) => {
+  const promptNames = toolset?.promptTemplates?.map((prompt) => prompt.name);
+
+  const tooltipContent = (
+    <div className="max-h-[300px] overflow-y-auto">
+      <Stack gap={1}>
+        {promptNames?.map((prompt, i) => (
+          <p key={i}>{prompt}</p>
+        ))}
+      </Stack>
+    </div>
+  );
+
+  return promptNames && promptNames.length > 0 ? (
+    <Badge size={size} variant={variant} tooltip={tooltipContent}>
+      {promptNames.length} Prompt{promptNames.length === 1 ? "" : "s"}
+    </Badge>
+  ) : null;
+};
+
 export const ToolsetToolsBadge = ({
   toolset,
   size = "md",

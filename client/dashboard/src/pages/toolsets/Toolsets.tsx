@@ -1,9 +1,12 @@
 import { AddButton } from "@/components/add-button";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
-import { NameAndSlug } from "@/components/name-and-slug";
+import { CopyableSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { ToolsetToolsBadge } from "@/components/tools-badge";
+import {
+  ToolsetPromptsBadge,
+  ToolsetToolsBadge,
+} from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
@@ -19,7 +22,6 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
-import { ToolsetEnvironmentBadge } from "./Toolset";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -117,14 +119,14 @@ function ToolsetCard({ toolset }: { toolset: Toolset }) {
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
           <Card.Title>
-            <NameAndSlug
-              name={toolset.name}
-              slug={toolset.slug}
-              linkTo={routes.toolsets.toolset.href(toolset.slug)}
-            />
+            <CopyableSlug slug={toolset.slug}>
+              <routes.toolsets.toolset.Link params={[toolset.slug]}>
+                {toolset.name}
+              </routes.toolsets.toolset.Link>
+            </CopyableSlug>
           </Card.Title>
-          <Stack direction="horizontal" gap={2} align="center">
-            <ToolsetEnvironmentBadge toolset={toolset} />
+          <Stack direction="horizontal" gap={1} align="center">
+            <ToolsetPromptsBadge toolset={toolset} />
             <ToolsetToolsBadge toolset={toolset} />
           </Stack>
         </Stack>

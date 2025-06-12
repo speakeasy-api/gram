@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dot } from "@/components/ui/dot";
 import { Heading } from "@/components/ui/heading";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { SearchBar } from "@/components/ui/search-bar";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
@@ -184,6 +186,8 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const customTools = useCustomTools();
 
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -240,6 +244,44 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
 
   const groupedTools = useGroupedTools(tools?.tools ?? []);
 
+  const tagFilterOptions = groupedTools.flatMap((group) =>
+    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
+  );
+  const uniqueTags = [...new Set(tagFilterOptions)];
+  const tagFilterItems = uniqueTags.map((tag) => ({
+    label: tag,
+    value: tag,
+  }));
+  const tagsFilter = (
+    <MultiSelect
+      options={tagFilterItems}
+      onValueChange={setTagFilters}
+      placeholder="Filter by tag"
+      className="w-fit capitalize"
+    />
+  );
+
+  const filteredGroups = useMemo(() => {
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const filteredGroups = groupedTools.map((g) => ({
+      ...g,
+      tools: g.tools.filter((t) => {
+        if (
+          tagFilters.length > 0 &&
+          !t.tags.some((tag) => tagFilters.includes(`${g.key}/${tag}`))
+        ) {
+          return false;
+        }
+        const tags = t.tags.join(",");
+        return (
+          normalize(t.name).includes(normalize(search)) ||
+          normalize(tags).includes(normalize(search))
+        );
+      }),
+    }));
+    return filteredGroups.filter((g) => g.tools.length > 0);
+  }, [tools, search, tagFilters]);
+
   const toolGroups = useMemo(() => {
     const toggleAll = (tools: ToggleableTool[]) => {
       setToolsEnabled(
@@ -248,7 +290,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       );
     };
 
-    const toolGroups = groupedTools.map((group) => ({
+    const toolGroups = filteredGroups.map((group) => ({
       ...group,
       tools: group.tools.map((tool) => ({
         ...tool,
@@ -280,29 +322,42 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     });
 
     return toolGroupsFinal;
-  }, [tools, selectedTools, toolsetSlug]);
+  }, [filteredGroups, selectedTools, toolsetSlug]);
 
   return (
-    <Stack gap={4}>
+    <Stack gap={4} className="mb-8">
       {!isLoadingTools ? (
-        // This div is necessary to make sure the table gets the room it needs
-        <div className="min-h-fit mb-6">
-          <Table
-            columns={groupColumnsToggleable}
-            data={toolGroups}
-            rowKey={(row) => row.key}
-            hideHeader
-            renderExpandedContent={(group) => (
-              <Table
-                columns={toggleableColumns}
-                data={group.tools}
-                rowKey={(row) => row.id}
-                hideHeader
-                className="bg-stone-50 border-b-1 dark:bg-card max-h-[500px] overflow-y-auto"
-              />
-            )}
-          />
-        </div>
+        <>
+          <Stack direction="horizontal" gap={2} className="h-fit">
+            {tagsFilter}
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search tools"
+              className="w-1/3"
+            />
+          </Stack>
+          {/* This div is necessary to make sure the table gets the room it needs */}
+          <div className="min-h-fit mb-6">
+            <Table
+              columns={groupColumnsToggleable}
+              data={toolGroups}
+              rowKey={(row) => row.key}
+              hideHeader
+              renderExpandedContent={(group) => (
+                // This div is necessary to apply the bottom border to the table
+                <div className="bg-stone-50 border-b-1 dark:bg-card max-h-[500px] overflow-y-auto">
+                  <Table
+                    columns={toggleableColumns}
+                    data={group.tools}
+                    rowKey={(row) => row.id}
+                    hideHeader
+                  />
+                </div>
+              )}
+            />
+          </div>
+        </>
       ) : (
         <SkeletonTable />
       )}

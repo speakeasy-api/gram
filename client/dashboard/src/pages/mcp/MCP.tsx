@@ -1,6 +1,9 @@
-import { NameAndSlug } from "@/components/name-and-slug";
+import { CopyableSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import { ToolsetToolsBadge } from "@/components/tools-badge";
+import {
+  ToolsetPromptsBadge,
+  ToolsetToolsBadge,
+} from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
@@ -315,71 +318,69 @@ export function McpToolsetCard({
     </Dialog>
   );
 
+  const badges = (
+    <Stack direction="horizontal" gap={2} align="center">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              size="md"
+              variant="outline"
+              className={"flex items-center gap-1"}
+            >
+              {toolset.mcpIsPublic ? (
+                <Check className={cn("w-4 h-4 stroke-3", "text-green-500")} />
+              ) : (
+                <Lock className={cn("w-4 h-4", "text-orange-500")} />
+              )}
+              {toolset.mcpIsPublic ? "Public" : "Private"}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            {toolset.mcpIsPublic
+              ? `Your MCP server is publicly reachable at ${mcpUrl}`
+              : "Your MCP server can be used alongisde a Gram API key."}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <ToolsetPromptsBadge toolset={toolset} variant="outline" />
+      <ToolsetToolsBadge toolset={toolset} variant="outline" />
+    </Stack>
+  );
+
   return (
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Stack direction="vertical" gap={1}>
-            <Card.Title>
-              <NameAndSlug
-                name={toolset.name}
-                slug={toolset.slug}
-                linkTo={routes.toolsets.toolset.href(toolset.slug)}
-              />
-            </Card.Title>
-            <Card.Description>
-              <Stack direction="horizontal" className="group" align="center">
-                <Type muted mono variant="small" className="break-all">
-                  {mcpUrl}
-                  {toolset.mcpSlug && customServerURL && (
-                    <span className="ml-2 text-green-600 text-xs"></span>
-                  )}
-                </Type>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setPublishModalOpen(true)}
-                  className="group-hover:opacity-100 opacity-0 transition-opacity ml-1"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <CopyButton
-                  text={mcpUrl}
-                  size="icon-sm"
-                  className="group-hover:opacity-100 opacity-0 transition-opacity"
-                />
-              </Stack>
-            </Card.Description>
-          </Stack>
-          <Stack direction="horizontal" gap={2} align="center">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    size="md"
-                    variant="outline"
-                    className={"flex items-center gap-1"}
-                  >
-                    {toolset.mcpIsPublic ? (
-                      <Check
-                        className={cn("w-4 h-4 stroke-3", "text-green-500")}
-                      />
-                    ) : (
-                      <Lock className={cn("w-4 h-4", "text-orange-500")} />
-                    )}
-                    {toolset.mcpIsPublic ? "Public" : "Private"}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {toolset.mcpIsPublic
-                    ? `Your MCP server is publicly reachable at ${mcpUrl}`
-                    : "Your MCP server can be used alongisde a Gram API key."}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <ToolsetToolsBadge toolset={toolset} variant="outline" />
-          </Stack>
+          <Card.Title>
+            <CopyableSlug slug={toolset.slug}>
+              <routes.toolsets.toolset.Link params={[toolset.slug]}>
+                {toolset.name}
+              </routes.toolsets.toolset.Link>
+            </CopyableSlug>
+          </Card.Title>
+          {badges}
         </Stack>
+        <Card.Description>
+          <Stack direction="horizontal" className="group" align="center">
+            <Type muted mono small className="break-all text-xs">
+              {mcpUrl}
+            </Type>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setPublishModalOpen(true)}
+              className="group-hover:opacity-100 opacity-0 transition-opacity ml-1"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <CopyButton
+              text={mcpUrl}
+              size="icon-sm"
+              className="group-hover:opacity-100 opacity-0 transition-opacity"
+            />
+          </Stack>
+        </Card.Description>
       </Card.Header>
       <Card.Content></Card.Content>
       <Card.Footer>
