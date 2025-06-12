@@ -77,9 +77,22 @@ func (c *caseInsensitiveEnv) Set(key, value string) {
 
 func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, toolCallSource ToolCallSource) error {
 	ciEnv := newCaseInsensitiveEnv(envVars)
+
+	bodyBytes, err := io.ReadAll(requestBody)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+	}
+
 	var toolCallBody ToolCallBody
-	if err := json.NewDecoder(requestBody).Decode(&toolCallBody); err != nil {
+	if err := json.Unmarshal(bodyBytes, &toolCallBody); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
+	}
+
+	// We are silently failing before we actually start returning errors to the LLM related to body not fitting json schema
+	if len(toolExecutionInfo.Tool.Schema) > 0 {
+		if validateErr := ValidateToolCallBody(ctx, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
+			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
+		}
 	}
 
 	// environment variable overrides on tool calls typically defined in the SDK
@@ -136,7 +149,6 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	// Create a new request
 	fullURL := strings.TrimRight(serverURL, "/") + "/" + strings.TrimLeft(requestPath, "/")
 	var req *http.Request
-	var err error
 	if strings.HasPrefix(toolExecutionInfo.Tool.RequestContentType.String, "application/x-www-form-urlencoded") {
 		encoded := ""
 		if len(toolCallBody.Body) > 0 {
