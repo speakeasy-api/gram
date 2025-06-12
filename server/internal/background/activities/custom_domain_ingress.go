@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/conv"
@@ -50,7 +51,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 	}
 
 	if args.Action == CustomDomainIngressActionSetup {
-		ingressName, secretName, _, err := c.k8s.CreateCustomDomainIngressCharts(customDomain.Domain)
+		ingressName, secretName, ingress, err := c.k8s.CreateCustomDomainIngressCharts(customDomain.Domain)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to create custom domain ingress").Log(ctx, c.logger)
 		}
@@ -60,10 +61,31 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 			slog.String("secret_name", secretName),
 		)
 
+		err = c.k8s.CreateOrUpdateIngress(ctx, ingressName, ingress)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to create or update custom domain ingress").Log(ctx, c.logger)
+		}
+
+		// Wait for ingress to be created
+		time.Sleep(60 * time.Second)
+
 		_, err = c.k8s.GetIngress(ctx, ingressName)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to get custom domain ingress").Log(ctx, c.logger)
 		}
+
+		_, err = c.domains.UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
+			ID:             customDomain.ID,
+			Verified:       true,
+			Activated:      true,
+			IngressName:    conv.ToPGText(ingressName),
+			CertSecretName: conv.ToPGText(secretName),
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to update custom domain").Log(ctx, c.logger)
+		}
+
+		return nil
 	}
 
 	if args.Action == CustomDomainIngressActionDelete {
