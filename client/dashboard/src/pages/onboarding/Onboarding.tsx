@@ -234,7 +234,7 @@ export function OnboardingContent({
                   ✓ Created {numTools} tools
                 </AccordionTrigger>
                 <AccordionContent>
-                  <DeploymentLogs deploymentId={deployment?.id} />
+                  <DeploymentLogs deploymentId={deployment?.id} onlyErrors />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -255,7 +255,7 @@ export function OnboardingContent({
   );
 }
 
-function DeploymentLogs(props: { deploymentId: string }) {
+function DeploymentLogs(props: { deploymentId: string, onlyErrors?: boolean }) {
   const { data, status, error } = useDeploymentLogs({
     deploymentId: props.deploymentId,
   });
@@ -277,7 +277,10 @@ function DeploymentLogs(props: { deploymentId: string }) {
     return null;
   }
 
-  const lines = data.events.map((e) => {
+  const lines = (props.onlyErrors
+    ? data.events.filter((e) => e.event.includes("error"))
+    : data.events)
+  .map((e) => {
     return (
       <p
         key={e.id}

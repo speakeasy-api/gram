@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/openapi"
+	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
 )
 
 type ProcessDeployment struct {
@@ -26,6 +27,7 @@ type ProcessDeployment struct {
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assets       *assetsRepo.Queries
+	tools        *toolsRepo.Queries
 	assetStorage assets.BlobStore
 }
 
@@ -35,6 +37,7 @@ func NewProcessDeployment(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		repo:         repo.New(db),
 		assets:       assetsRepo.New(db),
 		assetStorage: assetStorage,
+		tools:        toolsRepo.New(db),
 		logger:       logger,
 	}
 }
@@ -112,5 +115,22 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		})
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	tools, err := p.tools.ListTools(ctx, toolsRepo.ListToolsParams{
+		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
+		ProjectID:    projectID,
+		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+	})
+	if err != nil || len(tools) == 0 {
+		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)
+		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Cause:        err,
+		})
+	}
+
+	return nil
 }

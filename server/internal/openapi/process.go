@@ -101,6 +101,8 @@ func (p *ToolExtractor) Do(
 		eventsHandler,
 	)).With(
 		slog.String("project_id", projectID.String()),
+		slog.String("doc_name", docInfo.Name),
+		slog.String("doc_slug", string(docInfo.Slug)),
 		slog.String("deployment_id", deploymentID.String()),
 		slog.String("openapi_doc_id", openapiDocID.String()),
 	)
@@ -174,7 +176,7 @@ func (p *ToolExtractor) Do(
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error parsing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
