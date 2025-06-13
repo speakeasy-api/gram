@@ -17,6 +17,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/gen/types"
+	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
 	er "github.com/speakeasy-api/gram/internal/environments/repo"
@@ -24,9 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
-	templates "github.com/speakeasy-api/gram/internal/templates/repo"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	tr "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/toolsets"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -46,44 +46,47 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").Log(ctx, logger)
 	}
 
-	templatesRepo := templates.New(db)
-	envRepo := er.New(db)
-	toolsRepo := tr.New(db)
 	projectID := mv.ProjectID(payload.projectID)
+
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)))
+	if err != nil {
+		return nil, err
+	}
+
+	envRepo := er.New(db)
 	entries := environments.NewEnvironmentEntries(logger, envRepo, enc)
 	toolsetHelpers := toolsets.NewToolsets(db)
-
 	envSlug := payload.environment
+	var higherOrderTool *types.PromptTemplate
+	var toolID *string
 
-	var higherOrderTool templates.PromptTemplate
-	var hasHigherOrderTool bool
-	toolID, err := toolsRepo.PokeHTTPToolDefinitionByName(ctx, tr.PokeHTTPToolDefinitionByNameParams{
-		ProjectID: uuid.UUID(projectID),
-		Name:      params.Name,
-	})
-	switch {
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load tool").Log(ctx, logger)
-	case errors.Is(err, sql.ErrNoRows) || toolID == uuid.Nil:
-		if prompt, promptErr := templatesRepo.GetTemplateByName(ctx, templates.GetTemplateByNameParams{
-			ProjectID: payload.projectID,
-			Name:      params.Name,
-		}); promptErr == nil && prompt.Kind.String == "higher_order_tool" {
-			higherOrderTool = prompt
-			hasHigherOrderTool = true
-		}
-		if !hasHigherOrderTool {
-			return nil, oops.E(oops.CodeNotFound, err, "tool not found").Log(ctx, logger)
+	for _, tool := range toolset.HTTPTools {
+		if tool.Name == params.Name {
+			toolID = &tool.ID
+			break
 		}
 	}
 
-	if hasHigherOrderTool {
+	if toolID == nil {
+		for _, prompt := range toolset.PromptTemplates {
+			if string(prompt.Name) == params.Name {
+				higherOrderTool = prompt
+				break
+			}
+		}
+	}
+
+	if higherOrderTool == nil && toolID == nil {
+		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
+	}
+
+	if higherOrderTool != nil {
 		var args map[string]any
 		if err := json.Unmarshal(params.Arguments, &args); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse higher order tool arguments").Log(ctx, logger)
 		}
 
-		promptData, err := executePrompt(higherOrderTool, args)
+		promptData, err := executePrompt(higherOrderTool.Engine, higherOrderTool.Prompt, args)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
 		}
@@ -120,7 +123,7 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		maps.Copy(envVars, payload.mcpEnvVariables)
 	}
 
-	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, toolID, uuid.UUID(projectID))
+	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(*toolID), uuid.UUID(projectID))
 	if err != nil {
 		return nil, err
 	}

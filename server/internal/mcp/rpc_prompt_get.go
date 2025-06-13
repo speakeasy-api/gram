@@ -28,14 +28,14 @@ type promptGetResult struct {
 }
 
 // TODO: We will probably want to refactor this into a common prompt execution utility
-func executePrompt(prompt templates.PromptTemplate, args map[string]any) (string, error) {
+func executePrompt(engine, prompt string, args map[string]any) (string, error) {
 	var data string
 	var err error
-	switch prompt.Engine.String {
+	switch engine {
 	case "":
-		data = prompt.Prompt
+		data = prompt
 	case "mustache":
-		data, err = mustache.Render(prompt.Prompt, args)
+		data, err = mustache.Render(prompt, args)
 		if err != nil {
 			return "", errors.New("failed to render template")
 		}
@@ -65,7 +65,7 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return nil, oops.E(oops.CodeNotFound, err, "prompt not found").Log(ctx, logger)
 	}
 
-	promptData, err := executePrompt(prompt, params.Arguments)
+	promptData, err := executePrompt(prompt.Engine.String, prompt.Prompt, params.Arguments)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
 	}
