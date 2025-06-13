@@ -281,6 +281,8 @@ body {
 
 @utility header-base {
   @apply bg-background-pure/90 fixed top-0 left-0 right-0 z-[999] flex h-[var(--header-height)] items-center;
+  border-bottom: 1px solid var(--color-navbar-border);
+  backdrop-filter: blur(10px);
 }
 
 /* Custom gradient utility for Tailwind */

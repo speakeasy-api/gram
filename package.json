@@ -29,6 +29,7 @@
     "overrides": {}
   },
   "dependencies": {
-    "@speakeasy-api/moonshine": "link:../moonshine"
+    "@speakeasy-api/moonshine": "link:../moonshine",
+    "motion-plus": "^1.2.0"
   }
 }
