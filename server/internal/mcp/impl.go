@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/internal/projects/repo"
+	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	toolsets_repo "github.com/speakeasy-api/gram/internal/toolsets/repo"
 )
 
@@ -43,6 +44,7 @@ type Service struct {
 	toolsetsRepo *toolsets_repo.Queries
 	auth         *auth.Auth
 	enc          *encryption.Encryption
+	chatClient   *openrouter.ChatClient
 }
 
 type mcpInputs struct {
@@ -53,7 +55,7 @@ type mcpInputs struct {
 	authenticated   bool
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/mcp"),
 		logger:       logger,
@@ -64,6 +66,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		toolsetsRepo: toolsets_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
 		enc:          enc,
+		chatClient:   chatClient,
 	}
 }
 
@@ -346,7 +349,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req)
 	case "tools/call":
-		return handleToolsCall(ctx, s.tracer, s.logger, s.metrics, s.db, s.enc, payload, req)
+		return handleToolsCall(ctx, s.tracer, s.logger, s.metrics, s.db, s.enc, payload, req, s.chatClient)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":

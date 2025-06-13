@@ -691,7 +691,7 @@ function ToolCard({
       icon={autoSummarizeEnabled ? "check" : "sparkles"}
       variant="ghost"
       size="sm"
-      tooltip="An experimental feature. Attempt to Auto-summarize the tool's response via separate LLM and prevent large data from overwhelming the context window."
+      tooltip="An experimental feature. Attempt to Auto-summarize the tool's response via separate LLM call using your account's LLM credentials and prevent large data from overwhelming the context window. This can only be used when authenticated to Gram."
       onClick={() => {
         updateVariation({
           summarizer: autoSummarizeEnabled ? undefined : "auto",

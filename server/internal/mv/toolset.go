@@ -3,6 +3,7 @@ package mv
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"maps"
@@ -145,7 +146,7 @@ func DescribeToolset(
 
 			confirm, _ := SanitizeConfirm(confirmRaw)
 
-			httpTools = append(httpTools, &types.HTTPToolDefinition{
+			tool := &types.HTTPToolDefinition{
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
@@ -169,7 +170,13 @@ func DescribeToolset(
 				Canonical:           canonical,
 				Variation:           variation,
 				PackageName:         &def.PackageName,
-			})
+			}
+
+			if newSchema, err := variedToolSchema(ctx, logger, tool); err == nil {
+				tool.Schema = newSchema
+			}
+
+			httpTools = append(httpTools, tool)
 		}
 
 		relevantEnvVars, err = environmentVariablesForTools(ctx, tx, definitions)
@@ -282,4 +289,45 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindT
 	}
 
 	return slices.Collect(maps.Keys(relevantEnvVarsMap)), nil
+}
+
+func variedToolSchema(ctx context.Context, logger *slog.Logger, tool *types.HTTPToolDefinition) (string, error) {
+	schema := tool.Schema
+	if tool.Summarizer != nil {
+		var jsonSchema map[string]interface{}
+		err := json.Unmarshal([]byte(schema), &jsonSchema)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to unmarshal schema").Log(ctx, logger)
+		}
+
+		properties, ok := jsonSchema["properties"].(map[string]interface{})
+		if !ok {
+			properties = make(map[string]interface{})
+		}
+
+		properties["gram-request-summary"] = map[string]interface{}{
+			"type":        "string",
+			"description": "REQUIRED: A summary of the request to the tool. Distill the user's intention in order to ensure the response contains all the necessary information, without unnecessary details.",
+		}
+
+		jsonSchema["properties"] = properties
+
+		var required []string
+		required, ok = jsonSchema["required"].([]string)
+		if !ok {
+			required = []string{}
+		}
+
+		required = append(required, "gram-request-summary")
+		jsonSchema["required"] = required
+
+		newSchema, err := json.Marshal(jsonSchema)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to marshal schema").Log(ctx, logger)
+		}
+
+		schema = string(newSchema)
+	}
+
+	return schema, nil
 }

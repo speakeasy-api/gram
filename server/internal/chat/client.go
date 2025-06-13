@@ -243,7 +243,7 @@ func (c *ChatClient) LoadToolsetTools(
 				envVars[key] = value
 			}
 
-			err = instances.InstanceToolProxy(ctx, c.tracer, c.logger, c.metrics, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan, instances.ToolCallSourceDirect)
+			err = instances.InstanceToolProxy(ctx, c.tracer, c.logger, c.metrics, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan, instances.ToolCallSourceDirect, c.chatClient)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

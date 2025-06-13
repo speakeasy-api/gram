@@ -3,14 +3,10 @@ package instances
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,8 +50,6 @@ type Service struct {
 }
 
 var _ gen.Service = (*Service)(nil)
-
-const SUMMARIZE_BREAKPOINT_BYTES = 4 * 5_000 // 4 bytes per token, 5k token limit
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
 	envRepo := environments_repo.New(db)
@@ -161,45 +155,11 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		}
 	}
 
-	httpTools := make([]*types.HTTPToolDefinition, len(toolset.HTTPTools))
-	for i, tool := range toolset.HTTPTools {
-		schema, err := s.getToolSchema(ctx, tool)
-		if err != nil {
-			return nil, err
-		}
-
-		httpTools[i] = &types.HTTPToolDefinition{
-			ID:                  tool.ID,
-			ProjectID:           tool.ProjectID,
-			DeploymentID:        tool.DeploymentID,
-			Openapiv3DocumentID: tool.Openapiv3DocumentID,
-			Name:                tool.Name,
-			CanonicalName:       tool.CanonicalName,
-			Summary:             tool.Summary,
-			Description:         tool.Description,
-			Confirm:             tool.Confirm,
-			ConfirmPrompt:       tool.ConfirmPrompt,
-			Summarizer:          tool.Summarizer,
-			Openapiv3Operation:  tool.Openapiv3Operation,
-			Tags:                tool.Tags,
-			Security:            tool.Security,
-			HTTPMethod:          tool.HTTPMethod,
-			Path:                tool.Path,
-			SchemaVersion:       tool.SchemaVersion,
-			Schema:              schema,
-			CreatedAt:           tool.CreatedAt,
-			UpdatedAt:           tool.UpdatedAt,
-			Canonical:           tool.Canonical,
-			Variation:           tool.Variation,
-			PackageName:         tool.PackageName,
-		}
-	}
-
 	return &gen.GetInstanceResult{
 		Name:                         toolset.Name,
 		Description:                  toolset.Description,
 		RelevantEnvironmentVariables: toolset.RelevantEnvironmentVariables,
-		Tools:                        httpTools,
+		Tools:                        toolset.HTTPTools,
 		PromptTemplates:              promptTemplates,
 		Environment:                  environment,
 	}, nil
@@ -288,35 +248,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// in the event summarization is needed
 	interceptor := newResponseInterceptor(w)
 
-	err = InstanceToolProxy(ctx, s.tracer, s.logger, s.metrics, interceptor, requestBody, envVars, executionInfo, ToolCallSourceDirect)
+	err = InstanceToolProxy(ctx, s.tracer, s.logger, s.metrics, interceptor, requestBody, envVars, executionInfo, ToolCallSourceDirect, s.chatClient)
 	if err != nil {
 		return err
-	}
-
-	// The original, unmodified response body
-	responseBody := interceptor.buffer.String()
-
-	// Summarize if the response is too large or if the "gram-request-summary" param is provided
-	shouldSummarize := false
-	var requestSummary struct {
-		GramRequestSummary string `json:"gram-request-summary"`
-	}
-	err = json.Unmarshal(requestBodyBytes, &requestSummary)
-	if err == nil && requestSummary.GramRequestSummary != "" {
-		shouldSummarize = len(responseBody) > SUMMARIZE_BREAKPOINT_BYTES
-	}
-
-	if shouldSummarize {
-		summarizedResponse, err := s.summarizeResponse(ctx, authCtx.ActiveOrganizationID, requestSummary.GramRequestSummary, responseBody)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to summarize response").Log(ctx, s.logger)
-		}
-
-		s.logger.InfoContext(ctx, "summarizing response",
-			slog.Int("original_length", len(responseBody)),
-			slog.Int("summarized_length", len(summarizedResponse)))
-
-		responseBody = summarizedResponse
 	}
 
 	// Write the modified response to the original response writer
@@ -327,72 +261,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	_, err = w.Write([]byte(responseBody))
+	for _, cookie := range interceptor.cookies {
+		http.SetCookie(w, cookie)
+	}
+
+	_, err = w.Write(interceptor.buffer.Bytes())
 	return err
-}
-
-func (s *Service) summarizeResponse(ctx context.Context, orgID string, requestSummary, responseBody string) (string, error) {
-	var chunks []string
-	for i := 0; i < len(responseBody); i += SUMMARIZE_BREAKPOINT_BYTES {
-		end := int(math.Min(float64(i+SUMMARIZE_BREAKPOINT_BYTES), float64(len(responseBody))))
-		chunks = append(chunks, responseBody[i:end])
-	}
-
-	var wg sync.WaitGroup
-	workerSlots := make(chan bool, 5) // max 5 parallel workers
-	responsesCh := make(chan string, len(chunks))
-
-	for _, chunk := range chunks {
-		wg.Add(1)
-		workerSlots <- true // acquire slot
-
-		go func(chunk string) {
-			defer wg.Done()
-			defer func() { <-workerSlots }() // release slot
-
-			systemPrompt := `
-			You are a helper tasked with reducing the size of the response of a tool based on a given request summary.
-			For example, if the request is to "List all usernames", the response may include a list of users with many additional fields not relevant to the request.
-			Your goal is to extract the information that is most relevant to the request summary and return it as a new response.
-			There's no need to over-summarize responses that are already concise. Prioritize reducing enormous responses to manageable sizes.
-			`
-			prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere is a chunk of the response body:\n\n%s", requestSummary, chunk)
-
-			chatResponse, err := s.chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
-				return
-			}
-
-			responsesCh <- chatResponse.Content
-		}(chunk)
-	}
-
-	// Wait and close channel when all goroutines are done
-	go func() {
-		wg.Wait()
-		close(responsesCh)
-	}()
-
-	var chatResponses []string
-	for res := range responsesCh {
-		chatResponses = append(chatResponses, res)
-	}
-
-	systemPrompt := `
-	You are a helper tasked with reducing the size of the response of a tool based on a given request summary.
-	For example, if the request is to "List all usernames", the response may include a list of users with many additional fields not relevant to the request.
-	You previously extracted the information into condensed response chunks of the most relevant information.
-	Now please combine these chunks into one cohesive response.
-	`
-	prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere are all the response chunks with each separated by a new line :\n\n%s", requestSummary, strings.Join(chatResponses, "\n"))
-	chatResponse, err := s.chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
-		return "", err
-	}
-
-	return chatResponse.Content, nil
 }
 
 // ResponseInterceptor completely intercepts the response, allowing modifications before sending to client
@@ -401,6 +275,7 @@ type responseInterceptor struct {
 	statusCode int
 	buffer     *bytes.Buffer
 	headers    http.Header
+	cookies    []*http.Cookie
 }
 
 var _ http.ResponseWriter = (*responseInterceptor)(nil)
@@ -411,11 +286,16 @@ func newResponseInterceptor(w http.ResponseWriter) *responseInterceptor {
 		statusCode:     http.StatusOK, // Default status code
 		buffer:         &bytes.Buffer{},
 		headers:        make(http.Header),
+		cookies:        make([]*http.Cookie, 0),
 	}
 }
 
 func (w *responseInterceptor) Header() http.Header {
 	return w.headers
+}
+
+func (w *responseInterceptor) SetCookie(cookie *http.Cookie) {
+	w.cookies = append(w.cookies, cookie)
 }
 
 func (w *responseInterceptor) WriteHeader(statusCode int) {
@@ -431,46 +311,4 @@ func (w *responseInterceptor) Write(b []byte) (int, error) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
-}
-
-// getToolSchema returns the schema for a tool, with the "gram-request-summary" property added if the tool has a summarizer
-func (s *Service) getToolSchema(ctx context.Context, tool *types.HTTPToolDefinition) (string, error) {
-	schema := tool.Schema
-	if tool.Summarizer != nil {
-		var jsonSchema map[string]interface{}
-		err := json.Unmarshal([]byte(schema), &jsonSchema)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to unmarshal schema").Log(ctx, s.logger)
-		}
-
-		properties, ok := jsonSchema["properties"].(map[string]interface{})
-		if !ok {
-			properties = make(map[string]interface{})
-		}
-
-		properties["gram-request-summary"] = map[string]interface{}{
-			"type":        "string",
-			"description": "REQUIRED: A summary of the request to the tool. Distill the user's intention in order to ensure the response contains all the necessary information, without unnecessary details.",
-		}
-
-		jsonSchema["properties"] = properties
-
-		var required []string
-		required, ok = jsonSchema["required"].([]string)
-		if !ok {
-			required = []string{}
-		}
-
-		required = append(required, "gram-request-summary")
-		jsonSchema["required"] = required
-
-		newSchema, err := json.Marshal(jsonSchema)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to marshal schema").Log(ctx, s.logger)
-		}
-
-		schema = string(newSchema)
-	}
-
-	return schema, nil
 }
