@@ -1,7 +1,7 @@
+import { InputField } from "@/components/moon/input-field";
+import { Textarea } from "@/components/moon/textarea";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { textAreaClassNames } from "@/components/ui/textarea";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components";
@@ -129,24 +129,16 @@ export function PromptEditor({
       >
         <div className="mb-6 grid grid-cols-1 gap-4 content-start">
           {predecessor == null ? (
-            <div>
-              <Label className="mb-2" htmlFor="newprompt_name">
-                Name
-              </Label>
-              <Input
-                id="newprompt_name"
-                name="name"
-                required
-                pattern={PROMPT_NAME_PATTERN}
-              />
-            </div>
+            <InputField
+              label="Name"
+              name="name"
+              pattern={PROMPT_NAME_PATTERN}
+              required
+            />
           ) : null}
           <div>
-            <Label className="mb-2" htmlFor="newprompt_description">
-              Description
-            </Label>
-            <Input
-              id="newprompt_description"
+            <InputField
+              label="Description"
               name="description"
               defaultValue={predecessor?.description ?? ""}
             />
@@ -173,12 +165,11 @@ export function PromptEditor({
                 <Label className="mb-2" htmlFor="newprompt_prompt">
                   Prompt
                 </Label>
-                <textarea
+                <Textarea
                   id="newprompt_prompt"
                   name="prompt"
                   rows={fullScreenEditor ? void 0 : 20}
                   className={cn(
-                    textAreaClassNames,
                     "font-mono",
                     fullScreenEditor ? "h-full" : false
                   )}
@@ -264,10 +255,7 @@ const ArgumentEntry = ({
 }) => {
   return (
     <li>
-      <Label className="mb-2 font-mono" htmlFor={`_${name}`}>
-        {name}
-      </Label>
-      <Input name={`_${name}`} defaultValue={defaultValue} />
+      <InputField label={name} name={`_${name}`} defaultValue={defaultValue} />
     </li>
   );
 };
