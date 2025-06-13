@@ -84,6 +84,12 @@ func (c *caseInsensitiveEnv) Set(key, value string) {
 }
 
 func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, toolCallSource ToolCallSource, chatClient *openrouter.ChatClient) error {
+	logger = logger.With(
+		slog.String("project_id", toolExecutionInfo.Tool.ProjectID.String()),
+		slog.String("tool", toolExecutionInfo.Tool.Name),
+		slog.String("path", toolExecutionInfo.Tool.Path),
+		slog.String("source", string(toolCallSource)),
+	)
 	// Keep in mind tool calls are not required to be gram authenticated, we have public MCP servers. Develop accordingly
 	authCtx, isAuthenticated := contextvalues.GetAuthContext(ctx)
 	ciEnv := newCaseInsensitiveEnv(envVars)
@@ -387,14 +393,14 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		logger.InfoContext(ctx, "tool call", slog.String("tool", tool.Name), slog.String("source", string(toolCallSource)), slog.String("error", err.Error()), slog.String("status_code", "0"), slog.String("project_id", tool.ProjectID.String()), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")), slog.String("path", tool.Path))
+		logger.InfoContext(ctx, "tool call", slog.String("error", err.Error()), slog.String("status_code", "0"), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")))
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return resp.Body.Close()
 	})
 
-	logger.InfoContext(ctx, "tool call", slog.String("tool", tool.Name), slog.String("source", string(toolCallSource)), slog.String("status_code", fmt.Sprintf("%d", resp.StatusCode)), slog.String("project_id", tool.ProjectID.String()), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")), slog.String("path", tool.Path))
+	logger.InfoContext(ctx, "tool call", slog.String("status_code", fmt.Sprintf("%d", resp.StatusCode)), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")))
 
 	if len(resp.Trailer) > 0 {
 		var trailerKeys []string
