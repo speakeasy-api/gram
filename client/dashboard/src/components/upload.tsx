@@ -77,7 +77,6 @@ export default function FileUpload({
   const [isInvalidFile, setIsInvalidFile] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("File changed:", e.target.files?.[0]);
     const file = e.target.files?.[0];
     if (file) {
       onUpload(file);

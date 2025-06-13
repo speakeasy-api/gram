@@ -302,32 +302,7 @@ function ChatInner({
         delayInMs: 15, // Looks a little smoother
       }),
       onError: (event: { error: unknown }) => {
-        let displayMessage: string | undefined;
-        if (typeof event.error === "object" && event.error !== null) {
-          const errorObject = event.error as {
-            responseBody?: unknown;
-            message?: unknown;
-            [key: string]: unknown;
-          };
-
-          if (typeof errorObject.responseBody === "string") {
-            try {
-              const parsedBody = JSON.parse(errorObject.responseBody);
-              if (
-                typeof parsedBody === "object" &&
-                parsedBody !== null &&
-                parsedBody.error &&
-                typeof parsedBody.error.message === "string"
-              ) {
-                displayMessage = parsedBody.error.message;
-              }
-            } catch (e) {
-              console.error(`Error parsing model error: ${e}`);
-            }
-          } else if (typeof errorObject.message === "string") {
-            displayMessage = errorObject.message;
-          }
-        }
+        let displayMessage = extractStreamError(event);
         if (displayMessage) {
           // some manipulation to promote summarization
           if (displayMessage.includes("maximum context length")) {
@@ -606,4 +581,50 @@ const toolCallComponents = (tools: Toolset) => {
       );
     },
   };
+};
+
+const extractStreamError = (event: { error: unknown }) => {
+  let message: string | undefined;
+  if (typeof event.error === "object" && event.error !== null) {
+    const errorObject = event.error as {
+      responseBody?: unknown;
+      message?: unknown;
+      [key: string]: unknown;
+    };
+
+    if (typeof errorObject.responseBody === "string") {
+      try {
+        const parsedBody = JSON.parse(errorObject.responseBody);
+        if (
+          typeof parsedBody === "object" &&
+          parsedBody !== null &&
+          parsedBody.error
+        ) {
+          // Try to extract the raw error message which contains the actual error
+          if (parsedBody.error.metadata?.raw) {
+            try {
+              const rawError = JSON.parse(parsedBody.error.metadata.raw);
+              if (rawError.error?.message) {
+                message = rawError.error.message;
+              }
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            } catch (e) {
+              // If raw parsing fails, fall back to the main error message
+              if (typeof parsedBody.error.message === "string") {
+                message = parsedBody.error.message;
+              }
+            }
+          } else if (typeof parsedBody.error.message === "string") {
+            message = parsedBody.error.message;
+          }
+        }
+      } catch (e) {
+        console.error(`Error parsing model error: ${e}`);
+      }
+    } else if (typeof errorObject.message === "string") {
+      message = errorObject.message;
+    }
+  }
+
+  return message;
 };
