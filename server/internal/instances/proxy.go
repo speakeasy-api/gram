@@ -100,7 +100,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 
 	// We are silently failing before we actually start returning errors to the LLM related to body not fitting json schema
 	if len(toolExecutionInfo.Tool.Schema) > 0 {
-		if validateErr := ValidateToolCallBody(ctx, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
+		if validateErr := ValidateToolCallBody(ctx, logger, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
 		}
 	}

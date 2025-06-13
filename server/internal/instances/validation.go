@@ -5,27 +5,39 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-func ValidateToolCallBody(ctx context.Context, bodyBytes []byte, toolSchema string) error {
+var gramAddedFields = []string{"gram-request-summary", "environmentVariables"}
+
+func ValidateToolCallBody(ctx context.Context, logger *slog.Logger, bodyBytes []byte, toolSchema string) error {
 	compiler := jsonschema.NewCompiler()
 	rawSchema, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(toolSchema)))
 	if err != nil {
-		return fmt.Errorf("failed to parse tool schema: %w", err)
+		logger.InfoContext(ctx, "failed to parse tool schema not moving forward with request validation", slog.String("error", err.Error()))
+		return nil
 	}
 	if err := compiler.AddResource("file:///schema.json", rawSchema); err != nil {
-		return err
+		logger.InfoContext(ctx, "failed to get json schema for tool schema not moving forward with request validation", slog.String("error", err.Error()))
+		return nil
 	}
 	schema, err := compiler.Compile("file:///schema.json")
 	if err != nil {
-		return fmt.Errorf("failed to compile tool schema: %w", err)
+		logger.InfoContext(ctx, "failed to get json schema for tool schema not moving forward with request validation", slog.String("error", err.Error()))
+		return nil
 	}
 
-	var bodyMap any
+	var bodyMap map[string]any
 	if err := json.Unmarshal(bodyBytes, &bodyMap); err != nil {
-		return fmt.Errorf("failed to parse request body: %w", err)
+		logger.InfoContext(ctx, "failed to parse request body not moving forward with request validation", slog.String("error", err.Error()))
+		return nil
+	}
+
+	// We need to remove gram added fields since they are not part of the tool json schema
+	for _, field := range gramAddedFields {
+		delete(bodyMap, field)
 	}
 
 	if err := schema.Validate(bodyMap); err != nil {
