@@ -51,6 +51,8 @@ export type ChatConfig = React.RefObject<{
   isOnboarding: boolean;
 }>;
 
+const MAX_TOOL_RESPONSE_LENGTH = 50_000; // Characters
+
 export function ChatWindow({
   configRef,
   dynamicToolset = false,
@@ -159,6 +161,13 @@ function ChatInner({
       );
 
       const result = await response.text();
+
+      if (result.length > MAX_TOOL_RESPONSE_LENGTH) {
+        return (
+          "Response is too long and has been truncated to avoid bricking your playground's context window. Consider turning on auto-summarization for this tool." +
+          `\n\n${result.slice(0, MAX_TOOL_RESPONSE_LENGTH)}`
+        );
+      }
 
       return result || `status code: ${response.status}`;
     };
@@ -341,6 +350,7 @@ function ChatInner({
   const initialMessagesInner: Message[] = initialMessages ?? chatHistory ?? [];
 
   const toolCallApproval = useToolCallApproval({
+    // Disclaimer: this is a bit weird, because the tool's execute function actually seems to be called by the useChat hook
     executeToolCall: async (toolCall) => {
       if (toolCall.toolName === updateToolsTool.name) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -353,7 +363,7 @@ function ChatInner({
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return tool.execute!(toolCall.args, {} as any);
+      return await tool.execute!(toolCall.args, {} as any);
     },
     requiresApproval: (toolCall) => {
       const tool = allTools[toolCall.toolName];
@@ -526,6 +536,9 @@ const toolCallComponents = (tools: Toolset) => {
         typeof result === "string" &&
         result.includes("Schema validation error");
 
+      const isTooLong =
+        typeof result === "string" && result.includes("Response is too long");
+
       return (
         <Stack
           direction="horizontal"
@@ -548,6 +561,11 @@ const toolCallComponents = (tools: Toolset) => {
             </Type>
           )}
           {hasSummary && <AutoSummarizeBadge />}
+          {isTooLong && (
+            <Type variant="small" muted>
+              (truncated)
+            </Type>
+          )}
         </Stack>
       );
     },
