@@ -1,4 +1,4 @@
-import { HTTPToolDefinition } from "@gram/client/models/components";
+import { ToolDefinition } from "@/pages/toolsets/types";
 import { Stack } from "@speakeasy-api/moonshine";
 import { HttpRoute } from "./http-route";
 import { Badge } from "./ui/badge";
@@ -10,7 +10,7 @@ import {
 } from "./ui/tooltip";
 import { Type } from "./ui/type";
 
-export function ToolBadge({ tool }: { tool: HTTPToolDefinition }) {
+export function ToolBadge({ tool }: { tool: ToolDefinition }) {
   return (
     <TooltipProvider>
       <Tooltip>
@@ -19,7 +19,9 @@ export function ToolBadge({ tool }: { tool: HTTPToolDefinition }) {
         </TooltipTrigger>
         <TooltipContent inverted>
           <Stack className="max-w-md">
-            <HttpRoute method={tool.httpMethod} path={tool.path} />
+            {tool.type === "http" && (
+              <HttpRoute method={tool.httpMethod} path={tool.path} />
+            )}
             <Type>{tool.description}</Type>
           </Stack>
         </TooltipContent>

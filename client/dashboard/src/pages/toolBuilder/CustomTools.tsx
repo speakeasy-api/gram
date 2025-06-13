@@ -12,9 +12,17 @@ import {
   PromptTemplate,
   PromptTemplateKind,
 } from "@gram/client/models/components";
-import { useTemplates } from "@gram/client/react-query";
+import {
+  invalidateAllTemplates,
+  useDeleteTemplateMutation,
+  useTemplates,
+} from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Outlet } from "react-router";
+import { MustacheHighlight } from "./ToolBuilder";
+import { ToolifyDialog, ToolifyProvider } from "./Toolify";
 
 export function useCustomTools() {
   const { data } = useTemplates();
@@ -24,12 +32,17 @@ export function useCustomTools() {
 }
 
 export function CustomToolsRoot() {
-  return <Outlet />;
+  return (
+    <ToolifyProvider>
+      <Outlet />
+    </ToolifyProvider>
+  );
 }
 
 export default function CustomTools() {
   const customTools = useCustomTools();
   const routes = useRoutes();
+  const [newToolDialogOpen, setNewToolDialogOpen] = useState(false);
 
   const onNewCustomTool = () => {
     routes.customTools.toolBuilderNew.goTo();
@@ -47,9 +60,13 @@ export default function CustomTools() {
         {customTools?.map((template) => {
           return <CustomToolCard key={template.id} template={template} />;
         })}
-        <CreateThingCard onClick={onNewCustomTool}>
+        <CreateThingCard onClick={() => setNewToolDialogOpen(true)}>
           + New Custom Tool
         </CreateThingCard>
+        <ToolifyDialog
+          open={newToolDialogOpen}
+          setOpen={setNewToolDialogOpen}
+        />
       </Page.Body>
     </Page>
   );
@@ -57,6 +74,13 @@ export default function CustomTools() {
 
 export function CustomToolCard({ template }: { template: PromptTemplate }) {
   const routes = useRoutes();
+  const queryClient = useQueryClient();
+
+  const deleteTemplate = useDeleteTemplateMutation({
+    onSuccess: () => {
+      invalidateAllTemplates(queryClient);
+    },
+  });
 
   let inputsBadge = <Badge variant="secondary">No inputs</Badge>;
   if (template.arguments) {
@@ -92,7 +116,7 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           {template.description ? (
             <Card.Description className="max-w-2/3">
-              {template.description}
+              <MustacheHighlight>{template.description}</MustacheHighlight>
             </Card.Description>
           ) : null}
           <Type variant="body" muted className="text-sm italic">
@@ -101,73 +125,23 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
           </Type>
         </Stack>
       </Card.Header>
-      <Card.Content>
+      <Card.Footer>
+        <Button
+          variant="destructiveGhost"
+          onClick={() => {
+            if (confirm("Are you sure you want to delete this tool?")) {
+              deleteTemplate.mutate({ request: { name: template.name } });
+            }
+          }}
+          tooltip="Delete this tool"
+          icon="trash"
+        >
+          Delete
+        </Button>
         <routes.customTools.toolBuilder.Link params={[template.name]}>
           <Button variant="outline">Edit</Button>
         </routes.customTools.toolBuilder.Link>
-      </Card.Content>
+      </Card.Footer>
     </Card>
   );
 }
-
-//TODO use me
-// const NewToolDialog = ({
-//   open,
-//   setOpen,
-// }: {
-//   open: boolean;
-//   setOpen: (open: boolean) => void;
-// }) => {
-//   const [inProgress, setInProgress] = useState(false);
-//   const [purpose, setPurpose] = useState("");
-
-//   const onSubmit = () => {
-//     setOpen(false);
-//   };
-
-//   return (
-//     <Dialog open={open} onOpenChange={setOpen}>
-//       <Dialog.Content>
-//         <Dialog.Header>
-//           <Dialog.Title>
-//             <Stack direction="horizontal" gap={2} align="center">
-//               <Icon name="wand-sparkles" className="text-muted-foreground" />
-//               Agentify
-//             </Stack>
-//           </Dialog.Title>
-//           <Dialog.Description>
-//             Turn this chat into a reusable agent
-//           </Dialog.Description>
-//         </Dialog.Header>
-//         <Stack gap={4}>
-//           <Stack gap={1}>
-//             <Heading variant="h5" className="normal-case font-medium">
-//               What language should the agent be written in?
-//             </Heading>
-//           </Stack>
-//           <Stack gap={1}>
-//             <Heading variant="h5" className="normal-case font-medium">
-//               Build a custom tool
-//             </Heading>
-//             <TextArea
-//               value={purpose}
-//               onChange={(value) => setPurpose(value)}
-//               disabled={inProgress}
-//               placeholder="What should the agent do?"
-//               rows={4}
-//             />
-//           </Stack>
-//         </Stack>
-//         <Dialog.Footer>
-//           <Button variant="ghost" onClick={() => setOpen(false)}>
-//             Back
-//           </Button>
-//           <Button onClick={onSubmit} disabled={!purpose || inProgress}>
-//             {inProgress && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-//             {inProgress ? "Generating..." : "Agentify"}
-//           </Button>
-//         </Dialog.Footer>
-//       </Dialog.Content>
-//     </Dialog>
-//   );
-// };

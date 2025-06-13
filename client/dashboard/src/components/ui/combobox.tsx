@@ -59,7 +59,7 @@ export function Combobox<T extends DropdownItem>({
         variant={variant}
         role="combobox"
         aria-expanded={open}
-        className={cn("w-full px-2", className)}
+        className={cn("px-2", className)}
         disabled={!!disabledMessage}
         tooltip={disabledMessage}
       >
@@ -76,7 +76,7 @@ export function Combobox<T extends DropdownItem>({
       <Stack
         direction="horizontal"
         align="center"
-        className="bg-stone-200 dark:bg-stone-800 rounded-md"
+        className="bg-stone-200 dark:bg-stone-800 rounded-md w-fit"
       >
         <Type variant="small" className="px-2">
           {label}

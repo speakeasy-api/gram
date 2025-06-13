@@ -291,7 +291,7 @@ export function ToolsetView({
   const missingEnvVarsAlert = isMissingRequiredEnvVars && (
     <Alert
       variant="warning"
-      className="rounded-md my-2 p-4 max-w-4xl"
+      className="rounded-md my-2 p-4 max-w-4xl bg-orange-300 dark:bg-orange-900"
       dismissible={false}
     >
       <Stack gap={4}>
@@ -344,7 +344,7 @@ export function ToolsetView({
     </Button>
   );
 
-  const grouped = useGroupedTools(toolset?.httpTools || []);
+  const grouped = useGroupedTools(toolDefinitions);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(
     grouped.map((group) => group.key)
   );
@@ -362,7 +362,7 @@ export function ToolsetView({
     />
   );
 
-  let toolsToDisplay: HTTPToolDefinition[] = grouped
+  let toolsToDisplay: ToolDefinition[] = grouped
     .filter(
       (group) => !selectedGroups.length || selectedGroups.includes(group.key)
     )
@@ -371,7 +371,7 @@ export function ToolsetView({
   // If no tools are selected, show all tools
   // Mostly a failsafe for if the filtering doesn't work as expected
   if (toolsToDisplay.length === 0) {
-    toolsToDisplay = toolset?.httpTools || [];
+    toolsToDisplay = toolDefinitions;
   }
 
   const addPromptToToolset = (prompt: PromptTemplate) => {

@@ -21,14 +21,11 @@ import {
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { MUSTACHE_VAR_REGEX, TOOL_NAME_REGEX } from "@/lib/constants";
 import { useGroupedTools } from "@/lib/toolNames";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  HTTPToolDefinition,
-  PromptTemplateKind,
-  Toolset,
-} from "@gram/client/models/components";
+import { PromptTemplateKind, Toolset } from "@gram/client/models/components";
 import {
   invalidateAllListToolsets,
   invalidateTemplate,
@@ -37,7 +34,6 @@ import {
   useToolset,
   useUpdateTemplateMutation,
 } from "@gram/client/react-query";
-import { useListTools } from "@gram/client/react-query/listTools.js";
 import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Message } from "ai";
@@ -47,6 +43,7 @@ import { v7 as uuidv7 } from "uuid";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
+import { ToolDefinition, useToolDefinitions } from "../toolsets/types";
 import {
   Block,
   BlockInner,
@@ -54,10 +51,12 @@ import {
   instructionsPlaceholder,
   Step,
 } from "./components";
-import { MUSTACHE_VAR_REGEX, TOOL_NAME_REGEX } from "@/lib/constants";
+import { useToolifyContext } from "./Toolify";
 
 export function ToolBuilderNew() {
-  const newTemplate = {
+  const ctx = useToolifyContext();
+
+  const newTemplate: ToolBuilderState = {
     name: "new_composite_tool",
     description:
       "Do a series of steps using the tools in a toolset to accomplish a task",
@@ -66,6 +65,21 @@ export function ToolBuilderNew() {
     inputs: [],
     steps: [],
   };
+
+  // If we came from the toolify dialog, pull in the suggestion
+  if (ctx.toolset) {
+    newTemplate.toolset = ctx.toolset;
+    newTemplate.name = ctx.suggestion.name;
+    newTemplate.description = ctx.suggestion.description;
+    newTemplate.purpose = ctx.purpose;
+    newTemplate.inputs = ctx.suggestion.inputs;
+    newTemplate.steps = ctx.suggestion.steps.map((step) => ({
+      ...step,
+      id: uuidv7(),
+      canonicalTool: step.tool,
+      update: () => {}, // Set later
+    }));
+  }
 
   return (
     <Page>
@@ -121,20 +135,18 @@ export function ToolBuilderPage() {
   );
 }
 
-function ToolBuilder({
-  initial,
-}: {
-  initial: {
-    id?: string;
-    historyId?: string;
-    name: string;
-    description: string;
-    purpose: string;
-    inputs: Input[];
-    steps: Step[];
-    toolset?: Toolset;
-  };
-}) {
+type ToolBuilderState = {
+  id?: string;
+  historyId?: string;
+  name: string;
+  description: string;
+  purpose: string;
+  inputs: Input[];
+  steps: Step[];
+  toolset?: Toolset;
+};
+
+function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const queryClient = useQueryClient();
   const client = useSdkClient();
   const chat = useChatContext();
@@ -149,7 +161,6 @@ function ToolBuilder({
     initial.toolset
   );
 
-  const { data: tools } = useListTools();
   const { data: toolsetData } = useToolset(
     {
       slug: toolsetFilter?.slug ?? "",
@@ -182,7 +193,7 @@ function ToolBuilder({
     update: (s: Step) => setStep(s),
     canonicalTool:
       step.canonicalTool ??
-      tools?.tools.find((t) => t.name === step.tool)?.canonicalName ??
+      tools.find((t) => t.name === step.tool)?.canonicalName ??
       step.tool,
   });
 
@@ -236,7 +247,7 @@ function ToolBuilder({
     }
   }, [toolsetData]);
 
-  const maybeFilteredTools = toolsetData?.httpTools ?? tools?.tools ?? [];
+  const tools = useToolDefinitions(toolsetFilter);
 
   // When purpose or steps change, recompute inputs
   useEffect(() => {
@@ -260,7 +271,7 @@ function ToolBuilder({
     if (v.length > 100) {
       return "Tool name must be less than 100 characters long";
     }
-    if (tools?.tools.some((t) => t.name.toLowerCase() === v.toLowerCase())) {
+    if (tools.some((t) => t.name.toLowerCase() === v.toLowerCase())) {
       return "Tool name must be unique";
     }
     if (!v.match(TOOL_NAME_REGEX)) {
@@ -284,7 +295,7 @@ function ToolBuilder({
       <ToolSelectPopover
         open={open}
         setOpen={setOpen}
-        tools={maybeFilteredTools}
+        tools={tools}
         onSelect={(tool) => {
           insertTool(tool);
           setOpen(false);
@@ -365,7 +376,7 @@ function ToolBuilder({
   const saveButton = (
     <Button
       icon="save"
-      disabled={!anyChanges}
+      disabled={!!initial.id && !anyChanges}
       onClick={async () => {
         const argsJsonSchema = {
           type: "object",
@@ -475,7 +486,6 @@ function ToolBuilder({
                 <ToolsetDropdown
                   selectedToolset={toolsetFilter}
                   setSelectedToolset={setToolset}
-                  placeholder="Any"
                   noLabel
                   defaultSelection="most-recent"
                   disabledMessage={
@@ -561,7 +571,7 @@ function ToolBuilder({
                 <div key={index}>
                   <StepCard
                     step={step}
-                    tools={maybeFilteredTools}
+                    tools={tools}
                     removeStep={() =>
                       setSteps(steps.filter((s) => s.id !== step.id))
                     }
@@ -617,7 +627,7 @@ export const MustacheHighlight = ({
 
     chunks.push(
       <span key={`var-${start}`} className={inputStyles}>
-        {part[0]}
+        {part[0].slice(2, -2)}
       </span>
     );
 
@@ -635,7 +645,7 @@ const StepCard = ({
   removeStep,
 }: {
   step: Step;
-  tools: HTTPToolDefinition[];
+  tools: ToolDefinition[];
   removeStep: (step: Step) => void;
 }) => {
   const [open, setOpen] = useState(false);
@@ -715,8 +725,8 @@ const ToolSelectPopover = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSelect: (tool: HTTPToolDefinition) => void;
-  tools: HTTPToolDefinition[];
+  onSelect: (tool: ToolDefinition) => void;
+  tools: ToolDefinition[];
   children: React.ReactNode;
 }) => {
   const groupedTools = useGroupedTools(tools);

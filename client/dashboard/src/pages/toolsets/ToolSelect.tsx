@@ -16,7 +16,7 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
-import { Tool, useGroupedTools } from "@/lib/toolNames";
+import { useGroupedHttpTools } from "@/lib/toolNames";
 import {
   HTTPToolDefinition,
   PromptTemplate,
@@ -30,6 +30,8 @@ import { useParams } from "react-router";
 import { useCustomTools } from "../toolBuilder/CustomTools";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./Toolset";
+
+type Tool = HTTPToolDefinition & { displayName: string };
 
 type ToggleableTool = Tool & {
   enabled: boolean;
@@ -242,7 +244,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     });
   };
 
-  const groupedTools = useGroupedTools(tools?.tools ?? []);
+  const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
     group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
@@ -393,7 +395,7 @@ export function ToolsTable({
   additionalColumns?: Column<Tool>[];
   onRowClick?: (row: Tool) => void;
 }) {
-  const toolGroups = useGroupedTools(tools ?? []);
+  const toolGroups = useGroupedHttpTools(tools);
 
   return !isLoading ? (
     <Table

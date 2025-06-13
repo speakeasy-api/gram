@@ -1,8 +1,9 @@
-import { HTTPToolDefinition } from "@gram/client/models/components";
+import { ToolDefinition, useToolDefinitions } from "@/pages/toolsets/types";
+import { HTTPToolDefinition, Toolset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
 
-export type Tool = HTTPToolDefinition & {
+export type Tool = ToolDefinition & {
   displayName: string;
 };
 
@@ -11,7 +12,30 @@ export type ToolGroup = {
   tools: Tool[];
 };
 
-export const useGroupedTools = (tools: HTTPToolDefinition[]): ToolGroup[] => {
+type HttpToolGroup = {
+  key: string;
+  tools: (HTTPToolDefinition & { displayName: string })[];
+};
+
+export const useGroupedToolDefinitions = (
+  toolset: Toolset | undefined
+): ToolGroup[] => {
+  const toolDefinitions = useToolDefinitions(toolset);
+  return useGroupedTools(toolDefinitions);
+};
+
+export const useGroupedHttpTools = (
+  tools: HTTPToolDefinition[]
+): HttpToolGroup[] => {
+  const wrapped = tools.map((tool) => ({
+    ...tool,
+    type: "http",
+  }));
+
+  return useGroupedTools(wrapped as ToolDefinition[]) as HttpToolGroup[];
+};
+
+export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
   const { data: deployment } = useLatestDeployment();
 
   const documentIdToSlug = useMemo(() => {
@@ -23,10 +47,18 @@ export const useGroupedTools = (tools: HTTPToolDefinition[]): ToolGroup[] => {
 
   const toolGroups = useMemo(() => {
     return tools?.reduce((acc, tool) => {
-      const documentSlug = tool.openapiv3DocumentId
-        ? documentIdToSlug?.[tool.openapiv3DocumentId]
-        : undefined;
-      const groupKey = tool.packageName || documentSlug || "unknown";
+      let groupKey = "unknown";
+
+      if (tool.packageName) {
+        groupKey = tool.packageName;
+      } else if (tool.type === "http") {
+        const documentSlug = tool.openapiv3DocumentId
+          ? documentIdToSlug?.[tool.openapiv3DocumentId]
+          : undefined;
+        groupKey = documentSlug || "unknown";
+      } else if (tool.type === "prompt") {
+        groupKey = "custom";
+      }
 
       const toolWithDisplayName = {
         ...tool,

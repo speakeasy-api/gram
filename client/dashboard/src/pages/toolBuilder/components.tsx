@@ -18,9 +18,9 @@ import {
 import { Type } from "@/components/ui/type";
 import { useGroupedTools } from "@/lib/toolNames";
 import { capitalize, cn } from "@/lib/utils";
-import { HTTPToolDefinition } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { ToolDefinition } from "../toolsets/types";
 
 export type Input = {
   name: string;
@@ -136,7 +136,7 @@ export const StepCard = ({
   removeStep,
 }: {
   step: Step;
-  tools: HTTPToolDefinition[];
+  tools: ToolDefinition[];
   removeStep: (step: Step) => void;
 }) => {
   const [open, setOpen] = useState(false);
@@ -216,8 +216,8 @@ const ToolSelectPopover = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSelect: (tool: HTTPToolDefinition) => void;
-  tools: HTTPToolDefinition[];
+  onSelect: (tool: ToolDefinition) => void;
+  tools: ToolDefinition[];
   children: React.ReactNode;
 }) => {
   const groupedTools = useGroupedTools(tools);
