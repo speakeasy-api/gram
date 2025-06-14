@@ -7,6 +7,7 @@ import {
   useMotionValue,
   useSpring,
   useInView,
+  AnimatePresence,
 } from "framer-motion";
 import SpeakeasyLogo from "./components/SpeakeasyLogo";
 import { Button } from "./components/Button";
@@ -161,711 +162,6 @@ const DotComponent = ({
     </motion.div>
   );
 };
-
-export default function Home() {
-  const [dots, setDots] = useState<Dot[]>([]);
-  const [isResizing, setIsResizing] = useState(false);
-  const [active, setActive] = useState({ row: 0, col: 0 });
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [showNavbarCTA, setShowNavbarCTA] = useState(false);
-
-  const dragX = useMotionValue(0);
-  const dragY = useMotionValue(0);
-
-  const introducingRef = useRef<HTMLHeadingElement>(null);
-  const gramRef = useRef<HTMLHeadingElement>(null);
-  const descriptionRef = useRef<HTMLDivElement>(null);
-  const buttonsRef = useRef<HTMLDivElement>(null);
-
-  const footerHeadingRef = useRef<HTMLHeadingElement>(null);
-  const footerDescRef = useRef<HTMLParagraphElement>(null);
-  const footerButtonsRef = useRef<HTMLDivElement>(null);
-
-  const shouldSkipDot = (
-    x: number,
-    y: number,
-    introducingBounds: DOMRect,
-    gramBounds: DOMRect,
-    descriptionBounds: DOMRect,
-    buttonsBounds: DOMRect | null,
-    isMobile: boolean,
-    isTablet: boolean
-  ) => {
-    const introducingPadding = isMobile ? 20 : isTablet ? 25 : 30;
-    const introducingDescenderExtra = isMobile ? 15 : isTablet ? 20 : 25;
-
-    if (
-      x >= introducingBounds.left - introducingPadding &&
-      x <= introducingBounds.right + introducingPadding &&
-      y >= introducingBounds.top - introducingPadding &&
-      y <= introducingBounds.bottom + introducingDescenderExtra
-    ) {
-      return true;
-    }
-
-    const gramPadding = isMobile ? 20 : isTablet ? 25 : 30;
-    const gramDescenderExtra = isMobile ? 25 : isTablet ? 30 : 40;
-
-    if (
-      x >= gramBounds.left - gramPadding &&
-      x <= gramBounds.right + gramPadding &&
-      y >= gramBounds.top - gramPadding &&
-      y <= gramBounds.bottom + gramDescenderExtra
-    ) {
-      return true;
-    }
-
-    const descPadding = isMobile ? 25 : isTablet ? 35 : 45;
-    if (
-      x >= descriptionBounds.left - descPadding &&
-      x <= descriptionBounds.right + descPadding &&
-      y >= descriptionBounds.top - descPadding &&
-      y <= descriptionBounds.bottom + descPadding
-    ) {
-      return true;
-    }
-
-    if (buttonsBounds) {
-      const buttonPadding = isMobile ? 50 : isTablet ? 70 : 90;
-      if (
-        x >= buttonsBounds.left - buttonPadding &&
-        x <= buttonsBounds.right + buttonPadding &&
-        y >= buttonsBounds.top - buttonPadding &&
-        y <= buttonsBounds.bottom + buttonPadding
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  const generateDotGrid = () => {
-    const container = document.getElementById("dotGrid");
-    if (!container) return;
-
-    const isMobile = window.innerWidth < 768;
-    const isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
-
-    const containerBounds = container.getBoundingClientRect();
-    const introducingBounds = introducingRef.current?.getBoundingClientRect();
-    const gramBounds = gramRef.current?.getBoundingClientRect();
-    const descriptionBounds = descriptionRef.current?.getBoundingClientRect();
-    const buttonsBounds = buttonsRef.current?.getBoundingClientRect();
-
-    if (!introducingBounds || !gramBounds || !descriptionBounds) {
-      setTimeout(generateDotGrid, 50);
-      return;
-    }
-
-    const dotSize = isMobile ? 28 : isTablet ? 32 : 40;
-    const dotSpacing = isMobile ? 36 : isTablet ? 40 : 55;
-
-    const screenWidth = window.innerWidth;
-
-    const paddingX = isMobile ? 24 : isTablet ? 40 : 160;
-
-    const startX = paddingX;
-    const startY = Math.max(0, introducingBounds.top - containerBounds.top);
-    const endX = screenWidth - (isMobile ? paddingX : screenWidth * 0.08);
-    const endY = containerBounds.height - (isMobile ? 120 : 80);
-
-    const cols = Math.ceil((endX - startX) / dotSpacing);
-    const rows = Math.ceil((endY - startY) / (dotSpacing * 0.87));
-
-    // Convert bounds to container-relative coordinates
-    const relativeIntroducingBounds = {
-      left: introducingBounds.left - containerBounds.left,
-      right: introducingBounds.right - containerBounds.left,
-      top: introducingBounds.top - containerBounds.top,
-      bottom: introducingBounds.bottom - containerBounds.top,
-    };
-
-    const relativeGramBounds = {
-      left: gramBounds.left - containerBounds.left,
-      right: gramBounds.right - containerBounds.left,
-      top: gramBounds.top - containerBounds.top,
-      bottom: gramBounds.bottom - containerBounds.top,
-    };
-
-    const relativeDescriptionBounds = {
-      left: descriptionBounds.left - containerBounds.left,
-      right: descriptionBounds.right - containerBounds.left,
-      top: descriptionBounds.top - containerBounds.top,
-      bottom: descriptionBounds.bottom - containerBounds.top,
-    };
-
-    const relativeButtonsBounds = buttonsBounds
-      ? {
-          left: buttonsBounds.left - containerBounds.left,
-          right: buttonsBounds.right - containerBounds.left,
-          top: buttonsBounds.top - containerBounds.top,
-          bottom: buttonsBounds.bottom - containerBounds.top,
-        }
-      : null;
-
-    const newDots = [];
-
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const xOffset = row % 2 === 0 ? 0 : dotSpacing / 2;
-        const x = startX + col * dotSpacing + xOffset;
-        const y = startY + row * dotSpacing * 0.87;
-
-        if (x < startX || x > endX || y < startY || y > endY) {
-          continue;
-        }
-
-        if (isMobile && row % 2 === 0 && col % 2 === 0) {
-          continue;
-        }
-
-        if (
-          y < relativeIntroducingBounds.bottom &&
-          x < relativeIntroducingBounds.right + 20
-        ) {
-          continue;
-        }
-
-        if (
-          shouldSkipDot(
-            x,
-            y,
-            relativeIntroducingBounds as DOMRect,
-            relativeGramBounds as DOMRect,
-            relativeDescriptionBounds as DOMRect,
-            relativeButtonsBounds as DOMRect | null,
-            isMobile,
-            isTablet
-          )
-        ) {
-          continue;
-        }
-
-        const centerX = startX + (endX - startX) / 2;
-        const centerY = startY + (endY - startY) / 2;
-        const dx = x - centerX;
-        const dy = y - centerY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const delay = distance * 0.0003 + Math.random() * 0.1;
-
-        newDots.push({
-          id: `dot-${row}-${col}`,
-          x,
-          y,
-          size: dotSize,
-          delay,
-          row,
-          col,
-        });
-      }
-    }
-
-    setDots(newDots);
-  };
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsResizing(true);
-
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-
-      resizeTimeoutRef.current = setTimeout(() => {
-        generateDotGrid();
-        setTimeout(() => {
-          setIsResizing(false);
-        }, 50);
-      }, 250);
-    };
-
-    document.fonts.ready.then(() => {
-      generateDotGrid();
-    });
-
-    window.addEventListener("resize", handleResize);
-
-    const heroObserver = new window.IntersectionObserver(
-      ([entry]) => {
-        setShowNavbarCTA(!entry.isIntersecting);
-      },
-      {
-        threshold: 0,
-        rootMargin: "-80px 0px 0px 0px",
-      }
-    );
-
-    if (buttonsRef.current) {
-      heroObserver.observe(buttonsRef.current);
-    }
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      if (buttonsRef.current) {
-        heroObserver.unobserve(buttonsRef.current);
-      }
-      heroObserver.disconnect();
-    };
-  }, []);
-
-  return (
-    <>
-      <header className="header-base">
-        <div className="absolute top-0 left-0 right-0 h-1 w-full bg-gradient-primary" />
-        <div className="flex justify-between items-center px-6 md:px-10 lg:px-16 pt-1 w-full relative overflow-visible">
-          <a
-            href="https://www.speakeasy.com/"
-            className="transition-opacity hover:opacity-80"
-          >
-            <SpeakeasyLogo className="h-5 w-auto text-foreground" />
-          </a>
-          <motion.div
-            className="flex items-center"
-            initial={false}
-            animate={{
-              justifyContent: showNavbarCTA ? "flex-start" : "flex-end",
-              gap: showNavbarCTA ? "16px" : "0px",
-            }}
-            transition={{
-              type: "spring",
-              stiffness: 400,
-              damping: 40,
-              mass: 0.8,
-            }}
-          >
-            <motion.a
-              href="https://docs.getgram.ai/"
-              className="relative inline-flex items-center justify-center font-mono text-[15px] leading-[1.6] tracking-[0.01em] uppercase whitespace-nowrap rounded-full transition-colors"
-              initial={{
-                backgroundColor: "rgb(245 245 245)",
-                color: "rgb(38 38 38)",
-                paddingLeft: "20px",
-                paddingRight: "20px",
-                paddingTop: "8px",
-                paddingBottom: "8px",
-                boxShadow:
-                  "0px 2px 1px 0px #FFF inset, 0px -2px 1px 100px rgba(0,0,0,0.0) inset, 0px -2px 1px 0px rgba(0,0,0,0.1) inset",
-              }}
-              animate={{
-                backgroundColor: showNavbarCTA
-                  ? "transparent"
-                  : "rgb(245 245 245)",
-                color: showNavbarCTA ? "rgb(64 64 64)" : "rgb(38 38 38)",
-                paddingLeft: showNavbarCTA ? "0px" : "20px",
-                paddingRight: showNavbarCTA ? "0px" : "20px",
-                paddingTop: showNavbarCTA ? "0px" : "8px",
-                paddingBottom: showNavbarCTA ? "0px" : "8px",
-                boxShadow: showNavbarCTA
-                  ? "none"
-                  : "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(220,220,220,0.2) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
-              }}
-              whileHover={{
-                color: showNavbarCTA ? "rgb(38 38 38)" : "rgb(38 38 38)",
-                backgroundColor: showNavbarCTA
-                  ? "transparent"
-                  : "rgb(245 245 245)",
-                boxShadow: showNavbarCTA
-                  ? "none"
-                  : "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(220,220,220,0.2) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
-              }}
-              transition={{
-                type: "spring",
-                stiffness: 500,
-                damping: 40,
-                mass: 0.5,
-              }}
-            >
-              View docs
-            </motion.a>
-            <motion.div
-              initial={{
-                width: 0,
-                opacity: 0,
-              }}
-              animate={{
-                width: showNavbarCTA ? "auto" : 0,
-                opacity: showNavbarCTA ? 1 : 0,
-              }}
-              transition={{
-                width: {
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 40,
-                  mass: 0.8,
-                },
-                opacity: {
-                  duration: 0.2,
-                  ease: "easeOut",
-                },
-              }}
-              style={{
-                overflow: "hidden",
-                display: "flex",
-              }}
-            >
-              <div className="relative rounded-full overflow-hidden">
-                <Button
-                  variant="rainbow-light"
-                  href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
-                  className="shadow-lg whitespace-nowrap"
-                >
-                  Join the waitlist
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        </div>
-      </header>
-
-      <div className="relative min-h-screen">
-        <div
-          id="dotGrid"
-          className={`absolute inset-0 overflow-hidden transition-opacity duration-300 ${
-            isResizing ? "opacity-0" : "opacity-100"
-          }`}
-        >
-          {dots.map((dot) => (
-            <DotComponent
-              key={dot.id}
-              dot={dot}
-              active={active}
-              setActive={setActive}
-              dragX={dragX}
-              dragY={dragY}
-              allDots={dots}
-            />
-          ))}
-        </div>
-
-        <div className="relative z-20 pointer-events-none">
-          <h1
-            ref={introducingRef}
-            className="absolute top-[20vh] md:top-[140px] left-6 md:left-10 lg:left-40 font-display font-light text-display-sm md:text-display-md lg:text-display-lg leading-[0.8] tracking-tight"
-          >
-            Introducing
-          </h1>
-
-          <h2
-            ref={gramRef}
-            className="absolute top-[45vh] left-1/2 md:left-1/2 lg:left-auto lg:right-60 -translate-x-[20%] md:-translate-x-[10%] lg:translate-x-0 font-display font-light text-[5rem] md:text-[8rem] lg:text-[11.25rem] leading-[0.7] tracking-tighter"
-          >
-            gram.
-          </h2>
-        </div>
-
-        <div className="absolute bottom-8 left-6 right-6 md:bottom-10 md:right-10 lg:bottom-24 lg:right-24 md:left-auto z-30">
-          <div className="flex flex-col gap-6 lg:gap-8 items-center md:items-start">
-            <div ref={descriptionRef} className="max-w-md">
-              <p className="text-foreground/80 text-sm md:text-base lg:text-[1.0625rem] leading-relaxed text-center md:text-left">
-                Create, curate and distribute tools for AI
-                <br />
-                Everything you need to power
-                <br />
-                integrations for Agents and LLMs
-              </p>
-            </div>
-
-            <div
-              ref={buttonsRef}
-              className="flex flex-col md:flex-row gap-3 w-full md:w-auto"
-            >
-              <Button
-                size="chunky"
-                variant="rainbow-light"
-                href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
-              >
-                Join the waitlist
-              </Button>
-              <Button
-                size="chunky"
-                variant="primary-dark"
-                href="https://calendly.com/sagar-speakeasy/30min"
-              >
-                Book a demo
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <section className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-16 sm:py-24 space-y-16 sm:space-y-24">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
-          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12">
-            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
-              Easiest way to host MCP at scale
-            </h2>
-            <p className="text-base sm:text-lg md:text-xl text-foreground/80 mb-4 sm:mb-6">
-              High quality Agentic Tools. Enterprise Experience
-            </p>
-            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60">
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-black" />
-                </div>
-                <span>1-click hosting of Toolsets as MCP servers</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Key className="w-4 h-4 text-black" />
-                </div>
-                <span>
-                  Support for managed and passthrough API authentication
-                </span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-4 h-4 text-black" />
-                </div>
-                <span>Built in telemetry, audit logs</span>
-              </li>
-            </ul>
-          </div>
-          <div className="border-l border-[var(--color-neutral-200)] flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12 bg-gradient-to-br from-[var(--color-neutral-100)] via-transparent to-transparent">
-            <AnimatedToolCard />
-          </div>
-        </div>
-
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <APIToolsSection />
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
-          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12">
-            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
-              Curate Toolsets for every usecase
-            </h2>
-            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Layers className="w-4 h-4 text-black" />
-                </div>
-                <span>Easily group tools into Toolsets</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Shuffle className="w-4 h-4 text-black" />
-                </div>
-                <span>Remix tools across your APIs and 3P services</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Users className="w-4 h-4 text-black" />
-                </div>
-                <span>Scope tool use for teams</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-4 h-4 text-black" />
-                </div>
-                <span>Instantly test and run evals for quality</span>
-              </li>
-            </ul>
-          </div>
-          <div className="border-l border-border flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12">
-            <div className="space-y-2 w-full max-w-xs">
-              <div className="bg-background-pure rounded-lg p-3 border-2 border-[var(--color-info-400)] shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-info-100)] flex items-center justify-center">
-                  <span className="text-xs font-bold text-[var(--color-info-700)]">
-                    S
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-[var(--color-neutral-900)]">
-                    Slack
-                  </div>
-                  <div className="text-xs text-[var(--color-neutral-500)]">
-                    12 tools
-                  </div>
-                </div>
-              </div>
-              <div className="bg-background-pure rounded-lg p-3 border border-[var(--color-neutral-200)] flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[var(--color-success-100)] flex items-center justify-center">
-                  <span className="text-xs font-bold text-[var(--color-success-700)]">
-                    Z
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-[var(--color-neutral-900)]">
-                    Zendesk
-                  </div>
-                  <div className="text-xs text-[var(--color-neutral-500)]">
-                    8 tools
-                  </div>
-                </div>
-                <svg
-                  className="w-4 h-4 text-[var(--color-success-500)]"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <button className="w-full py-2.5 rounded-lg border border-dashed border-[var(--color-neutral-300)] text-xs text-[var(--color-neutral-600)] hover:border-[var(--color-neutral-400)] transition-colors">
-                + Add service
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
-          <div className="border-r border-border flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12 order-2 md:order-1">
-            <div className="bg-background-pure rounded-xl shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08)] border border-[var(--color-neutral-200)] p-4 sm:p-5 w-full max-w-xs">
-              <div className="mb-3">
-                <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-mono text-[var(--color-neutral-900)] font-light">
-                    18.2k
-                  </p>
-                  <span className="text-sm text-[var(--color-success-600)]">
-                    ↑ 47%
-                  </span>
-                </div>
-                <p className="text-xs text-[var(--color-neutral-600)]">
-                  Requests this hour
-                </p>
-              </div>
-              <div className="h-8 flex items-end gap-0.5">
-                {[40, 45, 52, 48, 65, 72, 88, 100].map((height, i) => (
-                  <div
-                    key={i}
-                    className={`flex-1 rounded-sm ${
-                      i >= 6
-                        ? "bg-[var(--color-success-500)]"
-                        : "bg-[var(--color-neutral-200)]"
-                    }`}
-                    style={{ height: `${height}%` }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12 order-1 md:order-2">
-            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
-              Distribute tools through an Enterprise ready Tools Gateway
-            </h2>
-            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-black" />
-                </div>
-                <span>1-click hosting of Toolsets as MCP servers</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Key className="w-4 h-4 text-black" />
-                </div>
-                <span>
-                  Support for managed and passthrough API authentication
-                </span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-4 h-4 text-black" />
-                </div>
-                <span>Built in telemetry, audit logs</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <div className="flex flex-col items-center text-center px-2 sm:px-8 py-8 sm:py-12">
-          <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
-            Build AI that works. Unlock API and Data for Agents. Secure and
-            Composable.
-          </h2>
-          <div className="w-full max-w-xs sm:max-w-sm">
-            <div className="bg-background-pure rounded-xl shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08)] border border-[var(--color-neutral-200)] p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-2 sm:gap-4 mb-4">
-                <div className="text-center">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--color-neutral-100)] border border-[var(--color-neutral-200)] flex items-center justify-center text-[10px] font-medium text-[var(--color-neutral-700)]">
-                    AI
-                  </div>
-                </div>
-                <div className="flex-1 h-[1px] bg-[var(--color-neutral-200)]" />
-                <div className="w-10 h-10 rounded-lg relative">
-                  <div className="absolute inset-0 rounded-lg bg-gradient-primary" />
-                  <div className="absolute inset-[1px] rounded-[9px] bg-background-pure flex items-center justify-center">
-                    <span className="text-sm font-display font-light text-[var(--color-neutral-900)]">
-                      g
-                    </span>
-                  </div>
-                </div>
-                <div className="flex-1 h-[1px] bg-[var(--color-neutral-200)]" />
-                <div className="text-center">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--color-neutral-900)] flex items-center justify-center text-[10px] font-medium text-white">
-                    API
-                  </div>
-                </div>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-[var(--color-neutral-600)]">
-                  <span className="font-medium text-[var(--color-neutral-900)]">
-                    2,847
-                  </span>{" "}
-                  tools ready
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <footer className="relative bg-white w-full mt-32 border-t border-neutral-200 overflow-hidden min-h-[400px] flex flex-col justify-center items-center">
-        <FooterDotsHeroLike
-          footerHeadingRef={footerHeadingRef}
-          footerDescRef={footerDescRef}
-          footerButtonsRef={footerButtonsRef}
-        />
-        <div className="relative z-10 w-full">
-          <div className="flex flex-col items-center justify-center py-20 max-w-2xl mx-auto px-4">
-            <h3
-              ref={footerHeadingRef}
-              className="text-4xl md:text-5xl font-display font-light text-neutral-900 mb-6 text-center max-w-2xl"
-            >
-              Ready to create, curate, and distribute tools for AI?
-            </h3>
-            <p
-              ref={footerDescRef}
-              className="text-lg text-neutral-700 mb-8 text-center max-w-xl"
-            >
-              Power your integrations for Agents and LLMs. Join the waitlist or
-              book a demo to get started.
-            </p>
-            <div
-              ref={footerButtonsRef}
-              className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-center"
-            >
-              <Button
-                size="chunky"
-                variant="rainbow-light"
-                href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
-              >
-                Join the waitlist
-              </Button>
-              <Button
-                size="chunky"
-                variant="primary-dark"
-                href="https://calendly.com/sagar-speakeasy/30min"
-              >
-                Book a demo
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div className="absolute left-0 right-0 bottom-0 h-1 w-full bg-gradient-primary z-20" />
-      </footer>
-    </>
-  );
-}
 
 function FooterDotsHeroLike({
   footerHeadingRef,
@@ -1104,7 +400,10 @@ function FooterDotsHeroLike({
 
 function AnimatedToolCard() {
   const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, amount: 0.5 });
+  const isInView = useInView(ref, {
+    once: true,
+    amount: 0.5,
+  });
   const TOOL_COUNT = 17;
   const [isDeployed, setIsDeployed] = useState(false);
 
@@ -1223,6 +522,398 @@ function AnimatedToolCard() {
           response time
         </motion.p>
       </div>
+    </div>
+  );
+}
+
+function StackedMetricCards() {
+  const ref = useRef(null);
+  const isInView = useInView(ref, {
+    once: true,
+    amount: 0.5,
+  });
+  const [hoveredCard, setHoveredCard] = useState<number | null>(null);
+
+  const cards = [
+    {
+      id: 1,
+      title: "Requests/hour",
+      value: "18.2k",
+      change: "↑ 47%",
+      changeColor: "text-[var(--color-success-600)]",
+      position: { x: "0%", y: "0%" },
+      rotate: -2,
+      chart: (
+        <div className="h-8 flex items-end gap-0.5 w-full">
+          {[40, 45, 52, 48, 65, 72, 88, 100].map((height, i) => (
+            <div
+              key={i}
+              className={`flex-1 rounded-sm min-w-0 ${
+                i >= 6
+                  ? "bg-[var(--color-success-500)]"
+                  : "bg-[var(--color-neutral-200)]"
+              }`}
+              style={{ height: `${height}%` }}
+            />
+          ))}
+        </div>
+      ),
+    },
+    {
+      id: 2,
+      title: "Response time",
+      value: "12ms",
+      change: "p99",
+      changeColor: "text-[var(--color-info-600)]",
+      position: { x: "45%", y: "15%" },
+      rotate: 1.5,
+      chart: (
+        <div className="space-y-1.5 w-full">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="text-[10px] text-[var(--color-neutral-500)] flex-shrink-0">p50</span>
+            <div className="flex-1 h-1.5 bg-[var(--color-neutral-100)] rounded-full overflow-hidden min-w-0">
+              <div className="h-full bg-[var(--color-info-400)] rounded-full" style={{ width: '35%' }} />
+            </div>
+            <span className="text-[10px] text-[var(--color-neutral-700)] font-mono flex-shrink-0">8ms</span>
+          </div>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="text-[10px] text-[var(--color-neutral-500)] flex-shrink-0">p99</span>
+            <div className="flex-1 h-1.5 bg-[var(--color-neutral-100)] rounded-full overflow-hidden min-w-0">
+              <div className="h-full bg-[var(--color-info-500)] rounded-full" style={{ width: '60%' }} />
+            </div>
+            <span className="text-[10px] text-[var(--color-neutral-700)] font-mono flex-shrink-0">12ms</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 3,
+      title: "Uptime",
+      value: "99.9%",
+      change: "SLA",
+      changeColor: "text-[var(--color-success-600)]",
+      position: { x: "20%", y: "50%" },
+      rotate: -1,
+      chart: (
+        <>
+          <div className="grid grid-cols-7 gap-0.5 w-full">
+            {Array.from({ length: 28 }, (_, i) => (
+              <div
+                key={i}
+                className={`aspect-square rounded-sm ${
+                  i === 14 ? "bg-[var(--color-warning-400)]" : "bg-[var(--color-success-400)]"
+                }`}
+              />
+            ))}
+          </div>
+          <p className="text-[9px] text-[var(--color-neutral-500)] mt-1.5">
+            Last 28 days
+          </p>
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <div
+      ref={ref}
+      className="relative w-full h-[380px] mx-auto"
+    >
+      {cards.map((card, index) => {
+        const isHovered = hoveredCard === card.id;
+        const anyHovered = hoveredCard !== null;
+        
+        return (
+          <motion.div
+            key={card.id}
+            className="absolute w-[55%] max-w-[220px] min-w-[180px]"
+            initial={{
+              left: card.position.x,
+              top: card.position.y,
+              scale: 0.8,
+              opacity: 0,
+              rotate: card.rotate,
+            }}
+            animate={{
+              left: card.position.x,
+              top: card.position.y,
+              scale: isInView ? (isHovered ? 1.05 : anyHovered ? 0.95 : 1) : 0.8,
+              opacity: isInView ? (anyHovered && !isHovered ? 0.6 : 1) : 0,
+              filter: anyHovered && !isHovered ? "blur(2px)" : "blur(0px)",
+              rotate: isInView ? (isHovered ? 0 : card.rotate) : card.rotate,
+            }}
+            transition={{
+              scale: {
+                type: "spring",
+                stiffness: 300,
+                damping: 25,
+              },
+              opacity: {
+                duration: 0.3,
+              },
+              filter: {
+                duration: 0.3,
+              },
+              rotate: {
+                type: "spring",
+                stiffness: 200,
+                damping: 20,
+              },
+              left: {
+                type: "spring",
+                stiffness: 260,
+                damping: 30,
+                delay: isInView ? index * 0.1 : 0,
+              },
+              top: {
+                type: "spring",
+                stiffness: 260,
+                damping: 30,
+                delay: isInView ? index * 0.1 : 0,
+              },
+            }}
+            style={{
+              zIndex: isHovered ? 10 : 3 - index,
+              transformOrigin: 'center center',
+            }}
+            onMouseEnter={() => setHoveredCard(card.id)}
+            onMouseLeave={() => setHoveredCard(null)}
+          >
+            <motion.div 
+              className="bg-background-pure rounded-xl border border-[var(--color-neutral-200)] p-3 sm:p-4 md:p-5 cursor-pointer"
+              animate={{
+                boxShadow: isHovered 
+                  ? "0 20px 40px -8px rgba(0,0,0,0.15), 0 8px 16px -4px rgba(0,0,0,0.08)" 
+                  : "0 4px 24px -4px rgba(0,0,0,0.08)",
+              }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="flex flex-col h-full">
+                <div className="mb-3">
+                  <p className="text-[11px] sm:text-xs text-[var(--color-neutral-600)] mb-1 truncate">
+                    {card.title}
+                  </p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-xl sm:text-2xl font-mono text-[var(--color-neutral-900)] font-light">
+                      {card.value}
+                    </p>
+                    <span className={`text-[10px] sm:text-xs ${card.changeColor} flex-shrink-0`}>
+                      {card.change}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-1 flex flex-col justify-end min-h-[60px]">
+                  {card.chart}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CurateToolsetsAnimation() {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, amount: 0.5 });
+
+  const toolsets = [
+    {
+      id: "engineering",
+      name: "Engineering",
+      icon: "E",
+      color: "neutral",
+      tools: [
+        { name: "your-api", type: "internal", label: "/deploy" },
+        { name: "github", type: "external", label: "GitHub" },
+        { name: "datadog", type: "external", label: "Datadog" },
+        { name: "your-api-2", type: "internal", label: "/logs" },
+      ],
+    },
+    {
+      id: "sales",
+      name: "Sales",
+      icon: "S",
+      color: "neutral",
+      tools: [
+        { name: "your-api-3", type: "internal", label: "/customers" },
+        { name: "salesforce", type: "external", label: "Salesforce" },
+        { name: "hubspot", type: "external", label: "HubSpot" },
+        { name: "your-api-4", type: "internal", label: "/analytics" },
+      ],
+    },
+    {
+      id: "marketing",
+      name: "Marketing",
+      icon: "M",
+      color: "neutral",
+      tools: [
+        { name: "your-api-5", type: "internal", label: "/campaigns" },
+        { name: "mailchimp", type: "external", label: "Mailchimp" },
+        { name: "analytics", type: "external", label: "Analytics" },
+        { name: "your-api-6", type: "internal", label: "/content" },
+      ],
+    },
+  ];
+
+  return (
+    <div ref={ref} className="w-full max-w-sm">
+      <div className="space-y-2">
+        {toolsets.map((toolset, index) => (
+          <motion.div
+            key={toolset.id}
+            className="bg-white rounded-xl p-4 border border-[var(--color-neutral-200)]"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ 
+              opacity: isInView ? 1 : 0, 
+              y: isInView ? 0 : 20,
+            }}
+            transition={{ 
+              duration: 0.5,
+              delay: index * 0.1,
+              ease: [0.21, 0.47, 0.32, 0.98],
+            }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--color-neutral-100)] flex items-center justify-center">
+                <span className="text-xs font-bold text-[var(--color-neutral-700)]">
+                  {toolset.icon}
+                </span>
+              </div>
+              <div>
+                <div className="text-sm font-medium text-[var(--color-neutral-900)]">
+                  {toolset.name}
+                </div>
+                <div className="text-xs text-[var(--color-neutral-500)]">
+                  {toolset.tools.filter(t => t.type === "internal").length} internal, {toolset.tools.filter(t => t.type === "external").length} external
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {toolset.tools.map((tool, toolIndex) => (
+                <motion.div
+                  key={tool.name}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium ${
+                    tool.type === "internal"
+                      ? "bg-[var(--color-neutral-100)] text-[var(--color-neutral-900)] ring-1 ring-inset ring-[var(--color-neutral-900)]/10"
+                      : "bg-[var(--color-neutral-50)] text-[var(--color-neutral-600)]"
+                  }`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: isInView ? 1 : 0 }}
+                  transition={{ 
+                    delay: index * 0.1 + 0.2 + toolIndex * 0.05,
+                    duration: 0.3,
+                  }}
+                >
+                  {tool.label}
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GramEcosystemAnimation() {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, amount: 0.5 });
+
+  return (
+    <div ref={ref} className="w-full max-w-2xl mx-auto">
+      <motion.div
+        className="relative h-[200px] flex items-center justify-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isInView ? 1 : 0 }}
+        transition={{ duration: 0.8, ease: [0.21, 0.47, 0.32, 0.98] }}
+      >
+        {/* Left: AI Agents */}
+        <motion.div
+          className="absolute left-0"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: isInView ? 1 : 0, scale: isInView ? 1 : 0.8 }}
+          transition={{ delay: 0, duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
+        >
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-xl bg-[var(--color-neutral-100)] flex items-center justify-center mx-auto mb-3">
+              <Users className="w-8 h-8 text-[var(--color-neutral-700)]" />
+            </div>
+            <div className="font-medium text-sm text-[var(--color-neutral-900)]">AI Agents</div>
+          </div>
+        </motion.div>
+
+        {/* Right: APIs */}
+        <motion.div
+          className="absolute right-0"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: isInView ? 1 : 0, scale: isInView ? 1 : 0.8 }}
+          transition={{ delay: 0.1, duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
+        >
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-xl bg-[var(--color-neutral-100)] flex items-center justify-center mx-auto mb-3">
+              <Layers className="w-8 h-8 text-[var(--color-neutral-700)]" />
+            </div>
+            <div className="font-medium text-sm text-[var(--color-neutral-900)]">Your APIs</div>
+          </div>
+        </motion.div>
+
+        {/* Center: Gram */}
+        <motion.div
+          className="relative z-10"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: isInView ? 1 : 0, opacity: isInView ? 1 : 0 }}
+          transition={{ 
+            delay: 0.3, 
+            duration: 0.6,
+            type: "spring",
+            stiffness: 260,
+            damping: 20
+          }}
+        >
+          <div className="w-24 h-24 rounded-2xl relative">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-primary" />
+            <div className="absolute inset-[3px] rounded-[13px] bg-white flex items-center justify-center shadow-lg">
+              <span className="text-4xl font-display font-light text-[var(--color-neutral-900)]">
+                g
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Animated connection lines */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          {/* Left line */}
+          <motion.div
+            className="absolute h-[2px] bg-gradient-to-r from-transparent via-[var(--color-neutral-300)] to-[var(--color-neutral-300)]"
+            style={{ 
+              left: '80px', 
+              right: '50%', 
+              marginRight: '60px',
+              transformOrigin: 'left center' 
+            }}
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: isInView ? 1 : 0, opacity: isInView ? 1 : 0 }}
+            transition={{ delay: 0.6, duration: 0.4, ease: "easeOut" }}
+          />
+          
+          {/* Right line */}
+          <motion.div
+            className="absolute h-[2px] bg-gradient-to-r from-[var(--color-neutral-300)] via-[var(--color-neutral-300)] to-transparent"
+            style={{ 
+              left: '50%', 
+              marginLeft: '60px', 
+              right: '80px',
+              transformOrigin: 'left center'
+            }}
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: isInView ? 1 : 0, opacity: isInView ? 1 : 0 }}
+            transition={{ delay: 0.7, duration: 0.4, ease: "easeOut" }}
+          />
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -1497,5 +1188,639 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
         </motion.div>
       </motion.div>
     </div>
+  );
+}
+
+export default function Home() {
+  const [dots, setDots] = useState<Dot[]>([]);
+  const [isResizing, setIsResizing] = useState(false);
+  const [active, setActive] = useState({ row: 0, col: 0 });
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showNavbarCTA, setShowNavbarCTA] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
+
+  const introducingRef = useRef<HTMLHeadingElement>(null);
+  const gramRef = useRef<HTMLHeadingElement>(null);
+  const descriptionRef = useRef<HTMLDivElement>(null);
+  const buttonsRef = useRef<HTMLDivElement>(null);
+
+  const footerHeadingRef = useRef<HTMLHeadingElement>(null);
+  const footerDescRef = useRef<HTMLParagraphElement>(null);
+  const footerButtonsRef = useRef<HTMLDivElement>(null);
+
+  const footerRef = useRef<HTMLDivElement>(null);
+  const isFooterInView = useInView(footerRef, { amount: 0.1 });
+
+  const shouldSkipDot = (
+    x: number,
+    y: number,
+    introducingBounds: DOMRect,
+    gramBounds: DOMRect,
+    descriptionBounds: DOMRect,
+    buttonsBounds: DOMRect | null,
+    isMobile: boolean,
+    isTablet: boolean
+  ) => {
+    const introducingPadding = isMobile ? 20 : isTablet ? 25 : 30;
+    const introducingDescenderExtra = isMobile ? 15 : isTablet ? 20 : 25;
+
+    if (
+      x >= introducingBounds.left - introducingPadding &&
+      x <= introducingBounds.right + introducingPadding &&
+      y >= introducingBounds.top - introducingPadding &&
+      y <= introducingBounds.bottom + introducingDescenderExtra
+    ) {
+      return true;
+    }
+
+    const gramPadding = isMobile ? 20 : isTablet ? 25 : 30;
+    const gramDescenderExtra = isMobile ? 25 : isTablet ? 30 : 40;
+
+    if (
+      x >= gramBounds.left - gramPadding &&
+      x <= gramBounds.right + gramPadding &&
+      y >= gramBounds.top - gramPadding &&
+      y <= gramBounds.bottom + gramDescenderExtra
+    ) {
+      return true;
+    }
+
+    const descPadding = isMobile ? 25 : isTablet ? 35 : 45;
+    if (
+      x >= descriptionBounds.left - descPadding &&
+      x <= descriptionBounds.right + descPadding &&
+      y >= descriptionBounds.top - descPadding &&
+      y <= descriptionBounds.bottom + descPadding
+    ) {
+      return true;
+    }
+
+    if (buttonsBounds) {
+      const buttonPadding = isMobile ? 50 : isTablet ? 70 : 90;
+      if (
+        x >= buttonsBounds.left - buttonPadding &&
+        x <= buttonsBounds.right + buttonPadding &&
+        y >= buttonsBounds.top - buttonPadding &&
+        y <= buttonsBounds.bottom + buttonPadding
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const generateDotGrid = () => {
+    const container = document.getElementById("dotGrid");
+    if (!container) return;
+
+    const isMobile = window.innerWidth < 768;
+    const isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
+
+    const containerBounds = container.getBoundingClientRect();
+    const introducingBounds = introducingRef.current?.getBoundingClientRect();
+    const gramBounds = gramRef.current?.getBoundingClientRect();
+    const descriptionBounds = descriptionRef.current?.getBoundingClientRect();
+    const buttonsBounds = buttonsRef.current?.getBoundingClientRect();
+
+    if (!introducingBounds || !gramBounds || !descriptionBounds) {
+      setTimeout(generateDotGrid, 50);
+      return;
+    }
+
+    const dotSize = isMobile ? 28 : isTablet ? 32 : 40;
+    const dotSpacing = isMobile ? 36 : isTablet ? 40 : 55;
+
+    const screenWidth = window.innerWidth;
+
+    const paddingX = isMobile ? 24 : isTablet ? 40 : 160;
+
+    const startX = paddingX;
+    const startY = Math.max(0, introducingBounds.top - containerBounds.top);
+    const endX = screenWidth - (isMobile ? paddingX : screenWidth * 0.08);
+    const endY = containerBounds.height - (isMobile ? 120 : 80);
+
+    const cols = Math.ceil((endX - startX) / dotSpacing);
+    const rows = Math.ceil((endY - startY) / (dotSpacing * 0.87));
+
+    // Convert bounds to container-relative coordinates
+    const relativeIntroducingBounds = {
+      left: introducingBounds.left - containerBounds.left,
+      right: introducingBounds.right - containerBounds.left,
+      top: introducingBounds.top - containerBounds.top,
+      bottom: introducingBounds.bottom - containerBounds.top,
+    };
+
+    const relativeGramBounds = {
+      left: gramBounds.left - containerBounds.left,
+      right: gramBounds.right - containerBounds.left,
+      top: gramBounds.top - containerBounds.top,
+      bottom: gramBounds.bottom - containerBounds.top,
+    };
+
+    const relativeDescriptionBounds = {
+      left: descriptionBounds.left - containerBounds.left,
+      right: descriptionBounds.right - containerBounds.left,
+      top: descriptionBounds.top - containerBounds.top,
+      bottom: descriptionBounds.bottom - containerBounds.top,
+    };
+
+    const relativeButtonsBounds = buttonsBounds
+      ? {
+          left: buttonsBounds.left - containerBounds.left,
+          right: buttonsBounds.right - containerBounds.left,
+          top: buttonsBounds.top - containerBounds.top,
+          bottom: buttonsBounds.bottom - containerBounds.top,
+        }
+      : null;
+
+    const newDots = [];
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const xOffset = row % 2 === 0 ? 0 : dotSpacing / 2;
+        const x = startX + col * dotSpacing + xOffset;
+        const y = startY + row * dotSpacing * 0.87;
+
+        if (x < startX || x > endX || y < startY || y > endY) {
+          continue;
+        }
+
+        if (isMobile && row % 2 === 0 && col % 2 === 0) {
+          continue;
+        }
+
+        if (
+          y < relativeIntroducingBounds.bottom &&
+          x < relativeIntroducingBounds.right + 20
+        ) {
+          continue;
+        }
+
+        if (
+          shouldSkipDot(
+            x,
+            y,
+            relativeIntroducingBounds as DOMRect,
+            relativeGramBounds as DOMRect,
+            relativeDescriptionBounds as DOMRect,
+            relativeButtonsBounds as DOMRect | null,
+            isMobile,
+            isTablet
+          )
+        ) {
+          continue;
+        }
+
+        const centerX = startX + (endX - startX) / 2;
+        const centerY = startY + (endY - startY) / 2;
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const delay = distance * 0.0003 + Math.random() * 0.1;
+
+        newDots.push({
+          id: `dot-${row}-${col}`,
+          x,
+          y,
+          size: dotSize,
+          delay,
+          row,
+          col,
+        });
+      }
+    }
+
+    setDots(newDots);
+  };
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsResizing(true);
+
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+
+      resizeTimeoutRef.current = setTimeout(() => {
+        generateDotGrid();
+        setTimeout(() => {
+          setIsResizing(false);
+        }, 50);
+      }, 250);
+    };
+
+    document.fonts.ready.then(() => {
+      generateDotGrid();
+    });
+
+    window.addEventListener("resize", handleResize);
+
+    const heroObserver = new window.IntersectionObserver(
+      ([entry]) => {
+        setShowNavbarCTA(!entry.isIntersecting);
+      },
+      {
+        threshold: 0,
+        rootMargin: "-80px 0px 0px 0px",
+      }
+    );
+
+    if (buttonsRef.current) {
+      heroObserver.observe(buttonsRef.current);
+    }
+
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      if (buttonsRef.current) {
+        heroObserver.unobserve(buttonsRef.current);
+      }
+      heroObserver.disconnect();
+    };
+  }, []);
+
+  return (
+    <>
+      <header className="header-base">
+        <div className="absolute top-0 left-0 right-0 h-1 w-full bg-gradient-primary" />
+        <div className="flex justify-between items-center px-6 md:px-10 lg:px-16 pt-1 w-full relative overflow-visible">
+          <a
+            href="https://www.speakeasy.com/"
+            className="transition-opacity hover:opacity-80"
+          >
+            <SpeakeasyLogo className="h-5 w-auto text-foreground" />
+          </a>
+          <motion.div
+            className="flex items-center"
+            initial={false}
+            animate={{
+              justifyContent: showNavbarCTA ? "flex-start" : "flex-end",
+              gap: showNavbarCTA ? "16px" : "0px",
+            }}
+            transition={{
+              type: "spring",
+              stiffness: 400,
+              damping: 40,
+              mass: 0.8,
+            }}
+          >
+            <motion.a
+              href="https://docs.getgram.ai/"
+              className="relative inline-flex items-center justify-center font-mono text-[15px] leading-[1.6] tracking-[0.01em] uppercase whitespace-nowrap rounded-full transition-colors"
+              initial={{
+                backgroundColor: "rgb(245 245 245)",
+                color: "rgb(38 38 38)",
+                paddingLeft: "20px",
+                paddingRight: "20px",
+                paddingTop: "8px",
+                paddingBottom: "8px",
+                boxShadow:
+                  "0px 2px 1px 0px #FFF inset, 0px -2px 1px 100px rgba(0,0,0,0.0) inset, 0px -2px 1px 0px rgba(0,0,0,0.1) inset",
+              }}
+              animate={{
+                backgroundColor: showNavbarCTA
+                  ? "transparent"
+                  : "rgb(245 245 245)",
+                color: showNavbarCTA ? "rgb(64 64 64)" : "rgb(38 38 38)",
+                paddingLeft: showNavbarCTA ? "0px" : "20px",
+                paddingRight: showNavbarCTA ? "0px" : "20px",
+                paddingTop: showNavbarCTA ? "0px" : "8px",
+                paddingBottom: showNavbarCTA ? "0px" : "8px",
+                boxShadow: showNavbarCTA
+                  ? "none"
+                  : "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(220,220,220,0.2) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
+              }}
+              whileHover={{
+                color: showNavbarCTA ? "rgb(38 38 38)" : "rgb(38 38 38)",
+                backgroundColor: showNavbarCTA
+                  ? "transparent"
+                  : "rgb(245 245 245)",
+                boxShadow: showNavbarCTA
+                  ? "none"
+                  : "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(220,220,220,0.2) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
+              }}
+              transition={{
+                type: "spring",
+                stiffness: 500,
+                damping: 40,
+                mass: 0.5,
+              }}
+            >
+              View docs
+            </motion.a>
+            {!isMobile && (
+              <motion.div
+                initial={{
+                  width: 0,
+                  opacity: 0,
+                }}
+                animate={{
+                  width: showNavbarCTA ? "auto" : 0,
+                  opacity: showNavbarCTA ? 1 : 0,
+                }}
+                transition={{
+                  width: {
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 40,
+                    mass: 0.8,
+                  },
+                  opacity: {
+                    duration: 0.2,
+                    ease: "easeOut",
+                  },
+                }}
+                style={{
+                  overflow: "hidden",
+                  display: "flex",
+                }}
+              >
+                <div className="relative rounded-full overflow-hidden">
+                  <Button
+                    variant="rainbow-light"
+                    href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
+                    className="shadow-lg whitespace-nowrap"
+                  >
+                    Join the waitlist
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        </div>
+      </header>
+
+      <div className="relative min-h-screen">
+        <div
+          id="dotGrid"
+          className={`absolute inset-0 overflow-hidden transition-opacity duration-300 ${
+            isResizing ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          {dots.map((dot) => (
+            <DotComponent
+              key={dot.id}
+              dot={dot}
+              active={active}
+              setActive={setActive}
+              dragX={dragX}
+              dragY={dragY}
+              allDots={dots}
+            />
+          ))}
+        </div>
+
+        <div className="relative z-20 pointer-events-none">
+          <h1
+            ref={introducingRef}
+            className="absolute top-[20vh] md:top-[140px] left-6 md:left-10 lg:left-40 font-display font-light text-display-sm md:text-display-md lg:text-display-lg leading-[0.8] tracking-tight"
+          >
+            Introducing
+          </h1>
+
+          <h2
+            ref={gramRef}
+            className="absolute top-[45vh] left-1/2 md:left-1/2 lg:left-auto lg:right-60 -translate-x-[20%] md:-translate-x-[10%] lg:translate-x-0 font-display font-light text-[5rem] md:text-[8rem] lg:text-[11.25rem] leading-[0.7] tracking-tighter"
+          >
+            gram.
+          </h2>
+        </div>
+
+        <div className="absolute bottom-8 left-6 right-6 md:bottom-10 md:right-10 lg:bottom-24 lg:right-24 md:left-auto z-30">
+          <div className="flex flex-col gap-6 lg:gap-8 items-center md:items-start">
+            <div ref={descriptionRef} className="max-w-md">
+              <p className="text-foreground/80 text-sm md:text-base lg:text-[1.0625rem] leading-relaxed text-center md:text-left">
+                Create, curate and distribute tools for AI
+                <br />
+                Everything you need to power
+                <br />
+                integrations for Agents and LLMs
+              </p>
+            </div>
+
+            <div
+              ref={buttonsRef}
+              className="flex flex-col md:flex-row gap-3 w-full md:w-auto"
+            >
+              <Button
+                size="chunky"
+                variant="rainbow-light"
+                href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
+              >
+                Join the waitlist
+              </Button>
+              <Button
+                size="chunky"
+                variant="primary-dark"
+                href="https://calendly.com/sagar-speakeasy/30min"
+              >
+                Book a demo
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-16 sm:py-24 space-y-16 sm:space-y-24">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
+          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12">
+            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
+              Easiest way to host MCP at scale
+            </h2>
+            <p className="text-base sm:text-lg md:text-xl text-foreground/80 mb-4 sm:mb-6">
+              High quality Agentic Tools. Enterprise Experience
+            </p>
+            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60">
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Zap className="w-4 h-4 text-black" />
+                </div>
+                <span>1-click hosting of Toolsets as MCP servers</span>
+              </li>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Key className="w-4 h-4 text-black" />
+                </div>
+                <span>
+                  Support for managed and passthrough API authentication
+                </span>
+              </li>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Activity className="w-4 h-4 text-black" />
+                </div>
+                <span>Built in telemetry, audit logs</span>
+              </li>
+            </ul>
+          </div>
+          <div className="border-l border-[var(--color-neutral-200)] flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12 bg-gradient-to-br from-[var(--color-neutral-100)] via-transparent to-transparent">
+            <AnimatedToolCard />
+          </div>
+        </div>
+
+        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
+
+        <APIToolsSection />
+        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
+          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12">
+            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
+              Curate Toolsets for every usecase
+            </h2>
+            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Layers className="w-4 h-4 text-black" />
+                </div>
+                <span>Easily group tools into Toolsets</span>
+              </li>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Shuffle className="w-4 h-4 text-black" />
+                </div>
+                <span>Remix tools across your APIs and 3P services</span>
+              </li>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Users className="w-4 h-4 text-black" />
+                </div>
+                <span>Scope tool use for teams</span>
+              </li>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="w-4 h-4 text-black" />
+                </div>
+                <span>Instantly test and run evals for quality</span>
+              </li>
+            </ul>
+          </div>
+          <div className="border-l border-border flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12">
+            <CurateToolsetsAnimation />
+          </div>
+        </div>
+        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
+          <div className="border-r border-border flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12 order-2 md:order-1">
+            <StackedMetricCards />
+          </div>
+          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12 order-1 md:order-2">
+            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
+              Distribute tools through an Enterprise ready Tools Gateway
+            </h2>
+            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Zap className="w-4 h-4 text-black" />
+                </div>
+                <span>1-click hosting of Toolsets as MCP servers</span>
+              </li>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Key className="w-4 h-4 text-black" />
+                </div>
+                <span>
+                  Support for managed and passthrough API authentication
+                </span>
+              </li>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
+                  <Activity className="w-4 h-4 text-black" />
+                </div>
+                <span>Built in telemetry, audit logs</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
+
+        <div className="flex flex-col items-center text-center px-2 sm:px-8 py-8 sm:py-12">
+          <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-8 sm:mb-12">
+            Build AI that works. Unlock API and Data for Agents. Secure and
+            Composable.
+          </h2>
+          <GramEcosystemAnimation />
+        </div>
+      </section>
+
+      <footer
+        ref={footerRef}
+        className="relative bg-white w-full mt-32 border-t border-neutral-200 overflow-hidden min-h-[400px] flex flex-col justify-center items-center"
+      >
+        <FooterDotsHeroLike
+          footerHeadingRef={footerHeadingRef}
+          footerDescRef={footerDescRef}
+          footerButtonsRef={footerButtonsRef}
+        />
+        <div className="relative z-10 w-full">
+          <div className="flex flex-col items-center justify-center py-20 max-w-2xl mx-auto px-4">
+            <h3
+              ref={footerHeadingRef}
+              className="text-4xl md:text-5xl font-display font-light text-neutral-900 mb-6 text-center max-w-2xl"
+            >
+              Ready to create, curate, and distribute tools for AI?
+            </h3>
+            <p
+              ref={footerDescRef}
+              className="text-lg text-neutral-700 mb-8 text-center max-w-xl"
+            >
+              Power your integrations for Agents and LLMs. Join the waitlist or
+              book a demo to get started.
+            </p>
+            <div
+              ref={footerButtonsRef}
+              className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-center"
+            >
+              <Button
+                size="chunky"
+                variant="rainbow-light"
+                href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
+              >
+                Join the waitlist
+              </Button>
+              <Button
+                size="chunky"
+                variant="primary-dark"
+                href="https://calendly.com/sagar-speakeasy/30min"
+              >
+                Book a demo
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="absolute left-0 right-0 bottom-0 h-1 w-full bg-gradient-primary z-20" />
+      </footer>
+      <AnimatePresence>
+        {showNavbarCTA && isMobile && !isFooterInView && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="fixed bottom-4 left-4 right-4 z-[1000] flex justify-center pointer-events-auto"
+          >
+            <Button
+              variant="rainbow-light"
+              href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
+              className="w-full max-w-xs shadow-lg text-base py-4"
+            >
+              Join the waitlist
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
