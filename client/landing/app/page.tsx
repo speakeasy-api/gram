@@ -11,6 +11,7 @@ import {
 } from "framer-motion";
 import SpeakeasyLogo from "./components/SpeakeasyLogo";
 import { Button } from "./components/Button";
+import { GridOverlay } from "./components/GridOverlay";
 import {
   Zap,
   Key,
@@ -276,9 +277,9 @@ function FooterDotsHeroLike({
 
     const paddingX = isMobile ? 24 : isTablet ? 40 : 160;
     const startX = paddingX;
-    const startY = 0;
+    const startY = isMobile ? 60 : 80;
     const endX = containerWidth - paddingX;
-    const endY = containerHeight - (isMobile ? 24 : 40);
+    const endY = containerHeight - (isMobile ? 60 : 80);
 
     const cols = Math.ceil((endX - startX) / dotSpacing);
     const rows = Math.ceil((endY - startY) / (dotSpacing * 0.87));
@@ -345,7 +346,9 @@ function FooterDotsHeroLike({
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
       resizeTimeoutRef.current = setTimeout(() => {
         generateDotGrid();
-        setTimeout(() => setIsResizing(false), 50);
+        setTimeout(() => {
+          setIsResizing(false);
+        }, 50);
       }, 250);
     };
 
@@ -436,7 +439,7 @@ function AnimatedToolCard() {
     <div ref={ref} className="w-full max-w-sm">
       <div className="relative space-y-4">
         {/* Deploy Button */}
-        <motion.div 
+        <motion.div
           className="flex justify-center"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: isInView ? 1 : 0, y: isInView ? 0 : 20 }}
@@ -447,8 +450,8 @@ function AnimatedToolCard() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.98 }}
             animate={{
-              boxShadow: isDeploying 
-                ? "0px 8px 16px rgba(0,0,0,0.1)" 
+              boxShadow: isDeploying
+                ? "0px 8px 16px rgba(0,0,0,0.1)"
                 : isDeployed
                 ? "0px 2px 4px rgba(0,0,0,0.05)"
                 : "0px 4px 8px rgba(0,0,0,0.05)",
@@ -458,7 +461,7 @@ function AnimatedToolCard() {
             disabled={isDeployed}
           >
             {/* Rainbow border effect */}
-            <motion.div 
+            <motion.div
               className="absolute inset-0 p-[1px] rounded-full bg-gradient-primary -z-10"
               animate={{
                 opacity: isDeployed ? 0.5 : 1,
@@ -466,9 +469,13 @@ function AnimatedToolCard() {
               transition={{ duration: 0.5 }}
             />
             <div className="absolute inset-[1px] rounded-full bg-white -z-10" />
-            
+
             <span className="relative z-10">
-              {isDeployed ? "Server Deployed" : isDeploying ? "Deploying..." : "Deploy Server"}
+              {isDeployed
+                ? "Server Deployed"
+                : isDeploying
+                ? "Deploying..."
+                : "Deploy Server"}
             </span>
           </motion.button>
         </motion.div>
@@ -477,22 +484,27 @@ function AnimatedToolCard() {
         <motion.div
           className="bg-white rounded-xl border border-neutral-200 overflow-hidden"
           initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ 
+          animate={{
             opacity: isInView ? 1 : 0,
             scale: isInView ? 1 : 0.95,
           }}
           transition={{ duration: 0.6, delay: 0.2, ease: [0.23, 1, 0.32, 1] }}
-          whileHover={{ 
-            boxShadow: "0px 16px 32px rgba(0,0,0,0.1), 0px 4px 8px rgba(0,0,0,0.05)",
+          whileHover={{
+            boxShadow:
+              "0px 16px 32px rgba(0,0,0,0.1), 0px 4px 8px rgba(0,0,0,0.05)",
           }}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center">
-                <span className="text-sm font-display text-neutral-700">g</span>
+                <span className="text-sm font-display text-neutral-700 relative top-[-1px]">
+                  g
+                </span>
               </div>
-              <h3 className="text-sm font-medium text-neutral-900">MCP Server</h3>
+              <h3 className="text-sm font-medium text-neutral-900">
+                MCP Server
+              </h3>
             </div>
             <motion.div
               className="w-2 h-2 rounded-full relative"
@@ -532,7 +544,9 @@ function AnimatedToolCard() {
                     transition={{ duration: 0.3 }}
                   >
                     <div className="text-sm text-neutral-500">
-                      {isDeploying ? "Deploying your MCP server..." : "Ready to deploy"}
+                      {isDeploying
+                        ? "Deploying your MCP server..."
+                        : "Ready to deploy"}
                     </div>
                   </motion.div>
                 ) : (
@@ -554,20 +568,28 @@ function AnimatedToolCard() {
                       >
                         {isDeployed ? TOOL_COUNT : 0}
                       </AnimateNumber>
-                      <div className="text-xs text-neutral-500 mt-1">tools available</div>
+                      <div className="text-xs text-neutral-500 mt-1">
+                        tools available
+                      </div>
                     </div>
-                    
+
                     <div className="flex items-center justify-center gap-4 text-xs">
                       <div className="flex items-center gap-1">
                         <div className="w-1 h-1 rounded-full bg-success-500" />
                         <span className="text-neutral-600">
-                          <span className="font-mono text-success-700">12ms</span> avg
+                          <span className="font-mono text-success-700">
+                            12ms
+                          </span>{" "}
+                          avg
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="w-1 h-1 rounded-full bg-brand-blue-500" />
                         <span className="text-neutral-600">
-                          <span className="font-mono text-brand-blue-700">99.9%</span> uptime
+                          <span className="font-mono text-brand-blue-700">
+                            99.9%
+                          </span>{" "}
+                          uptime
                         </span>
                       </div>
                     </div>
@@ -605,9 +627,7 @@ function StackedMetricCards() {
             <div
               key={i}
               className={`flex-1 rounded-sm min-w-0 ${
-                i >= 6
-                  ? "bg-success-500"
-                  : "bg-neutral-200"
+                i >= 6 ? "bg-success-500" : "bg-neutral-200"
               }`}
               style={{ height: `${height}%` }}
             />
@@ -626,18 +646,32 @@ function StackedMetricCards() {
       chart: (
         <div className="space-y-1.5 w-full">
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-[10px] text-neutral-500 flex-shrink-0">p50</span>
+            <span className="text-[10px] text-neutral-500 flex-shrink-0">
+              p50
+            </span>
             <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden min-w-0">
-              <div className="h-full bg-info-400 rounded-full" style={{ width: '35%' }} />
+              <div
+                className="h-full bg-info-400 rounded-full"
+                style={{ width: "35%" }}
+              />
             </div>
-            <span className="text-[10px] text-neutral-700 font-mono flex-shrink-0">8ms</span>
+            <span className="text-[10px] text-neutral-700 font-mono flex-shrink-0">
+              8ms
+            </span>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-[10px] text-neutral-500 flex-shrink-0">p99</span>
+            <span className="text-[10px] text-neutral-500 flex-shrink-0">
+              p99
+            </span>
             <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden min-w-0">
-              <div className="h-full bg-info-500 rounded-full" style={{ width: '60%' }} />
+              <div
+                className="h-full bg-info-500 rounded-full"
+                style={{ width: "60%" }}
+              />
             </div>
-            <span className="text-[10px] text-neutral-700 font-mono flex-shrink-0">12ms</span>
+            <span className="text-[10px] text-neutral-700 font-mono flex-shrink-0">
+              12ms
+            </span>
           </div>
         </div>
       ),
@@ -662,23 +696,18 @@ function StackedMetricCards() {
               />
             ))}
           </div>
-          <p className="text-[9px] text-neutral-500 mt-1.5">
-            Last 28 days
-          </p>
+          <p className="text-[9px] text-neutral-500 mt-1.5">Last 28 days</p>
         </>
       ),
     },
   ];
 
   return (
-    <div
-      ref={ref}
-      className="relative w-full h-[380px] mx-auto"
-    >
+    <div ref={ref} className="relative w-full h-[380px] mx-auto">
       {cards.map((card, index) => {
         const isHovered = hoveredCard === card.id;
         const anyHovered = hoveredCard !== null;
-        
+
         return (
           <motion.div
             key={card.id}
@@ -693,7 +722,13 @@ function StackedMetricCards() {
             animate={{
               left: card.position.x,
               top: card.position.y,
-              scale: isInView ? (isHovered ? 1.05 : anyHovered ? 0.95 : 1) : 0.8,
+              scale: isInView
+                ? isHovered
+                  ? 1.05
+                  : anyHovered
+                  ? 0.95
+                  : 1
+                : 0.8,
               opacity: isInView ? (anyHovered && !isHovered ? 0.6 : 1) : 0,
               filter: anyHovered && !isHovered ? "blur(2px)" : "blur(0px)",
               rotate: isInView ? (isHovered ? 0 : card.rotate) : card.rotate,
@@ -730,16 +765,16 @@ function StackedMetricCards() {
             }}
             style={{
               zIndex: isHovered ? 10 : 3 - index,
-              transformOrigin: 'center center',
+              transformOrigin: "center center",
             }}
             onMouseEnter={() => setHoveredCard(card.id)}
             onMouseLeave={() => setHoveredCard(null)}
           >
-            <motion.div 
+            <motion.div
               className="bg-background-pure rounded-xl border border-neutral-200 p-3 sm:p-4 md:p-5 cursor-pointer"
               animate={{
-                boxShadow: isHovered 
-                  ? "0 20px 40px -8px rgba(0,0,0,0.15), 0 8px 16px -4px rgba(0,0,0,0.08)" 
+                boxShadow: isHovered
+                  ? "0 20px 40px -8px rgba(0,0,0,0.15), 0 8px 16px -4px rgba(0,0,0,0.08)"
                   : "0 4px 24px -4px rgba(0,0,0,0.08)",
               }}
               transition={{ duration: 0.3 }}
@@ -753,7 +788,9 @@ function StackedMetricCards() {
                     <p className="text-xl sm:text-2xl font-mono text-neutral-900 font-light">
                       {card.value}
                     </p>
-                    <span className={`text-[10px] sm:text-xs ${card.changeColor} flex-shrink-0`}>
+                    <span
+                      className={`text-[10px] sm:text-xs ${card.changeColor} flex-shrink-0`}
+                    >
                       {card.change}
                     </span>
                   </div>
@@ -821,11 +858,11 @@ function CurateToolsetsAnimation() {
             key={toolset.id}
             className="bg-white rounded-xl p-4 border border-neutral-200"
             initial={{ opacity: 0, y: 20 }}
-            animate={{ 
-              opacity: isInView ? 1 : 0, 
+            animate={{
+              opacity: isInView ? 1 : 0,
               y: isInView ? 0 : 20,
             }}
-            transition={{ 
+            transition={{
               duration: 0.5,
               delay: index * 0.1,
               ease: [0.21, 0.47, 0.32, 0.98],
@@ -842,7 +879,10 @@ function CurateToolsetsAnimation() {
                   {toolset.name}
                 </div>
                 <div className="text-xs text-neutral-500">
-                  {toolset.tools.filter(t => t.type === "internal").length} internal, {toolset.tools.filter(t => t.type === "external").length} external
+                  {toolset.tools.filter((t) => t.type === "internal").length}{" "}
+                  internal,{" "}
+                  {toolset.tools.filter((t) => t.type === "external").length}{" "}
+                  external
                 </div>
               </div>
             </div>
@@ -858,7 +898,7 @@ function CurateToolsetsAnimation() {
                   }`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: isInView ? 1 : 0 }}
-                  transition={{ 
+                  transition={{
                     delay: index * 0.1 + 0.2 + toolIndex * 0.05,
                     duration: 0.3,
                   }}
@@ -891,13 +931,19 @@ function GramEcosystemAnimation() {
           className="absolute left-0"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: isInView ? 1 : 0, scale: isInView ? 1 : 0.8 }}
-          transition={{ delay: 0, duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
+          transition={{
+            delay: 0,
+            duration: 0.5,
+            ease: [0.21, 0.47, 0.32, 0.98],
+          }}
         >
           <div className="text-center">
-            <div className="w-16 h-16 rounded-xl bg-neutral-100 flex items-center justify-center mx-auto mb-3">
-              <Users className="w-8 h-8 text-neutral-700" />
+            <div className="w-16 h-16 rounded-xl bg-neutral-900 flex items-center justify-center mx-auto mb-3">
+              <Users className="w-8 h-8 text-white" />
             </div>
-            <div className="font-medium text-sm text-neutral-900">AI Agents</div>
+            <div className="font-medium text-sm text-neutral-400">
+              AI Agents
+            </div>
           </div>
         </motion.div>
 
@@ -906,13 +952,19 @@ function GramEcosystemAnimation() {
           className="absolute right-0"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: isInView ? 1 : 0, scale: isInView ? 1 : 0.8 }}
-          transition={{ delay: 0.1, duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
+          transition={{
+            delay: 0.1,
+            duration: 0.5,
+            ease: [0.21, 0.47, 0.32, 0.98],
+          }}
         >
           <div className="text-center">
-            <div className="w-16 h-16 rounded-xl bg-neutral-100 flex items-center justify-center mx-auto mb-3">
-              <Layers className="w-8 h-8 text-neutral-700" />
+            <div className="w-16 h-16 rounded-xl bg-neutral-900 flex items-center justify-center mx-auto mb-3">
+              <Layers className="w-8 h-8 text-white" />
             </div>
-            <div className="font-medium text-sm text-neutral-900">Your APIs</div>
+            <div className="font-medium text-sm text-neutral-400">
+              Your APIs
+            </div>
           </div>
         </motion.div>
 
@@ -921,18 +973,18 @@ function GramEcosystemAnimation() {
           className="relative z-10"
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: isInView ? 1 : 0, opacity: isInView ? 1 : 0 }}
-          transition={{ 
-            delay: 0.3, 
+          transition={{
+            delay: 0.3,
             duration: 0.6,
             type: "spring",
             stiffness: 260,
-            damping: 20
+            damping: 20,
           }}
         >
           <div className="w-24 h-24 rounded-2xl relative">
             <div className="absolute inset-0 rounded-2xl bg-gradient-primary" />
             <div className="absolute inset-[3px] rounded-[13px] bg-white flex items-center justify-center shadow-lg">
-              <span className="text-4xl font-display font-light text-neutral-900 relative top-[-2px]">
+              <span className="text-4xl font-display font-light text-neutral-900 relative top-[-4px]">
                 g
               </span>
             </div>
@@ -943,29 +995,29 @@ function GramEcosystemAnimation() {
         <div className="absolute inset-0 flex items-center justify-center">
           {/* Left line */}
           <motion.div
-            className="absolute h-[2px] bg-gradient-to-r from-transparent via-neutral-300 to-neutral-300"
-            style={{ 
-              left: '80px', 
-              right: '50%', 
-              marginRight: '60px',
-              transformOrigin: 'left center' 
+            className="absolute h-[2px] bg-gradient-to-r from-transparent via-neutral-400 to-neutral-400"
+            style={{
+              left: "80px",
+              right: "50%",
+              marginRight: "60px",
+              transformOrigin: "left center",
             }}
             initial={{ scaleX: 0, opacity: 0 }}
-            animate={{ scaleX: isInView ? 1 : 0, opacity: isInView ? 1 : 0 }}
+            animate={{ scaleX: isInView ? 1 : 0, opacity: isInView ? 0.6 : 0 }}
             transition={{ delay: 0.6, duration: 0.4, ease: "easeOut" }}
           />
-          
+
           {/* Right line */}
           <motion.div
-            className="absolute h-[2px] bg-gradient-to-r from-neutral-300 via-neutral-300 to-transparent"
-            style={{ 
-              left: '50%', 
-              marginLeft: '60px', 
-              right: '80px',
-              transformOrigin: 'left center'
+            className="absolute h-[2px] bg-gradient-to-r from-neutral-400 via-neutral-400 to-transparent"
+            style={{
+              left: "50%",
+              marginLeft: "60px",
+              right: "80px",
+              transformOrigin: "left center",
             }}
             initial={{ scaleX: 0, opacity: 0 }}
-            animate={{ scaleX: isInView ? 1 : 0, opacity: isInView ? 1 : 0 }}
+            animate={{ scaleX: isInView ? 1 : 0, opacity: isInView ? 0.6 : 0 }}
             transition={{ delay: 0.7, duration: 0.4, ease: "easeOut" }}
           />
         </div>
@@ -978,49 +1030,49 @@ function APIToolsSection() {
   const [hoveredFeature, setHoveredFeature] = useState<number>(-1);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
-      <div className="border-r border-border flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12 order-2 md:order-1">
-        <AnimatedAPITransform activeFeature={hoveredFeature} />
-      </div>
-      <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12 order-1 md:order-2">
-        <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
-          Create higher quality tools directly from your API
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
+      <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+        <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6 max-w-3xl">
+          Transform APIs into powerful AI tools
         </h2>
-        <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
+        <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
+          Transform your OpenAPI specs into powerful, well-documented AI tools.
+        </p>
+        <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
           <li
-            className="flex items-start gap-2 sm:gap-3"
+            className="flex items-start gap-3"
             onMouseEnter={() => setHoveredFeature(0)}
             onMouseLeave={() => setHoveredFeature(-1)}
           >
-            <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-              <Code2 className="w-4 h-4 text-black" />
+            <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Code2 className="w-4 h-4 text-neutral-900" />
             </div>
             <span>
-              <span className="underline decoration-dotted underline-offset-2 hover:text-foreground transition-colors">
+              <span className="underline decoration-dotted underline-offset-2 hover:text-neutral-900 transition-colors">
                 Autogenerate tool definitions
               </span>{" "}
               from OpenAPI
             </span>
           </li>
           <li
-            className="flex items-start gap-2 sm:gap-3"
+            className="flex items-start gap-3"
             onMouseEnter={() => setHoveredFeature(1)}
             onMouseLeave={() => setHoveredFeature(-1)}
           >
-            <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-              <Workflow className="w-4 h-4 text-black" />
+            <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Workflow className="w-4 h-4 text-neutral-900" />
             </div>
             <span>
               Craft{" "}
-              <span className="underline decoration-dotted underline-offset-2 hover:text-foreground transition-colors">
+              <span className="underline decoration-dotted underline-offset-2 hover:text-neutral-900 transition-colors">
                 higher order tools
               </span>{" "}
               for complex agentic workflows
             </span>
           </li>
-          <li className="flex items-start gap-2 sm:gap-3">
-            <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-4 h-4 text-black" />
+          <li className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <BookOpen className="w-4 h-4 text-neutral-900" />
             </div>
             <span>
               Catalog and distribute prompt templates to make your tools useful
@@ -1028,6 +1080,9 @@ function APIToolsSection() {
             </span>
           </li>
         </ul>
+      </div>
+      <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+        <AnimatedAPITransform activeFeature={hoveredFeature} />
       </div>
     </div>
   );
@@ -1037,7 +1092,9 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, amount: 0.5 });
   const [hasTransformed, setHasTransformed] = useState(false);
-  const [hoveredCard, setHoveredCard] = useState<'spec' | 'tools' | 'higher' | null>(null);
+  const [hoveredCard, setHoveredCard] = useState<
+    "spec" | "tools" | "higher" | null
+  >(null);
 
   useEffect(() => {
     if (isInView && !hasTransformed) {
@@ -1053,21 +1110,66 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
     <div ref={ref} className="w-full max-w-lg">
       <div className="relative h-[280px] sm:h-[320px] md:h-[340px]">
         {/* Background: OpenAPI Spec */}
-        <motion.div 
-          className={`absolute left-[12.5%] top-[10%] w-[75%] bg-gradient-to-br from-neutral-100 to-neutral-50 rounded-xl overflow-hidden border border-neutral-200 ${hasTransformed ? 'cursor-pointer' : ''}`}
-          onMouseEnter={() => hasTransformed && setHoveredCard('spec')}
+        <motion.div
+          className={`absolute left-[12.5%] top-[10%] w-[75%] bg-gradient-to-br from-neutral-100 to-neutral-50 rounded-xl overflow-hidden border border-neutral-200 ${
+            hasTransformed ? "cursor-pointer" : ""
+          }`}
+          onMouseEnter={() => hasTransformed && setHoveredCard("spec")}
           onMouseLeave={() => setHoveredCard(null)}
           style={{
-            zIndex: hoveredCard === 'spec' ? 20 : 1,
-            boxShadow: hoveredCard === 'spec' ? '0px 20px 40px rgba(0,0,0,0.15), 0px 8px 16px rgba(0,0,0,0.1)' : '0px 2px 4px rgba(0,0,0,0.05)',
+            zIndex: hoveredCard === "spec" ? 20 : 1,
+            boxShadow:
+              hoveredCard === "spec"
+                ? "0px 20px 40px rgba(0,0,0,0.15), 0px 8px 16px rgba(0,0,0,0.1)"
+                : "0px 2px 4px rgba(0,0,0,0.05)",
           }}
           animate={{
-            scale: !hasTransformed ? 1 : (hoveredCard === 'spec' ? 1.02 : showHigherOrder ? 0.96 : 0.98),
-            filter: !hasTransformed ? "blur(0px)" : (hoveredCard === 'spec' ? "blur(0px)" : (hoveredCard === 'tools' || hoveredCard === 'higher' || showHigherOrder) ? "blur(2.5px)" : "blur(1.5px)"),
-            opacity: !hasTransformed ? 1 : (hoveredCard === 'spec' ? 1 : (hoveredCard === 'tools' || hoveredCard === 'higher' || showHigherOrder) ? 0.7 : 0.85),
-            x: !hasTransformed ? 0 : (hoveredCard === 'spec' ? "-10%" : showHigherOrder ? "-15%" : "-12.5%"),
-            y: !hasTransformed ? 0 : (hoveredCard === 'spec' ? 20 : showHigherOrder ? 40 : 30),
-            rotate: !hasTransformed ? 0 : (hoveredCard === 'spec' ? 0 : showHigherOrder ? -1.5 : -1),
+            scale: !hasTransformed
+              ? 1
+              : hoveredCard === "spec"
+              ? 1.02
+              : showHigherOrder
+              ? 0.96
+              : 0.98,
+            filter: !hasTransformed
+              ? "blur(0px)"
+              : hoveredCard === "spec"
+              ? "blur(0px)"
+              : hoveredCard === "tools" ||
+                hoveredCard === "higher" ||
+                showHigherOrder
+              ? "blur(2.5px)"
+              : "blur(1.5px)",
+            opacity: !hasTransformed
+              ? 1
+              : hoveredCard === "spec"
+              ? 1
+              : hoveredCard === "tools" ||
+                hoveredCard === "higher" ||
+                showHigherOrder
+              ? 0.7
+              : 0.85,
+            x: !hasTransformed
+              ? 0
+              : hoveredCard === "spec"
+              ? "-10%"
+              : showHigherOrder
+              ? "-15%"
+              : "-12.5%",
+            y: !hasTransformed
+              ? 0
+              : hoveredCard === "spec"
+              ? 20
+              : showHigherOrder
+              ? 40
+              : 30,
+            rotate: !hasTransformed
+              ? 0
+              : hoveredCard === "spec"
+              ? 0
+              : showHigherOrder
+              ? -1.5
+              : -1,
           }}
           transition={{
             duration: hoveredCard !== null ? 0.3 : showHigherOrder ? 0.5 : 0.6,
@@ -1076,12 +1178,27 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
         >
           <div className="flex items-center gap-2 p-2 sm:p-3 bg-white border-b border-neutral-200">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="2" y="3" width="12" height="10" rx="1" className="stroke-neutral-400" strokeWidth="1.5"/>
-              <path d="M5 6.5H11M5 9.5H9" className="stroke-neutral-400" strokeWidth="1.5" strokeLinecap="round"/>
+              <rect
+                x="2"
+                y="3"
+                width="12"
+                height="10"
+                rx="1"
+                className="stroke-neutral-400"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M5 6.5H11M5 9.5H9"
+                className="stroke-neutral-400"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
-            <span className="text-[10px] sm:text-xs font-medium text-neutral-700">PETSTORE.YAML</span>
+            <span className="text-[10px] sm:text-xs font-medium text-neutral-700">
+              PETSTORE.YAML
+            </span>
           </div>
-          
+
           <div className="p-3 sm:p-4 font-mono text-[10px] sm:text-[11px] leading-[1.25] space-y-0.5">
             <div className="flex">
               <span className="text-neutral-400 mr-2 select-none">1</span>
@@ -1132,32 +1249,55 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
 
         {/* Foreground: AI Tools */}
         <motion.div
-          className={`absolute right-0 top-8 sm:top-12 w-[78%] ${hasTransformed ? 'cursor-pointer' : ''}`}
-          onMouseEnter={() => hasTransformed && setHoveredCard('tools')}
+          className={`absolute right-0 top-8 sm:top-12 w-[78%] ${
+            hasTransformed ? "cursor-pointer" : ""
+          }`}
+          onMouseEnter={() => hasTransformed && setHoveredCard("tools")}
           onMouseLeave={() => setHoveredCard(null)}
           style={{
-            zIndex: hoveredCard === 'spec' ? 5 : 10,
+            zIndex: hoveredCard === "spec" ? 5 : 10,
           }}
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ 
-            opacity: hasTransformed ? (hoveredCard === 'spec' ? 0.7 : (hoveredCard === 'higher' || showHigherOrder) ? 0.85 : 1) : 0,
+          animate={{
+            opacity: hasTransformed
+              ? hoveredCard === "spec"
+                ? 0.7
+                : hoveredCard === "higher" || showHigherOrder
+                ? 0.85
+                : 1
+              : 0,
             y: hasTransformed ? (showHigherOrder ? 10 : 0) : 20,
             x: showHigherOrder ? -8 : 0,
-            scale: hasTransformed ? (hoveredCard === 'tools' ? 1.01 : showHigherOrder ? 0.98 : 1) : 0.95,
-            filter: hoveredCard === 'spec' ? "blur(1px)" : (hoveredCard === 'higher' || showHigherOrder) ? "blur(1.5px)" : "blur(0px)",
+            scale: hasTransformed
+              ? hoveredCard === "tools"
+                ? 1.01
+                : showHigherOrder
+                ? 0.98
+                : 1
+              : 0.95,
+            filter:
+              hoveredCard === "spec"
+                ? "blur(1px)"
+                : hoveredCard === "higher" || showHigherOrder
+                ? "blur(1.5px)"
+                : "blur(0px)",
           }}
-          transition={{ 
+          transition={{
             duration: hoveredCard !== null ? 0.3 : showHigherOrder ? 0.5 : 0.6,
             ease: [0.23, 1, 0.32, 1],
-            delay: hasTransformed && hoveredCard === null && !showHigherOrder ? 0.1 : 0
+            delay:
+              hasTransformed && hoveredCard === null && !showHigherOrder
+                ? 0.1
+                : 0,
           }}
         >
-          <motion.div 
+          <motion.div
             className="w-full bg-white rounded-xl overflow-hidden border border-neutral-200"
             animate={{
-              boxShadow: hoveredCard === 'tools' 
-                ? '0px 20px 40px rgba(0,0,0,0.12), 0px 8px 16px rgba(0,0,0,0.08)' 
-                : '0px 16px 32px rgba(0,0,0,0.1), 0px 4px 8px rgba(0,0,0,0.05)'
+              boxShadow:
+                hoveredCard === "tools"
+                  ? "0px 20px 40px rgba(0,0,0,0.12), 0px 8px 16px rgba(0,0,0,0.08)"
+                  : "0px 16px 32px rgba(0,0,0,0.1), 0px 4px 8px rgba(0,0,0,0.05)",
             }}
             transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
           >
@@ -1173,37 +1313,53 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
                 <CheckCircle className="w-4 h-4 text-success-600" />
               </motion.div>
             </div>
-            
+
             <div className="p-3 sm:p-4 overflow-hidden">
               <div className="space-y-1.5 overflow-hidden">
-                {hasTransformed && [
-                  { name: "findPetById", desc: "GET /pet/{id}", color: "blue" },
-                  { name: "deletePet", desc: "DELETE /pet/{id}", color: "red" },
-                  { name: "addPet", desc: "POST /pet", color: "green" },
-                ].map((tool, index) => (
-                  <motion.div
-                    key={tool.name}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.5 + index * 0.08, duration: 0.3 }}
-                    className="flex items-center gap-3 p-2 rounded-md"
-                  >
-                    <div className={`w-1.5 h-1.5 rounded-full ${
-                      tool.color === 'blue' ? 'bg-brand-blue-500' :
-                      tool.color === 'green' ? 'bg-brand-green-500' :
-                      tool.color === 'yellow' ? 'bg-warning-500' :
-                      tool.color === 'red' ? 'bg-brand-red-500' : ''
-                    }`} />
-                    <div className="flex-1">
-                      <div className="font-mono text-[10px] sm:text-[11px] text-neutral-900">
-                        {tool.name}
+                {hasTransformed &&
+                  [
+                    {
+                      name: "findPetById",
+                      desc: "GET /pet/{id}",
+                      color: "blue",
+                    },
+                    {
+                      name: "deletePet",
+                      desc: "DELETE /pet/{id}",
+                      color: "red",
+                    },
+                    { name: "addPet", desc: "POST /pet", color: "green" },
+                  ].map((tool, index) => (
+                    <motion.div
+                      key={tool.name}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.5 + index * 0.08, duration: 0.3 }}
+                      className="flex items-center gap-3 p-2 rounded-md"
+                    >
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          tool.color === "blue"
+                            ? "bg-brand-blue-500"
+                            : tool.color === "green"
+                            ? "bg-brand-green-500"
+                            : tool.color === "yellow"
+                            ? "bg-warning-500"
+                            : tool.color === "red"
+                            ? "bg-brand-red-500"
+                            : ""
+                        }`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-mono text-[10px] sm:text-[11px] text-neutral-900">
+                          {tool.name}
+                        </div>
+                        <div className="text-[8px] sm:text-[9px] text-neutral-500">
+                          {tool.desc}
+                        </div>
                       </div>
-                      <div className="text-[8px] sm:text-[9px] text-neutral-500">
-                        {tool.desc}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  ))}
               </div>
             </div>
           </motion.div>
@@ -1211,29 +1367,36 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
 
         {/* Third Layer: Higher Order Tools */}
         <motion.div
-          className={`absolute right-0 top-8 sm:top-12 w-[72%] ${showHigherOrder ? 'cursor-pointer' : ''}`}
-          onMouseEnter={() => showHigherOrder && setHoveredCard('higher')}
+          className={`absolute right-0 top-8 sm:top-12 w-[72%] ${
+            showHigherOrder ? "cursor-pointer" : ""
+          }`}
+          onMouseEnter={() => showHigherOrder && setHoveredCard("higher")}
           onMouseLeave={() => setHoveredCard(null)}
           style={{
             zIndex: showHigherOrder ? 30 : 0,
           }}
           initial={{ opacity: 0, y: 40, scale: 0.9 }}
-          animate={{ 
+          animate={{
             opacity: showHigherOrder ? 1 : 0,
             y: showHigherOrder ? 0 : 40,
-            scale: showHigherOrder ? (hoveredCard === 'higher' ? 1.02 : 1) : 0.9,
+            scale: showHigherOrder
+              ? hoveredCard === "higher"
+                ? 1.02
+                : 1
+              : 0.9,
           }}
-          transition={{ 
+          transition={{
             duration: 0.5,
             ease: [0.23, 1, 0.32, 1],
           }}
         >
-          <motion.div 
+          <motion.div
             className="w-full bg-white rounded-xl overflow-hidden border border-neutral-200"
             animate={{
-              boxShadow: hoveredCard === 'higher' 
-                ? '0px 32px 64px rgba(0,0,0,0.2), 0px 16px 32px rgba(0,0,0,0.15)' 
-                : '0px 24px 48px rgba(0,0,0,0.15), 0px 12px 24px rgba(0,0,0,0.1)'
+              boxShadow:
+                hoveredCard === "higher"
+                  ? "0px 32px 64px rgba(0,0,0,0.2), 0px 16px 32px rgba(0,0,0,0.15)"
+                  : "0px 24px 48px rgba(0,0,0,0.15), 0px 12px 24px rgba(0,0,0,0.1)",
             }}
             transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
           >
@@ -1249,7 +1412,7 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
                 <Workflow className="w-4 h-4 text-brand-blue-600" />
               </motion.div>
             </div>
-            
+
             <div className="p-3 sm:p-4 overflow-hidden">
               <div className="space-y-3">
                 <motion.div
@@ -1268,7 +1431,7 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
                     </div>
                   </div>
                 </motion.div>
-                
+
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -1744,132 +1907,333 @@ export default function Home() {
         </div>
       </div>
 
-      <section className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-16 sm:py-24 space-y-16 sm:space-y-24">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
-          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12">
-            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-4">
-              Easiest way to host MCP at scale
-            </h2>
-            <p className="text-sm sm:text-base text-neutral-600 mb-6">
-              High quality Agentic Tools. Enterprise Experience.
-            </p>
-            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60">
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-black" />
-                </div>
-                <span>1-click hosting of Toolsets as MCP servers</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Key className="w-4 h-4 text-black" />
-                </div>
-                <span>
-                  Support for managed and passthrough API authentication
-                </span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-4 h-4 text-black" />
-                </div>
-                <span>Built in telemetry, audit logs</span>
-              </li>
-            </ul>
-          </div>
-          <div className="border-l border-neutral-200 flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12">
-            <AnimatedToolCard />
+      <section className="w-full py-24 sm:py-32 lg:py-40 relative">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative">
+          {/* Center divider line - moved outside to span full section */}
+          <div className="absolute left-1/2 top-0 bottom-0 w-px bg-neutral-200 -translate-x-1/2 hidden md:block" />
+
+          {/* Decoration squares where center line meets container top/bottom */}
+          <div
+            className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-20"
+            style={{
+              width: 10,
+              height: 10,
+              background: "var(--color-background)",
+              border: "2px solid var(--color-neutral-200)",
+              borderRadius: 2,
+            }}
+          />
+          <div
+            className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 hidden md:block z-20"
+            style={{
+              width: 10,
+              height: 10,
+              background: "var(--color-background)",
+              border: "2px solid var(--color-neutral-200)",
+              borderRadius: 2,
+            }}
+          />
+
+          <div className="relative space-y-24 sm:space-y-32 lg:space-y-40">
+            <GridOverlay inset="0" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
+              <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+                <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6">
+                  Easiest way to host MCP at scale
+                </h2>
+                <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
+                  High quality Agentic Tools. Enterprise Experience.
+                </p>
+                <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Zap className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>1-click hosting of Toolsets as MCP servers</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Key className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>
+                      Support for managed and passthrough API authentication
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Activity className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>Built in telemetry, audit logs</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+                <AnimatedToolCard />
+              </div>
+            </div>
+
+            {/* Section divider */}
+            <div className="relative h-0">
+              {/* Left horizontal line - extends to center + 15px */}
+              <div
+                className="absolute left-0 top-0 h-px hidden md:block"
+                style={{
+                  right: "calc(50% - 15px)",
+                  background: "var(--color-neutral-200)",
+                }}
+              />
+              {/* Right horizontal line - extends from center + 15px */}
+              <div
+                className="absolute right-0 top-0 h-px hidden md:block"
+                style={{
+                  left: "calc(50% - 15px)",
+                  background: "var(--color-neutral-200)",
+                }}
+              />
+              {/* Mobile version - single line */}
+              <div className="absolute inset-x-0 top-0 h-px bg-neutral-200 md:hidden" />
+
+              {/* Decoration squares - left edge, center, right edge */}
+              <div
+                className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+              <div
+                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+              <div
+                className="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+            </div>
+
+            <APIToolsSection />
+
+            {/* Section divider */}
+            <div className="relative h-0">
+              {/* Left horizontal line - extends to center + 15px */}
+              <div
+                className="absolute left-0 top-0 h-px hidden md:block"
+                style={{
+                  right: "calc(50% - 15px)",
+                  background: "var(--color-neutral-200)",
+                }}
+              />
+              {/* Right horizontal line - extends from center + 15px */}
+              <div
+                className="absolute right-0 top-0 h-px hidden md:block"
+                style={{
+                  left: "calc(50% - 15px)",
+                  background: "var(--color-neutral-200)",
+                }}
+              />
+              {/* Mobile version - single line */}
+              <div className="absolute inset-x-0 top-0 h-px bg-neutral-200 md:hidden" />
+
+              {/* Decoration squares - left edge, center, right edge */}
+              <div
+                className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+              <div
+                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+              <div
+                className="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
+              <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+                <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6 max-w-3xl">
+                  Curate Toolsets for every usecase
+                </h2>
+                <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
+                  Organize and optimize your tools for different teams and
+                  workflows.
+                </p>
+                <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Layers className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>Easily group tools into Toolsets</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Shuffle className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>Remix tools across your APIs and 3P services</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Users className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>Scope tool use for teams</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <CheckCircle className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>Instantly test and run evals for quality</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+                <CurateToolsetsAnimation />
+              </div>
+            </div>
+
+            {/* Section divider */}
+            <div className="relative h-0">
+              {/* Left horizontal line - extends to center + 15px */}
+              <div
+                className="absolute left-0 top-0 h-px hidden md:block"
+                style={{
+                  right: "calc(50% - 15px)",
+                  background: "var(--color-neutral-200)",
+                }}
+              />
+              {/* Right horizontal line - extends from center + 15px */}
+              <div
+                className="absolute right-0 top-0 h-px hidden md:block"
+                style={{
+                  left: "calc(50% - 15px)",
+                  background: "var(--color-neutral-200)",
+                }}
+              />
+              {/* Mobile version - single line */}
+              <div className="absolute inset-x-0 top-0 h-px bg-neutral-200 md:hidden" />
+
+              {/* Decoration squares - left edge, center, right edge */}
+              <div
+                className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+              <div
+                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+              <div
+                className="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: "var(--color-background)",
+                  border: "2px solid var(--color-neutral-200)",
+                  borderRadius: 2,
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
+              <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+                <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6 max-w-3xl">
+                  Enterprise-grade tool distribution
+                </h2>
+                <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
+                  Secure, scalable infrastructure for tool deployment and
+                  management.
+                </p>
+                <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Zap className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>1-click hosting of Toolsets as MCP servers</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Key className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>
+                      Support for managed and passthrough API authentication
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Activity className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>Built in telemetry, audit logs</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
+                <StackedMetricCards />
+              </div>
+            </div>
           </div>
         </div>
+      </section>
 
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <APIToolsSection />
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
-          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12">
-            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
-              Curate Toolsets for every usecase
+      {/* Pre-footer CTA section */}
+      <section className="w-full py-28 sm:py-36 lg:py-44 bg-black relative overflow-hidden">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col items-center text-center">
+            <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-8 sm:mb-12 max-w-4xl mx-auto text-white">
+              Build AI that works. Unlock API and Data for Agents. Secure and
+              Composable.
             </h2>
-            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Layers className="w-4 h-4 text-black" />
-                </div>
-                <span>Easily group tools into Toolsets</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Shuffle className="w-4 h-4 text-black" />
-                </div>
-                <span>Remix tools across your APIs and 3P services</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Users className="w-4 h-4 text-black" />
-                </div>
-                <span>Scope tool use for teams</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-4 h-4 text-black" />
-                </div>
-                <span>Instantly test and run evals for quality</span>
-              </li>
-            </ul>
+            <GramEcosystemAnimation />
           </div>
-          <div className="border-l border-border flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12">
-            <CurateToolsetsAnimation />
-          </div>
-        </div>
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
-          <div className="border-r border-border flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12 order-2 md:order-1">
-            <StackedMetricCards />
-          </div>
-          <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12 order-1 md:order-2">
-            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
-              Distribute tools through an Enterprise ready Tools Gateway
-            </h2>
-            <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-black" />
-                </div>
-                <span>1-click hosting of Toolsets as MCP servers</span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Key className="w-4 h-4 text-black" />
-                </div>
-                <span>
-                  Support for managed and passthrough API authentication
-                </span>
-              </li>
-              <li className="flex items-start gap-2 sm:gap-3">
-                <div className="w-6 h-6 rounded-[6px] border border-[#dcdcdc] flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-4 h-4 text-black" />
-                </div>
-                <span>Built in telemetry, audit logs</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div className="border-t" style={{ borderColor: "#dcdcdc" }} />
-
-        <div className="flex flex-col items-center text-center px-2 sm:px-8 py-8 sm:py-12">
-          <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-8 sm:mb-12">
-            Build AI that works. Unlock API and Data for Agents. Secure and
-            Composable.
-          </h2>
-          <GramEcosystemAnimation />
         </div>
       </section>
 
       <footer
         ref={footerRef}
-        className="relative bg-white w-full mt-32 border-t border-neutral-200 overflow-hidden min-h-[400px] flex flex-col justify-center items-center"
+        className="relative bg-neutral-100 w-full border-t border-neutral-200 overflow-hidden min-h-[600px] flex flex-col justify-center items-center"
       >
         <FooterDotsHeroLike
           footerHeadingRef={footerHeadingRef}
@@ -1877,23 +2241,23 @@ export default function Home() {
           footerButtonsRef={footerButtonsRef}
         />
         <div className="relative z-20 w-full pointer-events-none">
-          <div className="flex flex-col items-center justify-center py-20 max-w-2xl mx-auto px-4">
+          <div className="flex flex-col items-center justify-center py-32 sm:py-40 lg:py-48 max-w-2xl mx-auto px-4">
             <h3
               ref={footerHeadingRef}
-              className="text-4xl md:text-5xl font-display font-light text-neutral-900 mb-6 text-center max-w-2xl pointer-events-auto"
+              className="text-4xl md:text-5xl lg:text-6xl font-display font-light text-neutral-900 mb-8 sm:mb-10 text-center max-w-3xl pointer-events-auto"
             >
               Ready to create, curate, and distribute tools for AI?
             </h3>
             <p
               ref={footerDescRef}
-              className="text-lg text-neutral-700 mb-8 text-center max-w-xl pointer-events-auto"
+              className="text-lg sm:text-xl text-neutral-700 mb-10 sm:mb-12 text-center max-w-xl pointer-events-auto leading-relaxed"
             >
               Power your integrations for Agents and LLMs. Join the waitlist or
               book a demo to get started.
             </p>
             <div
               ref={footerButtonsRef}
-              className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-center pointer-events-auto"
+              className="flex flex-col md:flex-row gap-4 w-full md:w-auto justify-center pointer-events-auto"
             >
               <Button
                 size="chunky"
@@ -1912,6 +2276,7 @@ export default function Home() {
             </div>
           </div>
         </div>
+
         <div className="absolute left-0 right-0 bottom-0 h-1 w-full bg-gradient-primary z-20" />
       </footer>
       <AnimatePresence>
