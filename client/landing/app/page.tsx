@@ -101,7 +101,12 @@ const DotComponent = ({
       dragTransition={{ bounceStiffness: 500, bounceDamping: 20 }}
       dragElastic={1}
       onDragStart={() => setActive({ row: dot.row, col: dot.col })}
+      onDrag={(_, info) => {
+        dragX.set(info.offset.x);
+        dragY.set(info.offset.y);
+      }}
       onDragEnd={() => {
+        setActive({ row: -1, col: -1 });
         dragX.set(0);
         dragY.set(0);
       }}
@@ -377,10 +382,9 @@ function FooterDotsHeroLike({
     <div
       ref={containerRef}
       id="footerDotGrid"
-      className={`absolute inset-0 overflow-hidden transition-opacity duration-300 z-0 ${
+      className={`absolute inset-0 overflow-hidden transition-opacity duration-300 ${
         isResizing ? "opacity-0" : "opacity-100"
       }`}
-      aria-hidden="true"
     >
       {isVisible &&
         dots.map((dot) => (
@@ -405,122 +409,174 @@ function AnimatedToolCard() {
     amount: 0.5,
   });
   const TOOL_COUNT = 17;
+  const [isDeploying, setIsDeploying] = useState(false);
   const [isDeployed, setIsDeployed] = useState(false);
 
-  useEffect(() => {
-    if (isInView && !isDeployed) {
+  const handleDeploy = () => {
+    if (!isDeploying && !isDeployed) {
+      setIsDeploying(true);
       setTimeout(() => {
         setIsDeployed(true);
-      }, 800);
+        setIsDeploying(false);
+      }, 1200);
     }
-  }, [isInView, isDeployed]);
+  };
+
+  // Auto-click the button after a delay when in view
+  useEffect(() => {
+    if (isInView && !isDeployed && !isDeploying) {
+      const timer = setTimeout(() => {
+        handleDeploy();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isInView]);
 
   return (
-    <div
-      ref={ref}
-      className="bg-background-pure rounded-2xl shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] border border-[var(--color-neutral-200)] p-8 w-full max-w-sm flex flex-col gap-6 relative overflow-hidden"
-    >
-      <div className="flex items-center gap-4 w-full">
-        <motion.div
-          className="w-12 h-12 rounded-xl bg-white border border-[var(--color-neutral-200)] flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)]"
-          whileHover={{ scale: 1.05 }}
-          transition={{ type: "spring", stiffness: 400, damping: 10 }}
+    <div ref={ref} className="w-full max-w-sm">
+      <div className="relative space-y-4">
+        {/* Deploy Button */}
+        <motion.div 
+          className="flex justify-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: isInView ? 1 : 0, y: isInView ? 0 : 20 }}
+          transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
         >
-          <span className="text-xl font-display font-light text-[var(--color-neutral-900)] -mt-1">
-            g
-          </span>
-        </motion.div>
-        <div className="flex-1 min-w-0">
-          <h3 className="truncate text-lg font-medium text-[var(--color-neutral-900)]">
-            Your MCP
-          </h3>
-        </div>
-        <motion.div
-          className="w-3 h-3 rounded-full relative"
-          animate={{
-            backgroundColor: isDeployed
-              ? "var(--color-success-500)"
-              : "var(--color-neutral-300)",
-          }}
-          transition={{ duration: 0.3 }}
-        >
-          {isDeployed && (
-            <motion.div
-              className="absolute inset-0 w-3 h-3 bg-[var(--color-success-400)] rounded-full"
+          <motion.button
+            className="relative px-6 py-2.5 rounded-full font-mono text-xs uppercase tracking-wider text-neutral-800 overflow-hidden"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.98 }}
+            animate={{
+              boxShadow: isDeploying 
+                ? "0px 8px 16px rgba(0,0,0,0.1)" 
+                : isDeployed
+                ? "0px 2px 4px rgba(0,0,0,0.05)"
+                : "0px 4px 8px rgba(0,0,0,0.05)",
+              scale: isDeploying ? 0.95 : 1,
+            }}
+            onClick={handleDeploy}
+            disabled={isDeployed}
+          >
+            {/* Rainbow border effect */}
+            <motion.div 
+              className="absolute inset-0 p-[1px] rounded-full bg-gradient-primary -z-10"
               animate={{
-                scale: [1, 1.5, 1.5],
-                opacity: [1, 0, 0],
+                opacity: isDeployed ? 0.5 : 1,
               }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                times: [0, 0.5, 1],
-                ease: "easeOut",
-              }}
+              transition={{ duration: 0.5 }}
             />
-          )}
+            <div className="absolute inset-[1px] rounded-full bg-white -z-10" />
+            
+            <span className="relative z-10">
+              {isDeployed ? "Server Deployed" : isDeploying ? "Deploying..." : "Deploy Server"}
+            </span>
+          </motion.button>
         </motion.div>
-      </div>
 
-      <div className="flex-1 flex items-center justify-center min-h-[140px]">
-        <div className="relative">
-          <motion.p
-            className="text-base text-[var(--color-neutral-500)] absolute inset-0 flex items-center justify-center"
-            animate={{
-              opacity: !isDeployed ? 1 : 0,
-              scale: !isDeployed ? 1 : 0.8,
-            }}
-            transition={{ duration: 0.3 }}
-          >
-            Deploying...
-          </motion.p>
-
-          <motion.div
-            className="flex flex-col items-center justify-center gap-2"
-            animate={{
-              opacity: isDeployed ? 1 : 0,
-              scale: isDeployed ? 1 : 1.2,
-            }}
-            transition={{ duration: 0.3 }}
-          >
-            <AnimateNumber
-              className="text-5xl font-mono font-light text-[var(--color-neutral-900)] tabular-nums leading-none"
-              transition={{
-                visualDuration: 1.2,
-                type: "spring",
-                bounce: 0.25,
-              }}
-            >
-              {isDeployed ? TOOL_COUNT : 0}
-            </AnimateNumber>
-            <motion.p
-              className="text-sm text-[var(--color-neutral-600)]"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{
-                opacity: isDeployed ? 1 : 0,
-                y: isDeployed ? 0 : -10,
-              }}
-              transition={{ duration: 0.3, delay: 0.1 }}
-            >
-              tools
-            </motion.p>
-          </motion.div>
-        </div>
-      </div>
-
-      <div className="text-center h-5">
-        <motion.p
-          className="text-sm text-[var(--color-neutral-600)]"
-          animate={{
-            opacity: isDeployed ? 1 : 0,
+        {/* MCP Server Card */}
+        <motion.div
+          className="bg-white rounded-xl border border-neutral-200 overflow-hidden"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ 
+            opacity: isInView ? 1 : 0,
+            scale: isInView ? 1 : 0.95,
           }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.6, delay: 0.2, ease: [0.23, 1, 0.32, 1] }}
+          whileHover={{ 
+            boxShadow: "0px 16px 32px rgba(0,0,0,0.1), 0px 4px 8px rgba(0,0,0,0.05)",
+          }}
         >
-          <span className="font-mono text-[var(--color-success-700)]">
-            12ms
-          </span>{" "}
-          response time
-        </motion.p>
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center">
+                <span className="text-sm font-display text-neutral-700">g</span>
+              </div>
+              <h3 className="text-sm font-medium text-neutral-900">MCP Server</h3>
+            </div>
+            <motion.div
+              className="w-2 h-2 rounded-full relative"
+              animate={{
+                backgroundColor: isDeployed ? "#10b981" : "#e5e5e5",
+              }}
+              transition={{ duration: 0.3 }}
+            >
+              {isDeployed && (
+                <motion.div
+                  className="absolute inset-0 w-2 h-2 bg-success-500 rounded-full"
+                  animate={{
+                    scale: [1, 2, 2],
+                    opacity: [0.8, 0, 0],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeOut",
+                  }}
+                />
+              )}
+            </motion.div>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center justify-center min-h-[120px]">
+              <AnimatePresence mode="wait">
+                {!isDeployed ? (
+                  <motion.div
+                    key="waiting"
+                    className="text-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="text-sm text-neutral-500">
+                      {isDeploying ? "Deploying your MCP server..." : "Ready to deploy"}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="deployed"
+                    className="text-center space-y-4"
+                    initial={{ opacity: 0, scale: 1.1 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div>
+                      <AnimateNumber
+                        className="text-4xl font-mono text-neutral-900 tabular-nums"
+                        transition={{
+                          visualDuration: 1.2,
+                          type: "spring",
+                          bounce: 0.25,
+                        }}
+                      >
+                        {isDeployed ? TOOL_COUNT : 0}
+                      </AnimateNumber>
+                      <div className="text-xs text-neutral-500 mt-1">tools available</div>
+                    </div>
+                    
+                    <div className="flex items-center justify-center gap-4 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="w-1 h-1 rounded-full bg-success-500" />
+                        <span className="text-neutral-600">
+                          <span className="font-mono text-success-700">12ms</span> avg
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-1 h-1 rounded-full bg-brand-blue-500" />
+                        <span className="text-neutral-600">
+                          <span className="font-mono text-brand-blue-700">99.9%</span> uptime
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -540,7 +596,7 @@ function StackedMetricCards() {
       title: "Requests/hour",
       value: "18.2k",
       change: "↑ 47%",
-      changeColor: "text-[var(--color-success-600)]",
+      changeColor: "text-success-600",
       position: { x: "0%", y: "0%" },
       rotate: -2,
       chart: (
@@ -550,8 +606,8 @@ function StackedMetricCards() {
               key={i}
               className={`flex-1 rounded-sm min-w-0 ${
                 i >= 6
-                  ? "bg-[var(--color-success-500)]"
-                  : "bg-[var(--color-neutral-200)]"
+                  ? "bg-success-500"
+                  : "bg-neutral-200"
               }`}
               style={{ height: `${height}%` }}
             />
@@ -564,24 +620,24 @@ function StackedMetricCards() {
       title: "Response time",
       value: "12ms",
       change: "p99",
-      changeColor: "text-[var(--color-info-600)]",
+      changeColor: "text-info-600",
       position: { x: "45%", y: "15%" },
       rotate: 1.5,
       chart: (
         <div className="space-y-1.5 w-full">
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-[10px] text-[var(--color-neutral-500)] flex-shrink-0">p50</span>
-            <div className="flex-1 h-1.5 bg-[var(--color-neutral-100)] rounded-full overflow-hidden min-w-0">
-              <div className="h-full bg-[var(--color-info-400)] rounded-full" style={{ width: '35%' }} />
+            <span className="text-[10px] text-neutral-500 flex-shrink-0">p50</span>
+            <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden min-w-0">
+              <div className="h-full bg-info-400 rounded-full" style={{ width: '35%' }} />
             </div>
-            <span className="text-[10px] text-[var(--color-neutral-700)] font-mono flex-shrink-0">8ms</span>
+            <span className="text-[10px] text-neutral-700 font-mono flex-shrink-0">8ms</span>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-[10px] text-[var(--color-neutral-500)] flex-shrink-0">p99</span>
-            <div className="flex-1 h-1.5 bg-[var(--color-neutral-100)] rounded-full overflow-hidden min-w-0">
-              <div className="h-full bg-[var(--color-info-500)] rounded-full" style={{ width: '60%' }} />
+            <span className="text-[10px] text-neutral-500 flex-shrink-0">p99</span>
+            <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden min-w-0">
+              <div className="h-full bg-info-500 rounded-full" style={{ width: '60%' }} />
             </div>
-            <span className="text-[10px] text-[var(--color-neutral-700)] font-mono flex-shrink-0">12ms</span>
+            <span className="text-[10px] text-neutral-700 font-mono flex-shrink-0">12ms</span>
           </div>
         </div>
       ),
@@ -591,7 +647,7 @@ function StackedMetricCards() {
       title: "Uptime",
       value: "99.9%",
       change: "SLA",
-      changeColor: "text-[var(--color-success-600)]",
+      changeColor: "text-success-600",
       position: { x: "20%", y: "50%" },
       rotate: -1,
       chart: (
@@ -601,12 +657,12 @@ function StackedMetricCards() {
               <div
                 key={i}
                 className={`aspect-square rounded-sm ${
-                  i === 14 ? "bg-[var(--color-warning-400)]" : "bg-[var(--color-success-400)]"
+                  i === 14 ? "bg-warning-400" : "bg-success-400"
                 }`}
               />
             ))}
           </div>
-          <p className="text-[9px] text-[var(--color-neutral-500)] mt-1.5">
+          <p className="text-[9px] text-neutral-500 mt-1.5">
             Last 28 days
           </p>
         </>
@@ -680,7 +736,7 @@ function StackedMetricCards() {
             onMouseLeave={() => setHoveredCard(null)}
           >
             <motion.div 
-              className="bg-background-pure rounded-xl border border-[var(--color-neutral-200)] p-3 sm:p-4 md:p-5 cursor-pointer"
+              className="bg-background-pure rounded-xl border border-neutral-200 p-3 sm:p-4 md:p-5 cursor-pointer"
               animate={{
                 boxShadow: isHovered 
                   ? "0 20px 40px -8px rgba(0,0,0,0.15), 0 8px 16px -4px rgba(0,0,0,0.08)" 
@@ -690,11 +746,11 @@ function StackedMetricCards() {
             >
               <div className="flex flex-col h-full">
                 <div className="mb-3">
-                  <p className="text-[11px] sm:text-xs text-[var(--color-neutral-600)] mb-1 truncate">
+                  <p className="text-[11px] sm:text-xs text-neutral-600 mb-1 truncate">
                     {card.title}
                   </p>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-xl sm:text-2xl font-mono text-[var(--color-neutral-900)] font-light">
+                    <p className="text-xl sm:text-2xl font-mono text-neutral-900 font-light">
                       {card.value}
                     </p>
                     <span className={`text-[10px] sm:text-xs ${card.changeColor} flex-shrink-0`}>
@@ -763,7 +819,7 @@ function CurateToolsetsAnimation() {
         {toolsets.map((toolset, index) => (
           <motion.div
             key={toolset.id}
-            className="bg-white rounded-xl p-4 border border-[var(--color-neutral-200)]"
+            className="bg-white rounded-xl p-4 border border-neutral-200"
             initial={{ opacity: 0, y: 20 }}
             animate={{ 
               opacity: isInView ? 1 : 0, 
@@ -776,16 +832,16 @@ function CurateToolsetsAnimation() {
             }}
           >
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-[var(--color-neutral-100)] flex items-center justify-center">
-                <span className="text-xs font-bold text-[var(--color-neutral-700)]">
+              <div className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center">
+                <span className="text-xs font-bold text-neutral-700">
                   {toolset.icon}
                 </span>
               </div>
               <div>
-                <div className="text-sm font-medium text-[var(--color-neutral-900)]">
+                <div className="text-sm font-medium text-neutral-900">
                   {toolset.name}
                 </div>
-                <div className="text-xs text-[var(--color-neutral-500)]">
+                <div className="text-xs text-neutral-500">
                   {toolset.tools.filter(t => t.type === "internal").length} internal, {toolset.tools.filter(t => t.type === "external").length} external
                 </div>
               </div>
@@ -797,8 +853,8 @@ function CurateToolsetsAnimation() {
                   key={tool.name}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium ${
                     tool.type === "internal"
-                      ? "bg-[var(--color-neutral-100)] text-[var(--color-neutral-900)] ring-1 ring-inset ring-[var(--color-neutral-900)]/10"
-                      : "bg-[var(--color-neutral-50)] text-[var(--color-neutral-600)]"
+                      ? "bg-neutral-100 text-neutral-900 ring-1 ring-inset ring-neutral-900/10"
+                      : "bg-neutral-50 text-neutral-600"
                   }`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: isInView ? 1 : 0 }}
@@ -838,10 +894,10 @@ function GramEcosystemAnimation() {
           transition={{ delay: 0, duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
         >
           <div className="text-center">
-            <div className="w-16 h-16 rounded-xl bg-[var(--color-neutral-100)] flex items-center justify-center mx-auto mb-3">
-              <Users className="w-8 h-8 text-[var(--color-neutral-700)]" />
+            <div className="w-16 h-16 rounded-xl bg-neutral-100 flex items-center justify-center mx-auto mb-3">
+              <Users className="w-8 h-8 text-neutral-700" />
             </div>
-            <div className="font-medium text-sm text-[var(--color-neutral-900)]">AI Agents</div>
+            <div className="font-medium text-sm text-neutral-900">AI Agents</div>
           </div>
         </motion.div>
 
@@ -853,10 +909,10 @@ function GramEcosystemAnimation() {
           transition={{ delay: 0.1, duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
         >
           <div className="text-center">
-            <div className="w-16 h-16 rounded-xl bg-[var(--color-neutral-100)] flex items-center justify-center mx-auto mb-3">
-              <Layers className="w-8 h-8 text-[var(--color-neutral-700)]" />
+            <div className="w-16 h-16 rounded-xl bg-neutral-100 flex items-center justify-center mx-auto mb-3">
+              <Layers className="w-8 h-8 text-neutral-700" />
             </div>
-            <div className="font-medium text-sm text-[var(--color-neutral-900)]">Your APIs</div>
+            <div className="font-medium text-sm text-neutral-900">Your APIs</div>
           </div>
         </motion.div>
 
@@ -876,7 +932,7 @@ function GramEcosystemAnimation() {
           <div className="w-24 h-24 rounded-2xl relative">
             <div className="absolute inset-0 rounded-2xl bg-gradient-primary" />
             <div className="absolute inset-[3px] rounded-[13px] bg-white flex items-center justify-center shadow-lg">
-              <span className="text-4xl font-display font-light text-[var(--color-neutral-900)]">
+              <span className="text-4xl font-display font-light text-neutral-900 relative top-[-2px]">
                 g
               </span>
             </div>
@@ -887,7 +943,7 @@ function GramEcosystemAnimation() {
         <div className="absolute inset-0 flex items-center justify-center">
           {/* Left line */}
           <motion.div
-            className="absolute h-[2px] bg-gradient-to-r from-transparent via-[var(--color-neutral-300)] to-[var(--color-neutral-300)]"
+            className="absolute h-[2px] bg-gradient-to-r from-transparent via-neutral-300 to-neutral-300"
             style={{ 
               left: '80px', 
               right: '50%', 
@@ -901,7 +957,7 @@ function GramEcosystemAnimation() {
           
           {/* Right line */}
           <motion.div
-            className="absolute h-[2px] bg-gradient-to-r from-[var(--color-neutral-300)] via-[var(--color-neutral-300)] to-transparent"
+            className="absolute h-[2px] bg-gradient-to-r from-neutral-300 via-neutral-300 to-transparent"
             style={{ 
               left: '50%', 
               marginLeft: '60px', 
@@ -932,7 +988,7 @@ function APIToolsSection() {
         </h2>
         <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60 mb-4 sm:mb-6">
           <li
-            className="flex items-start gap-2 sm:gap-3 cursor-pointer"
+            className="flex items-start gap-2 sm:gap-3"
             onMouseEnter={() => setHoveredFeature(0)}
             onMouseLeave={() => setHoveredFeature(-1)}
           >
@@ -947,7 +1003,7 @@ function APIToolsSection() {
             </span>
           </li>
           <li
-            className="flex items-start gap-2 sm:gap-3 cursor-pointer"
+            className="flex items-start gap-2 sm:gap-3"
             onMouseEnter={() => setHoveredFeature(1)}
             onMouseLeave={() => setHoveredFeature(-1)}
           >
@@ -981,6 +1037,7 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, amount: 0.5 });
   const [hasTransformed, setHasTransformed] = useState(false);
+  const [hoveredCard, setHoveredCard] = useState<'spec' | 'tools' | 'higher' | null>(null);
 
   useEffect(() => {
     if (isInView && !hasTransformed) {
@@ -990,203 +1047,258 @@ function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
     }
   }, [isInView, hasTransformed]);
 
-  // Determine state based on activeFeature prop
-  // -1 or 0: Show basic transformation (OpenAPI -> Tools)
-  // 1: Show higher order tools
-  const showBasicTools = hasTransformed && activeFeature !== 1;
   const showHigherOrder = hasTransformed && activeFeature === 1;
 
   return (
-    <div ref={ref} className="w-full max-w-sm">
-      <motion.div
-        className="relative h-[320px]"
-        animate={{
-          scale: isInView && !hasTransformed ? [1, 1.02, 1] : 1,
-        }}
-        transition={{
-          duration: 1,
-          repeat: isInView && !hasTransformed ? 2 : 0,
-        }}
-      >
-        {/* OpenAPI Spec */}
-        <motion.div
-          className="absolute inset-0"
+    <div ref={ref} className="w-full max-w-lg">
+      <div className="relative h-[280px] sm:h-[320px] md:h-[340px]">
+        {/* Background: OpenAPI Spec */}
+        <motion.div 
+          className={`absolute left-[12.5%] top-[10%] w-[75%] bg-gradient-to-br from-neutral-100 to-neutral-50 rounded-xl overflow-hidden border border-neutral-200 ${hasTransformed ? 'cursor-pointer' : ''}`}
+          onMouseEnter={() => hasTransformed && setHoveredCard('spec')}
+          onMouseLeave={() => setHoveredCard(null)}
+          style={{
+            zIndex: hoveredCard === 'spec' ? 20 : 1,
+            boxShadow: hoveredCard === 'spec' ? '0px 20px 40px rgba(0,0,0,0.15), 0px 8px 16px rgba(0,0,0,0.1)' : '0px 2px 4px rgba(0,0,0,0.05)',
+          }}
           animate={{
-            opacity: !hasTransformed ? 1 : 0,
-            scale: !hasTransformed ? 1 : 0.9,
-            filter: !hasTransformed ? "blur(0px)" : "blur(8px)",
-            rotateY: !hasTransformed ? 0 : -15,
+            scale: !hasTransformed ? 1 : (hoveredCard === 'spec' ? 1.02 : showHigherOrder ? 0.96 : 0.98),
+            filter: !hasTransformed ? "blur(0px)" : (hoveredCard === 'spec' ? "blur(0px)" : (hoveredCard === 'tools' || hoveredCard === 'higher' || showHigherOrder) ? "blur(2.5px)" : "blur(1.5px)"),
+            opacity: !hasTransformed ? 1 : (hoveredCard === 'spec' ? 1 : (hoveredCard === 'tools' || hoveredCard === 'higher' || showHigherOrder) ? 0.7 : 0.85),
+            x: !hasTransformed ? 0 : (hoveredCard === 'spec' ? "-10%" : showHigherOrder ? "-15%" : "-12.5%"),
+            y: !hasTransformed ? 0 : (hoveredCard === 'spec' ? 20 : showHigherOrder ? 40 : 30),
+            rotate: !hasTransformed ? 0 : (hoveredCard === 'spec' ? 0 : showHigherOrder ? -1.5 : -1),
           }}
           transition={{
-            duration: 0.6,
+            duration: hoveredCard !== null ? 0.3 : showHigherOrder ? 0.5 : 0.6,
             ease: [0.23, 1, 0.32, 1],
           }}
-          style={{
-            pointerEvents: !hasTransformed ? "auto" : "none",
-            transformPerspective: 1000,
-          }}
         >
-          <div className="bg-[var(--color-neutral-900)] rounded-xl p-5 h-full font-mono text-[11px] overflow-hidden">
-            <div className="text-[var(--color-neutral-400)] mb-2">
-              openapi: 3.0.0
+          <div className="flex items-center gap-2 p-2 sm:p-3 bg-white border-b border-neutral-200">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="3" width="12" height="10" rx="1" className="stroke-neutral-400" strokeWidth="1.5"/>
+              <path d="M5 6.5H11M5 9.5H9" className="stroke-neutral-400" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="text-[10px] sm:text-xs font-medium text-neutral-700">PETSTORE.YAML</span>
+          </div>
+          
+          <div className="p-3 sm:p-4 font-mono text-[10px] sm:text-[11px] leading-[1.25] space-y-0.5">
+            <div className="flex">
+              <span className="text-neutral-400 mr-2 select-none">1</span>
+              <span className="text-brand-green-600">openapi</span>
+              <span className="text-neutral-600">: </span>
+              <span className="text-brand-blue-600">3.0.0</span>
             </div>
-            <div className="text-[var(--color-neutral-300)] space-y-2">
-              <div>paths:</div>
-              <div className="ml-3 space-y-2">
-                <div>
-                  {"/pet/:id"}:
-                  <div className="ml-3">
-                    <span className="text-[var(--color-brand-blue-400)]">
-                      get
-                    </span>
-                    : findPetById
-                  </div>
-                </div>
-                <div>
-                  /pet:
-                  <div className="ml-3 space-y-1">
-                    <div>
-                      <span className="text-[var(--color-brand-green-400)]">
-                        post
-                      </span>
-                      : addPet
-                    </div>
-                    <div>
-                      <span className="text-[var(--color-brand-yellow-400)]">
-                        put
-                      </span>
-                      : updatePet
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  {"/pet/:id"}:
-                  <div className="ml-3">
-                    <span className="text-[var(--color-brand-red-400)]">
-                      delete
-                    </span>
-                    : deletePet
-                  </div>
-                </div>
-                <div>
-                  /pet/findByStatus:
-                  <div className="ml-3">
-                    <span className="text-[var(--color-brand-blue-400)]">
-                      get
-                    </span>
-                    : findByStatus
-                  </div>
-                </div>
-              </div>
+            <div className="flex">
+              <span className="text-neutral-400 mr-2 select-none">2</span>
+              <span className="text-brand-green-600">paths</span>
+              <span className="text-neutral-600">:</span>
+            </div>
+            <div className="flex">
+              <span className="text-neutral-400 mr-2 select-none">3</span>
+              <span className="ml-2"></span>
+              <span className="text-brand-green-600">/pet/:id</span>
+              <span className="text-neutral-600">:</span>
+            </div>
+            <div className="flex">
+              <span className="text-neutral-400 mr-2 select-none">4</span>
+              <span className="ml-4"></span>
+              <span className="text-brand-green-600">get</span>
+              <span className="text-neutral-600">: </span>
+              <span className="text-brand-blue-600">findPetById</span>
+            </div>
+            <div className="flex">
+              <span className="text-neutral-400 mr-2 select-none">5</span>
+              <span className="ml-4"></span>
+              <span className="text-brand-green-600">delete</span>
+              <span className="text-neutral-600">: </span>
+              <span className="text-brand-blue-600">deletePet</span>
+            </div>
+            <div className="flex">
+              <span className="text-neutral-400 mr-2 select-none">6</span>
+              <span className="ml-2"></span>
+              <span className="text-brand-green-600">/pet</span>
+              <span className="text-neutral-600">:</span>
+            </div>
+            <div className="flex">
+              <span className="text-neutral-400 mr-2 select-none">7</span>
+              <span className="ml-4"></span>
+              <span className="text-brand-green-600">post</span>
+              <span className="text-neutral-600">: </span>
+              <span className="text-brand-blue-600">addPet</span>
             </div>
           </div>
         </motion.div>
 
-        {/* AI Tool */}
+        {/* Foreground: AI Tools */}
         <motion.div
-          className="absolute inset-0"
-          initial={{
-            opacity: 0,
-            scale: 0.8,
-            rotateY: 15,
-          }}
-          animate={{
-            opacity: hasTransformed ? 1 : 0,
-            scale: hasTransformed ? 1 : 0.8,
-            rotateY: hasTransformed ? 0 : 15,
-          }}
-          transition={{
-            duration: 0.7,
-            ease: [0.23, 1, 0.32, 1],
-            delay: hasTransformed ? 0.15 : 0,
-          }}
+          className={`absolute right-0 top-8 sm:top-12 w-[78%] ${hasTransformed ? 'cursor-pointer' : ''}`}
+          onMouseEnter={() => hasTransformed && setHoveredCard('tools')}
+          onMouseLeave={() => setHoveredCard(null)}
           style={{
-            transformPerspective: 1000,
+            zIndex: hoveredCard === 'spec' ? 5 : 10,
+          }}
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ 
+            opacity: hasTransformed ? (hoveredCard === 'spec' ? 0.7 : (hoveredCard === 'higher' || showHigherOrder) ? 0.85 : 1) : 0,
+            y: hasTransformed ? (showHigherOrder ? 10 : 0) : 20,
+            x: showHigherOrder ? -8 : 0,
+            scale: hasTransformed ? (hoveredCard === 'tools' ? 1.01 : showHigherOrder ? 0.98 : 1) : 0.95,
+            filter: hoveredCard === 'spec' ? "blur(1px)" : (hoveredCard === 'higher' || showHigherOrder) ? "blur(1.5px)" : "blur(0px)",
+          }}
+          transition={{ 
+            duration: hoveredCard !== null ? 0.3 : showHigherOrder ? 0.5 : 0.6,
+            ease: [0.23, 1, 0.32, 1],
+            delay: hasTransformed && hoveredCard === null && !showHigherOrder ? 0.1 : 0
           }}
         >
-          <div className="bg-background-pure rounded-xl border border-[var(--color-neutral-200)] p-4 h-full shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-medium text-[var(--color-neutral-900)]">
-                {showHigherOrder ? "Higher Order Tool" : "Auto-generated Tools"}
+          <motion.div 
+            className="w-full bg-white rounded-xl overflow-hidden border border-neutral-200"
+            animate={{
+              boxShadow: hoveredCard === 'tools' 
+                ? '0px 20px 40px rgba(0,0,0,0.12), 0px 8px 16px rgba(0,0,0,0.08)' 
+                : '0px 16px 32px rgba(0,0,0,0.1), 0px 4px 8px rgba(0,0,0,0.05)'
+            }}
+            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+          >
+            <div className="flex items-center justify-between p-2 sm:p-3 border-b border-neutral-200">
+              <h4 className="text-[10px] sm:text-xs font-medium text-neutral-900">
+                Auto-generated Tools
               </h4>
               <motion.div
                 initial={{ scale: 0, rotate: -180 }}
                 animate={{ scale: hasTransformed ? 1 : 0, rotate: 0 }}
                 transition={{ type: "spring", delay: 0.7 }}
               >
-                <div className="w-5 h-5 rounded-full bg-[var(--color-success-100)] flex items-center justify-center">
-                  <CheckCircle className="w-3 h-3 text-[var(--color-success-600)]" />
-                </div>
+                <CheckCircle className="w-4 h-4 text-success-600" />
               </motion.div>
             </div>
+            
+            <div className="p-3 sm:p-4 overflow-hidden">
+              <div className="space-y-1.5 overflow-hidden">
+                {hasTransformed && [
+                  { name: "findPetById", desc: "GET /pet/{id}", color: "blue" },
+                  { name: "deletePet", desc: "DELETE /pet/{id}", color: "red" },
+                  { name: "addPet", desc: "POST /pet", color: "green" },
+                ].map((tool, index) => (
+                  <motion.div
+                    key={tool.name}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.5 + index * 0.08, duration: 0.3 }}
+                    className="flex items-center gap-3 p-2 rounded-md"
+                  >
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      tool.color === 'blue' ? 'bg-brand-blue-500' :
+                      tool.color === 'green' ? 'bg-brand-green-500' :
+                      tool.color === 'yellow' ? 'bg-warning-500' :
+                      tool.color === 'red' ? 'bg-brand-red-500' : ''
+                    }`} />
+                    <div className="flex-1">
+                      <div className="font-mono text-[10px] sm:text-[11px] text-neutral-900">
+                        {tool.name}
+                      </div>
+                      <div className="text-[8px] sm:text-[9px] text-neutral-500">
+                        {tool.desc}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
 
-            <div className="flex-1 flex flex-col">
-              {/* Show either basic tools or higher order tool */}
-              {!showHigherOrder ? (
-                // Basic tools state
-                <div className="space-y-1">
-                  {showBasicTools &&
-                    [
-                      { name: "findPetById", desc: "GET /pet/{id}" },
-                      { name: "addPet", desc: "POST /pet" },
-                      { name: "updatePet", desc: "PUT /pet" },
-                      { name: "deletePet", desc: "DELETE /pet/{id}" },
-                      { name: "findByStatus", desc: "GET /pet/findByStatus" },
-                    ].map((tool, index) => {
-                      return (
-                        <motion.div
-                          key={tool.name}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{
-                            opacity: 1,
-                            x: 0,
-                          }}
-                          transition={{
-                            delay: 0.4 + index * 0.08,
-                            duration: 0.3,
-                          }}
-                          className="px-2 py-1.5 rounded-lg hover:bg-[var(--color-neutral-50)] transition-colors cursor-pointer"
-                        >
-                          <div className="font-mono text-[11px] text-[var(--color-neutral-900)]">
-                            {tool.name}
-                          </div>
-                          <div className="text-[10px] text-[var(--color-neutral-600)]">
-                            {tool.desc}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                </div>
-              ) : (
-                // Higher order tool state
+        {/* Third Layer: Higher Order Tools */}
+        <motion.div
+          className={`absolute right-0 top-8 sm:top-12 w-[72%] ${showHigherOrder ? 'cursor-pointer' : ''}`}
+          onMouseEnter={() => showHigherOrder && setHoveredCard('higher')}
+          onMouseLeave={() => setHoveredCard(null)}
+          style={{
+            zIndex: showHigherOrder ? 30 : 0,
+          }}
+          initial={{ opacity: 0, y: 40, scale: 0.9 }}
+          animate={{ 
+            opacity: showHigherOrder ? 1 : 0,
+            y: showHigherOrder ? 0 : 40,
+            scale: showHigherOrder ? (hoveredCard === 'higher' ? 1.02 : 1) : 0.9,
+          }}
+          transition={{ 
+            duration: 0.5,
+            ease: [0.23, 1, 0.32, 1],
+          }}
+        >
+          <motion.div 
+            className="w-full bg-white rounded-xl overflow-hidden border border-neutral-200"
+            animate={{
+              boxShadow: hoveredCard === 'higher' 
+                ? '0px 32px 64px rgba(0,0,0,0.2), 0px 16px 32px rgba(0,0,0,0.15)' 
+                : '0px 24px 48px rgba(0,0,0,0.15), 0px 12px 24px rgba(0,0,0,0.1)'
+            }}
+            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+          >
+            <div className="flex items-center justify-between p-2 sm:p-3 border-b border-neutral-200">
+              <h4 className="text-[10px] sm:text-xs font-medium text-neutral-900">
+                Higher Order Tool
+              </h4>
+              <motion.div
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", delay: 0.3 }}
+              >
+                <Workflow className="w-4 h-4 text-brand-blue-600" />
+              </motion.div>
+            </div>
+            
+            <div className="p-3 sm:p-4 overflow-hidden">
+              <div className="space-y-3">
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-                  className="flex flex-col justify-center h-full"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4, duration: 0.3 }}
+                  className="flex items-center gap-3"
                 >
-                  <div className="p-2.5 rounded-lg border-2 border-[var(--color-brand-blue-300)] bg-gradient-to-br from-[var(--color-brand-blue-50)] to-[var(--color-brand-blue-100)]">
-                    <div className="font-mono text-xs text-[var(--color-neutral-900)] mb-1 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-brand-blue-500" />
+                  <div className="flex-1">
+                    <div className="font-mono text-[10px] sm:text-[11px] text-neutral-900">
                       registerNewPet
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-brand-blue-300)] text-[var(--color-brand-blue-800)] font-sans font-medium">
-                        Workflow
-                      </span>
                     </div>
-                    <div className="text-[10px] text-[var(--color-neutral-700)] mb-1.5">
-                      Validates and registers a new pet in one call
-                    </div>
-                    <div className="text-[9px] text-[var(--color-neutral-600)] bg-white/50 rounded p-1.5 font-mono leading-relaxed">
-                      <div>1. Check if pet exists → findPetById</div>
-                      <div>2. Create pet record → addPet</div>
-                      <div>3. Set initial status → updatePet</div>
+                    <div className="text-[8px] sm:text-[9px] text-neutral-500">
+                      Validates and registers a new pet in one workflow
                     </div>
                   </div>
                 </motion.div>
-              )}
+                
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5, duration: 0.3 }}
+                  className="ml-5 space-y-1 text-[8px] sm:text-[9px] text-neutral-500 font-mono"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-neutral-400">1.</span>
+                    <span>Check if exists</span>
+                    <span className="text-neutral-400">→</span>
+                    <span className="text-brand-blue-600">findPetById</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-neutral-400">2.</span>
+                    <span>Create record</span>
+                    <span className="text-neutral-400">→</span>
+                    <span className="text-brand-green-600">addPet</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-neutral-400">3.</span>
+                    <span>Set status</span>
+                    <span className="text-neutral-400">→</span>
+                    <span className="text-warning-600">updatePet</span>
+                  </div>
+                </motion.div>
+              </div>
             </div>
-          </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -1635,11 +1747,11 @@ export default function Home() {
       <section className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-16 sm:py-24 space-y-16 sm:space-y-24">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0">
           <div className="flex flex-col justify-center px-2 sm:px-6 py-8 sm:py-12">
-            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-3 sm:mb-4">
+            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-display-lg mb-4">
               Easiest way to host MCP at scale
             </h2>
-            <p className="text-base sm:text-lg md:text-xl text-foreground/80 mb-4 sm:mb-6">
-              High quality Agentic Tools. Enterprise Experience
+            <p className="text-sm sm:text-base text-neutral-600 mb-6">
+              High quality Agentic Tools. Enterprise Experience.
             </p>
             <ul className="space-y-2 sm:space-y-3 text-sm sm:text-base text-foreground/60">
               <li className="flex items-start gap-2 sm:gap-3">
@@ -1664,7 +1776,7 @@ export default function Home() {
               </li>
             </ul>
           </div>
-          <div className="border-l border-[var(--color-neutral-200)] flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12 bg-gradient-to-br from-[var(--color-neutral-100)] via-transparent to-transparent">
+          <div className="border-l border-neutral-200 flex items-center justify-center px-2 sm:px-8 py-8 sm:py-12">
             <AnimatedToolCard />
           </div>
         </div>
@@ -1764,24 +1876,24 @@ export default function Home() {
           footerDescRef={footerDescRef}
           footerButtonsRef={footerButtonsRef}
         />
-        <div className="relative z-10 w-full">
+        <div className="relative z-20 w-full pointer-events-none">
           <div className="flex flex-col items-center justify-center py-20 max-w-2xl mx-auto px-4">
             <h3
               ref={footerHeadingRef}
-              className="text-4xl md:text-5xl font-display font-light text-neutral-900 mb-6 text-center max-w-2xl"
+              className="text-4xl md:text-5xl font-display font-light text-neutral-900 mb-6 text-center max-w-2xl pointer-events-auto"
             >
               Ready to create, curate, and distribute tools for AI?
             </h3>
             <p
               ref={footerDescRef}
-              className="text-lg text-neutral-700 mb-8 text-center max-w-xl"
+              className="text-lg text-neutral-700 mb-8 text-center max-w-xl pointer-events-auto"
             >
               Power your integrations for Agents and LLMs. Join the waitlist or
               book a demo to get started.
             </p>
             <div
               ref={footerButtonsRef}
-              className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-center"
+              className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-center pointer-events-auto"
             >
               <Button
                 size="chunky"
