@@ -2,8 +2,6 @@ module github.com/speakeasy-api/gram
 
 go 1.24.4
 
-replace goa.design/goa/v3 => github.com/speakeasy-api/goa/v3 v3.0.0-20250402162029-007a880aa38c
-
 tool (
 	github.com/sqlc-dev/sqlc/cmd/sqlc
 	goa.design/goa/v3/cmd/goa

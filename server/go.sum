@@ -443,8 +443,6 @@ github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9ySo=
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
-github.com/speakeasy-api/goa/v3 v3.0.0-20250402162029-007a880aa38c h1:FeURqpiSVBvxniLYMEZbKImxt/WvMzYgandN5nvkDHE=
-github.com/speakeasy-api/goa/v3 v3.0.0-20250402162029-007a880aa38c/go.mod h1:cLX3Y1JvnCabMWDAZxmfnjxM1f1l9g7Zf0C9CD9GIAQ=
 github.com/speakeasy-api/jsonpath v0.6.2 h1:Mys71yd6u8kuowNCR0gCVPlVAHCmKtoGXYoAtcEbqXQ=
 github.com/speakeasy-api/jsonpath v0.6.2/go.mod h1:ymb2iSkyOycmzKwbEAYPJV/yi2rSmvBCLZJcyD+VVWw=
 github.com/spf13/cobra v1.9.1 h1:CXSaggrXdbHK9CF+8ywj8Amf7PBRmPCOJugH954Nnlo=
@@ -577,6 +575,8 @@ go.uber.org/zap v1.27.0 h1:aJMhYGrd5QSmlpLMr2MftRKl7t8J8PTZPA732ud/XR8=
 go.uber.org/zap v1.27.0/go.mod h1:GB2qFLM7cTU87MWRP2mPIjqfIDnGu+VIO4V/SdhGo2E=
 goa.design/clue v1.2.1 h1:qFKQsNUzfwuBcTFZprfzOxipLTMiFvOLafuGm2Rnfh0=
 goa.design/clue v1.2.1/go.mod h1:Rn5RrcXYkqYNaActhTIcP76kchefNb0quA2or11ay9Q=
+goa.design/goa/v3 v3.21.1 h1:tLwhbcNoEBJm1CcJc3ks6oZ8BHYl6vFuxEBnl2kC428=
+goa.design/goa/v3 v3.21.1/go.mod h1:E+97AYffVIvDi6LkuNdfdvMZb8UFb/+ie3V0/WBBdgc=
 goa.design/plugins/v3 v3.21.1 h1:7MUuJRadaoQC4Gi0eRm47O4pB6yAPoEs4NAt+i/Fkzc=
 goa.design/plugins/v3 v3.21.1/go.mod h1:2tX6XgqRqABgyhnUpj4t3pNEv39gCaeCrSxIx9fi8Is=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
