@@ -1,0 +1,389 @@
+openapi: 3.1.0
+info:
+  title: CRM API
+  description: A simple CRM API for managing leads and pipelines
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: https://api.crm.example.com/v1
+    description: Production server
+
+paths:
+  /leads:
+    get:
+      summary: Get all leads
+      operationId: getLeads
+      tags:
+        - leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [new, contacted, qualified, lost]
+        - name: pipeline_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Lead'
+    post:
+      summary: Create a new lead
+      operationId: createLead
+      tags:
+        - leads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLeadRequest'
+      responses:
+        '201':
+          description: Lead created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+
+  /leads/{leadId}:
+    get:
+      summary: Get a specific lead
+      operationId: getLead
+      tags:
+        - leads
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        '404':
+          description: Lead not found
+    put:
+      summary: Update a lead
+      operationId: updateLead
+      tags:
+        - leads
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLeadRequest'
+      responses:
+        '200':
+          description: Lead updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+    delete:
+      summary: Delete a lead
+      operationId: deleteLead
+      tags:
+        - leads
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Lead deleted successfully
+
+  /pipelines:
+    get:
+      summary: Get all pipelines
+      operationId: getPipelines
+      tags:
+        - pipelines
+      responses:
+        '200':
+          description: List of pipelines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pipeline'
+    post:
+      summary: Create a new pipeline
+      operationId: createPipeline
+      tags:
+        - pipelines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePipelineRequest'
+      responses:
+        '201':
+          description: Pipeline created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+
+  /pipelines/{pipelineId}:
+    get:
+      summary: Get a specific pipeline
+      operationId: getPipeline
+      tags:
+        - pipelines
+      parameters:
+        - name: pipelineId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pipeline details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+        '404':
+          description: Pipeline not found
+    put:
+      summary: Update a pipeline
+      operationId: updatePipeline
+      tags:
+        - pipelines
+      parameters:
+        - name: pipelineId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePipelineRequest'
+      responses:
+        '200':
+          description: Pipeline updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    delete:
+      summary: Delete a pipeline
+      operationId: deletePipeline
+      tags:
+        - pipelines
+      parameters:
+        - name: pipelineId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Pipeline deleted successfully
+
+components:
+  schemas:
+    Lead:
+      type: object
+      required:
+        - id
+        - email
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        company:
+          type: string
+        status:
+          type: string
+          enum: [new, contacted, qualified, lost]
+        pipeline_id:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: double
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateLeadRequest:
+      type: object
+      required:
+        - email
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        company:
+          type: string
+        pipeline_id:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: double
+        notes:
+          type: string
+
+    UpdateLeadRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        company:
+          type: string
+        status:
+          type: string
+          enum: [new, contacted, qualified, lost]
+        pipeline_id:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: double
+        notes:
+          type: string
+
+    Pipeline:
+      type: object
+      required:
+        - id
+        - name
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineStage'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PipelineStage:
+      type: object
+      required:
+        - id
+        - name
+        - position
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        position:
+          type: integer
+        description:
+          type: string
+
+    CreatePipelineRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        stages:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - position
+            properties:
+              name:
+                type: string
+              position:
+                type: integer
+              description:
+                type: string
+
+    UpdatePipelineRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineStage'

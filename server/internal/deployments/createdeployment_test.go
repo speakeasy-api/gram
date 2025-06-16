@@ -27,7 +27,7 @@ func TestDeploymentsService_CreateDeployment(t *testing.T) {
 
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/valid.yaml"))
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 
 	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
 		ApikeyToken:      nil,
@@ -110,7 +110,7 @@ func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/valid.yaml"))
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -269,7 +269,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 	t.Run("circular package dependency", func(t *testing.T) {
 		t.Parallel()
 
-		bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/valid.yaml"))
+		bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 		ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
 			ApikeyToken:      nil,
 			SessionToken:     nil,
