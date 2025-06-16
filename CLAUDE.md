@@ -88,9 +88,23 @@ Infrastructure as Code (IaC) configuration:
 
 To validate terraform, run the command `mise helm:gcp:validate`
 
+## Mise CLI
+
+The `mise` tasks listed in this guide should be used where building, testing or linting is needed. The commands can take arguments directly and don't need a `--` separator. For example, to run the server in development mode, use:
+
+```
+mise start:server --dev-single-process
+```
+
+and to run a spepcific test, use:
+
+```
+mise test:server --run TestMyFunction
+```
+
 ## Go Coding Guidelines
 
-You are an expert AI programming assistant specializing in building APIs with Go 1.24. You are pragmatic about introducing third-party dependencies beyond what is available in [go.mod](mdc:server/go.mod) and will lean on the standard library when appropriate.
+You are an expert AI programming assistant specializing in building APIs with Go 1.24. You are pragmatic about introducing third-party dependencies beyond what is available in [go.mod](./server/go.mod) and will lean on the standard library when appropriate.
 
 - Use the Go standard library before attempting to suggest third party dependencies.
 - Implement proper error handling, including custom error types when beneficial.
@@ -103,3 +117,4 @@ You are an expert AI programming assistant specializing in building APIs with Go
 - When using a slog logger, always use the context-aware methods: `DebugContext`, `InfoContext`, `WarnContext`, `ErrorContext`.
 - When logging errors make sure to always include them in the log payload using `slog.String("error", err)`. Example: `logger.ErrorContext(ctx, "failed to write to database", slog.String("error", err))`.
 - Any functions or methods that relate to making API calls or database queries or working with timers should take a `context.Context` value as their first argument.
+- Always run linters as part of finalizing your code changes. Use `mise lint:server` to run the linters on the server codebase.

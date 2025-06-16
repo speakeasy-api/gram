@@ -37,6 +37,7 @@ type deploymentFields struct {
 	organizationID string
 	githubRepo     string
 	githubPr       string
+	githubSha      string
 	externalID     string
 	externalURL    string
 }
@@ -67,6 +68,7 @@ func createDeployment(
 
 		GithubRepo:  conv.ToPGTextEmpty(fields.githubRepo),
 		GithubPr:    conv.ToPGTextEmpty(fields.githubPr),
+		GithubSha:   conv.ToPGTextEmpty(fields.githubSha),
 		ExternalID:  conv.ToPGTextEmpty(fields.externalID),
 		ExternalUrl: conv.ToPGTextEmpty(fields.externalURL),
 	})

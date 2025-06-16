@@ -123,6 +123,7 @@ INSERT INTO deployments (
   , project_id
   , github_repo
   , github_pr
+  , github_sha
   , external_id
   , external_url
 ) VALUES (
@@ -132,6 +133,7 @@ INSERT INTO deployments (
   , @project_id
   , @github_repo
   , @github_pr
+  , @github_sha
   , @external_id
   , @external_url
 )

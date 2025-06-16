@@ -159,6 +159,7 @@ INSERT INTO deployments (
   , project_id
   , github_repo
   , github_pr
+  , github_sha
   , external_id
   , external_url
 ) VALUES (
@@ -170,6 +171,7 @@ INSERT INTO deployments (
   , $6
   , $7
   , $8
+  , $9
 )
 ON CONFLICT (project_id, idempotency_key) DO NOTHING
 `
@@ -181,6 +183,7 @@ type CreateDeploymentParams struct {
 	ProjectID      uuid.UUID
 	GithubRepo     pgtype.Text
 	GithubPr       pgtype.Text
+	GithubSha      pgtype.Text
 	ExternalID     pgtype.Text
 	ExternalUrl    pgtype.Text
 }
@@ -193,6 +196,7 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		arg.ProjectID,
 		arg.GithubRepo,
 		arg.GithubPr,
+		arg.GithubSha,
 		arg.ExternalID,
 		arg.ExternalUrl,
 	)

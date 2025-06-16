@@ -343,6 +343,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			externalURL:    conv.PtrValOr(form.ExternalURL, ""),
 			githubRepo:     conv.PtrValOr(form.GithubRepo, ""),
 			githubPr:       conv.PtrValOr(form.GithubPr, ""),
+			githubSha:      conv.PtrValOr(form.GithubSha, ""),
 		},
 		newAssets, newPackages,
 	)
@@ -480,6 +481,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 				externalURL:    "",
 				githubRepo:     "",
 				githubPr:       "",
+				githubSha:      "",
 			},
 			assetsToUpsert,
 			packagesToUpsert,
