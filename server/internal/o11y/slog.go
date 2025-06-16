@@ -24,18 +24,23 @@ var temporalKeys = map[string]string{
 }
 
 func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
+	rl := rawLevel
+	if rl == "" {
+		rl = "error"
+	}
+
 	if pretty {
 		return &ContextHandler{
 			Handler: charmlog.NewWithOptions(os.Stderr, charmlog.Options{
 				ReportCaller: true,
-				Level:        LogLevels[rawLevel].Charm,
+				Level:        LogLevels[rl].Charm,
 			}),
 		}
 	} else {
 		return &ContextHandler{
 			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 				AddSource: true,
-				Level:     LogLevels[rawLevel].Slog,
+				Level:     LogLevels[rl].Slog,
 				ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 					if len(groups) != 0 {
 						return a

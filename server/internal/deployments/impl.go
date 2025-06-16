@@ -736,7 +736,6 @@ func validatePackageInclusion(ctx context.Context, logger *slog.Logger, targetPr
 		"resolved package state",
 		"package id cannot be nil", resolved.packageID != uuid.Nil,
 		"version id cannot be nil", resolved.versionID != uuid.Nil,
-		"project id cannot be the same as the target project id", resolved.projectID != targetProjectID,
 	); err != nil {
 		return oops.E(oops.CodeInvariantViolation, err, "error resolving package: %s@%s", requirement[0], requirement[1]).Log(ctx, logger)
 	}

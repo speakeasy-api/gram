@@ -83,6 +83,7 @@ linters:
         - '^go.temporal.io/sdk/internal\.RetryPolicy$'
         - '^go.temporal.io/sdk/internal\..+Options$'
         - '^go.temporal.io/sdk/contrib/opentelemetry\..+Options$'
+        - '^go.temporal.io/sdk/testsuite\.DevServerOptions$'
     exhaustive:
       check:
         - switch

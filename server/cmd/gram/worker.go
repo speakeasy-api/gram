@@ -212,7 +212,15 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, db, openRouter, baseChatClient, encryptionClient)
 
-			temporalWorker := newTemporalWorker(temporalClient, logger, db, assetStorage, slackClient, chatClient, openRouter, k8sClient, customdomains.GetCustomDomainCNAME(c.String("environment")))
+			temporalWorker := background.NewTemporalWorker(temporalClient, logger, &background.WorkerOptions{
+				DB:                  db,
+				AssetStorage:        assetStorage,
+				SlackClient:         slackClient,
+				ChatClient:          chatClient,
+				OpenRouter:          openRouter,
+				K8sClient:           k8sClient,
+				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
+			})
 
 			return temporalWorker.Run(worker.InterruptCh())
 		},

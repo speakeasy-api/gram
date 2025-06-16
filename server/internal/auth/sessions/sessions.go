@@ -2,17 +2,11 @@ package sessions
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 )
 
@@ -47,36 +41,6 @@ func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suf
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,
 	}
-}
-
-func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Manager, error) {
-	file, err := os.Open(filepath.Clean(localEnvPath))
-	if err != nil {
-		return nil, fmt.Errorf("failed to open local env file: %w", err)
-	}
-	defer o11y.LogDefer(context.Background(), logger, func() error {
-		return file.Close()
-	})
-
-	bs, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read local env file: %w", err)
-	}
-
-	var data localEnvFile
-	if err := json.Unmarshal(bs, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
-	}
-
-	return &Manager{
-		logger:                 logger.With(slog.String("component", "sessions")),
-		sessionCache:           cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
-		userInfoCache:          cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
-		localEnvFile:           data,
-		unsafeLocal:            true,
-		speakeasyServerAddress: "",
-		speakeasySecretKey:     "",
-	}, nil
 }
 
 func (s *Manager) IsUnsafeLocalDevelopment() bool {

@@ -1,30 +1,33 @@
-package dbtest
+package testenv
 
 import (
 	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+func nextRandom() string {
+	return fmt.Sprintf("%d", uuid.New().ID())
+}
 
 type PostgresDBCloneFunc func(t *testing.T, name string) (*pgxpool.Pool, error)
 
-// NewPostgres creates a new Postgres container with a template database built
+// NewTestPostgres creates a new Postgres container with a template database built
 // from a SQL init script. A reference to the container is returned as well as
 // a function to create test databases from the template. All "clone" databases
 // are automatically dropped when the test ends using t.Cleanup() hooks.
-func NewPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
+func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
 	container, err := postgres.Run(
 		ctx,
 		"postgres:17",
@@ -32,10 +35,8 @@ func NewPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCl
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),
 		postgres.WithInitScripts(filepath.Join("..", "..", "database", "schema.sql")),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second)),
+		postgres.BasicWaitStrategies(),
+		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -54,13 +55,15 @@ func NewPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCl
 		return conn.Close(ctx)
 	})
 
-	_, err = conn.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true")
+	_, err = conn.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;")
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return container, newPostgresCloneFunc(container), nil
 }
+
+var cloneMutex sync.Mutex
 
 func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBCloneFunc {
 	return func(t *testing.T, name string) (*pgxpool.Pool, error) {
@@ -71,6 +74,9 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 			return nil, fmt.Errorf("read connection string: %w", err)
 		}
 
+		cloneMutex.Lock()
+		defer cloneMutex.Unlock()
+
 		conn, err := pgx.Connect(ctx, uri)
 		if err != nil {
 			return nil, fmt.Errorf("connect to template database: %w", err)
@@ -79,7 +85,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 			return conn.Close(ctx)
 		})
 
-		clonename := fmt.Sprintf("%s_%s", name, must.Value(uuid.NewV7()))
+		clonename := fmt.Sprintf("%s_%s", name, nextRandom())
 		_, err = conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", clonename))
 		if err != nil {
 			return nil, fmt.Errorf("create test database: %w", err)
@@ -92,8 +98,9 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 		}
 
 		t.Cleanup(func() {
-			timeoutCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			timeoutCtx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 60*time.Second)
 			defer cancel()
+
 			pool.Close()
 
 			conn, err := pgx.Connect(timeoutCtx, uri)

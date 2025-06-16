@@ -409,7 +409,15 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := newTemporalWorker(temporalClient, logger.With(slog.String("component", "temporal")), db, assetStorage, slackClient, chatClient, openRouter, k8sClient, customdomains.GetCustomDomainCNAME(c.String("environment")))
+					temporalWorker := background.NewTemporalWorker(temporalClient, logger, &background.WorkerOptions{
+						DB:                  db,
+						AssetStorage:        assetStorage,
+						SlackClient:         slackClient,
+						ChatClient:          chatClient,
+						OpenRouter:          openRouter,
+						K8sClient:           k8sClient,
+						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
+					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", slog.String("error", err.Error()))
 					}

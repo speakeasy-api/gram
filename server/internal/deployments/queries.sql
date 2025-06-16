@@ -368,3 +368,4 @@ FROM deployments_packages
 INNER JOIN packages ON deployments_packages.package_id = packages.id
 INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
 WHERE deployments_packages.deployment_id = @deployment_id;
+

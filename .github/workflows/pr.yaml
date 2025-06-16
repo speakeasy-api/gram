@@ -111,7 +111,7 @@ jobs:
           build-args: |
             GIT_USERNAME=speakeasybot
 
-  server-build-lint-test:
+  server-build-lint:
     runs-on: ubicloud-standard-4
     needs: changes
     if: ${{ needs.changes.outputs.server == 'true' }}
@@ -164,6 +164,35 @@ jobs:
         run: mise run go:tidy
       - name: Check for dirty files
         run: mise run git:porcelain
+
+  server-test:
+    runs-on: ubicloud-standard-4
+    needs: changes
+    if: ${{ needs.changes.outputs.server == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Mise
+        uses: jdx/mise-action@13abe502c30c1559a5c37dff303831bab82c9402 # v2.2.3
+        with:
+          install: true
+          cache: true
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+      - name: Cache Go
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+      - name: Install Go deps
+        run: mise run install:go
+      - name: Test
+        run: mise run test:server
 
   client-build-lint-test:
     runs-on: ubicloud-standard-4

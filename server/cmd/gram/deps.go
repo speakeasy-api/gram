@@ -17,21 +17,14 @@ import (
 	"github.com/pgx-contrib/pgxotel"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
-	"github.com/speakeasy-api/gram/internal/chat"
-	"github.com/speakeasy-api/gram/internal/k8s"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
-	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/internal/assets"
-	"github.com/speakeasy-api/gram/internal/background"
-	"github.com/speakeasy-api/gram/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/internal/must"
 	"github.com/speakeasy-api/gram/internal/o11y"
 )
@@ -178,31 +171,4 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 		temporalClient.Close()
 		return nil
 	}, nil
-}
-
-func newTemporalWorker(client client.Client, logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openRouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients, expectedTargetCNAME string) worker.Worker {
-	temporalWorker := worker.New(client, string(background.TaskQueueMain), worker.Options{
-		Interceptors: []interceptor.WorkerInterceptor{
-			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		},
-	})
-
-	activities := background.NewActivities(logger, db, assetStorage, slackClient, chatClient, openRouter, k8sClient, expectedTargetCNAME)
-	temporalWorker.RegisterActivity(activities.ProcessDeployment)
-	temporalWorker.RegisterActivity(activities.TransitionDeployment)
-	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
-	temporalWorker.RegisterActivity(activities.PostSlackMessage)
-	temporalWorker.RegisterActivity(activities.SlackChatCompletion)
-	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
-	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
-	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
-
-	temporalWorker.RegisterWorkflow(background.ProcessDeploymentWorkflow)
-	temporalWorker.RegisterWorkflow(background.SlackEventWorkflow)
-	temporalWorker.RegisterWorkflow(background.OpenrouterKeyRefreshWorkflow)
-	temporalWorker.RegisterWorkflow(background.CustomDomainRegistrationWorkflow)
-
-	return temporalWorker
 }

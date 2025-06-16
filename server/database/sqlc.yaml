@@ -29,6 +29,16 @@ sql:
         omit_unused_structs: false
 
   - schema: schema.sql
+    queries: ../internal/testenv/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "testrepo"
+        out: "../internal/testenv/testrepo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/auth/queries.sql
     engine: postgresql
     gen:
