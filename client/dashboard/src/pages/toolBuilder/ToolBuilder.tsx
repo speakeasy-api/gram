@@ -476,7 +476,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       className="h-full [&>[role='separator']]:border-border [&>[role='separator']]:mx-8 [&>[role='separator']]:border-1"
     >
       <ResizablePanel.Pane minSize={35}>
-        <Stack gap={1}>
+        <Stack gap={1}  className="h-full overflow-y-scroll">
           <Stack direction="horizontal" align="center" className="w-full">
             <Block label="Tool name" className="w-2/3">
               <BlockInner>{toolName}</BlockInner>

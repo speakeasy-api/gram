@@ -1,4 +1,5 @@
 import { useGroupedToolDefinitions } from "@/lib/toolNames";
+import { getToolsetPrompts } from "@/pages/prompts/Prompts";
 import { Toolset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge } from "./ui/badge";
@@ -12,7 +13,7 @@ export const ToolsetPromptsBadge = ({
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {
-  const promptNames = toolset?.promptTemplates?.map((prompt) => prompt.name);
+  const promptNames = getToolsetPrompts(toolset)?.map((prompt) => prompt.name);
 
   const tooltipContent = (
     <div className="max-h-[300px] overflow-y-auto">

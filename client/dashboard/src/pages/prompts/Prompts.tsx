@@ -9,6 +9,7 @@ import { useRoutes } from "@/routes";
 import {
   PromptTemplate,
   PromptTemplateKind,
+  Toolset,
 } from "@gram/client/models/components";
 import { useTemplates } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -21,6 +22,12 @@ export function PromptsRoot() {
 export function usePrompts() {
   const { data } = useTemplates();
   return data?.templates.filter(
+    (template) => template.kind === PromptTemplateKind.Prompt
+  );
+}
+
+export function getToolsetPrompts(toolset: Toolset | undefined) {
+  return toolset?.promptTemplates.filter(
     (template) => template.kind === PromptTemplateKind.Prompt
   );
 }
