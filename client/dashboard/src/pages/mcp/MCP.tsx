@@ -47,14 +47,11 @@ export default function MCP() {
         </Heading>
         <Type>
           Head to the{" "}
-          <Button
-            size="inline"
-            icon="arrow-right"
-            iconAfter
-            onClick={() => routes.playground.goTo()}
-          >
-            Playground
-          </Button>{" "}
+          <routes.playground.Link>
+            <Button size="inline" icon="arrow-right" iconAfter>
+              Playground
+            </Button>
+          </routes.playground.Link>{" "}
           to get started
         </Type>
       </Stack>

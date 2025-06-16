@@ -37,9 +37,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         "bg-primary! text-primary-foreground! hover:bg-primary/90 hover:text-primary-foreground min-w-8 trans",
         routes.playground.active && "border-violet-300 border-2 scale-105" // TODO rainbow
       )}
-      onClick={() => {
-        routes.playground.goTo();
-      }}
+      href={routes.playground.href()}
       isActive={routes.playground.active}
     >
       <routes.playground.Icon />

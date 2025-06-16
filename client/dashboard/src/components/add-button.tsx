@@ -5,7 +5,7 @@ export const AddButton = ({
   onClick,
   tooltip,
 }: {
-  onClick: () => void;
+  onClick?: () => void;
   tooltip: string;
 }) => {
   return (

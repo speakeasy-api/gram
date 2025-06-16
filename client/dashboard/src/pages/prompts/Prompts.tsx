@@ -41,19 +41,18 @@ export default function Prompts() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
         <Page.Header.Actions>
-          <AddButton
-            onClick={() => routes.prompts.newPrompt.goTo()}
-            tooltip="New Prompt Template"
-          />
+          <routes.prompts.newPrompt.Link>
+            <AddButton tooltip="New Prompt Template" />
+          </routes.prompts.newPrompt.Link>
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
         {prompts?.map((template) => {
           return <PromptTemplateCard key={template.id} template={template} />;
         })}
-        <CreateThingCard onClick={() => routes.prompts.newPrompt.goTo()}>
-          + New Prompt Template
-        </CreateThingCard>
+        <routes.prompts.newPrompt.Link>
+          <CreateThingCard>+ New Prompt Template</CreateThingCard>
+        </routes.prompts.newPrompt.Link>
       </Page.Body>
     </Page>
   );

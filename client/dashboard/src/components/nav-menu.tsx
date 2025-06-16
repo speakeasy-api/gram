@@ -26,18 +26,10 @@ export function NavMenu({
 }
 
 function NavMenuButton({ item }: { item: AppRoute }) {
-  const onClick = () => {
-    if (item.external) {
-      window.open(item.url, "_blank");
-    } else {
-      item.goTo();
-    }
-  };
-
   return (
     <NavButton
       title={item.title}
-      onClick={onClick}
+      href={item.href()}
       active={item.active}
       Icon={item.Icon}
     />
@@ -46,11 +38,13 @@ function NavMenuButton({ item }: { item: AppRoute }) {
 
 export function NavButton({
   title,
-  onClick,
+  href,
   active,
   Icon,
+  onClick,
 }: {
   title: string;
+  href?: string;
   onClick?: () => void;
   active?: boolean;
   Icon?: React.ComponentType<{ className?: string }>;
@@ -59,8 +53,9 @@ export function NavButton({
     <SidebarMenuButton
       className="group/nav-button"
       tooltip={title}
-      onClick={onClick}
+      href={href}
       isActive={active}
+      onClick={onClick}
     >
       {Icon && (
         <Icon

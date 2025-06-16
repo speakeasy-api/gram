@@ -274,6 +274,10 @@ export const useRoutes = (): RoutesWithGoTo => {
     const urlWithParent = `${parent ?? ""}/${route.url}`;
 
     const resolveUrl = (...params: string[]) => {
+      if (route.external) {
+        return route.url;
+      }
+
       const parts = urlWithParent.split("/").filter(Boolean);
       const finalParts = [];
 

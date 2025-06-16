@@ -21,6 +21,7 @@ import { Slot } from "@radix-ui/react-slot";
 import { VariantProps, cva } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -502,16 +503,18 @@ function SidebarMenuButton({
   size = "default",
   tooltip,
   className,
+  href,
   ...props
 }: React.ComponentProps<"button"> & {
   asChild?: boolean;
   isActive?: boolean;
+  href?: string;
   tooltip?: string | React.ComponentProps<typeof TooltipContent>;
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : "button";
   const { isMobile, state } = useSidebar();
 
-  const button = (
+  let button = (
     <Comp
       data-slot="sidebar-menu-button"
       data-sidebar="menu-button"
@@ -525,6 +528,14 @@ function SidebarMenuButton({
       {...props}
     />
   );
+
+  if (href) {
+    if (href.startsWith("http")) {
+      button = <Link to={href} target="_blank" className="w-full">{button}</Link>;
+    } else {
+      button = <Link to={href} className="w-full">{button}</Link>;
+    }
+  }
 
   if (!tooltip) {
     return button;
