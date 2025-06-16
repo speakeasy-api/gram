@@ -1067,7 +1067,7 @@ function APIToolsSection() {
               <span className="underline decoration-dotted underline-offset-2 hover:text-neutral-900 transition-colors">
                 higher order tools
               </span>{" "}
-              for complex agentic workflows
+              to support complex agentic workflows
             </span>
           </li>
           <li className="flex items-start gap-3">
@@ -1950,21 +1950,21 @@ export default function Home() {
                     <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Zap className="w-4 h-4 text-neutral-900" />
                     </div>
-                    <span>1-click hosting of Toolsets as MCP servers</span>
+                    <span>1-click hosting of MCP servers.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Key className="w-4 h-4 text-neutral-900" />
                     </div>
                     <span>
-                      Support for managed and passthrough API authentication
+                      Redeploy new versions of tools with zero downtime 
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Activity className="w-4 h-4 text-neutral-900" />
                     </div>
-                    <span>Built in telemetry, audit logs</span>
+                    <span>Test and refine tools for optimal performance</span>
                   </li>
                 </ul>
               </div>
@@ -2115,7 +2115,7 @@ export default function Home() {
                     <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <CheckCircle className="w-4 h-4 text-neutral-900" />
                     </div>
-                    <span>Instantly test and run evals for quality</span>
+                    <span>Instantly test and refine tools for quality</span>
                   </li>
                 </ul>
               </div>
@@ -2184,29 +2184,34 @@ export default function Home() {
                   Enterprise-grade tool distribution
                 </h2>
                 <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
-                  Secure, scalable infrastructure for tool deployment and
-                  management.
+                  Secure and scalable Tools Gateway. 
                 </p>
                 <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Zap className="w-4 h-4 text-neutral-900" />
                     </div>
-                    <span>1-click hosting of Toolsets as MCP servers</span>
+                    <span>Model and Framework Agnostic. Works with your stack.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Key className="w-4 h-4 text-neutral-900" />
                     </div>
                     <span>
-                      Support for managed and passthrough API authentication
+                      Support for managed and passthrough MCP authentication
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Activity className="w-4 h-4 text-neutral-900" />
                     </div>
-                    <span>Built in telemetry, audit logs</span>
+                    <span>Built in telemetry, audit logs, and rate limiting</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Activity className="w-4 h-4 text-neutral-900" />
+                    </div>
+                    <span>Deploy and run on your own infrastructure for full control over data and compliance requirements.</span>
                   </li>
                 </ul>
               </div>
