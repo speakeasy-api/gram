@@ -52,6 +52,7 @@ import {
   Step,
 } from "./components";
 import { useToolifyContext } from "./Toolify";
+import { toast } from "sonner";
 
 export function ToolBuilderNew() {
   const ctx = useToolifyContext();
@@ -441,6 +442,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           invalidateAllListToolsets(queryClient);
           routes.customTools.toolBuilder.goTo(name);
         }
+
+        toast.success("Tool saved successfully");
       }}
     >
       Save

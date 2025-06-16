@@ -30,6 +30,8 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { Check, Lock, Pencil } from "lucide-react";
 import React, { useState } from "react";
 import { useToolsets } from "../toolsets/Toolsets";
+import { toast } from "sonner";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 export default function MCP() {
   const routes = useRoutes();
@@ -95,6 +97,7 @@ export function McpToolsetCard({
   domain?: CustomDomain;
   onUpdate: () => void;
 }) {
+  const telemetry = useTelemetry();
   const routes = useRoutes();
   const project = useProject();
   const organization = useOrganization();
@@ -204,6 +207,11 @@ export function McpToolsetCard({
     value = value.slice(0, 40);
     setMcpSlug(value);
     setMcpSlugError(validateMcpSlug(value));
+
+    telemetry.capture("mcp_event", {
+      action: "mcp_slug_changed",
+      slug: value,
+    });
   };
 
   const publishDialog = (
@@ -268,6 +276,13 @@ export function McpToolsetCard({
                 },
               });
               setPublishModalOpen(false);
+              toast.success("MCP settings saved successfully");
+
+              telemetry.capture("mcp_event", {
+                action: "mcp_settings_saved",
+                slug: mcpSlug,
+                isPublic: mcpIsPublic,
+              });
             }}
             disabled={!!mcpSlugError || !mcpSlug}
           >

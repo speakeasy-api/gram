@@ -29,6 +29,7 @@ import { AgentifyProvider } from "./Agentify";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { PlaygroundRHS } from "./PlaygroundRHS";
+import { toast } from "sonner";
 
 export default function Playground() {
   return (
@@ -122,7 +123,7 @@ function PlaygroundInner() {
           action: "chat_shared",
         });
         navigator.clipboard.writeText(chat.url);
-        alert("Chat link copied to clipboard");
+        toast.success("Chat link copied to clipboard");
       }}
     >
       Share chat

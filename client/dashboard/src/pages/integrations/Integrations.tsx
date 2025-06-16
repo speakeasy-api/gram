@@ -1,10 +1,14 @@
 import { AddButton } from "@/components/add-button";
 import { AssetImage } from "@/components/asset-image";
+import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { ToolsBadge } from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
+import { Heading } from "@/components/ui/heading";
+import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -19,12 +23,15 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export default function Integrations() {
   const { data: integrations, refetch } = useListIntegrations();
 
   const isAdmin = useIsAdmin();
 
+  const [requestIntegrationDialogOpen, setRequestIntegrationDialogOpen] =
+    useState(false);
   const [createIntegrationDialogOpen, setCreateIntegrationDialogOpen] =
     useState(false);
 
@@ -58,6 +65,11 @@ export default function Integrations() {
               }}
             />
           ))}
+          <CreateThingCard
+            onClick={() => setRequestIntegrationDialogOpen(true)}
+          >
+            Request an Integration
+          </CreateThingCard>
         </Cards>
         <CreateIntegrationDialog
           open={createIntegrationDialogOpen}
@@ -65,6 +77,10 @@ export default function Integrations() {
           onNewVersion={() => {
             refetch();
           }}
+        />
+        <RequestIntegrationDialog
+          open={requestIntegrationDialogOpen}
+          onOpenChange={setRequestIntegrationDialogOpen}
         />
       </Page.Body>
     </Page>
@@ -203,7 +219,7 @@ export function IntegrationCard({
   newVersionCallback: () => void;
 }) {
   const telemetry = useTelemetry();
-  
+
   const { data: deployment, refetch } = useLatestDeployment();
   const { data: packages } = useListPackagesSuspense();
 
@@ -310,5 +326,59 @@ export function IntegrationCard({
         )}
       </Card.Footer>
     </Card>
+  );
+}
+
+function RequestIntegrationDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const telemetry = useTelemetry();
+  const [integrationName, setIntegrationName] = useState("");
+
+  const handleSubmit = () => {
+    telemetry.capture("integration_event", {
+      action: "integration_requested",
+      integration_name: integrationName,
+    });
+    onOpenChange(false);
+    toast.success("Integration requested successfully");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Request an Integration</Dialog.Title>
+        </Dialog.Header>
+        <Dialog.Description>
+          Not seeing the integration you need? Request it here.
+        </Dialog.Description>
+        <Stack gap={2}>
+          <Heading variant="h5" className="normal-case font-medium">
+            What integration are you looking for?
+          </Heading>
+          <Input
+            placeholder="Slack, GitHub, etc."
+            value={integrationName}
+            onChange={setIntegrationName}
+          />
+        </Stack>
+        <Dialog.Footer>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Back
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={integrationName.length === 0}
+          >
+            Request
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
