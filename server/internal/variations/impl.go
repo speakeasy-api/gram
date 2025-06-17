@@ -105,7 +105,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error beginning transaction").Log(ctx, s.logger)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
 	})
 
@@ -175,7 +175,10 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 		return nil, oops.E(oops.CodeInvalid, err, "invalid variation ID").Log(ctx, s.logger)
 	}
 
-	row, err := s.repo.DeleteGlobalToolVariation(ctx, variationID)
+	row, err := s.repo.DeleteGlobalToolVariation(ctx, repo.DeleteGlobalToolVariationParams{
+		ID:        variationID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "global tool variation not found").Log(ctx, s.logger)

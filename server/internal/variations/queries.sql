@@ -96,4 +96,13 @@ WHERE
   AND deleted IS FALSE;
 
 -- name: DeleteGlobalToolVariation :one
-UPDATE tool_variations SET deleted_at = clock_timestamp() WHERE id = @id RETURNING id;
+UPDATE tool_variations SET deleted_at = clock_timestamp()
+WHERE tool_variations.id = @id
+  AND tool_variations.group_id IN (
+    SELECT tool_variations_groups.id
+    FROM tool_variations_groups
+    INNER JOIN project_tool_variations ON tool_variations_groups.id = project_tool_variations.group_id
+    WHERE project_tool_variations.project_id = @project_id
+  )
+  AND tool_variations.deleted IS FALSE
+RETURNING tool_variations.id;

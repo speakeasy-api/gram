@@ -13,11 +13,26 @@ import (
 )
 
 const deleteGlobalToolVariation = `-- name: DeleteGlobalToolVariation :one
-UPDATE tool_variations SET deleted_at = clock_timestamp() WHERE id = $1 RETURNING id
+UPDATE tool_variations SET deleted_at = clock_timestamp()
+WHERE tool_variations.id = $1
+  AND tool_variations.group_id IN (
+    SELECT tool_variations_groups.id
+    FROM tool_variations_groups
+    INNER JOIN project_tool_variations ON tool_variations_groups.id = project_tool_variations.group_id
+    WHERE project_tool_variations.project_id = $2
+  )
+  AND tool_variations.deleted IS FALSE
+RETURNING tool_variations.id
 `
 
-func (q *Queries) DeleteGlobalToolVariation(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, deleteGlobalToolVariation, id)
+type DeleteGlobalToolVariationParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteGlobalToolVariation(ctx context.Context, arg DeleteGlobalToolVariationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteGlobalToolVariation, arg.ID, arg.ProjectID)
+	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
 }
