@@ -131,9 +131,6 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 		s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
 	}
 
-	// TODO: Temporary logging to debug
-	s.logger.InfoContext(ctx, "stored use info in cache")
-
 	return userInfo, false, err
 }
 
