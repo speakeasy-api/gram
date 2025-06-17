@@ -26,7 +26,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Aut
 	return &Auth{
 		logger:   logger,
 		db:       db,
-		keys:     NewKeyAuth(db),
+		keys:     NewKeyAuth(db, logger),
 		sessions: sessions,
 		repo:     repo.New(db),
 	}
@@ -75,6 +75,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	for _, project := range projects {
 		if project.Slug == projectSlug {
 			authCtx.ProjectID = &project.ID // This is important
+			authCtx.ProjectSlug = &projectSlug
 			hasProjectAccess = true
 			break
 		}

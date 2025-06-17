@@ -203,10 +203,21 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		userID = uid
 	}
 
-	s.logger.InfoContext(ctx, "chat request received",
+	slogArgs := []any{
 		slog.String("project_id", authCtx.ProjectID.String()),
 		slog.String("org_id", orgID),
-		slog.String("user_id", userID))
+		slog.String("user_id", userID),
+	}
+
+	if authCtx.ProjectSlug != nil {
+		slogArgs = append(slogArgs, slog.String("project_slug", *authCtx.ProjectSlug))
+	}
+	if authCtx.OrganizationSlug != nil {
+		slogArgs = append(slogArgs, slog.String("org_slug", *authCtx.OrganizationSlug))
+	}
+
+	s.logger.InfoContext(ctx, "chat request received",
+		slogArgs...)
 
 	// Read the request body
 	reqBody, err := io.ReadAll(r.Body)

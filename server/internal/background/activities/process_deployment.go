@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/openapi"
+	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
 )
 
@@ -29,6 +30,7 @@ type ProcessDeployment struct {
 	assets       *assetsRepo.Queries
 	tools        *toolsRepo.Queries
 	assetStorage assets.BlobStore
+	projects     *projectsRepo.Queries
 }
 
 func NewProcessDeployment(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) *ProcessDeployment {
@@ -39,6 +41,7 @@ func NewProcessDeployment(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		assetStorage: assetStorage,
 		tools:        toolsRepo.New(db),
 		logger:       logger,
+		projects:     projectsRepo.New(db),
 	}
 }
 
@@ -48,6 +51,15 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		return err
 	}
 
+	var projectSlug *string
+	var orgSlug *string
+	if orgData, err := p.projects.GetProjectWithOrganizationMetadata(ctx, uuid.MustParse(deployment.ProjectID)); err != nil {
+		// TODO: Once all organization metadata is backfilled this would actually fail
+		p.logger.ErrorContext(ctx, "error loading organization metadata", slog.String("error", err.Error()))
+	} else {
+		orgSlug = &orgData.Slug
+		projectSlug = &orgData.ProjectSlug
+	}
 	workers := pool.New().WithErrors().WithMaxGoroutines(2)
 	perm := &atomic.Bool{}
 	for _, docInfo := range deployment.Openapiv3Assets {
@@ -57,6 +69,13 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 			slog.String("openapi_id", docInfo.ID),
 			slog.String("asset_id", docInfo.AssetID),
 		)
+
+		if projectSlug != nil {
+			logger = logger.With(slog.String("project_slug", *projectSlug))
+		}
+		if orgSlug != nil {
+			logger = logger.With(slog.String("org_slug", *orgSlug))
+		}
 
 		openapiDocID, err := uuid.Parse(docInfo.ID)
 		if err != nil {
@@ -90,6 +109,8 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 				DocumentID:   openapiDocID,
 				DocInfo:      docInfo,
 				DocURL:       u,
+				ProjectSlug:  projectSlug,
+				OrgSlug:      orgSlug,
 			})
 
 			if processErr == nil {

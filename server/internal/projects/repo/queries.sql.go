@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createProject = `-- name: CreateProject :one
@@ -65,6 +66,51 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getProjectWithOrganizationMetadata = `-- name: GetProjectWithOrganizationMetadata :one
+SELECT 
+    -- Project fields
+    p.id as project_id,
+    p.name as project_name,
+    p.slug as project_slug,
+    
+    -- Organization metadata fields
+    om.id, om.name, om.slug, om.account_type, om.created_at, om.updated_at
+    
+FROM projects p
+INNER JOIN organization_metadata om ON p.organization_id = om.id
+WHERE p.deleted IS FALSE
+  AND p.id = $1
+`
+
+type GetProjectWithOrganizationMetadataRow struct {
+	ProjectID   uuid.UUID
+	ProjectName string
+	ProjectSlug string
+	ID          string
+	Name        string
+	Slug        string
+	AccountType string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uuid.UUID) (GetProjectWithOrganizationMetadataRow, error) {
+	row := q.db.QueryRow(ctx, getProjectWithOrganizationMetadata, id)
+	var i GetProjectWithOrganizationMetadataRow
+	err := row.Scan(
+		&i.ProjectID,
+		&i.ProjectName,
+		&i.ProjectSlug,
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.AccountType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

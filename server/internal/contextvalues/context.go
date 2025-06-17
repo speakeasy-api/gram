@@ -13,6 +13,8 @@ type AuthContext struct {
 	UserID               string
 	SessionID            *string
 	ProjectID            *uuid.UUID
+	OrganizationSlug     *string
+	ProjectSlug          *string
 }
 
 type CustomDomainContext struct {

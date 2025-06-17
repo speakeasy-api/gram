@@ -27,10 +27,10 @@ func TestService_ServeImage_Success(t *testing.T) {
 	// Setup storage with test content first
 	writer, uri, err := ti.storage.Write(ctx, filename, strings.NewReader(testContent), contentType)
 	require.NoError(t, err)
-	
+
 	_, err = io.Copy(writer, strings.NewReader(testContent))
 	require.NoError(t, err)
-	
+
 	err = writer.Close()
 	require.NoError(t, err)
 

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/keys/repo"
 	"github.com/speakeasy-api/gram/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
 )
 
 func GetAPIKeyHash(key string) (string, error) {
@@ -21,12 +23,16 @@ func GetAPIKeyHash(key string) (string, error) {
 }
 
 type ByKey struct {
-	keyDB *repo.Queries
+	keyDB   *repo.Queries
+	orgRepo *orgRepo.Queries
+	logger  *slog.Logger
 }
 
-func NewKeyAuth(db *pgxpool.Pool) *ByKey {
+func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger) *ByKey {
 	return &ByKey{
-		keyDB: repo.New(db),
+		keyDB:   repo.New(db),
+		orgRepo: orgRepo.New(db),
+		logger:  logger,
 	}
 }
 
@@ -58,11 +64,21 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		}
 	}
 
+	var orgSlug *string
+	if org, err := k.orgRepo.GetOrganizationMetadata(ctx, apiKey.OrganizationID); err != nil {
+		// TODO: Once all organization metadata is backfilled this would actually fail
+		k.logger.ErrorContext(ctx, "error loading organization metadata", slog.String("error", err.Error()))
+	} else {
+		orgSlug = &org.Slug
+	}
+
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID: apiKey.OrganizationID,
 		UserID:               apiKey.CreatedByUserID,
 		SessionID:            nil,
 		ProjectID:            nil,
+		OrganizationSlug:     orgSlug,
+		ProjectSlug:          nil,
 	})
 
 	return ctx, nil

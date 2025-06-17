@@ -79,4 +79,3 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 	}
 }
-

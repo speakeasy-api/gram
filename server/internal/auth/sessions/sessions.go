@@ -71,16 +71,22 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+	authCtx := &contextvalues.AuthContext{
 		SessionID:            &session.SessionID,
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		UserID:               session.UserID,
 		ProjectID:            nil,
-	})
-
-	if _, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID); !ok {
-		return ctx, oops.C(oops.CodeForbidden)
+		OrganizationSlug:     nil,
+		ProjectSlug:          nil,
 	}
+
+	if org, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID); !ok {
+		return ctx, oops.C(oops.CodeForbidden)
+	} else {
+		authCtx.OrganizationSlug = &org.Slug
+	}
+
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	return ctx, nil
 }

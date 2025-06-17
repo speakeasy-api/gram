@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/tools/security"
 	"github.com/speakeasy-api/gram/internal/toolsets/repo"
@@ -15,18 +16,22 @@ import (
 type Toolsets struct {
 	repo      *repo.Queries
 	toolsRepo *toolsRepo.Queries
+	projects  *projectsRepo.Queries
 }
 
 func NewToolsets(tx repo.DBTX) *Toolsets {
 	return &Toolsets{
 		repo:      repo.New(tx),
 		toolsRepo: toolsRepo.New(tx),
+		projects:  projectsRepo.New(tx),
 	}
 }
 
 type HTTPToolExecutionInfo struct {
-	Tool     toolsRepo.HttpToolDefinition
-	Security []repo.HttpSecurity
+	Tool        toolsRepo.HttpToolDefinition
+	Security    []repo.HttpSecurity
+	ProjectSlug *string
+	OrgSlug     *string
 }
 
 func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
@@ -55,8 +60,17 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		return nil, err
 	}
 
+	var projectSlug *string
+	var orgSlug *string
+	if orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID); err == nil {
+		orgSlug = &orgData.Slug
+		projectSlug = &orgData.ProjectSlug
+	}
+
 	return &HTTPToolExecutionInfo{
-		Tool:     tool,
-		Security: securityEntries,
+		Tool:        tool,
+		Security:    securityEntries,
+		ProjectSlug: projectSlug,
+		OrgSlug:     orgSlug,
 	}, nil
 }
