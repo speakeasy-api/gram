@@ -190,15 +190,6 @@ export function ProjectMenu() {
             <ThemeToggle />
           </Stack>
 
-          <NavButton
-            title="Logout"
-            Icon={() => <Icon name="log-out" />}
-            onClick={async () => {
-              await client.auth.logout();
-              window.location.href = "/login";
-              setOpen(false);
-            }}
-          />
           <SimpleTooltip
             tooltip={
               organization?.ssoConnectionId
@@ -216,6 +207,15 @@ export function ProjectMenu() {
               }}
             />
           </SimpleTooltip>
+          <NavButton
+            title="Logout"
+            Icon={() => <Icon name="log-out" />}
+            onClick={async () => {
+              await client.auth.logout();
+              window.location.href = "/login";
+              setOpen(false);
+            }}
+          />
         </div>
       </PopoverContent>
     </Popover>
