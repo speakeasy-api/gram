@@ -1,5 +1,6 @@
 import { AddButton } from "@/components/add-button";
 import { CreateThingCard } from "@/components/create-thing-card";
+import { DeleteButton } from "@/components/delete-button";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,8 +12,13 @@ import {
   PromptTemplateKind,
   Toolset,
 } from "@gram/client/models/components";
-import { useTemplates } from "@gram/client/react-query/index.js";
+import {
+  invalidateAllTemplates,
+  useDeleteTemplateMutation,
+  useTemplates,
+} from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "react-router";
 
 export function PromptsRoot() {
@@ -66,6 +72,13 @@ export function PromptTemplateCard({
   actions?: React.ReactNode;
 }) {
   const routes = useRoutes();
+  const queryClient = useQueryClient();
+
+  const deleteTemplate = useDeleteTemplateMutation({
+    onSuccess: () => {
+      invalidateAllTemplates(queryClient);
+    },
+  });
 
   return (
     <Card>
@@ -85,9 +98,19 @@ export function PromptTemplateCard({
         {actions && <Card.Actions>{actions}</Card.Actions>}
       </Card.Header>
       <Card.Content>
-        <routes.prompts.prompt.Link params={[template.name]}>
-          <Button variant="outline">Edit</Button>
-        </routes.prompts.prompt.Link>
+        <Stack direction="horizontal" gap={2}>
+          <routes.prompts.prompt.Link params={[template.name]}>
+            <Button variant="outline">Edit</Button>
+          </routes.prompts.prompt.Link>
+          <DeleteButton
+            tooltip="Delete Prompt Template"
+            onClick={() => {
+              if (confirm("Are you sure you want to delete this prompt template?")) {
+                deleteTemplate.mutate({ request: { name: template.name } });
+              }
+            }}
+          />
+        </Stack>
       </Card.Content>
     </Card>
   );
