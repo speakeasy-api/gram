@@ -245,16 +245,23 @@ export function ToolsetView({
     });
   };
 
-  const missingEnvVars = environment
-    ? toolset?.relevantEnvironmentVariables?.filter(
-        (varName) =>
-          !environment?.entries.find((entry) => entry.name === varName)
-      )
-    : [];
-
-  const isMissingRequiredEnvVars = missingEnvVars?.some(
-    (envVar) => !envVar.includes("SERVER_URL")
+  // For now to reduce user confusion we omit server url env variables
+  // If a spec already has a security env variable set we will not surface variables as missing for that spec
+  const relevantEnvVars = toolset?.relevantEnvironmentVariables?.filter(
+    (varName) =>
+      !varName.includes("SERVER_URL")
   );
+
+  const missingEnvVars = relevantEnvVars?.filter(
+        (varName) =>
+          !environment?.entries?.find((entry) => {
+            const entryPrefix = entry.name.split('_')[0];
+            const varPrefix = varName.split('_')[0];
+            return entryPrefix === varPrefix;
+          })
+      ) || [];
+
+  const isMissingRequiredEnvVars = missingEnvVars?.length > 0;
 
   const submitEnvVars = () => {
     if (!environment) {

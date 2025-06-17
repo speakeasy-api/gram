@@ -144,9 +144,17 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
         <Dialog.Header>
           <Dialog.Title>Fill for Toolset</Dialog.Title>
           <Dialog.Description>
-            Select a list toolsets you would like to prefill environment
-            variables for. All possible env variables will be filled in as empty
-            values, set any relevant variables and remove uneeded ones.
+            <p>
+              Select a toolsets you would like to prefill environment variables for. All relevant env variables will be filled in with empty placeholders.
+            </p>
+            <br />
+            <p>
+              When an API has multiple optional security options, you only need to provide values for the security scheme relevant to you and you can remove the uneeded entries.
+            </p>
+            <br />
+            <p>
+              If your API has a default server URL, providing a value for a server URL is not required.
+            </p>
           </Dialog.Description>
         </Dialog.Header>
         <div className="grid gap-4 py-4">
