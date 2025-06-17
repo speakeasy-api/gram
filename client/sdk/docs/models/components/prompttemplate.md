@@ -14,9 +14,10 @@ let value: PromptTemplate = {
   name: "<value>",
   prompt: "<value>",
   toolsHint: [
-    "<value>",
+    "<value 1>",
+    "<value 2>",
   ],
-  updatedAt: new Date("2024-11-07T17:04:28.929Z"),
+  updatedAt: new Date("2025-05-11T16:12:34.391Z"),
 };
 ```
 

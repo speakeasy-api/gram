@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS projects (
   CONSTRAINT projects_pkey PRIMARY KEY (id)
 );
 
+CREATE TABLE IF NOT EXISTS organization_metadata (
+  id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  account_type TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_metadata_pkey PRIMARY KEY (id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS projects_organization_id_slug_key
 ON projects (organization_id, slug)
 WHERE deleted IS FALSE;

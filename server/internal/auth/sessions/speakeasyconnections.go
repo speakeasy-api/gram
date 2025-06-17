@@ -24,12 +24,14 @@ type speakeasyProviderUser struct {
 }
 
 type speakeasyProviderOrganization struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	AccountType string    `json:"account_type"`
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	Slug               string    `json:"slug"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+	AccountType        string    `json:"account_type"`
+	SSOConnectionID    *string   `json:"sso_connection_id,omitempty"`
+	UserWorkspaceSlugs []string  `json:"user_workspace_slugs"`
 }
 
 type validateTokenResponse struct {
@@ -74,11 +76,13 @@ func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, err
 	var nonFreeOrganizations []auth.OrganizationEntry
 	for i, org := range validateResp.Organizations {
 		authOrg := auth.OrganizationEntry{
-			ID:          org.ID,
-			Name:        org.Name,
-			Slug:        org.Slug,
-			AccountType: org.AccountType,
-			Projects:    []*auth.ProjectEntry{}, // filled in from gram server
+			ID:                 org.ID,
+			Name:               org.Name,
+			Slug:               org.Slug,
+			AccountType:        org.AccountType,
+			SsoConnectionID:    org.SSOConnectionID,
+			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
+			Projects:           []*auth.ProjectEntry{}, // filled in from gram server
 		}
 
 		organizations[i] = authOrg
@@ -106,9 +110,9 @@ func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) er
 	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false})
 }
 
-func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*CachedUserInfo, error) {
+func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*CachedUserInfo, bool, error) {
 	if userInfo, err := s.userInfoCache.Get(ctx, UserInfoCacheKey(userID)); err == nil {
-		return &userInfo, nil
+		return &userInfo, true, nil
 	}
 
 	var userInfo *CachedUserInfo
@@ -120,18 +124,21 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 		userInfo, err = s.GetUserInfoFromSpeakeasy(sessionID)
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if err = s.userInfoCache.Store(ctx, *userInfo); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
 	}
 
-	return userInfo, err
+	// TODO: Temporary logging to debug
+	s.logger.InfoContext(ctx, "stored use info in cache")
+
+	return userInfo, false, err
 }
 
 func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.OrganizationEntry, bool) {
-	userInfo, err := s.GetUserInfo(ctx, userID, sessionID)
+	userInfo, _, err := s.GetUserInfo(ctx, userID, sessionID)
 	if err != nil {
 		return nil, false
 	}

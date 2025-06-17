@@ -91,11 +91,13 @@ func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, e
 	// Convert organizations
 	for i, org := range userInfo.Organizations {
 		result.Organizations[i] = auth.OrganizationEntry{
-			ID:          org.OrganizationID,
-			Name:        org.OrganizationName,
-			Slug:        org.OrganizationSlug,
-			AccountType: org.AccountType,
-			Projects:    []*auth.ProjectEntry{},
+			ID:                 org.OrganizationID,
+			Name:               org.OrganizationName,
+			Slug:               org.OrganizationSlug,
+			AccountType:        org.AccountType,
+			SsoConnectionID:    nil,
+			UserWorkspaceSlugs: []string{},
+			Projects:           []*auth.ProjectEntry{},
 		}
 	}
 

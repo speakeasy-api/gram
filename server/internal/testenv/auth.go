@@ -26,7 +26,7 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	// Generate unique project slug to avoid conflicts when tests run in parallel
 	// Keep it short to comply with database constraint (max 40 chars)
 	projectSlug := fmt.Sprintf("test-%s", uuid.New().String()[:8])
-	
+
 	p, err := projectsRepo.New(conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
 		Name:           projectSlug,
 		Slug:           projectSlug,

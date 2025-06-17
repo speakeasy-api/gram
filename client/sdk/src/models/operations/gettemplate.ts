@@ -18,9 +18,15 @@ export type GetTemplateSecurityOption2 = {
   projectSlugHeaderGramProject: string;
 };
 
+export type GetTemplateSecurityOption3 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type GetTemplateSecurity = {
   option1?: GetTemplateSecurityOption1 | undefined;
   option2?: GetTemplateSecurityOption2 | undefined;
+  option3?: GetTemplateSecurityOption3 | undefined;
 };
 
 export type GetTemplateRequest = {
@@ -181,6 +187,73 @@ export function getTemplateSecurityOption2FromJSON(
 }
 
 /** @internal */
+export const GetTemplateSecurityOption3$inboundSchema: z.ZodType<
+  GetTemplateSecurityOption3,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type GetTemplateSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const GetTemplateSecurityOption3$outboundSchema: z.ZodType<
+  GetTemplateSecurityOption3$Outbound,
+  z.ZodTypeDef,
+  GetTemplateSecurityOption3
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace GetTemplateSecurityOption3$ {
+  /** @deprecated use `GetTemplateSecurityOption3$inboundSchema` instead. */
+  export const inboundSchema = GetTemplateSecurityOption3$inboundSchema;
+  /** @deprecated use `GetTemplateSecurityOption3$outboundSchema` instead. */
+  export const outboundSchema = GetTemplateSecurityOption3$outboundSchema;
+  /** @deprecated use `GetTemplateSecurityOption3$Outbound` instead. */
+  export type Outbound = GetTemplateSecurityOption3$Outbound;
+}
+
+export function getTemplateSecurityOption3ToJSON(
+  getTemplateSecurityOption3: GetTemplateSecurityOption3,
+): string {
+  return JSON.stringify(
+    GetTemplateSecurityOption3$outboundSchema.parse(getTemplateSecurityOption3),
+  );
+}
+
+export function getTemplateSecurityOption3FromJSON(
+  jsonString: string,
+): SafeParseResult<GetTemplateSecurityOption3, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => GetTemplateSecurityOption3$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetTemplateSecurityOption3' from JSON`,
+  );
+}
+
+/** @internal */
 export const GetTemplateSecurity$inboundSchema: z.ZodType<
   GetTemplateSecurity,
   z.ZodTypeDef,
@@ -188,10 +261,12 @@ export const GetTemplateSecurity$inboundSchema: z.ZodType<
 > = z.object({
   Option1: z.lazy(() => GetTemplateSecurityOption1$inboundSchema).optional(),
   Option2: z.lazy(() => GetTemplateSecurityOption2$inboundSchema).optional(),
+  Option3: z.lazy(() => GetTemplateSecurityOption3$inboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     "Option1": "option1",
     "Option2": "option2",
+    "Option3": "option3",
   });
 });
 
@@ -199,6 +274,7 @@ export const GetTemplateSecurity$inboundSchema: z.ZodType<
 export type GetTemplateSecurity$Outbound = {
   Option1?: GetTemplateSecurityOption1$Outbound | undefined;
   Option2?: GetTemplateSecurityOption2$Outbound | undefined;
+  Option3?: GetTemplateSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -209,10 +285,12 @@ export const GetTemplateSecurity$outboundSchema: z.ZodType<
 > = z.object({
   option1: z.lazy(() => GetTemplateSecurityOption1$outboundSchema).optional(),
   option2: z.lazy(() => GetTemplateSecurityOption2$outboundSchema).optional(),
+  option3: z.lazy(() => GetTemplateSecurityOption3$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
+    option3: "Option3",
   });
 });
 

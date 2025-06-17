@@ -46,7 +46,7 @@ func TestDeploymentsService_GetLatestDeployment_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		GithubRepo:       nil,
 		GithubPr:         nil,
-		GithubSha:        nil,	
+		GithubSha:        nil,
 		ExternalID:       nil,
 		ExternalURL:      nil,
 	})

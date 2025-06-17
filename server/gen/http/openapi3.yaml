@@ -7016,6 +7016,12 @@ components:
                         $ref: '#/components/schemas/ProjectEntry'
                 slug:
                     type: string
+                sso_connection_id:
+                    type: string
+                user_workspace_slugs:
+                    type: array
+                    items:
+                        type: string
             required:
                 - id
                 - name

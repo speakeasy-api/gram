@@ -464,6 +464,8 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 			}
 		}
 	} else {
+		fmt.Println("autoSummarizeConfig.autoSummarizeMessage", autoSummarizeConfig.autoSummarizeMessage)
+		fmt.Println("autoSummarizeConfig.authenticatedOrg", autoSummarizeConfig.authenticatedOrg)
 		if autoSummarizeConfig.autoSummarizeMessage != "" && autoSummarizeConfig.authenticatedOrg != nil {
 			// Only read entire body if we might need to summarize
 			bodyBytes, err := io.ReadAll(resp.Body)
@@ -480,6 +482,7 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 				if err != nil {
 					return oops.E(oops.CodeUnexpected, err, "failed to summarize response").Log(ctx, logger)
 				}
+				fmt.Println("summarizedResponse", summarizedResponse)
 				responseBody = summarizedResponse
 			}
 

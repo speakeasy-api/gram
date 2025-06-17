@@ -5,13 +5,7 @@
 ```typescript
 import { SwitchAuthScopesResponse } from "@gram/client/models/operations";
 
-let value: SwitchAuthScopesResponse = {
-  headers: {
-    "key": [
-      "<value>",
-    ],
-  },
-};
+let value: SwitchAuthScopesResponse = {};
 ```
 
 ## Fields

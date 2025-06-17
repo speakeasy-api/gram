@@ -926,11 +926,13 @@ type InfoGatewayErrorResponseBody struct {
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
-	ID          string                      `form:"id" json:"id" xml:"id"`
-	Name        string                      `form:"name" json:"name" xml:"name"`
-	Slug        string                      `form:"slug" json:"slug" xml:"slug"`
-	AccountType string                      `form:"account_type" json:"account_type" xml:"account_type"`
-	Projects    []*ProjectEntryResponseBody `form:"projects" json:"projects" xml:"projects"`
+	ID                 string                      `form:"id" json:"id" xml:"id"`
+	Name               string                      `form:"name" json:"name" xml:"name"`
+	Slug               string                      `form:"slug" json:"slug" xml:"slug"`
+	AccountType        string                      `form:"account_type" json:"account_type" xml:"account_type"`
+	Projects           []*ProjectEntryResponseBody `form:"projects" json:"projects" xml:"projects"`
+	SsoConnectionID    *string                     `form:"sso_connection_id,omitempty" json:"sso_connection_id,omitempty" xml:"sso_connection_id,omitempty"`
+	UserWorkspaceSlugs []string                    `form:"user_workspace_slugs,omitempty" json:"user_workspace_slugs,omitempty" xml:"user_workspace_slugs,omitempty"`
 }
 
 // ProjectEntryResponseBody is used to define fields on response body types.

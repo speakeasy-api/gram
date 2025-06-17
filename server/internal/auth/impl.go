@@ -25,6 +25,7 @@ import (
 	envRepo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/middleware"
 	"github.com/speakeasy-api/gram/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
 )
 
@@ -45,6 +46,7 @@ type Service struct {
 	cfg          AuthConfigurations
 	projectsRepo *projectsRepo.Queries
 	envRepo      *envRepo.Queries
+	orgRepo      *orgRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -58,6 +60,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		cfg:          cfg,
 		projectsRepo: projectsRepo.New(db),
 		envRepo:      envRepo.New(db),
+		orgRepo:      orgRepo.New(db),
 	}
 }
 
@@ -166,7 +169,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +229,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, fromCache, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -258,12 +261,26 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			})
 		}
 
+		// write through organization metadata when not from cache
+		if !fromCache {
+			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+				ID:          org.ID,
+				Name:        org.Name,
+				Slug:        org.Slug,
+				AccountType: org.AccountType,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+			}
+		}
+
 		organizations = append(organizations, &gen.OrganizationEntry{
-			ID:          org.ID,
-			Name:        org.Name,
-			Slug:        org.Slug,
-			AccountType: org.AccountType,
-			Projects:    orgProjects,
+			ID:                 org.ID,
+			Name:               org.Name,
+			Slug:               org.Slug,
+			AccountType:        org.AccountType,
+			SsoConnectionID:    org.SsoConnectionID,
+			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
+			Projects:           orgProjects,
 		})
 	}
 

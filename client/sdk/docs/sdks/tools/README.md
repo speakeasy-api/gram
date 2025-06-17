@@ -23,7 +23,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.tools.list();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -44,15 +43,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await toolsList(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("toolsList failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();

@@ -60,7 +60,7 @@ variations (upsert-global|delete-global|list-global)
 func UsageExamples() string {
 	return os.Args[0] + ` assets serve-image --id "Ipsa mollitia aspernatur sunt eos." --session-token "Explicabo libero magnam aspernatur fuga dolorem voluptas."` + "\n" +
 		os.Args[0] + ` auth callback --id-token "Non sed."` + "\n" +
-		os.Args[0] + ` chat list-chats --session-token "Sunt adipisci et voluptatum fuga id consequatur." --project-slug-input "Culpa beatae quos eos hic tenetur non."` + "\n" +
+		os.Args[0] + ` chat list-chats --session-token "Beatae quos eos hic tenetur." --project-slug-input "Debitis voluptas autem ea cum pariatur."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Libero et temporibus." --apikey-token "Rerum saepe veritatis eveniet repudiandae." --session-token "Ab nemo maiores reprehenderit." --project-slug-input "Cumque fuga cumque provident rem tenetur fuga."` + "\n" +
 		os.Args[0] + ` domains get-domain --session-token "Voluptatem praesentium omnis corporis ex tenetur." --project-slug-input "Non est nihil vel est ea debitis."` + "\n" +
 		""
@@ -1201,7 +1201,7 @@ List all chats for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s chat list-chats --session-token "Sunt adipisci et voluptatum fuga id consequatur." --project-slug-input "Culpa beatae quos eos hic tenetur non."
+    %[1]s chat list-chats --session-token "Beatae quos eos hic tenetur." --project-slug-input "Debitis voluptas autem ea cum pariatur."
 `, os.Args[0])
 }
 

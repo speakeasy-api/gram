@@ -7,13 +7,13 @@ import { UploadOpenAPIv3Result } from "@gram/client/models/components";
 
 let value: UploadOpenAPIv3Result = {
   asset: {
-    contentLength: 742982,
+    contentLength: 958634,
     contentType: "<value>",
-    createdAt: new Date("2025-07-18T05:10:44.635Z"),
+    createdAt: new Date("2023-05-13T07:03:10.444Z"),
     id: "<id>",
-    kind: "image",
+    kind: "unknown",
     sha256: "<value>",
-    updatedAt: new Date("2023-11-05T23:49:28.974Z"),
+    updatedAt: new Date("2024-11-10T19:50:20.384Z"),
   },
 };
 ```

@@ -928,11 +928,13 @@ type InfoGatewayErrorResponseBody struct {
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
-	ID          *string                     `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	Name        *string                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Slug        *string                     `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	AccountType *string                     `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
-	Projects    []*ProjectEntryResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
+	ID                 *string                     `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name               *string                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Slug               *string                     `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	AccountType        *string                     `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	Projects           []*ProjectEntryResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
+	SsoConnectionID    *string                     `form:"sso_connection_id,omitempty" json:"sso_connection_id,omitempty" xml:"sso_connection_id,omitempty"`
+	UserWorkspaceSlugs []string                    `form:"user_workspace_slugs,omitempty" json:"user_workspace_slugs,omitempty" xml:"user_workspace_slugs,omitempty"`
 }
 
 // ProjectEntryResponseBody is used to define fields on response body types.

@@ -217,6 +217,15 @@ type OpenrouterApiKey struct {
 	Deleted        bool
 }
 
+type OrganizationMetadatum struct {
+	ID          string
+	Name        string
+	Slug        string
+	AccountType string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type Package struct {
 	ID              uuid.UUID
 	Name            string

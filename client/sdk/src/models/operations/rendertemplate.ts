@@ -19,9 +19,15 @@ export type RenderTemplateSecurityOption2 = {
   projectSlugHeaderGramProject: string;
 };
 
+export type RenderTemplateSecurityOption3 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type RenderTemplateSecurity = {
   option1?: RenderTemplateSecurityOption1 | undefined;
   option2?: RenderTemplateSecurityOption2 | undefined;
+  option3?: RenderTemplateSecurityOption3 | undefined;
 };
 
 export type RenderTemplateRequest = {
@@ -183,6 +189,75 @@ export function renderTemplateSecurityOption2FromJSON(
 }
 
 /** @internal */
+export const RenderTemplateSecurityOption3$inboundSchema: z.ZodType<
+  RenderTemplateSecurityOption3,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  "apikey_header_Gram-Key": z.string(),
+  "project_slug_header_Gram-Project": z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
+  });
+});
+
+/** @internal */
+export type RenderTemplateSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const RenderTemplateSecurityOption3$outboundSchema: z.ZodType<
+  RenderTemplateSecurityOption3$Outbound,
+  z.ZodTypeDef,
+  RenderTemplateSecurityOption3
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RenderTemplateSecurityOption3$ {
+  /** @deprecated use `RenderTemplateSecurityOption3$inboundSchema` instead. */
+  export const inboundSchema = RenderTemplateSecurityOption3$inboundSchema;
+  /** @deprecated use `RenderTemplateSecurityOption3$outboundSchema` instead. */
+  export const outboundSchema = RenderTemplateSecurityOption3$outboundSchema;
+  /** @deprecated use `RenderTemplateSecurityOption3$Outbound` instead. */
+  export type Outbound = RenderTemplateSecurityOption3$Outbound;
+}
+
+export function renderTemplateSecurityOption3ToJSON(
+  renderTemplateSecurityOption3: RenderTemplateSecurityOption3,
+): string {
+  return JSON.stringify(
+    RenderTemplateSecurityOption3$outboundSchema.parse(
+      renderTemplateSecurityOption3,
+    ),
+  );
+}
+
+export function renderTemplateSecurityOption3FromJSON(
+  jsonString: string,
+): SafeParseResult<RenderTemplateSecurityOption3, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => RenderTemplateSecurityOption3$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RenderTemplateSecurityOption3' from JSON`,
+  );
+}
+
+/** @internal */
 export const RenderTemplateSecurity$inboundSchema: z.ZodType<
   RenderTemplateSecurity,
   z.ZodTypeDef,
@@ -190,10 +265,12 @@ export const RenderTemplateSecurity$inboundSchema: z.ZodType<
 > = z.object({
   Option1: z.lazy(() => RenderTemplateSecurityOption1$inboundSchema).optional(),
   Option2: z.lazy(() => RenderTemplateSecurityOption2$inboundSchema).optional(),
+  Option3: z.lazy(() => RenderTemplateSecurityOption3$inboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     "Option1": "option1",
     "Option2": "option2",
+    "Option3": "option3",
   });
 });
 
@@ -201,6 +278,7 @@ export const RenderTemplateSecurity$inboundSchema: z.ZodType<
 export type RenderTemplateSecurity$Outbound = {
   Option1?: RenderTemplateSecurityOption1$Outbound | undefined;
   Option2?: RenderTemplateSecurityOption2$Outbound | undefined;
+  Option3?: RenderTemplateSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -213,10 +291,13 @@ export const RenderTemplateSecurity$outboundSchema: z.ZodType<
     .optional(),
   option2: z.lazy(() => RenderTemplateSecurityOption2$outboundSchema)
     .optional(),
+  option3: z.lazy(() => RenderTemplateSecurityOption3$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
+    option3: "Option3",
   });
 });
 

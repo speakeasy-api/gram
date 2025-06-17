@@ -9,20 +9,13 @@ import { Environment } from "@gram/client/models/components";
 
 let value: Environment = {
   createdAt: new Date("2024-12-03T14:12:16.809Z"),
-  entries: [
-    {
-      createdAt: new Date("2023-07-04T13:38:25.319Z"),
-      name: "<value>",
-      updatedAt: new Date("2023-09-16T02:48:31.195Z"),
-      value: "<value>",
-    },
-  ],
+  entries: [],
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
   projectId: "<id>",
   slug: "<value>",
-  updatedAt: new Date("2025-12-18T14:47:07.379Z"),
+  updatedAt: new Date("2023-09-16T02:48:31.195Z"),
 };
 ```
 

@@ -20,6 +20,8 @@ export type OrganizationEntry = {
   name: string;
   projects: Array<ProjectEntry>;
   slug: string;
+  ssoConnectionId?: string | undefined;
+  userWorkspaceSlugs?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -33,9 +35,13 @@ export const OrganizationEntry$inboundSchema: z.ZodType<
   name: z.string(),
   projects: z.array(ProjectEntry$inboundSchema),
   slug: z.string(),
+  sso_connection_id: z.string().optional(),
+  user_workspace_slugs: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     "account_type": "accountType",
+    "sso_connection_id": "ssoConnectionId",
+    "user_workspace_slugs": "userWorkspaceSlugs",
   });
 });
 
@@ -46,6 +52,8 @@ export type OrganizationEntry$Outbound = {
   name: string;
   projects: Array<ProjectEntry$Outbound>;
   slug: string;
+  sso_connection_id?: string | undefined;
+  user_workspace_slugs?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -59,9 +67,13 @@ export const OrganizationEntry$outboundSchema: z.ZodType<
   name: z.string(),
   projects: z.array(ProjectEntry$outboundSchema),
   slug: z.string(),
+  ssoConnectionId: z.string().optional(),
+  userWorkspaceSlugs: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     accountType: "account_type",
+    ssoConnectionId: "sso_connection_id",
+    userWorkspaceSlugs: "user_workspace_slugs",
   });
 });
 

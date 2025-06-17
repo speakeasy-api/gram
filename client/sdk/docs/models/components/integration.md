@@ -11,10 +11,11 @@ let value: Integration = {
   packageSummary: "<value>",
   packageTitle: "<value>",
   toolNames: [
-    "<value>",
+    "<value 1>",
+    "<value 2>",
   ],
   version: "<value>",
-  versionCreatedAt: new Date("2024-07-18T10:54:14.712Z"),
+  versionCreatedAt: new Date("2025-10-27T14:06:45.597Z"),
 };
 ```
 

@@ -7,15 +7,15 @@ import { PublishPackageResult } from "@gram/client/models/components";
 
 let value: PublishPackageResult = {
   package: {
-    createdAt: new Date("2023-03-12T09:33:18.947Z"),
+    createdAt: new Date("2025-04-29T19:32:19.315Z"),
     id: "<id>",
     name: "<value>",
     organizationId: "<id>",
     projectId: "<id>",
-    updatedAt: new Date("2025-06-16T13:02:48.836Z"),
+    updatedAt: new Date("2023-02-03T19:41:53.384Z"),
   },
   version: {
-    createdAt: new Date("2023-12-27T12:10:52.007Z"),
+    createdAt: new Date("2023-03-12T09:33:18.947Z"),
     deploymentId: "<id>",
     id: "<id>",
     packageId: "<id>",

@@ -7,17 +7,18 @@ import { UpdatePromptTemplateResult } from "@gram/client/models/components";
 
 let value: UpdatePromptTemplateResult = {
   template: {
-    createdAt: new Date("2023-07-07T11:52:39.775Z"),
+    createdAt: new Date("2025-02-04T03:43:35.518Z"),
     engine: "mustache",
     historyId: "<id>",
     id: "<id>",
-    kind: "higher_order_tool",
+    kind: "prompt",
     name: "<value>",
     prompt: "<value>",
     toolsHint: [
-      "<value>",
+      "<value 1>",
+      "<value 2>",
     ],
-    updatedAt: new Date("2025-04-25T21:00:08.895Z"),
+    updatedAt: new Date("2025-01-13T13:49:49.606Z"),
   },
 };
 ```

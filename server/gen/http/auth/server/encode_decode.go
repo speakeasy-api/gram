@@ -996,10 +996,11 @@ func EncodeInfoError(encoder func(context.Context, http.ResponseWriter) goahttp.
 // *auth.OrganizationEntry.
 func marshalAuthOrganizationEntryToOrganizationEntryResponseBody(v *auth.OrganizationEntry) *OrganizationEntryResponseBody {
 	res := &OrganizationEntryResponseBody{
-		ID:          v.ID,
-		Name:        v.Name,
-		Slug:        v.Slug,
-		AccountType: v.AccountType,
+		ID:              v.ID,
+		Name:            v.Name,
+		Slug:            v.Slug,
+		AccountType:     v.AccountType,
+		SsoConnectionID: v.SsoConnectionID,
 	}
 	if v.Projects != nil {
 		res.Projects = make([]*ProjectEntryResponseBody, len(v.Projects))
@@ -1008,6 +1009,12 @@ func marshalAuthOrganizationEntryToOrganizationEntryResponseBody(v *auth.Organiz
 		}
 	} else {
 		res.Projects = []*ProjectEntryResponseBody{}
+	}
+	if v.UserWorkspaceSlugs != nil {
+		res.UserWorkspaceSlugs = make([]string, len(v.UserWorkspaceSlugs))
+		for i, val := range v.UserWorkspaceSlugs {
+			res.UserWorkspaceSlugs[i] = val
+		}
 	}
 
 	return res

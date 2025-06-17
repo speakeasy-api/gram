@@ -8,21 +8,7 @@ import { InfoResponseBody } from "@gram/client/models/components";
 let value: InfoResponseBody = {
   activeOrganizationId: "<id>",
   isAdmin: false,
-  organizations: [
-    {
-      accountType: "<value>",
-      id: "<id>",
-      name: "<value>",
-      projects: [
-        {
-          id: "<id>",
-          name: "<value>",
-          slug: "<value>",
-        },
-      ],
-      slug: "<value>",
-    },
-  ],
+  organizations: [],
   userEmail: "<value>",
   userId: "<id>",
 };

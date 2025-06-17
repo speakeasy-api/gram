@@ -5,11 +5,7 @@
 ```typescript
 import { RegisterDomainRequest } from "@gram/client/models/operations";
 
-let value: RegisterDomainRequest = {
-  createDomainRequestBody: {
-    domain: "salty-patroller.info",
-  },
-};
+let value: RegisterDomainRequest = {};
 ```
 
 ## Fields

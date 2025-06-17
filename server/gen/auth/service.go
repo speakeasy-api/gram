@@ -103,11 +103,13 @@ type LogoutResult struct {
 }
 
 type OrganizationEntry struct {
-	ID          string
-	Name        string
-	Slug        string
-	AccountType string
-	Projects    []*ProjectEntry
+	ID                 string
+	Name               string
+	Slug               string
+	AccountType        string
+	Projects           []*ProjectEntry
+	SsoConnectionID    *string
+	UserWorkspaceSlugs []string
 }
 
 type ProjectEntry struct {

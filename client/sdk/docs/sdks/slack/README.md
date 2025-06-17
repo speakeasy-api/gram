@@ -29,7 +29,6 @@ async function run() {
     projectSlug: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -52,15 +51,12 @@ async function run() {
   const res = await slackSlackLogin(gram, {
     projectSlug: "<value>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("slackSlackLogin failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -105,7 +101,6 @@ async function run() {
     code: "<value>",
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -129,15 +124,12 @@ async function run() {
     state: "Colorado",
     code: "<value>",
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("slackSlackCallback failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -198,14 +190,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await slackDeleteSlackConnection(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    
+  } else {
+    console.log("slackDeleteSlackConnection failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  
 }
 
 run();
@@ -264,7 +254,6 @@ const gram = new Gram();
 async function run() {
   const result = await gram.slack.getSlackConnection();
 
-  // Handle the result
   console.log(result);
 }
 
@@ -285,15 +274,12 @@ const gram = new GramCore();
 
 async function run() {
   const res = await slackGetSlackConnection(gram);
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("slackGetSlackConnection failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
@@ -367,7 +353,6 @@ async function run() {
     },
   });
 
-  // Handle the result
   console.log(result);
 }
 
@@ -392,15 +377,12 @@ async function run() {
       defaultToolsetSlug: "<value>",
     },
   });
-
-  if (!res.ok) {
-    throw res.error;
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("slackUpdateSlackConnection failed:", res.error);
   }
-
-  const { value: result } = res;
-
-  // Handle the result
-  console.log(result);
 }
 
 run();
