@@ -1,25 +1,29 @@
 {
   "permissions": {
     "allow": [
-      "Bash(helm template *)",
-      "Bash(helm lint *)",
-      "Bash(kubectl apply --dry-run=client *)",
-      "Bash(kubectl explain *)",
-      "Bash(terraform validate *)",
-      "Bash(terraform plan *)",
-      "Bash(mise helm:up)",
-      "Bash(mise helm:update)",
-      "Bash(mise helm:validate)",
+      "Bash(helm template:*)",
+      "Bash(helm lint:*)",
+      "Bash(kubectl apply --dry-run=client:*)",
+      "Bash(kubectl explain:*)",
+      "Bash(terraform validate:*)",
+      "Bash(terraform plan:*)",
       "Bash(find:*)",
-      "Bash(docker *)",
-      "Bash(go *)",
+      "Bash(docker:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(go:*)",
       "Bash(ls:*)",
+      "Bash(mise test:*)",
+      "Bash(mise lint:*)",
+      "Bash(mise build:*)",
+      "Bash(mise gen:*)",
       "Read(*)",
       "Update(infra:*)",
       "Update(client:*)",
       "Update(server:*)",
       "WebFetch"
-    ]
+    ],
+    "deny": ["Read(mise.local.toml)"]
   },
   "preferredLineLength": 120,
   "notes": "Only use kubectl and terraform commands for validation/dry-run as defined in CLAUDE.md. Only run mise commands for local iteration (helm:up, helm:update, k8s:refresh). Do not automatically run commands that make real infrastructure changes without specific user request."
