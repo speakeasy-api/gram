@@ -22,6 +22,7 @@ import { Separator } from "./ui/separator.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
 import { ThemeToggle } from "./ui/theme-toggle.tsx";
 import { Type } from "./ui/type.tsx";
+import { SimpleTooltip } from "./ui/tooltip.tsx";
 
 // Generate colors from project label
 function getProjectColors(label: string): {
@@ -88,6 +89,12 @@ export function ProjectMenu() {
   const isAdmin = useIsAdmin();
 
   const [open, setOpen] = React.useState(false);
+
+  const membershipURL =
+    organization?.userWorkspaceSlugs &&
+    organization.userWorkspaceSlugs.length > 0
+      ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
+      : "https://app.speakeasy.com";
 
   const adminOverride = isAdmin ? (
     <>
@@ -192,6 +199,23 @@ export function ProjectMenu() {
               setOpen(false);
             }}
           />
+          <SimpleTooltip
+            tooltip={
+              organization?.ssoConnectionId
+                ? "user membership is managed through your Speakeasy account domain"
+                : "user membership is managed through your account"
+            }
+          >
+            <NavButton
+              title="Manage Members"
+              active={!organization?.ssoConnectionId}
+              Icon={() => <Icon name="users-round" />}
+              onClick={() => {
+                window.open(membershipURL, "_blank");
+                setOpen(false);
+              }}
+            />
+          </SimpleTooltip>
         </div>
       </PopoverContent>
     </Popover>
