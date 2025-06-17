@@ -112,10 +112,6 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset")
 	}
 
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return body.Close()
-	})
-
 	return &gen.ServeImageResult{
 		ContentType:   row.ContentType,
 		ContentLength: row.ContentLength,
