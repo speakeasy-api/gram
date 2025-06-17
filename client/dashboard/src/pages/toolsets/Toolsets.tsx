@@ -1,27 +1,17 @@
 import { AddButton } from "@/components/add-button";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
-import { CopyableSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import {
-  ToolsetPromptsBadge,
-  ToolsetToolsBadge,
-} from "@/components/tools-badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
 import {
   useCreateToolsetMutation,
   useListToolsetsSuspense,
   useToolsetSuspense,
 } from "@gram/client/react-query/index.js";
-import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
+import { ToolsetCard } from "./ToolsetCard";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -108,57 +98,5 @@ export default function Toolsets() {
         />
       </Page.Body>
     </Page>
-  );
-}
-
-function ToolsetCard({ toolset }: { toolset: Toolset }) {
-  const routes = useRoutes();
-
-  return (
-    <Card>
-      <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Card.Title>
-            <CopyableSlug slug={toolset.slug}>
-              <routes.toolsets.toolset.Link params={[toolset.slug]}>
-                {toolset.name}
-              </routes.toolsets.toolset.Link>
-            </CopyableSlug>
-          </Card.Title>
-          <Stack direction="horizontal" gap={1} align="center">
-            <ToolsetPromptsBadge toolset={toolset} />
-            <ToolsetToolsBadge toolset={toolset} />
-          </Stack>
-        </Stack>
-        <Stack direction="horizontal" gap={3} justify={"space-between"}>
-          <Card.Description className="max-w-2/3">
-            {toolset.description}
-          </Card.Description>
-          <Type variant="body" muted className="text-sm italic">
-            {"Updated "}
-            <HumanizeDateTime date={new Date(toolset.updatedAt)} />
-          </Type>
-        </Stack>
-      </Card.Header>
-      <Card.Content>
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2">
-            <routes.toolsets.toolset.Link params={[toolset.slug]}>
-              <Button variant="outline">Edit</Button>
-            </routes.toolsets.toolset.Link>
-            <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
-              <Button
-                variant="outline"
-                className="group"
-                tooltip="Open in chat playground"
-              >
-                Playground
-                <routes.playground.Icon className="text-muted-foreground group-hover:text-foreground trans" />
-              </Button>
-            </routes.playground.Link>
-          </div>
-        </div>
-      </Card.Content>
-    </Card>
   );
 }

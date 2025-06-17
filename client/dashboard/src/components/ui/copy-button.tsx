@@ -9,12 +9,14 @@ export const CopyButton = ({
   size = "icon",
   className,
   tooltip,
+  onCopy,
 }: {
   text: string;
   size?: "icon" | "icon-sm";
   absolute?: boolean;
   className?: string;
   tooltip?: string;
+  onCopy?: () => void; // Extra callback to do something when the code is copied
 }) => {
   const [recentlyCopied, setRecentlyCopied] = useState(false);
 
@@ -24,6 +26,7 @@ export const CopyButton = ({
     setTimeout(() => {
       setRecentlyCopied(false);
     }, 1000);
+    onCopy?.();
   };
 
   return (

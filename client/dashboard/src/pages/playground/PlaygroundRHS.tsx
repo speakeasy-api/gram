@@ -1,15 +1,12 @@
-import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
-import { useToolsetSuspense } from "@gram/client/react-query";
+import { Message } from "@ai-sdk/react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import { McpToolsetCard } from "../mcp/MCP";
 import { SdkContent } from "../sdk/SDK";
 import { AgentifyButton } from "./Agentify";
 import { ChatConfig, ChatWindow } from "./ChatWindow";
 import { PanelHeader } from "./Playground";
-import { Message } from "@ai-sdk/react";
 
 export function PlaygroundRHS({
   configRef,
@@ -18,7 +15,7 @@ export function PlaygroundRHS({
   configRef: ChatConfig;
   dynamicToolset: boolean;
 }) {
-  const [activeTab, setActiveTab] = useState<"chat" | "agents" | "mcp">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
 
   const agentifyButton = (
     <AgentifyButton
@@ -33,19 +30,24 @@ export function PlaygroundRHS({
     ? [
         {
           id: "1",
-          role: "assistant",
+          role: "system",
           content:
             "Welcome to Gram! Upload an OpenAPI document to get started.",
         },
       ]
-    : undefined;
+    : [
+        {
+          id: "1",
+          role: "system",
+          content:
+            "This chat has access to the selected toolset on the left! Use it to test out your toolset.",
+        },
+      ];
 
   return (
     <Tabs
       value={activeTab}
-      onValueChange={(value) =>
-        setActiveTab(value as "chat" | "agents" | "mcp")
-      }
+      onValueChange={(value) => setActiveTab(value as "chat" | "agents")}
       className="h-full relative"
     >
       <PanelHeader side="right">
@@ -53,7 +55,6 @@ export function PlaygroundRHS({
           <Type className="font-medium">Use with: </Type>
           <TabsList>
             <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="mcp">MCP</TabsTrigger>
             <TabsTrigger value="agents">Agents</TabsTrigger>
           </TabsList>
         </Stack>
@@ -76,30 +77,7 @@ export function PlaygroundRHS({
             environment={configRef.current.environmentSlug ?? undefined}
           />
         </TabsContent>
-        <TabsContent value="mcp">
-          {configRef.current.toolsetSlug ? (
-            <McpTab toolsetSlug={configRef.current.toolsetSlug} />
-          ) : (
-            <div className="text-muted-foreground">No toolset selected</div>
-          )}
-        </TabsContent>
       </div>
     </Tabs>
   );
 }
-
-const McpTab = ({ toolsetSlug }: { toolsetSlug: string }) => {
-  const { data: toolset, refetch } = useToolsetSuspense({ slug: toolsetSlug });
-
-  return (
-    <Stack gap={8}>
-      <div>
-        <Heading variant="h2">Hosted MCP Servers</Heading>
-        <Type className="text-muted-foreground mt-2">
-          Expose this toolset as a hosted MCP server
-        </Type>
-      </div>
-      <McpToolsetCard toolset={toolset} onUpdate={refetch} />
-    </Stack>
-  );
-};

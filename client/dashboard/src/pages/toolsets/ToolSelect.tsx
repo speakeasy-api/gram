@@ -29,7 +29,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { useCustomTools } from "../toolBuilder/CustomTools";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
-import { ToolsetHeader } from "./Toolset";
+import { ToolsetHeader } from "./ToolsetHeader";
 
 type Tool = HTTPToolDefinition & { displayName: string };
 
@@ -500,7 +500,12 @@ function CustomToolCard({
   return (
     <Card className="h-52">
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
+        <Stack
+          direction="horizontal"
+          gap={2}
+          justify={"space-between"}
+          wrap="wrap"
+        >
           <Card.Title className="normal-case">{template.name}</Card.Title>
           {badge}
         </Stack>

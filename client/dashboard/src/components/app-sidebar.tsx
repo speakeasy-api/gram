@@ -23,25 +23,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
 
   const topNavGroups = {
-    create: [routes.openapi, routes.customTools, routes.prompts],
-    curate: [routes.toolsets, routes.environments, routes.integrations],
-    connect: [routes.mcp, routes.sdk, routes.slackApp],
+    create: [
+      routes.openapi,
+      routes.customTools,
+      routes.prompts,
+      routes.environments,
+    ],
+    consume: [routes.playground, routes.mcp, routes.agents, routes.slackApp],
   };
 
   const bottomNav = [routes.settings, routes.docs];
 
-  const playgroundCTA = (
+  const primaryCTA = (
     <SidebarMenuButton
-      tooltip={routes.playground.title}
       className={cn(
         "bg-primary! text-primary-foreground! hover:bg-primary/90 hover:text-primary-foreground min-w-8 trans",
-        routes.playground.active && "border-violet-300 border-2 scale-105" // TODO rainbow
+        routes.toolsets.active && "border-violet-300 border-2 scale-105" // TODO rainbow
       )}
-      href={routes.playground.href()}
-      isActive={routes.playground.active}
+      href={routes.toolsets.href()}
+      isActive={routes.toolsets.active}
     >
-      <routes.playground.Icon />
-      <span>{routes.playground.title}</span>
+      <routes.toolsets.Icon />
+      <span>{routes.toolsets.title}</span>
     </SidebarMenuButton>
   );
 
@@ -59,7 +62,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <GramLogo className="text-3xl" />
                 </routes.openapi.Link>
                 <Type variant="small" muted className="self-end">
-                  v0.5.3 (alpha)
+                  v0.6.0 (alpha)
                 </Type>
               </Stack>
             </SidebarMenuButton>
@@ -71,7 +74,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem className="flex items-center gap-2">
-                {playgroundCTA}
+                {primaryCTA}
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

@@ -8,7 +8,8 @@ import Environments, {
 } from "./pages/environments/Environments";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
-import MCP from "./pages/mcp/MCP";
+import { MCPDetailPage } from "./pages/mcp/MCPDetails";
+import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import Onboarding from "./pages/onboarding/Onboarding";
 import OpenAPIDocuments from "./pages/openapi/OpenAPI";
 import Playground from "./pages/playground/Playground";
@@ -169,7 +170,15 @@ const ROUTE_STRUCTURE = {
     title: "MCP",
     url: "mcp",
     icon: "network",
-    component: MCP,
+    component: MCPRoot,
+    indexComponent: MCPOverview,
+    subPages: {
+      details: {
+        title: "MCP Details",
+        url: ":toolsetSlug",
+        component: MCPDetailPage,
+      },
+    },
   },
   environments: {
     title: "Environments",
@@ -185,9 +194,9 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  sdk: {
-    title: "SDK",
-    url: "sdk",
+  agents: {
+    title: "Agents",
+    url: "agents",
     icon: "code",
     component: SDK,
   },

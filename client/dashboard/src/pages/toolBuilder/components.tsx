@@ -39,11 +39,13 @@ export type Step = {
 export const blockBackground = "bg-stone-100 dark:bg-stone-900";
 export const Block = ({
   label,
+  error,
   labelRHS,
   className,
   children,
 }: {
   label: string;
+  error?: string | null; // Can't be set if labelRHS is set, for now
   labelRHS?: string;
   className?: string;
   children: React.ReactNode;
@@ -54,22 +56,32 @@ export const Block = ({
       align={labelRHS ? "stretch" : "start"}
     >
       <Stack
-        direction="horizontal"
-        align="center"
-        justify="space-between"
-        className={cn(
-          "px-2 pt-1 rounded-sm rounded-b-none",
-          blockBackground,
-          !labelRHS && "mb-[-3px]"
-        )}
+        direction={"horizontal"}
+        className={cn(!labelRHS && "mb-[-3px]")}
+        gap={2}
       >
-        <Type variant="small">{label}</Type>
-        {labelRHS && (
-          <Type muted variant="small">
-            {labelRHS}
+        <Stack
+          direction="horizontal"
+          align="center"
+          justify="space-between"
+          className={cn("px-2 pt-1 rounded-sm rounded-b-none", blockBackground)}
+        >
+          <Type small className={cn("z-1", error && "text-destructive!")}>
+            {label}
+          </Type>
+          {labelRHS && (
+            <Type muted variant="small">
+              {labelRHS}
+            </Type>
+          )}
+        </Stack>
+        {error && !labelRHS && (
+          <Type small italic className="pt-1 text-destructive!">
+            {error}
           </Type>
         )}
       </Stack>
+
       <div
         className={cn(
           "h-full w-full p-1 rounded-md rounded-tl-none",
