@@ -51,7 +51,7 @@ Contains the main application code for the Gram server:
 - `mise go:tidy`: Run `go mod tidy` across the codebase
 - `mise build:server`: Build the server binary
 - `mise lint:server`: Run linters on the server code
-- `mise test:server`: Run tests for the server code
+- `mise test:server`: Run tests for the server code. It takes the same arguments as `go test`, so you can run specific tests like `mise test:server --run TestMyFunction ./path/to/package`.
 - `mise start:server --dev-single-process`: Run the server locally
 - `mise gen:sqlc-server`: Generate SQLc code for the server
 - `mise gen:goa-server`: Generate Goa code for the server
@@ -99,7 +99,7 @@ mise start:server --dev-single-process
 and to run a spepcific test, use:
 
 ```
-mise test:server --run TestMyFunction
+mise test:server --run TestMyFunction ./path/to/package
 ```
 
 ## Go Coding Guidelines
