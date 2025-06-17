@@ -118,3 +118,7 @@ You are an expert AI programming assistant specializing in building APIs with Go
 - When logging errors make sure to always include them in the log payload using `slog.String("error", err)`. Example: `logger.ErrorContext(ctx, "failed to write to database", slog.String("error", err))`.
 - Any functions or methods that relate to making API calls or database queries or working with timers should take a `context.Context` value as their first argument.
 - Always run linters as part of finalizing your code changes. Use `mise lint:server` to run the linters on the server codebase.
+
+### Go Testing Guidelines
+
+- When writing assertions, use `github.com/stretchr/testify/require` exclusively.
