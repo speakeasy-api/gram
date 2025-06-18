@@ -91,7 +91,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			SessionCookie: "",
 		}, nil
 	}
-	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(payload.IDToken)
+	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, payload.IDToken)
 	if err != nil {
 		return redirectWithError(err)
 	}

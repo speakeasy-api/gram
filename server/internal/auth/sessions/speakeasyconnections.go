@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/gen/auth"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 )
 
 type speakeasyProviderUser struct {
@@ -39,7 +40,7 @@ type validateTokenResponse struct {
 	Organizations []speakeasyProviderOrganization `json:"organizations"`
 }
 
-func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, error) {
+func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) (*CachedUserInfo, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -72,6 +73,11 @@ func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, err
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	var adminOverride string
+	if override, _ := contextvalues.GetAdminOverrideFromContext(ctx); override != "" && validateResp.User.Admin {
+		adminOverride = override
+	}
+
 	organizations := make([]auth.OrganizationEntry, len(validateResp.Organizations))
 	var nonFreeOrganizations []auth.OrganizationEntry
 	for i, org := range validateResp.Organizations {
@@ -87,12 +93,12 @@ func (s *Manager) GetUserInfoFromSpeakeasy(idToken string) (*CachedUserInfo, err
 
 		organizations[i] = authOrg
 
-		if org.AccountType != "free" {
+		if org.AccountType != "free" || adminOverride == org.Slug {
 			nonFreeOrganizations = append(nonFreeOrganizations, authOrg)
 		}
 	}
 
-	// If applicable we will only utilize non-free organizations
+	// If applicable we will only utilize non-free organizations, plus an applied admin override
 	if len(nonFreeOrganizations) > 0 {
 		organizations = nonFreeOrganizations
 	}
@@ -121,7 +127,7 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 	if s.unsafeLocal {
 		userInfo, err = s.GetUserInfoFromLocalEnvFile(userID)
 	} else {
-		userInfo, err = s.GetUserInfoFromSpeakeasy(sessionID)
+		userInfo, err = s.GetUserInfoFromSpeakeasy(ctx, sessionID)
 	}
 	if err != nil {
 		return nil, false, err
