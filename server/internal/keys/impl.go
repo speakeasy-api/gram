@@ -160,8 +160,13 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	keyID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
+	}
+
 	return s.repo.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
-		ID:             uuid.MustParse(payload.ID),
+		ID:             keyID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 }
