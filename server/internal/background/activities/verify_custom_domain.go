@@ -36,7 +36,7 @@ type VerifyCustomDomainArgs struct {
 }
 
 var prohibitedDomainRoots = []string{"getgram.ai", "speakeasy.com", "speakeasyapi.dev"}
-var specialTestDomains = []string{"testmcp.speakeasy.com", "testmcp.dev.speakeasy.com"}
+var specialTestDomains = []string{"chat.speakeasy.com", "chat.dev.speakeasy.com"}
 var domainRegex = regexp.MustCompile(`^(?i)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$`)
 
 func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs) error {
