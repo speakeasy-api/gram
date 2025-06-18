@@ -242,7 +242,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	// Convert set back to slice
-	if len(payload.HTTPToolNames) > 0 {
+	if payload.HTTPToolNames != nil {
 		updateParams.HttpToolNames = make([]string, 0, len(payload.HTTPToolNames))
 		updateParams.HttpToolNames = append(updateParams.HttpToolNames, payload.HTTPToolNames...)
 	}
