@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: be2e8ba09beb749b56e2b1aabbb0072b
+  docChecksum: 195f258c5b567e570f1a1230c5903b64
   docVersion: 0.0.1
-  speakeasyVersion: 1.566.1
-  generationVersion: 2.630.9
-  releaseVersion: 0.12.17
-  configChecksum: 740e761d0949c53592d8b5b4b6fa56bc
+  speakeasyVersion: 1.567.0
+  generationVersion: 2.632.0
+  releaseVersion: 0.12.18
+  configChecksum: 654bf403f570d634b2be3a1cd841adf9
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -717,7 +717,7 @@ examples:
     speakeasy-default-session-info:
       responses:
         "200":
-          application/json: {"active_organization_id": "<id>", "is_admin": false, "organizations": [{"account_type": "<value>", "id": "<id>", "name": "<value>", "projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}], "slug": "<value>"}], "user_email": "<value>", "user_id": "<id>"}
+          application/json: {"active_organization_id": "<id>", "gram_account_type": "<value>", "is_admin": false, "organizations": [{"id": "<id>", "name": "<value>", "projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}], "slug": "<value>"}], "user_email": "<value>", "user_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

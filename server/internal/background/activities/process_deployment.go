@@ -51,15 +51,11 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		return err
 	}
 
-	var projectSlug *string
-	var orgSlug *string
-	if orgData, err := p.projects.GetProjectWithOrganizationMetadata(ctx, uuid.MustParse(deployment.ProjectID)); err != nil {
-		// TODO: Once all organization metadata is backfilled this would actually fail
-		p.logger.ErrorContext(ctx, "error loading organization metadata", slog.String("error", err.Error()))
-	} else {
-		orgSlug = &orgData.Slug
-		projectSlug = &orgData.ProjectSlug
+	orgData, err := p.projects.GetProjectWithOrganizationMetadata(ctx, uuid.MustParse(deployment.ProjectID))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").Log(ctx, p.logger)
 	}
+
 	workers := pool.New().WithErrors().WithMaxGoroutines(2)
 	perm := &atomic.Bool{}
 	for _, docInfo := range deployment.Openapiv3Assets {
@@ -68,14 +64,9 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 			slog.String("project_id", deployment.ProjectID),
 			slog.String("openapi_id", docInfo.ID),
 			slog.String("asset_id", docInfo.AssetID),
+			slog.String("org_slug", orgData.Slug),
+			slog.String("project_slug", orgData.ProjectSlug),
 		)
-
-		if projectSlug != nil {
-			logger = logger.With(slog.String("project_slug", *projectSlug))
-		}
-		if orgSlug != nil {
-			logger = logger.With(slog.String("org_slug", *orgSlug))
-		}
 
 		openapiDocID, err := uuid.Parse(docInfo.ID)
 		if err != nil {
@@ -109,8 +100,8 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 				DocumentID:   openapiDocID,
 				DocInfo:      docInfo,
 				DocURL:       u,
-				ProjectSlug:  projectSlug,
-				OrgSlug:      orgSlug,
+				ProjectSlug:  orgData.ProjectSlug,
+				OrgSlug:      orgData.Slug,
 			})
 
 			if processErr == nil {

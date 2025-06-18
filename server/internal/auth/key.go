@@ -64,12 +64,9 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		}
 	}
 
-	var orgSlug *string
-	if org, err := k.orgRepo.GetOrganizationMetadata(ctx, apiKey.OrganizationID); err != nil {
-		// TODO: Once all organization metadata is backfilled this would actually fail
-		k.logger.ErrorContext(ctx, "error loading organization metadata", slog.String("error", err.Error()))
-	} else {
-		orgSlug = &org.Slug
+	org, err := k.orgRepo.GetOrganizationMetadata(ctx, apiKey.OrganizationID)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization")
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
@@ -77,7 +74,8 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		UserID:               apiKey.CreatedByUserID,
 		SessionID:            nil,
 		ProjectID:            nil,
-		OrganizationSlug:     orgSlug,
+		OrganizationSlug:     org.Slug,
+		AccountType:          org.GramAccountType,
 		ProjectSlug:          nil,
 	})
 

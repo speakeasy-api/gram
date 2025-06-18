@@ -8,13 +8,16 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/gen/auth"
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/o11y"
+	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
 )
 
 var unsafeSessionData = []byte(`
@@ -27,7 +30,7 @@ var unsafeSessionData = []byte(`
         "organization_id": "550e8400-e29b-41d4-a716-446655440000",
         "organization_name": "Organization 123",
         "organization_slug": "organization-123",
-        "account_type": "business"
+        "account_type": "pro"
       },
       {
         "organization_id": "e0395991-d5c5-4c2f-8c3b-4eae305524ed",
@@ -40,7 +43,7 @@ var unsafeSessionData = []byte(`
 }
 `)
 
-func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Manager, error) {
+func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Manager, error) {
 	raw := unsafeSessionData
 	if localEnvPath != "" {
 		file, err := os.Open(filepath.Clean(localEnvPath))
@@ -70,6 +73,7 @@ func NewUnsafeManager(logger *slog.Logger, redisClient *redis.Client, suffix cac
 		unsafeLocal:            true,
 		speakeasyServerAddress: "",
 		speakeasySecretKey:     "",
+		orgRepo:                orgRepo.New(db),
 	}, nil
 }
 
@@ -94,7 +98,6 @@ func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, e
 			ID:                 org.OrganizationID,
 			Name:               org.OrganizationName,
 			Slug:               org.OrganizationSlug,
-			AccountType:        org.AccountType,
 			SsoConnectionID:    nil,
 			UserWorkspaceSlugs: []string{},
 			Projects:           []*auth.ProjectEntry{},
@@ -110,6 +113,25 @@ func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (strin
 	for userID, userInfo := range s.localEnvFile {
 		if err := s.InvalidateUserInfoCache(ctx, userID); err != nil {
 			s.logger.WarnContext(ctx, "failed to invalidate user info cache", slog.String("error", err.Error()))
+		}
+		_, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+			ID:   userInfo.Organizations[0].OrganizationID,
+			Name: userInfo.Organizations[0].OrganizationName,
+			Slug: userInfo.Organizations[0].OrganizationSlug,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to upsert organization metadata: %w", err)
+		}
+		accountType := userInfo.Organizations[0].AccountType
+		if !slices.Contains([]string{"free", "pro", "enterprise"}, accountType) {
+			accountType = "free"
+		}
+		err = s.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+			ID:              userInfo.Organizations[0].OrganizationID,
+			GramAccountType: accountType,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to set account type: %w", err)
 		}
 		gramSession = &Session{
 			SessionID:            uuid.NewString(),

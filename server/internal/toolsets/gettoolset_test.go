@@ -9,8 +9,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
 	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/testenv/testrepo"
 )
@@ -53,14 +53,14 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 	require.Equal(t, "test-toolset", string(result.Slug))
 	require.Equal(t, "A test toolset", *result.Description)
 	require.Len(t, result.HTTPTools, 2, "should have 2 HTTP tools")
-	
+
 	// Verify tools are properly populated
 	for _, tool := range result.HTTPTools {
 		require.NotEmpty(t, tool.ID)
 		require.NotEmpty(t, tool.Name)
 		// Summary and Description may be empty depending on the OpenAPI spec
 	}
-	
+
 	require.NotNil(t, result.CreatedAt)
 	require.NotNil(t, result.UpdatedAt)
 }
@@ -189,10 +189,10 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 	require.Equal(t, "Complete Toolset", result.Name)
 	require.Equal(t, "complete-toolset", string(result.Slug))
 	require.Equal(t, "A complete toolset with all fields", *result.Description)
-	
+
 	// Verify HTTP tools
 	require.Empty(t, result.HTTPTools)
-	
+
 	// Verify timestamps
 	require.NotNil(t, result.CreatedAt)
 	require.NotNil(t, result.UpdatedAt)

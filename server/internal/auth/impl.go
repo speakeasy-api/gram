@@ -107,7 +107,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if len(userInfo.Organizations) == 0 {
 		return redirectWithError(errors.New("you currently don't have access to a speakeasy organization, ask to be added to a speakeasy account"))
 	}
-	activeOrganizationID := userInfo.Organizations[0].ID
+	activeOrg := userInfo.Organizations[0]
 
 	// For speakeasy users and admins we default speakeasy-team being the active organization if present
 	// For admins we allow you to override the active organization returned by header if present
@@ -120,16 +120,24 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 		for _, org := range userInfo.Organizations {
 			if org.Slug == override {
-				activeOrganizationID = org.ID
+				activeOrg = org
 				break
 			}
 		}
 	}
 
+	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:   activeOrg.ID,
+		Name: activeOrg.Name,
+		Slug: activeOrg.Slug,
+	}); err != nil {
+		return redirectWithError(err)
+	}
+
 	session := sessions.Session{
 		SessionID:            payload.IDToken,
 		UserID:               userInfo.UserID,
-		ActiveOrganizationID: activeOrganizationID,
+		ActiveOrganizationID: activeOrg.ID,
 	}
 
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
@@ -179,6 +187,13 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		for _, org := range userInfo.Organizations {
 			if org.ID == *payload.OrganizationID {
 				orgFound = true
+				if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+					ID:   org.ID,
+					Name: org.Name,
+					Slug: org.Slug,
+				}); err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+				}
 				break
 			}
 		}
@@ -261,13 +276,13 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			})
 		}
 
-		// write through organization metadata when not from cache
+		// write through organization metadata when not from cache to keep entries updated
+		// TODO: there may be a better place to do this
 		if !fromCache {
 			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:          org.ID,
-				Name:        org.Name,
-				Slug:        org.Slug,
-				AccountType: org.AccountType,
+				ID:   org.ID,
+				Name: org.Name,
+				Slug: org.Slug,
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 			}
@@ -277,7 +292,6 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			ID:                 org.ID,
 			Name:               org.Name,
 			Slug:               org.Slug,
-			AccountType:        org.AccountType,
 			SsoConnectionID:    org.SsoConnectionID,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           orgProjects,
@@ -288,6 +302,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		SessionToken:         *authCtx.SessionID,
 		SessionCookie:        *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
+		GramAccountType:      authCtx.AccountType,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,
 		IsAdmin:              userInfo.Admin,

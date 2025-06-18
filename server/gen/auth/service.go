@@ -78,6 +78,7 @@ type InfoResult struct {
 	UserEmail            string
 	IsAdmin              bool
 	ActiveOrganizationID string
+	GramAccountType      string
 	Organizations        []*OrganizationEntry
 	// The authentication session
 	SessionToken string
@@ -106,7 +107,6 @@ type OrganizationEntry struct {
 	ID                 string
 	Name               string
 	Slug               string
-	AccountType        string
 	Projects           []*ProjectEntry
 	SsoConnectionID    *string
 	UserWorkspaceSlugs []string

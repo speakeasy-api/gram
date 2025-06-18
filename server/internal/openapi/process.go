@@ -50,8 +50,8 @@ type ToolExtractorTask struct {
 	DocumentID   uuid.UUID
 	DocInfo      *types.OpenAPIv3DeploymentAsset
 	DocURL       *url.URL
-	ProjectSlug  *string
-	OrgSlug      *string
+	ProjectSlug  string
+	OrgSlug      string
 }
 
 type ToolExtractor struct {
@@ -103,13 +103,8 @@ func (p *ToolExtractor) Do(
 		slog.String("doc_slug", string(docInfo.Slug)),
 		slog.String("deployment_id", deploymentID.String()),
 		slog.String("openapi_doc_id", openapiDocID.String()),
-	}
-
-	if task.ProjectSlug != nil {
-		slogArgs = append(slogArgs, slog.String("project_slug", *task.ProjectSlug))
-	}
-	if task.OrgSlug != nil {
-		slogArgs = append(slogArgs, slog.String("org_slug", *task.OrgSlug))
+		slog.String("project_slug", task.ProjectSlug),
+		slog.String("org_slug", task.OrgSlug),
 	}
 
 	eventsHandler := NewLogHandler()

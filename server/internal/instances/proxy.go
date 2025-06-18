@@ -89,13 +89,10 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 		slog.String("tool", toolExecutionInfo.Tool.Name),
 		slog.String("path", toolExecutionInfo.Tool.Path),
 		slog.String("source", string(toolCallSource)),
+		slog.String("account_type", toolExecutionInfo.AccountType),
+		slog.String("org_slug", toolExecutionInfo.OrgSlug),
+		slog.String("project_slug", toolExecutionInfo.ProjectSlug),
 	)
-	if toolExecutionInfo.ProjectSlug != nil {
-		logger = logger.With(slog.String("project_slug", *toolExecutionInfo.ProjectSlug))
-	}
-	if toolExecutionInfo.OrgSlug != nil {
-		logger = logger.With(slog.String("org_slug", *toolExecutionInfo.OrgSlug))
-	}
 
 	// Keep in mind tool calls are not required to be gram authenticated, we have public MCP servers. Develop accordingly
 	authCtx, isAuthenticated := contextvalues.GetAuthContext(ctx)

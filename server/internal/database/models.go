@@ -218,12 +218,12 @@ type OpenrouterApiKey struct {
 }
 
 type OrganizationMetadatum struct {
-	ID          string
-	Name        string
-	Slug        string
-	AccountType string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
+	ID              string
+	Name            string
+	Slug            string
+	GramAccountType string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type Package struct {

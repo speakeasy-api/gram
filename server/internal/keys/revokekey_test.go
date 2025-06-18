@@ -53,7 +53,7 @@ func TestKeysService_RevokeKey(t *testing.T) {
 			ID:           nonExistentID,
 			SessionToken: nil,
 		})
-		
+
 		// This should not error, as the delete operation would be idempotent
 		// The SQL query would just not match any rows
 		require.NoError(t, err)

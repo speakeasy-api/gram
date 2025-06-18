@@ -16,6 +16,7 @@ import {
 
 export type InfoResponseBody = {
   activeOrganizationId: string;
+  gramAccountType: string;
   isAdmin: boolean;
   organizations: Array<OrganizationEntry>;
   userEmail: string;
@@ -29,6 +30,7 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   active_organization_id: z.string(),
+  gram_account_type: z.string(),
   is_admin: z.boolean(),
   organizations: z.array(OrganizationEntry$inboundSchema),
   user_email: z.string(),
@@ -36,6 +38,7 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "active_organization_id": "activeOrganizationId",
+    "gram_account_type": "gramAccountType",
     "is_admin": "isAdmin",
     "user_email": "userEmail",
     "user_id": "userId",
@@ -45,6 +48,7 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
 /** @internal */
 export type InfoResponseBody$Outbound = {
   active_organization_id: string;
+  gram_account_type: string;
   is_admin: boolean;
   organizations: Array<OrganizationEntry$Outbound>;
   user_email: string;
@@ -58,6 +62,7 @@ export const InfoResponseBody$outboundSchema: z.ZodType<
   InfoResponseBody
 > = z.object({
   activeOrganizationId: z.string(),
+  gramAccountType: z.string(),
   isAdmin: z.boolean(),
   organizations: z.array(OrganizationEntry$outboundSchema),
   userEmail: z.string(),
@@ -65,6 +70,7 @@ export const InfoResponseBody$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     activeOrganizationId: "active_organization_id",
+    gramAccountType: "gram_account_type",
     isAdmin: "is_admin",
     userEmail: "user_email",
     userId: "user_id",

@@ -1242,7 +1242,6 @@ func unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry(v *Organizati
 		ID:              *v.ID,
 		Name:            *v.Name,
 		Slug:            *v.Slug,
-		AccountType:     *v.AccountType,
 		SsoConnectionID: v.SsoConnectionID,
 	}
 	res.Projects = make([]*auth.ProjectEntry, len(v.Projects))

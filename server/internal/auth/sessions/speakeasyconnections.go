@@ -85,7 +85,6 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 			ID:                 org.ID,
 			Name:               org.Name,
 			Slug:               org.Slug,
-			AccountType:        org.AccountType,
 			SsoConnectionID:    org.SSOConnectionID,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           []*auth.ProjectEntry{}, // filled in from gram server

@@ -19,6 +19,7 @@ type InfoResponseBody struct {
 	UserEmail            string                           `form:"user_email" json:"user_email" xml:"user_email"`
 	IsAdmin              bool                             `form:"is_admin" json:"is_admin" xml:"is_admin"`
 	ActiveOrganizationID string                           `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
+	GramAccountType      string                           `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	Organizations        []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
@@ -929,7 +930,6 @@ type OrganizationEntryResponseBody struct {
 	ID                 string                      `form:"id" json:"id" xml:"id"`
 	Name               string                      `form:"name" json:"name" xml:"name"`
 	Slug               string                      `form:"slug" json:"slug" xml:"slug"`
-	AccountType        string                      `form:"account_type" json:"account_type" xml:"account_type"`
 	Projects           []*ProjectEntryResponseBody `form:"projects" json:"projects" xml:"projects"`
 	SsoConnectionID    *string                     `form:"sso_connection_id,omitempty" json:"sso_connection_id,omitempty" xml:"sso_connection_id,omitempty"`
 	UserWorkspaceSlugs []string                    `form:"user_workspace_slugs,omitempty" json:"user_workspace_slugs,omitempty" xml:"user_workspace_slugs,omitempty"`
@@ -953,6 +953,7 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		UserEmail:            res.UserEmail,
 		IsAdmin:              res.IsAdmin,
 		ActiveOrganizationID: res.ActiveOrganizationID,
+		GramAccountType:      res.GramAccountType,
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationEntryResponseBody, len(res.Organizations))

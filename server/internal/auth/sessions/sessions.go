@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
 )
 
 type localEnvFile map[string]struct {
@@ -29,9 +31,10 @@ type Manager struct {
 	unsafeLocal            bool
 	speakeasyServerAddress string
 	speakeasySecretKey     string
+	orgRepo                *orgRepo.Queries
 }
 
-func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string) *Manager {
+func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string) *Manager {
 	return &Manager{
 		logger:                 logger.With(slog.String("component", "sessions")),
 		sessionCache:           cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
@@ -40,6 +43,7 @@ func NewManager(logger *slog.Logger, redisClient *redis.Client, suffix cache.Suf
 		unsafeLocal:            false,
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,
+		orgRepo:                orgRepo.New(db),
 	}
 }
 
@@ -76,15 +80,21 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		ActiveOrganizationID: session.ActiveOrganizationID,
 		UserID:               session.UserID,
 		ProjectID:            nil,
-		OrganizationSlug:     nil,
+		OrganizationSlug:     "",
+		AccountType:          "",
 		ProjectSlug:          nil,
 	}
 
-	if org, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID); !ok {
+	if _, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID); !ok {
 		return ctx, oops.C(oops.CodeForbidden)
-	} else {
-		authCtx.OrganizationSlug = &org.Slug
 	}
+
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization metadata").Log(ctx, s.logger)
+	}
+	authCtx.AccountType = orgMetadata.GramAccountType
+	authCtx.OrganizationSlug = orgMetadata.Slug
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 

@@ -42,12 +42,12 @@ const emptySession: Session = {
   organizations: [],
   activeOrganizationId: "",
   session: "",
+  gramAccountType: "",
   organization: {
     id: "",
     name: "",
     slug: "",
     projects: [],
-    accountType: "",
   },
   refetch: () => Promise.resolve(emptySession),
 };

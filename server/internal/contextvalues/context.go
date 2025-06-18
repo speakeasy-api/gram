@@ -13,7 +13,8 @@ type AuthContext struct {
 	UserID               string
 	SessionID            *string
 	ProjectID            *uuid.UUID
-	OrganizationSlug     *string
+	OrganizationSlug     string
+	AccountType          string
 	ProjectSlug          *string
 }
 

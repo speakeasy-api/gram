@@ -7,6 +7,7 @@ import { InfoResponseBody } from "@gram/client/models/components";
 
 let value: InfoResponseBody = {
   activeOrganizationId: "<id>",
+  gramAccountType: "<value>",
   isAdmin: false,
   organizations: [],
   userEmail: "<value>",
@@ -19,6 +20,7 @@ let value: InfoResponseBody = {
 | Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `activeOrganizationId`                                                         | *string*                                                                       | :heavy_check_mark:                                                             | N/A                                                                            |
+| `gramAccountType`                                                              | *string*                                                                       | :heavy_check_mark:                                                             | N/A                                                                            |
 | `isAdmin`                                                                      | *boolean*                                                                      | :heavy_check_mark:                                                             | N/A                                                                            |
 | `organizations`                                                                | [components.OrganizationEntry](../../models/components/organizationentry.md)[] | :heavy_check_mark:                                                             | N/A                                                                            |
 | `userEmail`                                                                    | *string*                                                                       | :heavy_check_mark:                                                             | N/A                                                                            |

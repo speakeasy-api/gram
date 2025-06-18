@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   id TEXT NOT NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
-  account_type TEXT NOT NULL,
+  gram_account_type TEXT NOT NULL DEFAULT 'free',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -277,10 +277,10 @@ func newStartCommand() *cli.Command {
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"))
+				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"))
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger.With(slog.String("component", "sessions")), redisClient, cache.Suffix("gram-local"), localEnvPath)
+				s, err := sessions.NewUnsafeManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.Suffix("gram-local"), localEnvPath)
 				if err != nil {
 					return err
 				}

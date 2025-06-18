@@ -2,20 +2,23 @@
 INSERT INTO organization_metadata (
     id,
     name,
-    slug,
-    account_type
+    slug
 ) VALUES (
     @id,
     @name,
-    @slug,
-    @account_type
+    @slug
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
-    account_type = EXCLUDED.account_type,
     updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: SetAccountType :exec
+UPDATE organization_metadata
+SET gram_account_type = @gram_account_type,
+    updated_at = clock_timestamp()
+WHERE id = @id;
 
 -- name: GetOrganizationMetadata :one
 SELECT *

@@ -56,7 +56,7 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, redisClient, cache.Suffix("gram-local"), "")
+	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "")
 	require.NoError(t, err)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)

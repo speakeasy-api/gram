@@ -10,7 +10,7 @@ import (
 )
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, account_type, created_at, updated_at
+SELECT id, name, slug, gram_account_type, created_at, updated_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -22,53 +22,61 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.ID,
 		&i.Name,
 		&i.Slug,
-		&i.AccountType,
+		&i.GramAccountType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
+const setAccountType = `-- name: SetAccountType :exec
+UPDATE organization_metadata
+SET gram_account_type = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type SetAccountTypeParams struct {
+	GramAccountType string
+	ID              string
+}
+
+func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) error {
+	_, err := q.db.Exec(ctx, setAccountType, arg.GramAccountType, arg.ID)
+	return err
+}
+
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
     name,
-    slug,
-    account_type
+    slug
 ) VALUES (
     $1,
     $2,
-    $3,
-    $4
+    $3
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
-    account_type = EXCLUDED.account_type,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, account_type, created_at, updated_at
+RETURNING id, name, slug, gram_account_type, created_at, updated_at
 `
 
 type UpsertOrganizationMetadataParams struct {
-	ID          string
-	Name        string
-	Slug        string
-	AccountType string
+	ID   string
+	Name string
+	Slug string
 }
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationMetadata,
-		arg.ID,
-		arg.Name,
-		arg.Slug,
-		arg.AccountType,
-	)
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadata, arg.ID, arg.Name, arg.Slug)
 	var i OrganizationMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Slug,
-		&i.AccountType,
+		&i.GramAccountType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

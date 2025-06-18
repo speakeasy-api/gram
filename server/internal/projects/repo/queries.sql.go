@@ -78,7 +78,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.account_type, om.created_at, om.updated_at
+    om.id, om.name, om.slug, om.gram_account_type, om.created_at, om.updated_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -87,15 +87,15 @@ WHERE p.deleted IS FALSE
 `
 
 type GetProjectWithOrganizationMetadataRow struct {
-	ProjectID   uuid.UUID
-	ProjectName string
-	ProjectSlug string
-	ID          string
-	Name        string
-	Slug        string
-	AccountType string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
+	ProjectID       uuid.UUID
+	ProjectName     string
+	ProjectSlug     string
+	ID              string
+	Name            string
+	Slug            string
+	GramAccountType string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uuid.UUID) (GetProjectWithOrganizationMetadataRow, error) {
@@ -108,7 +108,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.ID,
 		&i.Name,
 		&i.Slug,
-		&i.AccountType,
+		&i.GramAccountType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

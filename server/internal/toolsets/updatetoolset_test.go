@@ -8,8 +8,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/gen/toolsets"
 	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/internal/environments/repo"
 )
 
@@ -85,7 +85,7 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "Updated Name Only", result.Name)
 	require.Equal(t, "Original description", *result.Description) // Should remain unchanged
-	require.Empty(t, result.HTTPTools) // Should remain unchanged
+	require.Empty(t, result.HTTPTools)                            // Should remain unchanged
 }
 
 func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {

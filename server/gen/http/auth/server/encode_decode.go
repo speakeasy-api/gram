@@ -999,7 +999,6 @@ func marshalAuthOrganizationEntryToOrganizationEntryResponseBody(v *auth.Organiz
 		ID:              v.ID,
 		Name:            v.Name,
 		Slug:            v.Slug,
-		AccountType:     v.AccountType,
 		SsoConnectionID: v.SsoConnectionID,
 	}
 	if v.Projects != nil {

@@ -153,7 +153,8 @@ func TestVariationsService_DeleteGlobal_NoProjectID(t *testing.T) {
 		UserID:               "test-user",
 		SessionID:            nil,
 		ProjectID:            nil, // No project ID
-		OrganizationSlug:     nil,
+		OrganizationSlug:     "test-org",
+		AccountType:          "free",
 		ProjectSlug:          nil,
 	}
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)

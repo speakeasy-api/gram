@@ -21,6 +21,7 @@ type InfoResponseBody struct {
 	UserEmail            *string                          `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	IsAdmin              *bool                            `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
 	ActiveOrganizationID *string                          `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
+	GramAccountType      *string                          `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	Organizations        []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
@@ -931,7 +932,6 @@ type OrganizationEntryResponseBody struct {
 	ID                 *string                     `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Name               *string                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Slug               *string                     `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	AccountType        *string                     `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 	Projects           []*ProjectEntryResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
 	SsoConnectionID    *string                     `form:"sso_connection_id,omitempty" json:"sso_connection_id,omitempty" xml:"sso_connection_id,omitempty"`
 	UserWorkspaceSlugs []string                    `form:"user_workspace_slugs,omitempty" json:"user_workspace_slugs,omitempty" xml:"user_workspace_slugs,omitempty"`
@@ -1577,6 +1577,7 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		UserEmail:            *body.UserEmail,
 		IsAdmin:              *body.IsAdmin,
 		ActiveOrganizationID: *body.ActiveOrganizationID,
+		GramAccountType:      *body.GramAccountType,
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -1746,6 +1747,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.Organizations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.GramAccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gram_account_type", "body"))
 	}
 	for _, e := range body.Organizations {
 		if e != nil {
@@ -2968,9 +2972,6 @@ func ValidateOrganizationEntryResponseBody(body *OrganizationEntryResponseBody) 
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.AccountType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
 	}
 	if body.Projects == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("projects", "body"))

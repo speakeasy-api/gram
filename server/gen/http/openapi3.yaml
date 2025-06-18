@@ -6668,6 +6668,8 @@ components:
             properties:
                 active_organization_id:
                     type: string
+                gram_account_type:
+                    type: string
                 is_admin:
                     type: boolean
                 organizations:
@@ -6684,6 +6686,7 @@ components:
                 - is_admin
                 - active_organization_id
                 - organizations
+                - gram_account_type
         Integration:
             type: object
             properties:
@@ -7012,8 +7015,6 @@ components:
         OrganizationEntry:
             type: object
             properties:
-                account_type:
-                    type: string
                 id:
                     type: string
                 name:
@@ -7034,7 +7035,6 @@ components:
                 - id
                 - name
                 - slug
-                - account_type
                 - projects
         Package:
             type: object

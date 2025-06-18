@@ -30,8 +30,9 @@ func NewToolsets(tx repo.DBTX) *Toolsets {
 type HTTPToolExecutionInfo struct {
 	Tool        toolsRepo.HttpToolDefinition
 	Security    []repo.HttpSecurity
-	ProjectSlug *string
-	OrgSlug     *string
+	ProjectSlug string
+	AccountType string
+	OrgSlug     string
 }
 
 func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
@@ -60,17 +61,16 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		return nil, err
 	}
 
-	var projectSlug *string
-	var orgSlug *string
-	if orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID); err == nil {
-		orgSlug = &orgData.Slug
-		projectSlug = &orgData.ProjectSlug
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID)
+	if err != nil {
+		return nil, err
 	}
 
 	return &HTTPToolExecutionInfo{
 		Tool:        tool,
 		Security:    securityEntries,
-		ProjectSlug: projectSlug,
-		OrgSlug:     orgSlug,
+		ProjectSlug: orgData.ProjectSlug,
+		OrgSlug:     orgData.Slug,
+		AccountType: orgData.GramAccountType,
 	}, nil
 }

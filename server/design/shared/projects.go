@@ -8,11 +8,10 @@ var OrganizationEntry = Type("OrganizationEntry", func() {
 	Attribute("id", String)
 	Attribute("name", String)
 	Attribute("slug", String)
-	Attribute("account_type", String)
 	Attribute("projects", ArrayOf(ProjectEntry))
 	Attribute("sso_connection_id", String)
 	Attribute("user_workspace_slugs", ArrayOf(String))
-	Required("id", "name", "slug", "account_type", "projects")
+	Required("id", "name", "slug", "projects")
 })
 
 var Project = Type("Project", func() {
