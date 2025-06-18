@@ -1741,7 +1741,7 @@ export default function Home() {
             initial={false}
             animate={{
               justifyContent: showNavbarCTA ? "flex-start" : "flex-end",
-              gap: showNavbarCTA ? "24px" : "12px",
+              gap: showNavbarCTA ? "16px" : "0px",
             }}
             transition={{
               type: "spring",
@@ -1796,62 +1796,40 @@ export default function Home() {
             </motion.a>
             {!isMobile && (
               <motion.div
-                className="flex items-center gap-4"
-                initial={false}
+                initial={{
+                  width: 0,
+                  opacity: 0,
+                }}
                 animate={{
-                  gap: showNavbarCTA ? "16px" : "16px",
+                  width: showNavbarCTA ? "auto" : 0,
+                  opacity: showNavbarCTA ? 1 : 0,
                 }}
                 transition={{
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 40,
-                  mass: 0.8,
+                  width: {
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 40,
+                    mass: 0.8,
+                  },
+                  opacity: {
+                    duration: 0.2,
+                    ease: "easeOut",
+                  },
+                }}
+                style={{
+                  overflow: "hidden",
+                  display: "flex",
                 }}
               >
                 <div className="relative rounded-full overflow-hidden">
                   <Button
                     variant="rainbow-light"
-                    href="https://app.getgram.ai/auth/login"
+                    href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
                     className="shadow-lg whitespace-nowrap"
                   >
-                    Login
+                    Join the waitlist
                   </Button>
                 </div>
-                <motion.div
-                  initial={{
-                    width: 0,
-                    opacity: 0,
-                  }}
-                  animate={{
-                    width: showNavbarCTA ? "auto" : 0,
-                    opacity: showNavbarCTA ? 1 : 0,
-                  }}
-                  transition={{
-                    width: {
-                      type: "spring",
-                      stiffness: 400,
-                      damping: 40,
-                      mass: 0.8,
-                    },
-                    opacity: {
-                      duration: 0.2,
-                      ease: "easeOut",
-                    },
-                  }}
-                  style={{
-                    overflow: "hidden",
-                  }}
-                >
-                  <div className="relative rounded-full overflow-hidden">
-                    <Button
-                      variant="rainbow-light"
-                      href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
-                      className="shadow-lg whitespace-nowrap"
-                    >
-                      Join the waitlist
-                    </Button>
-                  </div>
-                </motion.div>
               </motion.div>
             )}
           </motion.div>
