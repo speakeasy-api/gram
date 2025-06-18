@@ -88,12 +88,13 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
 
-		var jsErr *jsonSchemaValidationError
 		err := validateInputSchema(bytes.NewReader(args))
 		switch {
-		case errors.As(err, &jsErr):
-			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, logger)
-		case err != nil && !errors.Is(err, errSchemaHasNoProperties):
+		case errors.Is(err, errSchemaUnsupportedType) || errors.Is(err, errSchemaNotObject):
+			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, logger)
+		case errors.Is(err, errSchemaHasNoProperties):
+			// This is allowed, it means the schema is empty, which is valid.
+		case err != nil:
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, logger)
 		}
 	}
@@ -108,6 +109,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		Kind:        conv.ToPGTextEmpty(payload.Kind),
 		ToolsHint:   payload.ToolsHint,
 	})
+
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.As(err, &pgErr):
@@ -144,7 +146,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin update operation").Log(ctx, s.logger)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	tr := s.repo.WithTx(dbtx)
 
@@ -153,7 +155,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		return nil, oops.E(oops.CodeInvalid, err, "invalid template id")
 	}
 
-	peek, err := tr.PeekTemplateByID(ctx, repo.PeekTemplateByIDParams{
+	current, err := tr.GetTemplateByID(ctx, repo.GetTemplateByIDParams{
 		ProjectID: projectID,
 		ID:        id,
 	})
@@ -161,21 +163,22 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to peek template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
 	}
 
-	nextid := peek.ID
+	nextid := current.ID
 
 	var args []byte
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
 
-		var jsErr *jsonSchemaValidationError
 		err := validateInputSchema(bytes.NewReader(args))
 		switch {
-		case errors.As(err, &jsErr):
-			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema: %s", jsErr).Log(ctx, s.logger)
-		case err != nil && !errors.Is(err, errSchemaHasNoProperties):
+		case errors.Is(err, errSchemaUnsupportedType) || errors.Is(err, errSchemaNotObject):
+			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, s.logger)
+		case errors.Is(err, errSchemaHasNoProperties):
+			// This is allowed, it means the schema is empty, which is valid.
+		case err != nil:
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, s.logger)
 		}
 	}

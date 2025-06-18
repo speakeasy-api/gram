@@ -35,10 +35,6 @@ func validateInputSchema(rawInput io.Reader) error {
 		return fmt.Errorf("compile schema: %w", err)
 	}
 
-	if len(schema.Properties) == 0 && !hasAdditionalProperties(schema) {
-		return errSchemaHasNoProperties
-	}
-
 	if schema.Types != nil {
 		types := schema.Types.ToStrings()
 		hasObject := false
@@ -64,6 +60,10 @@ func validateInputSchema(rawInput io.Reader) error {
 		if !hasObject {
 			return fmt.Errorf("%w: %v", errSchemaNotObject, types)
 		}
+	}
+
+	if len(schema.Properties) == 0 && !hasAdditionalProperties(schema) {
+		return errSchemaHasNoProperties
 	}
 
 	return nil

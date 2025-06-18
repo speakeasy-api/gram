@@ -104,7 +104,7 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		Prompt:        row.Prompt,
 		Description:   conv.FromPGText[string](row.Description),
 		Arguments:     args,
-		Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](row.Engine), "mustache"),
+		Engine:        conv.PtrValOr(conv.FromPGText[string](row.Engine), ""),
 		Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](row.Kind), "prompt"),
 		ToolsHint:     tools,
 		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),

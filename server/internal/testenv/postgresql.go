@@ -38,6 +38,9 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		postgres.WithDatabase("gotestdb"),
 		postgres.WithInitScripts(filepath.Join("..", "..", "database", "schema.sql")),
 		postgres.BasicWaitStrategies(),
+		// Store the database in-memory for faster tests
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
+		testcontainers.WithEnv(map[string]string{"PGDATA": "/var/lib/postgresql/data"}),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {
