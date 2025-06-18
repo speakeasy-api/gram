@@ -64,9 +64,11 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	limit := conv.PtrValOrEmpty(payload.Limit, 1000)
-	if limit < 1 || limit > 1000 {
-		limit = 1000
+	// TODO: for now setting a sufficiently large limit that is still safe
+	// we will need to decide if we will apply filters or paginate on the client side here
+	limit := conv.PtrValOrEmpty(payload.Limit, 10000)
+	if limit < 1 || limit > 10000 {
+		limit = 10000
 	}
 
 	params := repo.ListToolsParams{
