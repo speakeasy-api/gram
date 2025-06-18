@@ -193,13 +193,12 @@ export function ProjectMenu() {
           <SimpleTooltip
             tooltip={
               organization?.ssoConnectionId
-                ? "user membership is managed through your Speakeasy account domain"
-                : "user membership is managed through your account"
+                ? "User membership is managed through your Speakeasy account domain"
+                : "User membership is managed through your account"
             }
           >
             <NavButton
               title="Manage Members"
-              active={!organization?.ssoConnectionId}
               Icon={() => <Icon name="users-round" />}
               onClick={() => {
                 window.open(membershipURL, "_blank");

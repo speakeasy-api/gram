@@ -19,6 +19,10 @@ export type ListToolsRequest = {
    */
   cursor?: string | undefined;
   /**
+   * The number of tools to return per page
+   */
+  limit?: number | undefined;
+  /**
    * The deployment ID. If unset, latest deployment will be used.
    */
   deploymentId?: string | undefined;
@@ -106,6 +110,7 @@ export const ListToolsRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   cursor: z.string().optional(),
+  limit: z.number().int().optional(),
   deployment_id: z.string().optional(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
@@ -120,6 +125,7 @@ export const ListToolsRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type ListToolsRequest$Outbound = {
   cursor?: string | undefined;
+  limit?: number | undefined;
   deployment_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -132,6 +138,7 @@ export const ListToolsRequest$outboundSchema: z.ZodType<
   ListToolsRequest
 > = z.object({
   cursor: z.string().optional(),
+  limit: z.number().int().optional(),
   deploymentId: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),

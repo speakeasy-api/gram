@@ -94,6 +94,7 @@ export function setListToolsData(
   queryKeyBase: [
     parameters: {
       cursor?: string | undefined;
+      limit?: number | undefined;
       deploymentId?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -111,6 +112,7 @@ export function invalidateListTools(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       cursor?: string | undefined;
+      limit?: number | undefined;
       deploymentId?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -146,6 +148,7 @@ export function buildListToolsQuery(
   return {
     queryKey: queryKeyListTools({
       cursor: request?.cursor,
+      limit: request?.limit,
       deploymentId: request?.deploymentId,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -170,6 +173,7 @@ export function buildListToolsQuery(
 export function queryKeyListTools(
   parameters: {
     cursor?: string | undefined;
+    limit?: number | undefined;
     deploymentId?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

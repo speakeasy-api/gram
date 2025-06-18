@@ -115,7 +115,7 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
         </Stack>
         <Stack direction="horizontal" gap={3} justify={"space-between"}>
           {template.description ? (
-            <Card.Description className="max-w-2/3">
+            <Card.Description className="max-w-2/3 line-clamp-3">
               <MustacheHighlight>{template.description}</MustacheHighlight>
             </Card.Description>
           ) : null}

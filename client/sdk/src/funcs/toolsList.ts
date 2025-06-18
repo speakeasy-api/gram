@@ -98,6 +98,7 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "deployment_id": payload?.deployment_id,
+    "limit": payload?.limit,
   });
 
   const headers = new Headers(compactMap({
