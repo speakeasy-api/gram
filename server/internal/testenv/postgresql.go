@@ -17,6 +17,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
+var pgCloneMutex sync.Mutex
+
 func nextRandom() string {
 	return fmt.Sprintf("%d", uuid.New().ID())
 }
@@ -63,8 +65,6 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 	return container, newPostgresCloneFunc(container), nil
 }
 
-var cloneMutex sync.Mutex
-
 func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBCloneFunc {
 	return func(t *testing.T, name string) (*pgxpool.Pool, error) {
 		t.Helper()
@@ -74,8 +74,8 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 			return nil, fmt.Errorf("read connection string: %w", err)
 		}
 
-		cloneMutex.Lock()
-		defer cloneMutex.Unlock()
+		pgCloneMutex.Lock()
+		defer pgCloneMutex.Unlock()
 
 		conn, err := pgx.Connect(ctx, uri)
 		if err != nil {

@@ -66,7 +66,8 @@ WHERE
   http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND http_tool_definitions.deleted IS FALSE
   AND (sqlc.narg(cursor)::uuid IS NULL OR http_tool_definitions.id < sqlc.narg(cursor))
-ORDER BY http_tool_definitions.id DESC;
+ORDER BY http_tool_definitions.id DESC
+LIMIT $1;
 
 -- name: FindToolsByName :many
 WITH deployment AS (

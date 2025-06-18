@@ -64,18 +64,32 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	limit := conv.PtrValOrEmpty(payload.Limit, 100)
+	if limit < 1 || limit > 100 {
+		limit = 100
+	}
+
 	params := repo.ListToolsParams{
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		Limit:        limit + 1,
 	}
 
 	if payload.Cursor != nil {
-		params.Cursor = uuid.NullUUID{UUID: uuid.MustParse(*payload.Cursor), Valid: true}
+		cursorUUID, err := uuid.Parse(*payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		}
+		params.Cursor = uuid.NullUUID{UUID: cursorUUID, Valid: true}
 	}
 
 	if payload.DeploymentID != nil {
-		params.DeploymentID = uuid.NullUUID{UUID: uuid.MustParse(*payload.DeploymentID), Valid: true}
+		deploymentUUID, err := uuid.Parse(*payload.DeploymentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").Log(ctx, s.logger)
+		}
+		params.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
 	tools, err := s.repo.ListTools(ctx, params)
@@ -193,9 +207,10 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		}
 	}
 
-	if len(tools) == 100 {
+	if len(tools) >= int(limit+1) {
 		lastID := tools[len(tools)-1].ID.String()
 		result.NextCursor = &lastID
+		result.Tools = result.Tools[:len(result.Tools)-1]
 	}
 
 	return result, nil

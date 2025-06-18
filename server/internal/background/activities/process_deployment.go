@@ -144,6 +144,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
 		ProjectID:    projectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		Limit:        1,
 	})
 	if err != nil || len(tools) == 0 {
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)

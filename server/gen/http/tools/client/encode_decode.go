@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -53,6 +54,9 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		values := req.URL.Query()
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
 		if p.DeploymentID != nil {
 			values.Add("deployment_id", *p.DeploymentID)

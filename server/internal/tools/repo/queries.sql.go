@@ -302,10 +302,10 @@ const listTools = `-- name: ListTools :many
 WITH deployment AS (
     SELECT id
     FROM deployments
-    WHERE deployments.project_id = $1
+    WHERE deployments.project_id = $2
       AND (
-        $3::uuid IS NULL
-        OR id = $3::uuid
+        $4::uuid IS NULL
+        OR id = $4::uuid
       )
     ORDER BY seq DESC
     LIMIT 1
@@ -336,7 +336,7 @@ SELECT
   http_tool_definitions.updated_at,
   http_tool_definitions.tags,
   (CASE
-    WHEN http_tool_definitions.project_id = $1 THEN ''
+    WHEN http_tool_definitions.project_id = $2 THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
     ELSE ''
   END) as package_name
@@ -345,11 +345,13 @@ LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
 WHERE
   http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND http_tool_definitions.deleted IS FALSE
-  AND ($2::uuid IS NULL OR http_tool_definitions.id < $2)
+  AND ($3::uuid IS NULL OR http_tool_definitions.id < $3)
 ORDER BY http_tool_definitions.id DESC
+LIMIT $1
 `
 
 type ListToolsParams struct {
+	Limit        int32
 	ProjectID    uuid.UUID
 	Cursor       uuid.NullUUID
 	DeploymentID uuid.NullUUID
@@ -378,7 +380,12 @@ type ListToolsRow struct {
 }
 
 func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToolsRow, error) {
-	rows, err := q.db.Query(ctx, listTools, arg.ProjectID, arg.Cursor, arg.DeploymentID)
+	rows, err := q.db.Query(ctx, listTools,
+		arg.Limit,
+		arg.ProjectID,
+		arg.Cursor,
+		arg.DeploymentID,
+	)
 	if err != nil {
 		return nil, err
 	}

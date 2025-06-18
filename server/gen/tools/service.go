@@ -51,6 +51,8 @@ type ListToolsPayload struct {
 	DeploymentID *string
 	// The cursor to fetch results from
 	Cursor *string
+	// The number of tools to return per page
+	Limit *int32
 }
 
 // ListToolsResult is the result type of the tools service listTools method.

@@ -3,9 +3,7 @@ package testenv
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -18,49 +16,31 @@ import (
 type Environment struct {
 	CloneTestDatabase PostgresDBCloneFunc
 	NewRedisClient    RedisClientFunc
-	NewTemporalClient func(t *testing.T) client.Client
+	NewTemporalClient func(t *testing.T) (client client.Client, server *testsuite.DevServer)
 }
 
 func Launch(ctx context.Context) (*Environment, func() error, error) {
 	pgcontainer, cloner, err := NewTestPostgres(ctx)
 	if err != nil {
-		log.Fatalf("start postgres container: %v", err)
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("start postgres container: %w", err)
 	}
 
 	rediscontainer, rcFactory, err := NewTestRedis(ctx)
 	if err != nil {
-		log.Fatalf("start redis container: %v", err)
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("start redis container: %w", err)
 	}
 
 	res := &Environment{
 		CloneTestDatabase: cloner,
 		NewRedisClient:    rcFactory,
-		NewTemporalClient: func(t *testing.T) client.Client {
+		NewTemporalClient: func(t *testing.T) (client.Client, *testsuite.DevServer) {
 			t.Helper()
 
-			var stdout io.Writer
-			var stderr io.Writer
-			if !testing.Verbose() {
-				stdout = io.Discard
-				stderr = io.Discard
-			}
-
-			temporal, err := testsuite.StartDevServer(ctx, testsuite.DevServerOptions{
-				LogLevel: "error",
-				ClientOptions: &client.Options{
-					Namespace: fmt.Sprintf("test_%s", nextRandom()),
-					Logger:    NewLogger(t),
-				},
-				Stdout: stdout,
-				Stderr: stderr,
-			})
+			temporal, err := NewTemporalDevServer(t, ctx)
 			require.NoError(t, err, "start temporal dev server")
-			t.Cleanup(func() {
-				require.NoError(t, temporal.Stop(), "stop temporal dev server")
-			})
-			return temporal.Client()
+
+			client := temporal.Client()
+			return client, temporal
 		},
 	}
 

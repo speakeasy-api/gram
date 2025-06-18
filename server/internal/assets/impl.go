@@ -417,7 +417,10 @@ func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return dst.Close()
+		if err := dst.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			return err
+		}
+		return nil
 	})
 
 	n, err := io.CopyBuffer(dst, params.file, make([]byte, 4096))

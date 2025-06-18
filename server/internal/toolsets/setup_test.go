@@ -2,7 +2,6 @@ package toolsets_test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -74,13 +73,14 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	// Create a test blob store for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	temporal := infra.NewTemporalClient(t)
+	temporal, devserver := infra.NewTemporalClient(t)
 	worker := background.NewTemporalWorker(temporal, logger, background.ForDeploymentProcessing(conn, assetStorage))
-	go func() {
-		if err := worker.Start(); err != nil {
-			panic(fmt.Sprintf("failed to start temporal worker: %v", err))
-		}
-	}()
+	t.Cleanup(func() {
+		worker.Stop()
+		temporal.Close()
+		require.NoError(t, devserver.Stop(), "shutdown temporal")
+	})
+	require.NoError(t, worker.Start(), "start temporal worker")
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
@@ -89,11 +89,6 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	t.Cleanup(func() {
-		worker.Stop()
-		temporal.Close()
-	})
 
 	svc := toolsets.NewService(logger, conn, sessionManager)
 	deploymentsSvc := deployments.NewService(logger, conn, temporal, sessionManager, assetStorage)

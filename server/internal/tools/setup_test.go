@@ -1,4 +1,4 @@
-package deployments_test
+package tools_test
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
@@ -17,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/deployments"
 	packages "github.com/speakeasy-api/gram/internal/packages"
 	"github.com/speakeasy-api/gram/internal/testenv"
+	"github.com/speakeasy-api/gram/internal/tools"
 )
 
 var (
@@ -43,15 +43,15 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *deployments.Service
+	service        *tools.Service
+	deployments    *deployments.Service
 	assets         *assets.Service
 	packages       *packages.Service
 	conn           *pgxpool.Pool
-	temporal       client.Client
 	sessionManager *sessions.Manager
 }
 
-func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (context.Context, *testInstance) {
+func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -60,6 +60,14 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	sessionManager, err := sessions.NewUnsafeManager(logger, redisClient, cache.Suffix("gram-local"), "")
+	require.NoError(t, err)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	temporal, devserver := infra.NewTemporalClient(t)
 	worker := background.NewTemporalWorker(temporal, logger, background.ForDeploymentProcessing(conn, assetStorage))
@@ -70,24 +78,17 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
-	sessionManager, err := sessions.NewUnsafeManager(logger, redisClient, cache.Suffix("gram-local"), "")
-	require.NoError(t, err)
-
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	svc := deployments.NewService(logger, conn, temporal, sessionManager, assetStorage)
+	toolsSvc := tools.NewService(logger, conn, sessionManager)
+	deploymentsSvc := deployments.NewService(logger, conn, temporal, sessionManager, assetStorage)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{
-		service:        svc,
+		service:        toolsSvc,
+		deployments:    deploymentsSvc,
 		assets:         assetsSvc,
 		packages:       packagesSvc,
 		conn:           conn,
-		temporal:       temporal,
 		sessionManager: sessionManager,
 	}
 }

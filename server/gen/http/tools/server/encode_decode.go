@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	tools "github.com/speakeasy-api/gram/gen/tools"
@@ -37,14 +38,27 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	return func(r *http.Request) (any, error) {
 		var (
 			cursor           *string
+			limit            *int32
 			deploymentID     *string
 			sessionToken     *string
 			projectSlugInput *string
+			err              error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, 32)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int32(v)
+				limit = &pv
+			}
 		}
 		deploymentIDRaw := qp.Get("deployment_id")
 		if deploymentIDRaw != "" {
@@ -58,7 +72,10 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewListToolsPayload(cursor, deploymentID, sessionToken, projectSlugInput)
+		if err != nil {
+			return nil, err
+		}
+		payload := NewListToolsPayload(cursor, limit, deploymentID, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

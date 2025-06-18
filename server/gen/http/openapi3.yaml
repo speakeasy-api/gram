@@ -4638,6 +4638,14 @@ paths:
                     description: The cursor to fetch results from
                     type: string
                 - allowEmptyValue: true
+                  description: The number of tools to return per page
+                  in: query
+                  name: limit
+                  schema:
+                    description: The number of tools to return per page
+                    format: int32
+                    type: integer
+                - allowEmptyValue: true
                   description: The deployment ID. If unset, latest deployment will be used.
                   in: query
                   name: deployment_id

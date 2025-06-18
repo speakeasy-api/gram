@@ -8,16 +8,32 @@
 package client
 
 import (
+	"fmt"
+	"strconv"
+
 	tools "github.com/speakeasy-api/gram/gen/tools"
 )
 
 // BuildListToolsPayload builds the payload for the tools listTools endpoint
 // from CLI flags.
-func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsDeploymentID string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
+func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit string, toolsListToolsDeploymentID string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
+	var err error
 	var cursor *string
 	{
 		if toolsListToolsCursor != "" {
 			cursor = &toolsListToolsCursor
+		}
+	}
+	var limit *int32
+	{
+		if toolsListToolsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(toolsListToolsLimit, 10, 32)
+			val := int32(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT32")
+			}
 		}
 	}
 	var deploymentID *string
@@ -40,6 +56,7 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsDeployment
 	}
 	v := &tools.ListToolsPayload{}
 	v.Cursor = cursor
+	v.Limit = limit
 	v.DeploymentID = deploymentID
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

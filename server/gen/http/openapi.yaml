@@ -3798,6 +3798,12 @@ paths:
                   name: cursor
                   required: false
                   type: string
+                - description: The number of tools to return per page
+                  format: int32
+                  in: query
+                  name: limit
+                  required: false
+                  type: integer
                 - description: The deployment ID. If unset, latest deployment will be used.
                   in: query
                   name: deployment_id
@@ -4507,13 +4513,13 @@ definitions:
             name:
                 type: string
                 description: The name of the package.
-                example: Sapiente architecto quaerat eaque et consequatur pariatur.
+                example: Atque sed fugiat.
             version:
                 type: string
                 description: The version of the package.
-                example: Quod atque sed fugiat et et.
+                example: Et id enim non.
         example:
-            name: Enim non ut numquam at.
+            name: Numquam at.
             version: Repudiandae quis animi nobis enim sapiente.
         required:
             - name
@@ -4524,21 +4530,21 @@ definitions:
             asset_id:
                 type: string
                 description: The ID of the uploaded asset.
-                example: Assumenda cum sapiente beatae.
+                example: Aut assumenda iusto alias dolor.
             name:
                 type: string
                 description: The name to give the document as it will be displayed in UIs.
-                example: Aut assumenda iusto alias dolor.
+                example: Odit eveniet qui sit recusandae dolore ipsa.
             slug:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
-                example: 61i
+                example: a39
                 pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
-            asset_id: Recusandae dolore ipsa.
-            name: Delectus ut nesciunt cupiditate quia quis.
-            slug: 3a1
+            asset_id: Quia quis sequi voluptatem omnis commodi.
+            name: Debitis sapiente architecto quaerat.
+            slug: 8o4
         required:
             - asset_id
             - name
@@ -4567,24 +4573,24 @@ definitions:
             content_length:
                 type: integer
                 description: The content length of the asset
-                example: 7663358806917756031
+                example: 596864075957566057
                 format: int64
             content_type:
                 type: string
                 description: The content type of the asset
-                example: Asperiores odit quidem.
+                example: Natus tempora sit enim fugiat.
             created_at:
                 type: string
                 description: The creation date of the asset.
-                example: "2011-08-24T06:20:59Z"
+                example: "1980-09-28T18:39:48Z"
                 format: date-time
             id:
                 type: string
                 description: The ID of the asset
-                example: Qui et incidunt eaque deleniti aut id.
+                example: Sunt exercitationem hic.
             kind:
                 type: string
-                example: image
+                example: openapiv3
                 enum:
                     - openapiv3
                     - image
@@ -4592,20 +4598,20 @@ definitions:
             sha256:
                 type: string
                 description: The SHA256 hash of the asset
-                example: Unde similique sunt.
+                example: Atque accusantium sed.
             updated_at:
                 type: string
                 description: The last update date of the asset.
-                example: "1971-06-23T08:03:50Z"
+                example: "1977-05-25T08:29:28Z"
                 format: date-time
         example:
-            content_length: 367958819568072206
-            content_type: Mollitia alias reiciendis voluptatem quas.
-            created_at: "2000-11-04T10:54:40Z"
-            id: Magnam labore qui sequi qui.
+            content_length: 6112781074728957367
+            content_type: Expedita repellat sed dolores perferendis.
+            created_at: "2002-11-27T02:55:49Z"
+            id: Consequuntur eveniet et.
             kind: unknown
-            sha256: Sit aut magni eveniet ea qui.
-            updated_at: "1987-08-05T09:48:47Z"
+            sha256: Repellendus cum dolorum.
+            updated_at: "1977-10-10T21:01:11Z"
         required:
             - id
             - kind
@@ -4621,7 +4627,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -4637,7 +4643,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -4680,19 +4686,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource already exists (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -4723,11 +4729,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: permission denied (default view)
         example:
             fault: false
@@ -4735,7 +4741,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -4766,19 +4772,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -4793,7 +4799,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -4809,19 +4815,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request contains one or more invalidation fields (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -4836,7 +4842,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -4856,7 +4862,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: true
@@ -4864,7 +4870,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -4879,7 +4885,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -4902,7 +4908,7 @@ definitions:
                 example: true
         description: resource not found (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -4922,7 +4928,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -4938,11 +4944,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unauthorized access (default view)
         example:
             fault: true
@@ -4950,7 +4956,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -4988,12 +4994,12 @@ definitions:
                 example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -5035,7 +5041,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -5051,7 +5057,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5074,12 +5080,12 @@ definitions:
                 example: true
         description: request is invalid (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -5094,7 +5100,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5110,19 +5116,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: resource already exists (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -5137,7 +5143,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5164,7 +5170,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -5196,19 +5202,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -5223,7 +5229,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5243,15 +5249,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -5266,7 +5272,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5286,15 +5292,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -5309,7 +5315,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5325,14 +5331,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource not found (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -5368,11 +5374,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unauthorized access (default view)
         example:
             fault: false
@@ -5395,7 +5401,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5415,7 +5421,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: true
@@ -5454,19 +5460,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -5504,12 +5510,12 @@ definitions:
                 example: true
         description: request is invalid (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -5540,19 +5546,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource already exists (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -5583,7 +5589,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -5594,7 +5600,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -5626,19 +5632,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -5673,14 +5679,14 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -5719,11 +5725,11 @@ definitions:
                 example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -5759,15 +5765,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -5798,7 +5804,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -5809,7 +5815,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -5825,7 +5831,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5845,10 +5851,10 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -5868,7 +5874,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5888,7 +5894,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unsupported media type (default view)
         example:
             fault: true
@@ -5896,7 +5902,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -5911,7 +5917,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5927,18 +5933,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -5954,7 +5960,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -5982,7 +5988,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -6013,19 +6019,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: permission denied (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -6056,18 +6062,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -6103,14 +6109,14 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -6126,7 +6132,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6146,14 +6152,14 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -6169,7 +6175,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6185,14 +6191,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -6212,7 +6218,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6228,11 +6234,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unauthorized access (default view)
         example:
             fault: true
@@ -6278,12 +6284,12 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -6318,7 +6324,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unsupported media type (default view)
         example:
             fault: false
@@ -6357,11 +6363,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
             fault: false
@@ -6400,7 +6406,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -6411,7 +6417,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -6443,19 +6449,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: permission denied (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -6470,7 +6476,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6490,15 +6496,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -6513,7 +6519,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6533,7 +6539,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request contains one or more invalidation fields (default view)
         example:
             fault: true
@@ -6541,7 +6547,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -6579,12 +6585,12 @@ definitions:
                 example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -6599,7 +6605,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6619,7 +6625,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
             fault: true
@@ -6641,10 +6647,10 @@ definitions:
         properties:
             active_organization_id:
                 type: string
-                example: Officiis ea.
+                example: Architecto nihil veritatis libero et laudantium.
             is_admin:
                 type: boolean
-                example: false
+                example: true
             organizations:
                 type: array
                 items:
@@ -6680,14 +6686,44 @@ definitions:
                       user_workspace_slugs:
                         - Tenetur dolorem totam quaerat aut.
                         - Culpa adipisci.
+                    - account_type: Eum ex necessitatibus.
+                      id: Cumque rem velit.
+                      name: Aut aut neque quisquam error.
+                      projects:
+                        - id: Labore et eaque perspiciatis fuga.
+                          name: Alias quas expedita quod vero aperiam.
+                          slug: hdw
+                        - id: Labore et eaque perspiciatis fuga.
+                          name: Alias quas expedita quod vero aperiam.
+                          slug: hdw
+                      slug: Alias et doloremque dolorem tempore similique voluptatum.
+                      sso_connection_id: Velit iste possimus voluptatem accusamus.
+                      user_workspace_slugs:
+                        - Tenetur dolorem totam quaerat aut.
+                        - Culpa adipisci.
+                    - account_type: Eum ex necessitatibus.
+                      id: Cumque rem velit.
+                      name: Aut aut neque quisquam error.
+                      projects:
+                        - id: Labore et eaque perspiciatis fuga.
+                          name: Alias quas expedita quod vero aperiam.
+                          slug: hdw
+                        - id: Labore et eaque perspiciatis fuga.
+                          name: Alias quas expedita quod vero aperiam.
+                          slug: hdw
+                      slug: Alias et doloremque dolorem tempore similique voluptatum.
+                      sso_connection_id: Velit iste possimus voluptatem accusamus.
+                      user_workspace_slugs:
+                        - Tenetur dolorem totam quaerat aut.
+                        - Culpa adipisci.
             user_email:
                 type: string
-                example: Quasi ab dolorem pariatur dignissimos.
+                example: Sunt architecto laudantium atque pariatur velit.
             user_id:
                 type: string
-                example: Quia provident dolorem sequi dolore iste.
+                example: Quis repudiandae ipsam.
         example:
-            active_organization_id: Aspernatur in voluptates quae laborum.
+            active_organization_id: Fugit consequuntur.
             is_admin: false
             organizations:
                 - account_type: Eum ex necessitatibus.
@@ -6735,23 +6771,8 @@ definitions:
                   user_workspace_slugs:
                     - Tenetur dolorem totam quaerat aut.
                     - Culpa adipisci.
-                - account_type: Eum ex necessitatibus.
-                  id: Cumque rem velit.
-                  name: Aut aut neque quisquam error.
-                  projects:
-                    - id: Labore et eaque perspiciatis fuga.
-                      name: Alias quas expedita quod vero aperiam.
-                      slug: hdw
-                    - id: Labore et eaque perspiciatis fuga.
-                      name: Alias quas expedita quod vero aperiam.
-                      slug: hdw
-                  slug: Alias et doloremque dolorem tempore similique voluptatum.
-                  sso_connection_id: Velit iste possimus voluptatem accusamus.
-                  user_workspace_slugs:
-                    - Tenetur dolorem totam quaerat aut.
-                    - Culpa adipisci.
-            user_email: Sit quo numquam ab quam.
-            user_id: Atque voluptas est rerum.
+            user_email: Dolore iure in.
+            user_id: Voluptatum assumenda quam facere nisi reiciendis.
         required:
             - user_id
             - user_email
@@ -6781,19 +6802,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: unauthorized access (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -6808,7 +6829,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6824,11 +6845,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
             fault: true
@@ -6851,7 +6872,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6871,15 +6892,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -6910,7 +6931,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -6960,12 +6981,12 @@ definitions:
                 example: true
         description: resource already exists (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -6980,7 +7001,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -6996,19 +7017,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: permission denied (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -7043,15 +7064,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -7066,7 +7087,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7089,7 +7110,7 @@ definitions:
                 example: true
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -7109,7 +7130,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7129,15 +7150,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -7152,7 +7173,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7172,10 +7193,10 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource not found (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -7211,7 +7232,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -7222,8 +7243,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -7258,7 +7279,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: true
@@ -7281,7 +7302,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7301,15 +7322,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unsupported media type (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -7324,7 +7345,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7340,18 +7361,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -7387,7 +7408,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource already exists (default view)
         example:
             fault: true
@@ -7430,15 +7451,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: permission denied (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -7469,7 +7490,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -7480,8 +7501,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -7524,7 +7545,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -7539,7 +7560,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7562,7 +7583,7 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -7598,11 +7619,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource not found (default view)
         example:
             fault: false
@@ -7610,7 +7631,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -7625,7 +7646,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7652,8 +7673,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -7668,7 +7689,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7684,19 +7705,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -7727,14 +7748,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -7770,14 +7791,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: request is invalid (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -7797,7 +7818,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7817,14 +7838,14 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource already exists (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -7840,7 +7861,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7856,19 +7877,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: permission denied (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -7883,7 +7904,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -7899,18 +7920,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -7954,7 +7975,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -7985,14 +8006,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -8012,7 +8033,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8035,7 +8056,7 @@ definitions:
                 example: false
         description: resource not found (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -8055,7 +8076,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8078,12 +8099,12 @@ definitions:
                 example: true
         description: unauthorized access (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -8114,19 +8135,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -8141,7 +8162,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8168,8 +8189,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -8241,12 +8262,12 @@ definitions:
             created_at:
                 type: string
                 description: When the chat was created.
-                example: "1973-01-29T04:45:14Z"
+                example: "1975-09-16T18:16:39Z"
                 format: date-time
             id:
                 type: string
                 description: The ID of the chat
-                example: Beatae veniam laboriosam est dolorem corporis.
+                example: Similique enim quis accusamus distinctio modi nobis.
             messages:
                 type: array
                 items:
@@ -8271,27 +8292,45 @@ definitions:
                       tool_call_id: Laborum quo deleniti voluptatum adipisci.
                       tool_calls: Odio et accusantium odio exercitationem eligendi inventore.
                       user_id: Fugit id dolores aut.
+                    - content: Et fugiat dolorem.
+                      created_at: "2002-06-01T02:04:33Z"
+                      finish_reason: Hic modi numquam quia qui.
+                      id: Qui sed eum consequatur rem maxime earum.
+                      model: Officiis fuga voluptas.
+                      role: Odio dolore a ducimus ut voluptas mollitia.
+                      tool_call_id: Laborum quo deleniti voluptatum adipisci.
+                      tool_calls: Odio et accusantium odio exercitationem eligendi inventore.
+                      user_id: Fugit id dolores aut.
+                    - content: Et fugiat dolorem.
+                      created_at: "2002-06-01T02:04:33Z"
+                      finish_reason: Hic modi numquam quia qui.
+                      id: Qui sed eum consequatur rem maxime earum.
+                      model: Officiis fuga voluptas.
+                      role: Odio dolore a ducimus ut voluptas mollitia.
+                      tool_call_id: Laborum quo deleniti voluptatum adipisci.
+                      tool_calls: Odio et accusantium odio exercitationem eligendi inventore.
+                      user_id: Fugit id dolores aut.
             num_messages:
                 type: integer
                 description: The number of messages in the chat
-                example: 9160685077251710640
+                example: 5631133374583047314
                 format: int64
             title:
                 type: string
                 description: The title of the chat
-                example: Provident doloremque corrupti.
+                example: Et beatae veniam laboriosam est.
             updated_at:
                 type: string
                 description: When the chat was last updated.
-                example: "2002-01-16T15:11:44Z"
+                example: "1987-12-13T18:40:47Z"
                 format: date-time
             user_id:
                 type: string
                 description: The ID of the user who created the chat
-                example: Vel atque voluptas asperiores voluptatem quia quia.
+                example: Corporis qui provident doloremque.
         example:
-            created_at: "1989-08-13T14:13:01Z"
-            id: Dolores pariatur doloribus.
+            created_at: "2000-04-14T01:33:38Z"
+            id: Assumenda nihil quas aspernatur placeat.
             messages:
                 - content: Et fugiat dolorem.
                   created_at: "2002-06-01T02:04:33Z"
@@ -8320,10 +8359,19 @@ definitions:
                   tool_call_id: Laborum quo deleniti voluptatum adipisci.
                   tool_calls: Odio et accusantium odio exercitationem eligendi inventore.
                   user_id: Fugit id dolores aut.
-            num_messages: 7699060367111575289
-            title: Et recusandae eius.
-            updated_at: "2010-02-15T16:49:47Z"
-            user_id: Maiores animi.
+                - content: Et fugiat dolorem.
+                  created_at: "2002-06-01T02:04:33Z"
+                  finish_reason: Hic modi numquam quia qui.
+                  id: Qui sed eum consequatur rem maxime earum.
+                  model: Officiis fuga voluptas.
+                  role: Odio dolore a ducimus ut voluptas mollitia.
+                  tool_call_id: Laborum quo deleniti voluptatum adipisci.
+                  tool_calls: Odio et accusantium odio exercitationem eligendi inventore.
+                  user_id: Fugit id dolores aut.
+            num_messages: 7230971869255886930
+            title: Nesciunt dolorem.
+            updated_at: "1995-10-29T04:53:13Z"
+            user_id: Ab et quod dolores pariatur.
         required:
             - messages
             - id
@@ -8339,7 +8387,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8398,11 +8446,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource already exists (default view)
         example:
             fault: true
@@ -8410,7 +8458,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -8448,12 +8496,12 @@ definitions:
                 example: false
         description: permission denied (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -8484,11 +8532,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: true
@@ -8496,7 +8544,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -8527,19 +8575,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -8570,19 +8618,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -8597,7 +8645,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8620,11 +8668,11 @@ definitions:
                 example: false
         description: resource not found (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -8640,7 +8688,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8660,15 +8708,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unauthorized access (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -8683,7 +8731,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8726,7 +8774,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8742,7 +8790,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -8753,8 +8801,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -8789,15 +8837,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request is invalid (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -8812,7 +8860,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -8835,7 +8883,7 @@ definitions:
                 example: false
         description: resource already exists (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -8871,11 +8919,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: permission denied (default view)
         example:
             fault: true
@@ -8883,7 +8931,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -8921,12 +8969,12 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -8961,15 +9009,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request contains one or more invalidation fields (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -9000,11 +9048,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: false
@@ -9012,7 +9060,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -9047,15 +9095,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -9097,8 +9145,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -9107,6 +9155,49 @@ definitions:
             - timeout
             - fault
     ChatLoadChatUnexpectedResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: false
+        description: an unexpected error occurred (default view)
+        example:
+            fault: true
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    ChatLoadChatUnsupportedMediaResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -9134,52 +9225,9 @@ definitions:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
-        description: an unexpected error occurred (default view)
-        example:
-            fault: false
-            id: 123abc
-            message: parameter 'p' must be an integer
-            name: bad_request
-            temporary: false
-            timeout: false
-        required:
-            - name
-            - id
-            - message
-            - temporary
-            - timeout
-            - fault
-    ChatLoadChatUnsupportedMediaResponseBody:
-        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
-        type: object
-        properties:
-            fault:
-                type: boolean
-                description: Is the error a server-side fault?
-                example: true
-            id:
-                type: string
-                description: ID is a unique identifier for this particular occurrence of the problem.
-                example: 123abc
-            message:
-                type: string
-                description: Message is a human-readable explanation specific to this occurrence of the problem.
-                example: parameter 'p' must be an integer
-            name:
-                type: string
-                description: Name is the name of this class of errors.
-                example: bad_request
-            temporary:
-                type: boolean
-                description: Is the error temporary?
-                example: true
-            timeout:
-                type: boolean
-                description: Is the error a timeout?
-                example: true
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -9199,50 +9247,50 @@ definitions:
             content:
                 type: string
                 description: The content of the message
-                example: Et dolores.
+                example: Sint expedita excepturi dolorem iure.
             created_at:
                 type: string
                 description: When the message was created.
-                example: "1988-10-16T03:45:57Z"
+                example: "1988-03-25T12:38:18Z"
                 format: date-time
             finish_reason:
                 type: string
                 description: The finish reason of the message
-                example: Earum sequi et dolorem.
+                example: Iure nostrum qui et.
             id:
                 type: string
                 description: The ID of the message
-                example: Reiciendis maxime amet fugit quia iure nostrum.
+                example: Quasi et eaque itaque labore voluptatibus.
             model:
                 type: string
                 description: The model that generated the message
-                example: Temporibus facere.
+                example: Laudantium laudantium natus.
             role:
                 type: string
                 description: The role of the message
-                example: Et facere sit aut saepe eum sint.
+                example: Consequuntur eveniet maxime sed consequatur veniam.
             tool_call_id:
                 type: string
                 description: The tool call ID of the message
-                example: Nihil vitae eaque necessitatibus sed.
+                example: Id rerum soluta dolor.
             tool_calls:
                 type: string
                 description: The tool calls in the message as a JSON blob
-                example: Veritatis aperiam iste ut provident.
+                example: Totam et autem reiciendis maxime amet fugit.
             user_id:
                 type: string
                 description: The ID of the user who created the message
-                example: Voluptatem voluptates aspernatur quidem.
+                example: Sit aut saepe.
         example:
-            content: Quas consequatur sed.
-            created_at: "1986-01-19T13:43:01Z"
-            finish_reason: Commodi suscipit ut dignissimos.
-            id: Quis atque.
-            model: Aut perferendis.
-            role: Ullam sit.
-            tool_call_id: Qui autem ut quos similique et.
-            tool_calls: Iure temporibus voluptas voluptatem omnis.
-            user_id: Et debitis.
+            content: Est aut esse cupiditate iusto.
+            created_at: "2008-04-22T02:32:25Z"
+            finish_reason: Perferendis qui qui autem ut quos similique.
+            id: Qui impedit velit reiciendis eveniet saepe.
+            model: Sint non iste rerum repellat quia sed.
+            role: Facilis consequatur quo consequatur unde quos ducimus.
+            tool_call_id: Dicta minima quis atque similique ullam.
+            tool_calls: Rerum quas consequatur sed sint.
+            user_id: Ducimus iure temporibus voluptas voluptatem omnis quas.
         required:
             - id
             - role
@@ -9255,37 +9303,37 @@ definitions:
             created_at:
                 type: string
                 description: When the chat was created.
-                example: "1993-08-29T12:13:13Z"
+                example: "1997-09-06T18:48:45Z"
                 format: date-time
             id:
                 type: string
                 description: The ID of the chat
-                example: Similique repellendus nam ut tenetur eligendi ab.
+                example: Nulla rerum blanditiis et earum.
             num_messages:
                 type: integer
                 description: The number of messages in the chat
-                example: 7409458198292236315
+                example: 5077520251145595732
                 format: int64
             title:
                 type: string
                 description: The title of the chat
-                example: Ut dolorum aut.
+                example: Ut ut cum quasi eum.
             updated_at:
                 type: string
                 description: When the chat was last updated.
-                example: "2006-06-15T15:36:44Z"
+                example: "1986-03-05T18:04:24Z"
                 format: date-time
             user_id:
                 type: string
                 description: The ID of the user who created the chat
-                example: Odit laboriosam sapiente quos tempore voluptatem.
+                example: Vitae voluptas deserunt quia qui voluptas.
         example:
-            created_at: "2002-11-11T09:17:00Z"
-            id: Mollitia pariatur quo rerum velit.
-            num_messages: 3986500686805105398
-            title: Modi voluptas porro pariatur non autem.
-            updated_at: "1994-10-05T22:23:37Z"
-            user_id: Voluptatem quam.
+            created_at: "2000-08-22T01:15:05Z"
+            id: Numquam vero.
+            num_messages: 2157519047442417595
+            title: Ut officiis molestiae dolores doloribus eligendi animi.
+            updated_at: "2001-11-15T15:35:59Z"
+            user_id: Facere quia praesentium perspiciatis consequatur.
         required:
             - id
             - title
@@ -9437,7 +9485,7 @@ definitions:
             created_at:
                 type: string
                 description: The creation date of the deployment.
-                example: "2009-08-19T21:51:46Z"
+                example: "2007-03-10T04:29:00Z"
                 format: date-time
             external_id:
                 type: string
@@ -9446,7 +9494,7 @@ definitions:
             external_url:
                 type: string
                 description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                example: Et voluptatem dolores porro.
+                example: Delectus quas libero ea.
             github_pr:
                 type: string
                 description: The github pull request that resulted in the deployment.
@@ -9481,18 +9529,10 @@ definitions:
                       id: Enim deleniti facere quod.
                       name: Quas incidunt et eos rerum velit itaque.
                       slug: c1l
-                    - asset_id: Aut veritatis ut totam quam.
-                      id: Enim deleniti facere quod.
-                      name: Quas incidunt et eos rerum velit itaque.
-                      slug: c1l
-                    - asset_id: Aut veritatis ut totam quam.
-                      id: Enim deleniti facere quod.
-                      name: Quas incidunt et eos rerum velit itaque.
-                      slug: c1l
             organization_id:
                 type: string
                 description: The ID of the organization that the deployment belongs to.
-                example: Ab voluptatum consequuntur aut.
+                example: Sunt quo sed molestiae vero recusandae vero.
             packages:
                 type: array
                 items:
@@ -9505,22 +9545,28 @@ definitions:
                     - id: Quia voluptates.
                       name: Nihil explicabo voluptatem rerum.
                       version: Recusandae facilis dolor deserunt possimus vitae tempora.
+                    - id: Quia voluptates.
+                      name: Nihil explicabo voluptatem rerum.
+                      version: Recusandae facilis dolor deserunt possimus vitae tempora.
+                    - id: Quia voluptates.
+                      name: Nihil explicabo voluptatem rerum.
+                      version: Recusandae facilis dolor deserunt possimus vitae tempora.
             project_id:
                 type: string
                 description: The ID of the project that the deployment belongs to.
-                example: Quia sunt quo.
+                example: Perspiciatis perferendis et ut illum iusto.
             status:
                 type: string
                 description: The status of the deployment.
-                example: Ipsa et quia commodi a.
+                example: Explicabo maxime deserunt molestiae veritatis fuga.
             user_id:
                 type: string
                 description: The ID of the user that created the deployment.
-                example: Molestiae vero recusandae vero temporibus perspiciatis perferendis.
+                example: Voluptas porro modi nesciunt error sunt qui.
         example:
-            created_at: "1982-03-12T06:56:51Z"
+            created_at: "2014-10-06T18:47:32Z"
             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-            external_url: Et ea.
+            external_url: Porro perferendis vitae culpa.
             github_pr: "1234"
             github_repo: speakeasyapi/gram
             github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
@@ -9535,7 +9581,7 @@ definitions:
                   id: Enim deleniti facere quod.
                   name: Quas incidunt et eos rerum velit itaque.
                   slug: c1l
-            organization_id: Molestiae veritatis fuga nobis delectus.
+            organization_id: Et aut labore deserunt eaque.
             packages:
                 - id: Quia voluptates.
                   name: Nihil explicabo voluptatem rerum.
@@ -9549,9 +9595,9 @@ definitions:
                 - id: Quia voluptates.
                   name: Nihil explicabo voluptatem rerum.
                   version: Recusandae facilis dolor deserunt possimus vitae tempora.
-            project_id: Libero ea cum qui.
-            status: Est et quam repellendus.
-            user_id: Et aut labore deserunt eaque.
+            project_id: Impedit ut et ut accusantium.
+            status: Quis nemo fugit.
+            user_id: Cum earum.
         required:
             - id
             - created_at
@@ -9598,19 +9644,19 @@ definitions:
             id:
                 type: string
                 description: The ID of the deployment package.
-                example: Modi incidunt.
+                example: Enim ab voluptate.
             name:
                 type: string
                 description: The name of the package.
-                example: Ea at dignissimos libero.
+                example: Et modi.
             version:
                 type: string
                 description: The version of the package.
-                example: Voluptatum nihil.
+                example: Qui ea.
         example:
-            id: Labore officiis quam.
-            name: Alias pariatur voluptas.
-            version: Suscipit rem.
+            id: Dignissimos libero omnis voluptatum nihil vel labore.
+            name: Quam facilis alias pariatur voluptas dolores.
+            version: Rem adipisci molestiae sed.
         required:
             - id
             - name
@@ -9654,7 +9700,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -9670,11 +9716,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request is invalid (default view)
         example:
             fault: true
@@ -9697,7 +9743,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -9717,15 +9763,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource already exists (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -9756,18 +9802,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: permission denied (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -9783,7 +9829,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -9799,19 +9845,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -9826,7 +9872,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -9853,8 +9899,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -9863,6 +9909,49 @@ definitions:
             - timeout
             - fault
     DeploymentsCreateDeploymentInvariantViolationResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: an unexpected error occurred (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: false
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    DeploymentsCreateDeploymentNotFoundResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -9889,53 +9978,10 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
-        description: an unexpected error occurred (default view)
-        example:
-            fault: false
-            id: 123abc
-            message: parameter 'p' must be an integer
-            name: bad_request
-            temporary: false
-            timeout: true
-        required:
-            - name
-            - id
-            - message
-            - temporary
-            - timeout
-            - fault
-    DeploymentsCreateDeploymentNotFoundResponseBody:
-        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
-        type: object
-        properties:
-            fault:
-                type: boolean
-                description: Is the error a server-side fault?
-                example: false
-            id:
-                type: string
-                description: ID is a unique identifier for this particular occurrence of the problem.
-                example: 123abc
-            message:
-                type: string
-                description: Message is a human-readable explanation specific to this occurrence of the problem.
-                example: parameter 'p' must be an integer
-            name:
-                type: string
-                description: Name is the name of this class of errors.
-                example: bad_request
-            temporary:
-                type: boolean
-                description: Is the error temporary?
-                example: false
-            timeout:
-                type: boolean
-                description: Is the error a timeout?
-                example: false
+                example: true
         description: resource not found (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -9959,7 +10005,7 @@ definitions:
             external_url:
                 type: string
                 description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                example: Illum quo aut ut alias consequuntur velit.
+                example: Sapiente beatae.
             github_pr:
                 type: string
                 description: The github pull request that resulted in the deployment.
@@ -10042,7 +10088,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -10054,7 +10100,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -10085,18 +10131,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -10112,7 +10158,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -10128,19 +10174,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -10668,7 +10714,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -10684,7 +10730,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -10711,7 +10757,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -10734,7 +10780,7 @@ definitions:
                 example: true
         description: resource already exists (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -10777,7 +10823,7 @@ definitions:
                 example: false
         description: permission denied (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -10813,18 +10859,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -10840,7 +10886,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -10856,19 +10902,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -10903,14 +10949,14 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -11356,7 +11402,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11376,7 +11422,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource not found (default view)
         example:
             fault: true
@@ -11415,14 +11461,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unauthorized access (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -11442,7 +11488,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11469,7 +11515,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -11485,7 +11531,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11501,19 +11547,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: unsupported media type (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -11544,14 +11590,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -11598,7 +11644,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -11614,7 +11660,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11634,7 +11680,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: permission denied (default view)
         example:
             fault: false
@@ -11657,7 +11703,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11673,55 +11719,12 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: an unexpected error occurred (default view)
-        example:
-            fault: true
-            id: 123abc
-            message: parameter 'p' must be an integer
-            name: bad_request
-            temporary: false
-            timeout: true
-        required:
-            - name
-            - id
-            - message
-            - temporary
-            - timeout
-            - fault
-    DeploymentsGetLatestDeploymentInvalidResponseBody:
-        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
-        type: object
-        properties:
-            fault:
-                type: boolean
-                description: Is the error a server-side fault?
-                example: false
-            id:
-                type: string
-                description: ID is a unique identifier for this particular occurrence of the problem.
-                example: 123abc
-            message:
-                type: string
-                description: Message is a human-readable explanation specific to this occurrence of the problem.
-                example: parameter 'p' must be an integer
-            name:
-                type: string
-                description: Name is the name of this class of errors.
-                example: bad_request
-            temporary:
-                type: boolean
-                description: Is the error temporary?
-                example: true
-            timeout:
-                type: boolean
-                description: Is the error a timeout?
-                example: false
-        description: request contains one or more invalidation fields (default view)
         example:
             fault: true
             id: 123abc
@@ -11736,6 +11739,49 @@ definitions:
             - temporary
             - timeout
             - fault
+    DeploymentsGetLatestDeploymentInvalidResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: request contains one or more invalidation fields (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
     DeploymentsGetLatestDeploymentInvariantViolationResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -11743,7 +11789,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11766,11 +11812,11 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -11786,7 +11832,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11802,19 +11848,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource not found (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -11829,7 +11875,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11845,18 +11891,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unauthorized access (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -11892,15 +11938,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -11915,7 +11961,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -11931,18 +11977,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: unsupported media type (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -15691,7 +15737,7 @@ definitions:
             created_at:
                 type: string
                 description: The creation date of the deployment.
-                example: "1981-04-05T10:52:22Z"
+                example: "1985-07-02T08:27:16Z"
                 format: date-time
             external_id:
                 type: string
@@ -15700,7 +15746,7 @@ definitions:
             external_url:
                 type: string
                 description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                example: Exercitationem doloribus.
+                example: Rerum dolorem quam consequatur adipisci.
             github_pr:
                 type: string
                 description: The github pull request that resulted in the deployment.
@@ -15735,10 +15781,14 @@ definitions:
                       id: Enim deleniti facere quod.
                       name: Quas incidunt et eos rerum velit itaque.
                       slug: c1l
+                    - asset_id: Aut veritatis ut totam quam.
+                      id: Enim deleniti facere quod.
+                      name: Quas incidunt et eos rerum velit itaque.
+                      slug: c1l
             organization_id:
                 type: string
                 description: The ID of the organization that the deployment belongs to.
-                example: Explicabo in inventore quis.
+                example: Ex tempore.
             packages:
                 type: array
                 items:
@@ -15751,25 +15801,22 @@ definitions:
                     - id: Quia voluptates.
                       name: Nihil explicabo voluptatem rerum.
                       version: Recusandae facilis dolor deserunt possimus vitae tempora.
-                    - id: Quia voluptates.
-                      name: Nihil explicabo voluptatem rerum.
-                      version: Recusandae facilis dolor deserunt possimus vitae tempora.
             project_id:
                 type: string
                 description: The ID of the project that the deployment belongs to.
-                example: Minima minus.
+                example: Autem et.
             status:
                 type: string
                 description: The status of the deployment.
-                example: Quam consequatur adipisci temporibus est odit aut.
+                example: In ipsum dolor ipsa voluptates porro qui.
             user_id:
                 type: string
                 description: The ID of the user that created the deployment.
-                example: Perferendis aut dolor ut omnis.
+                example: Voluptatem minima est explicabo.
         example:
-            created_at: "2008-11-13T12:44:51Z"
+            created_at: "1978-05-13T16:19:54Z"
             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-            external_url: Nobis ut ea dolorem.
+            external_url: Repellendus quam sequi laboriosam aperiam.
             github_pr: "1234"
             github_repo: speakeasyapi/gram
             github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
@@ -15784,7 +15831,7 @@ definitions:
                   id: Enim deleniti facere quod.
                   name: Quas incidunt et eos rerum velit itaque.
                   slug: c1l
-            organization_id: Sed quia modi.
+            organization_id: Quis veritatis illo et sint modi.
             packages:
                 - id: Quia voluptates.
                   name: Nihil explicabo voluptatem rerum.
@@ -15792,12 +15839,9 @@ definitions:
                 - id: Quia voluptates.
                   name: Nihil explicabo voluptatem rerum.
                   version: Recusandae facilis dolor deserunt possimus vitae tempora.
-                - id: Quia voluptates.
-                  name: Nihil explicabo voluptatem rerum.
-                  version: Recusandae facilis dolor deserunt possimus vitae tempora.
-            project_id: Veritatis illo et sint modi a est.
-            status: Qui aliquam.
-            user_id: Quidem ab esse illo tenetur veniam.
+            project_id: Est qui quidem ab esse illo.
+            status: Nobis ut ea dolorem.
+            user_id: Veniam ut quisquam accusantium ut.
         required:
             - id
             - created_at
@@ -19358,6 +19402,18 @@ definitions:
                   title: Qui eaque.
                   updated_at: "1974-03-07T14:12:07Z"
                   user_id: Reiciendis quibusdam.
+                - created_at: "2012-03-25T11:41:45Z"
+                  id: Exercitationem totam neque.
+                  num_messages: 5347010538442598725
+                  title: Qui eaque.
+                  updated_at: "1974-03-07T14:12:07Z"
+                  user_id: Reiciendis quibusdam.
+                - created_at: "2012-03-25T11:41:45Z"
+                  id: Exercitationem totam neque.
+                  num_messages: 5347010538442598725
+                  title: Qui eaque.
+                  updated_at: "1974-03-07T14:12:07Z"
+                  user_id: Reiciendis quibusdam.
         required:
             - chats
     ListDeploymentResult:
@@ -20337,10 +20393,10 @@ definitions:
                     $ref: '#/definitions/Toolset'
                 description: The list of toolsets
                 example:
-                    - created_at: "1998-07-19T17:44:16Z"
-                      custom_domain_id: Optio autem cupiditate rem explicabo.
-                      default_environment_slug: vhb
-                      description: Eius perferendis veniam veniam mollitia neque facilis.
+                    - created_at: "1971-02-26T10:41:34Z"
+                      custom_domain_id: Sit laboriosam.
+                      default_environment_slug: ctt
+                      description: Voluptatem odit consequatur odio velit.
                       http_tools:
                         - canonical:
                             confirm: Quos ut praesentium et.
@@ -20495,12 +20551,12 @@ definitions:
                                 - Ea nam sed et mollitia.
                                 - Aperiam aliquam alias nostrum.
                             updated_at: Dolor et aliquid inventore sunt.
-                      id: Doloribus iste maxime molestiae.
+                      id: Voluptate illo expedita quis dolore.
                       mcp_is_public: true
-                      mcp_slug: fr6
-                      name: Illo expedita quis dolore corporis distinctio maiores.
-                      organization_id: Porro doloribus.
-                      project_id: Dicta fuga optio perferendis inventore corporis et.
+                      mcp_slug: 7ar
+                      name: Mollitia neque facilis.
+                      organization_id: Magnam eius perferendis veniam.
+                      project_id: Distinctio maiores et eum laboriosam.
                       prompt_templates:
                         - arguments: '{"name":"example","email":"mail@example.com"}'
                           created_at: "1987-12-08T08:09:28Z"
@@ -20533,15 +20589,16 @@ definitions:
                             - Minima libero.
                           updated_at: "1986-02-14T13:01:15Z"
                       relevant_environment_variables:
-                        - Odit consequatur odio velit.
-                        - Aut aut libero magni.
                         - Cupiditate ipsam consectetur in.
-                      slug: sns
-                      updated_at: "1989-06-01T17:05:03Z"
-                    - created_at: "1998-07-19T17:44:16Z"
-                      custom_domain_id: Optio autem cupiditate rem explicabo.
-                      default_environment_slug: vhb
-                      description: Eius perferendis veniam veniam mollitia neque facilis.
+                        - Voluptas corporis.
+                        - Neque ut dolorem perferendis optio autem.
+                        - Rem explicabo sed.
+                      slug: vhb
+                      updated_at: "1971-09-13T12:02:16Z"
+                    - created_at: "1971-02-26T10:41:34Z"
+                      custom_domain_id: Sit laboriosam.
+                      default_environment_slug: ctt
+                      description: Voluptatem odit consequatur odio velit.
                       http_tools:
                         - canonical:
                             confirm: Quos ut praesentium et.
@@ -20696,12 +20753,12 @@ definitions:
                                 - Ea nam sed et mollitia.
                                 - Aperiam aliquam alias nostrum.
                             updated_at: Dolor et aliquid inventore sunt.
-                      id: Doloribus iste maxime molestiae.
+                      id: Voluptate illo expedita quis dolore.
                       mcp_is_public: true
-                      mcp_slug: fr6
-                      name: Illo expedita quis dolore corporis distinctio maiores.
-                      organization_id: Porro doloribus.
-                      project_id: Dicta fuga optio perferendis inventore corporis et.
+                      mcp_slug: 7ar
+                      name: Mollitia neque facilis.
+                      organization_id: Magnam eius perferendis veniam.
+                      project_id: Distinctio maiores et eum laboriosam.
                       prompt_templates:
                         - arguments: '{"name":"example","email":"mail@example.com"}'
                           created_at: "1987-12-08T08:09:28Z"
@@ -20734,17 +20791,18 @@ definitions:
                             - Minima libero.
                           updated_at: "1986-02-14T13:01:15Z"
                       relevant_environment_variables:
-                        - Odit consequatur odio velit.
-                        - Aut aut libero magni.
                         - Cupiditate ipsam consectetur in.
-                      slug: sns
-                      updated_at: "1989-06-01T17:05:03Z"
+                        - Voluptas corporis.
+                        - Neque ut dolorem perferendis optio autem.
+                        - Rem explicabo sed.
+                      slug: vhb
+                      updated_at: "1971-09-13T12:02:16Z"
         example:
             toolsets:
-                - created_at: "1998-07-19T17:44:16Z"
-                  custom_domain_id: Optio autem cupiditate rem explicabo.
-                  default_environment_slug: vhb
-                  description: Eius perferendis veniam veniam mollitia neque facilis.
+                - created_at: "1971-02-26T10:41:34Z"
+                  custom_domain_id: Sit laboriosam.
+                  default_environment_slug: ctt
+                  description: Voluptatem odit consequatur odio velit.
                   http_tools:
                     - canonical:
                         confirm: Quos ut praesentium et.
@@ -20899,12 +20957,12 @@ definitions:
                             - Ea nam sed et mollitia.
                             - Aperiam aliquam alias nostrum.
                         updated_at: Dolor et aliquid inventore sunt.
-                  id: Doloribus iste maxime molestiae.
+                  id: Voluptate illo expedita quis dolore.
                   mcp_is_public: true
-                  mcp_slug: fr6
-                  name: Illo expedita quis dolore corporis distinctio maiores.
-                  organization_id: Porro doloribus.
-                  project_id: Dicta fuga optio perferendis inventore corporis et.
+                  mcp_slug: 7ar
+                  name: Mollitia neque facilis.
+                  organization_id: Magnam eius perferendis veniam.
+                  project_id: Distinctio maiores et eum laboriosam.
                   prompt_templates:
                     - arguments: '{"name":"example","email":"mail@example.com"}'
                       created_at: "1987-12-08T08:09:28Z"
@@ -20937,15 +20995,16 @@ definitions:
                         - Minima libero.
                       updated_at: "1986-02-14T13:01:15Z"
                   relevant_environment_variables:
-                    - Odit consequatur odio velit.
-                    - Aut aut libero magni.
                     - Cupiditate ipsam consectetur in.
-                  slug: sns
-                  updated_at: "1989-06-01T17:05:03Z"
-                - created_at: "1998-07-19T17:44:16Z"
-                  custom_domain_id: Optio autem cupiditate rem explicabo.
-                  default_environment_slug: vhb
-                  description: Eius perferendis veniam veniam mollitia neque facilis.
+                    - Voluptas corporis.
+                    - Neque ut dolorem perferendis optio autem.
+                    - Rem explicabo sed.
+                  slug: vhb
+                  updated_at: "1971-09-13T12:02:16Z"
+                - created_at: "1971-02-26T10:41:34Z"
+                  custom_domain_id: Sit laboriosam.
+                  default_environment_slug: ctt
+                  description: Voluptatem odit consequatur odio velit.
                   http_tools:
                     - canonical:
                         confirm: Quos ut praesentium et.
@@ -21100,12 +21159,12 @@ definitions:
                             - Ea nam sed et mollitia.
                             - Aperiam aliquam alias nostrum.
                         updated_at: Dolor et aliquid inventore sunt.
-                  id: Doloribus iste maxime molestiae.
+                  id: Voluptate illo expedita quis dolore.
                   mcp_is_public: true
-                  mcp_slug: fr6
-                  name: Illo expedita quis dolore corporis distinctio maiores.
-                  organization_id: Porro doloribus.
-                  project_id: Dicta fuga optio perferendis inventore corporis et.
+                  mcp_slug: 7ar
+                  name: Mollitia neque facilis.
+                  organization_id: Magnam eius perferendis veniam.
+                  project_id: Distinctio maiores et eum laboriosam.
                   prompt_templates:
                     - arguments: '{"name":"example","email":"mail@example.com"}'
                       created_at: "1987-12-08T08:09:28Z"
@@ -21138,15 +21197,16 @@ definitions:
                         - Minima libero.
                       updated_at: "1986-02-14T13:01:15Z"
                   relevant_environment_variables:
-                    - Odit consequatur odio velit.
-                    - Aut aut libero magni.
                     - Cupiditate ipsam consectetur in.
-                  slug: sns
-                  updated_at: "1989-06-01T17:05:03Z"
-                - created_at: "1998-07-19T17:44:16Z"
-                  custom_domain_id: Optio autem cupiditate rem explicabo.
-                  default_environment_slug: vhb
-                  description: Eius perferendis veniam veniam mollitia neque facilis.
+                    - Voluptas corporis.
+                    - Neque ut dolorem perferendis optio autem.
+                    - Rem explicabo sed.
+                  slug: vhb
+                  updated_at: "1971-09-13T12:02:16Z"
+                - created_at: "1971-02-26T10:41:34Z"
+                  custom_domain_id: Sit laboriosam.
+                  default_environment_slug: ctt
+                  description: Voluptatem odit consequatur odio velit.
                   http_tools:
                     - canonical:
                         confirm: Quos ut praesentium et.
@@ -21301,12 +21361,12 @@ definitions:
                             - Ea nam sed et mollitia.
                             - Aperiam aliquam alias nostrum.
                         updated_at: Dolor et aliquid inventore sunt.
-                  id: Doloribus iste maxime molestiae.
+                  id: Voluptate illo expedita quis dolore.
                   mcp_is_public: true
-                  mcp_slug: fr6
-                  name: Illo expedita quis dolore corporis distinctio maiores.
-                  organization_id: Porro doloribus.
-                  project_id: Dicta fuga optio perferendis inventore corporis et.
+                  mcp_slug: 7ar
+                  name: Mollitia neque facilis.
+                  organization_id: Magnam eius perferendis veniam.
+                  project_id: Distinctio maiores et eum laboriosam.
                   prompt_templates:
                     - arguments: '{"name":"example","email":"mail@example.com"}'
                       created_at: "1987-12-08T08:09:28Z"
@@ -21339,11 +21399,12 @@ definitions:
                         - Minima libero.
                       updated_at: "1986-02-14T13:01:15Z"
                   relevant_environment_variables:
-                    - Odit consequatur odio velit.
-                    - Aut aut libero magni.
                     - Cupiditate ipsam consectetur in.
-                  slug: sns
-                  updated_at: "1989-06-01T17:05:03Z"
+                    - Voluptas corporis.
+                    - Neque ut dolorem perferendis optio autem.
+                    - Rem explicabo sed.
+                  slug: vhb
+                  updated_at: "1971-09-13T12:02:16Z"
         required:
             - toolsets
     ListVariationsResult:
@@ -21508,26 +21569,26 @@ definitions:
             asset_id:
                 type: string
                 description: The ID of the uploaded asset.
-                example: Facere illum.
+                example: Exercitationem doloribus.
             id:
                 type: string
                 description: The ID of the deployment asset.
-                example: Enim dolorem voluptatem facilis asperiores magnam.
+                example: Est odit aut.
             name:
                 type: string
                 description: The name to give the document as it will be displayed in UIs.
-                example: Pariatur voluptate porro.
+                example: Enim dolorem voluptatem facilis asperiores magnam.
             slug:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
-                example: r3w
+                example: ewn
                 pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
-            asset_id: Soluta nisi.
-            id: A deserunt provident nam tempore veritatis.
-            name: Pariatur ut enim expedita.
-            slug: z2h
+            asset_id: A deserunt provident nam tempore veritatis.
+            id: Voluptate porro quia consectetur veniam corrupti.
+            name: Soluta nisi.
+            slug: yhf
         required:
             - id
             - asset_id
@@ -21539,13 +21600,13 @@ definitions:
         properties:
             account_type:
                 type: string
-                example: Earum eligendi quis.
+                example: Ab dolorem pariatur dignissimos.
             id:
                 type: string
-                example: Cum pariatur.
+                example: Quia numquam voluptate nulla explicabo repellendus libero.
             name:
                 type: string
-                example: Ullam sed explicabo enim consequuntur dignissimos deserunt.
+                example: Occaecati reprehenderit quia.
             projects:
                 type: array
                 items:
@@ -21557,32 +21618,24 @@ definitions:
                     - id: Labore et eaque perspiciatis fuga.
                       name: Alias quas expedita quod vero aperiam.
                       slug: hdw
-                    - id: Labore et eaque perspiciatis fuga.
-                      name: Alias quas expedita quod vero aperiam.
-                      slug: hdw
-                    - id: Labore et eaque perspiciatis fuga.
-                      name: Alias quas expedita quod vero aperiam.
-                      slug: hdw
             slug:
                 type: string
-                example: Qui debitis ut commodi tenetur quis suscipit.
+                example: Dolorem sequi dolore iste delectus.
             sso_connection_id:
                 type: string
-                example: Dolor dolor.
+                example: Debitis amet ut.
             user_workspace_slugs:
                 type: array
                 items:
                     type: string
-                    example: Ut sed.
+                    example: Ea ut culpa.
                 example:
-                    - Magnam quam.
-                    - Et sit distinctio ratione nulla exercitationem temporibus.
-                    - Quasi a numquam.
-                    - Doloribus rerum.
+                    - Ea dicta quae et.
+                    - Sed est aliquid animi facilis.
         example:
-            account_type: Dolore iure in.
-            id: Et praesentium rerum magni molestias molestiae aut.
-            name: Culpa in.
+            account_type: Ipsum magnam quam.
+            id: Sunt possimus blanditiis.
+            name: Qui quae maxime ratione dolor dolor.
             projects:
                 - id: Labore et eaque perspiciatis fuga.
                   name: Alias quas expedita quod vero aperiam.
@@ -21590,12 +21643,13 @@ definitions:
                 - id: Labore et eaque perspiciatis fuga.
                   name: Alias quas expedita quod vero aperiam.
                   slug: hdw
-            slug: Dolorem voluptatum assumenda quam facere nisi reiciendis.
-            sso_connection_id: Fugit consequuntur.
+            slug: Ut sed.
+            sso_connection_id: Sit distinctio ratione nulla exercitationem.
             user_workspace_slugs:
-                - Atque earum odio placeat vel sunt.
-                - Nesciunt tempora.
-                - Ipsa impedit et nostrum.
+                - Quasi a numquam.
+                - Doloribus rerum.
+                - Et praesentium rerum magni molestias molestiae aut.
+                - Culpa in.
         required:
             - id
             - name
@@ -24111,21 +24165,21 @@ definitions:
             id:
                 type: string
                 description: The ID of the project
-                example: Ex et quaerat ipsa debitis amet ut.
+                example: In officiis.
             name:
                 type: string
                 description: The name of the project
-                example: Ea ut culpa.
+                example: Voluptas cum pariatur tempore ullam sed.
             slug:
                 type: string
                 description: The slug of the project
-                example: 4pn
+                example: ntk
                 pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
-            id: Et dolores sed est.
-            name: Animi facilis voluptatem sunt possimus.
-            slug: wwa
+            id: Sed qui debitis ut commodi.
+            name: Quis suscipit voluptatem earum eligendi.
+            slug: whr
         required:
             - id
             - name
@@ -33326,13 +33380,13 @@ definitions:
                 $ref: '#/definitions/Asset'
         example:
             asset:
-                content_length: 7241897199581660133
-                content_type: Aut dignissimos sit ullam.
-                created_at: "1977-08-18T03:40:29Z"
-                id: Reprehenderit vel sed soluta nam sed.
-                kind: openapiv3
-                sha256: Officia repellendus rem.
-                updated_at: "1979-01-26T08:23:30Z"
+                content_length: 1678302682789501203
+                content_type: Error unde tempora itaque nemo qui.
+                created_at: "2013-08-12T02:56:28Z"
+                id: Soluta nam sed et qui officia.
+                kind: unknown
+                sha256: Necessitatibus aut dignissimos sit ullam.
+                updated_at: "1973-01-14T15:30:17Z"
         required:
             - asset
     UploadOpenAPIv3Result:
@@ -33343,13 +33397,13 @@ definitions:
                 $ref: '#/definitions/Asset'
         example:
             asset:
-                content_length: 7241897199581660133
-                content_type: Aut dignissimos sit ullam.
-                created_at: "1977-08-18T03:40:29Z"
-                id: Reprehenderit vel sed soluta nam sed.
-                kind: openapiv3
-                sha256: Officia repellendus rem.
-                updated_at: "1979-01-26T08:23:30Z"
+                content_length: 1678302682789501203
+                content_type: Error unde tempora itaque nemo qui.
+                created_at: "2013-08-12T02:56:28Z"
+                id: Soluta nam sed et qui officia.
+                kind: unknown
+                sha256: Necessitatibus aut dignissimos sit ullam.
+                updated_at: "1973-01-14T15:30:17Z"
         required:
             - asset
     UpsertGlobalToolVariationResult:
