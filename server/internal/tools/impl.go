@@ -64,9 +64,9 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	limit := conv.PtrValOrEmpty(payload.Limit, 100)
-	if limit < 1 || limit > 100 {
-		limit = 100
+	limit := conv.PtrValOrEmpty(payload.Limit, 1000)
+	if limit < 1 || limit > 1000 {
+		limit = 1000
 	}
 
 	params := repo.ListToolsParams{
