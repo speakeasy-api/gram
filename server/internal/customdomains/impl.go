@@ -3,6 +3,7 @@ package customdomains
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,25 +17,35 @@ import (
 	"github.com/speakeasy-api/gram/internal/oops"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	repo   *repo.Queries
-	auth   *auth.Auth
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	repo           *repo.Queries
+	auth           *auth.Auth
+	temporalClient TemporalClient
+}
+
+type TemporalClient interface {
+	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
+	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient) *Service {
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/internal/customdomains"),
-		logger: logger,
-		repo:   repo.New(db),
-		auth:   auth.New(logger, db, sessions),
+		tracer:         otel.Tracer("github.com/speakeasy-api/gram/internal/customdomains"),
+		logger:         logger,
+		repo:           repo.New(db),
+		auth:           auth.New(logger, db, sessions),
+		temporalClient: temporal,
 	}
 }
 
@@ -63,6 +74,11 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}
 
+	isUpdating := false
+	if workflowInfo, _ := s.temporalClient.GetWorkflowInfo(ctx, authCtx.ActiveOrganizationID, domain.Domain); workflowInfo != nil {
+		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}
+
 	return &gen.CustomDomain{
 		ID:             domain.ID.String(),
 		OrganizationID: domain.OrganizationID,
@@ -71,12 +87,26 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		Activated:      domain.Activated,
 		CreatedAt:      domain.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      domain.UpdatedAt.Time.Format(time.RFC3339),
+		IsUpdating:     isUpdating,
 	}, nil
 }
 
-func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPayload) (res *gen.CustomDomain, err error) {
-	// TODO: To start domain registration will be kicked off on-demand
-	return nil, nil
+func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPayload) (err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if !slices.Contains([]string{"pro", "enterprise"}, authCtx.AccountType) {
+		return oops.E(oops.CodeUnauthorized, err, "custom domain registration is not supported for free account").Log(ctx, s.logger)
+	}
+
+	_, err = s.temporalClient.ExecuteCustomDomainRegistration(ctx, authCtx.ActiveOrganizationID, payload.Domain)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error executing custom domain registration").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) DeleteDomain(context.Context, *gen.DeleteDomainPayload) (err error) {

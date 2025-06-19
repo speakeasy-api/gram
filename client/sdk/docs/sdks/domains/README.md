@@ -202,13 +202,13 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.domains.registerDomain({
+  await gram.domains.registerDomain({
     createDomainRequestBody: {
       domain: "cooperative-partridge.name",
     },
   });
 
-  console.log(result);
+
 }
 
 run();
@@ -234,7 +234,7 @@ async function run() {
   });
   if (res.ok) {
     const { value: result } = res;
-    console.log(result);
+    
   } else {
     console.log("domainsRegisterDomain failed:", res.error);
   }
@@ -272,7 +272,7 @@ import {
 
 ### Response
 
-**Promise\<[components.CustomDomain](../../models/components/customdomain.md)\>**
+**Promise\<void\>**
 
 ### Errors
 

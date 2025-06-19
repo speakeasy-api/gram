@@ -19,7 +19,7 @@ type Service interface {
 	// Get the custom domain for a project
 	GetDomain(context.Context, *GetDomainPayload) (res *CustomDomain, err error)
 	// Create a custom domain for a organization
-	CreateDomain(context.Context, *CreateDomainPayload) (res *CustomDomain, err error)
+	CreateDomain(context.Context, *CreateDomainPayload) (err error)
 	// Delete a custom domain
 	DeleteDomain(context.Context, *DeleteDomainPayload) (err error)
 }
@@ -71,6 +71,8 @@ type CustomDomain struct {
 	CreatedAt string
 	// When the custom domain was last updated.
 	UpdatedAt string
+	// The custom domain is actively being registered
+	IsUpdating bool
 }
 
 // DeleteDomainPayload is the payload type of the domains service deleteDomain

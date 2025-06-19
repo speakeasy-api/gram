@@ -36,25 +36,8 @@ type GetDomainResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the custom domain was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// CreateDomainResponseBody is the type of the "domains" service "createDomain"
-// endpoint HTTP response body.
-type CreateDomainResponseBody struct {
-	// The ID of the custom domain
-	ID string `form:"id" json:"id" xml:"id"`
-	// The ID of the organization this domain belongs to
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The custom domain name
-	Domain string `form:"domain" json:"domain" xml:"domain"`
-	// Whether the domain is verified
-	Verified bool `form:"verified" json:"verified" xml:"verified"`
-	// Whether the domain is activated in ingress
-	Activated bool `form:"activated" json:"activated" xml:"activated"`
-	// When the custom domain was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the custom domain was last updated.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The custom domain is actively being registered
+	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
 }
 
 // GetDomainUnauthorizedResponseBody is the type of the "domains" service
@@ -612,21 +595,7 @@ func NewGetDomainResponseBody(res *domains.CustomDomain) *GetDomainResponseBody 
 		Activated:      res.Activated,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
-	}
-	return body
-}
-
-// NewCreateDomainResponseBody builds the HTTP response body from the result of
-// the "createDomain" endpoint of the "domains" service.
-func NewCreateDomainResponseBody(res *domains.CustomDomain) *CreateDomainResponseBody {
-	body := &CreateDomainResponseBody{
-		ID:             res.ID,
-		OrganizationID: res.OrganizationID,
-		Domain:         res.Domain,
-		Verified:       res.Verified,
-		Activated:      res.Activated,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		IsUpdating:     res.IsUpdating,
 	}
 	return body
 }

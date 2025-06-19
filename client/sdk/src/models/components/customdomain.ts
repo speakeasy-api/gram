@@ -26,6 +26,10 @@ export type CustomDomain = {
    */
   id: string;
   /**
+   * The custom domain is actively being registered
+   */
+  isUpdating: boolean;
+  /**
    * The ID of the organization this domain belongs to
    */
   organizationId: string;
@@ -49,12 +53,14 @@ export const CustomDomain$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   domain: z.string(),
   id: z.string(),
+  is_updating: z.boolean(),
   organization_id: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   verified: z.boolean(),
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
+    "is_updating": "isUpdating",
     "organization_id": "organizationId",
     "updated_at": "updatedAt",
   });
@@ -66,6 +72,7 @@ export type CustomDomain$Outbound = {
   created_at: string;
   domain: string;
   id: string;
+  is_updating: boolean;
   organization_id: string;
   updated_at: string;
   verified: boolean;
@@ -81,12 +88,14 @@ export const CustomDomain$outboundSchema: z.ZodType<
   createdAt: z.date().transform(v => v.toISOString()),
   domain: z.string(),
   id: z.string(),
+  isUpdating: z.boolean(),
   organizationId: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
   verified: z.boolean(),
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
+    isUpdating: "is_updating",
     organizationId: "organization_id",
     updatedAt: "updated_at",
   });

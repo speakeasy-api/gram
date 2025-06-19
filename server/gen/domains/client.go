@@ -64,13 +64,9 @@ func (c *Client) GetDomain(ctx context.Context, p *GetDomainPayload) (res *Custo
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateDomain(ctx context.Context, p *CreateDomainPayload) (res *CustomDomain, err error) {
-	var ires any
-	ires, err = c.CreateDomainEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*CustomDomain), nil
+func (c *Client) CreateDomain(ctx context.Context, p *CreateDomainPayload) (err error) {
+	_, err = c.CreateDomainEndpoint(ctx, p)
+	return
 }
 
 // DeleteDomain calls the "deleteDomain" endpoint of the "domains" service.

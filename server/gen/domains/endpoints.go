@@ -105,7 +105,7 @@ func NewCreateDomainEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			return nil, err
 		}
-		return s.CreateDomain(ctx, p)
+		return nil, s.CreateDomain(ctx, p)
 	}
 }
 

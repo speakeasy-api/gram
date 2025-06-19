@@ -1895,10 +1895,6 @@ paths:
                 required: true
             responses:
                 "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/CustomDomain'
                     description: OK response.
                 "400":
                     content:
@@ -6066,6 +6062,9 @@ components:
                 id:
                     type: string
                     description: The ID of the custom domain
+                is_updating:
+                    type: boolean
+                    description: The custom domain is actively being registered
                 organization_id:
                     type: string
                     description: The ID of the organization this domain belongs to
@@ -6084,6 +6083,7 @@ components:
                 - activated
                 - created_at
                 - updated_at
+                - is_updating
         DeleteGlobalToolVariationForm:
             type: object
             properties:

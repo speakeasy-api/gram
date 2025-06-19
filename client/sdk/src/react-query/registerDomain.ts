@@ -11,7 +11,6 @@ import { GramCore } from "../core.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -23,7 +22,7 @@ export type RegisterDomainMutationVariables = {
   options?: RequestOptions;
 };
 
-export type RegisterDomainMutationData = components.CustomDomain;
+export type RegisterDomainMutationData = void;
 
 /**
  * createDomain domains

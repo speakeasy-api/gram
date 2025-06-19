@@ -1,10 +1,14 @@
 package background
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/speakeasy-api/gram/internal/background/activities"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -12,6 +16,32 @@ import (
 type CustomDomainRegistrationParams struct {
 	OrgID  string
 	Domain string
+}
+
+type CustomDomainRegistrationClient struct {
+	Temporal client.Client
+}
+
+func (c *CustomDomainRegistrationClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	id := c.GetID(orgID, domain)
+	return c.Temporal.DescribeWorkflowExecution(ctx, id, "")
+}
+
+func (c *CustomDomainRegistrationClient) GetID(orgID string, domain string) string {
+	return fmt.Sprintf("v1:custom-domain-registration:%s:%s", orgID, domain)
+}
+
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error) {
+	id := c.GetID(orgID, domain)
+	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    id,
+		TaskQueue:             string(TaskQueueMain),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowRunTimeout:    5 * time.Minute,
+	}, CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{
+		OrgID:  orgID,
+		Domain: domain,
+	})
 }
 
 func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainRegistrationParams) error {

@@ -386,7 +386,7 @@ func newStartCommand() *cli.Command {
 				SlackSigningSecret: c.String("slack-signing-secret"),
 			}))
 			variations.Attach(mux, variations.NewService(logger.With(slog.String("component", "variations")), db, sessionManager))
-			customdomains.Attach(mux, customdomains.NewService(logger.With(slog.String("component", "customdomains")), db, sessionManager))
+			customdomains.Attach(mux, customdomains.NewService(logger.With(slog.String("component", "customdomains")), db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

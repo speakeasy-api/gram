@@ -21,8 +21,9 @@ var CustomDomain = Type("CustomDomain", func() {
 		Description("When the custom domain was last updated.")
 		Format(FormatDateTime)
 	})
+	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
 
-	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at")
+	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating")
 })
 
 var _ = Service("domains", func() {
@@ -61,8 +62,6 @@ var _ = Service("domains", func() {
 			Attribute("domain", String, "The custom domain")
 			Required("domain")
 		})
-
-		Result(CustomDomain)
 
 		HTTP(func() {
 			POST("/rpc/domain.register")

@@ -59,7 +59,7 @@ export class Domains extends ClientSDK {
     request: operations.RegisterDomainRequest,
     security?: operations.RegisterDomainSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CustomDomain> {
+  ): Promise<void> {
     return unwrapAsync(domainsRegisterDomain(
       this,
       request,

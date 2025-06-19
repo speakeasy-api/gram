@@ -322,20 +322,7 @@ func DecodeCreateDomainResponse(decoder func(*http.Response) goahttp.Decoder, re
 		}
 		switch resp.StatusCode {
 		case http.StatusOK:
-			var (
-				body CreateDomainResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("domains", "createDomain", err)
-			}
-			err = ValidateCreateDomainResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("domains", "createDomain", err)
-			}
-			res := NewCreateDomainCustomDomainOK(&body)
-			return res, nil
+			return nil, nil
 		case http.StatusUnauthorized:
 			var (
 				body CreateDomainUnauthorizedResponseBody

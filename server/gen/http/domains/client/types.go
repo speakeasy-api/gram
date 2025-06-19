@@ -36,25 +36,8 @@ type GetDomainResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the custom domain was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// CreateDomainResponseBody is the type of the "domains" service "createDomain"
-// endpoint HTTP response body.
-type CreateDomainResponseBody struct {
-	// The ID of the custom domain
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the organization this domain belongs to
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The custom domain name
-	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
-	// Whether the domain is verified
-	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
-	// Whether the domain is activated in ingress
-	Activated *bool `form:"activated,omitempty" json:"activated,omitempty" xml:"activated,omitempty"`
-	// When the custom domain was created.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the custom domain was last updated.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The custom domain is actively being registered
+	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
 }
 
 // GetDomainUnauthorizedResponseBody is the type of the "domains" service
@@ -621,6 +604,7 @@ func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDoma
 		Activated:      *body.Activated,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
+		IsUpdating:     *body.IsUpdating,
 	}
 
 	return v
@@ -771,22 +755,6 @@ func NewGetDomainGatewayError(body *GetDomainGatewayErrorResponseBody) *goa.Serv
 		Temporary: *body.Temporary,
 		Timeout:   *body.Timeout,
 		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCreateDomainCustomDomainOK builds a "domains" service "createDomain"
-// endpoint result from a HTTP "OK" response.
-func NewCreateDomainCustomDomainOK(body *CreateDomainResponseBody) *domains.CustomDomain {
-	v := &domains.CustomDomain{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		Domain:         *body.Domain,
-		Verified:       *body.Verified,
-		Activated:      *body.Activated,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
 	}
 
 	return v
@@ -1116,38 +1084,8 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateCreateDomainResponseBody runs the validations defined on
-// CreateDomainResponseBody
-func ValidateCreateDomainResponseBody(body *CreateDomainResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.Domain == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))
-	}
-	if body.Verified == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
-	}
-	if body.Activated == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activated", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	if body.IsUpdating == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
