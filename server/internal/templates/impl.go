@@ -116,7 +116,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		if pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "template name already exists")
 		}
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "unexpected database error").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create template").Log(ctx, logger)
 	}

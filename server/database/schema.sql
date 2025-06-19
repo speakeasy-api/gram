@@ -605,7 +605,7 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS prompt_templates_project_id_name_key
-ON prompt_templates (project_id, name, COALESCE(predecessor_id, '00000000-0000-0000-0000-000000000000'))
+ON prompt_templates (project_id, name, predecessor_id) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS prompt_templates_latest_revision
