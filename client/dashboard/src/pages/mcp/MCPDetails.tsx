@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useOrganization, useProject } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { Toolset } from "@gram/client/models/components";
@@ -81,6 +81,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const project = useProject();
   const organization = useOrganization();
   const queryClient = useQueryClient();
+  const session = useSession();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => invalidateAllToolset(queryClient),
@@ -135,6 +136,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
                   slug: toolset.slug,
                   updateToolsetRequestBody: {
                     customDomainId: domain.id,
+                    mcpSlug: mcpSlug,
                   },
                 },
               });
@@ -149,19 +151,21 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   );
 
   const customDomain =
-    domain && !toolset.customDomainId && !!toolset.mcpSlug ? (
+    domain && session.gramAccountType !== "free" && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
       <Button
         variant="outline"
         size="sm"
         onClick={() => {
-          telemetry.capture("mcp_event", {
-            action: "mcp_custom_domain_requested",
-            slug: toolset.slug,
-          });
+          if (session.gramAccountType === "free") {
+            telemetry.capture("mcp_event", {
+              action: "mcp_custom_domain_requested",
+              slug: toolset.slug,
+            });
+          }
           alert(
-            "Custom domains require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
+            "Custom domains require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly." 
           );
         }}
       >
@@ -266,7 +270,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
               <Type muted mono small>
                 {mcpSlug}
               </Type>
-              <div className="ml-auto">{customDomain}</div>
+              {!toolset.customDomainId && <div className="ml-auto">{customDomain}</div>}
             </Stack>
           </BlockInner>
         </Block>
