@@ -83,8 +83,7 @@ export function LoginSection() {
         <div className="flex flex-col items-center gap-4">
           <h1 className="bsmnt-text-display-xl">gram</h1>
           <p className="bsmnt-text-body-lg text-center">
-            The AI Tools platform, chat and build agentic workflows with your
-            APIs
+            Create, Curate and Host high quality MCP servers for every use case. Enable AI to connect with your APIs.
           </p>
         </div>
 
