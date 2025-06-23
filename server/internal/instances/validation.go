@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -40,7 +41,7 @@ func ValidateToolCallBody(ctx context.Context, logger *slog.Logger, bodyBytes []
 	}
 
 	if err := schema.Validate(bodyMap); err != nil {
-		return err
+		return fmt.Errorf("input to toolschema validation failure: %w", err)
 	}
 
 	return nil
