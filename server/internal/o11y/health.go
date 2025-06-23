@@ -51,7 +51,12 @@ func NewHealthCheckHandler(
 	for _, rc := range redisClients {
 		n := fmt.Sprintf("redis:%s", rc.Name)
 		pingers = append(pingers, ping{name: n, timeout: 10 * time.Second, checkFunc: func(ctx context.Context) error {
-			return rc.Resource.Ping(ctx).Err()
+			err := rc.Resource.Ping(ctx).Err()
+			if err != nil {
+				return fmt.Errorf("redis health check failed: %w", err)
+			}
+
+			return nil
 		}})
 	}
 
@@ -59,7 +64,7 @@ func NewHealthCheckHandler(
 		n := fmt.Sprintf("temporal:%s", tc.Name)
 		pingers = append(pingers, ping{name: n, timeout: 10 * time.Second, checkFunc: func(ctx context.Context) error {
 			_, err := tc.Resource.CheckHealth(ctx, &client.CheckHealthRequest{})
-			return err
+			return fmt.Errorf("temporal health check failed: %w", err)
 		}})
 	}
 

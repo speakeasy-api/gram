@@ -2,6 +2,7 @@ package toolsets
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -41,13 +42,13 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		ProjectID: projectID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get http tool definition by id: %w", err)
 	}
 
 	relevantSecurityKeysMap := make(map[string]bool)
 	securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse http tool security keys: %w", err)
 	}
 	for _, key := range securityKeys {
 		relevantSecurityKeysMap[key] = true
@@ -58,12 +59,12 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		DeploymentIds: []uuid.UUID{tool.DeploymentID},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get http security definitions: %w", err)
 	}
 
 	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
 	}
 
 	return &HTTPToolExecutionInfo{

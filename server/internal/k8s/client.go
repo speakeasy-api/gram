@@ -122,7 +122,12 @@ func (k *KubernetesClients) CreateOrUpdateIngress(ctx context.Context, ingressNa
 
 //nolint:exhaustruct // We intentionally do not exhaustively fill all struct fields for Kubernetes API objects, as only a subset are required and others are left to their zero values or managed by the API server.
 func (k *KubernetesClients) GetIngress(ctx context.Context, ingressName string) (*networkingv1.Ingress, error) {
-	return k.Clientset.NetworkingV1().Ingresses(k.namespace).Get(ctx, ingressName, metav1.GetOptions{})
+	ingress, err := k.Clientset.NetworkingV1().Ingresses(k.namespace).Get(ctx, ingressName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get ingress: %w", err)
+	}
+
+	return ingress, nil
 }
 
 //nolint:exhaustruct // We intentionally do not exhaustively fill all struct fields for Kubernetes API objects, as only a subset are required and others are left to their zero values or managed by the API server.

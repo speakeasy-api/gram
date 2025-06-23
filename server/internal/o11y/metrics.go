@@ -2,6 +2,7 @@ package o11y
 
 import (
 	"context"
+	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -32,7 +33,7 @@ func (m *MetricsHandler) IncCounter(ctx context.Context, name MetricName, attrs 
 	counter, err := m.meter.Int64Counter(string(name))
 	if err != nil {
 		// The caller will decide what to do, they should typically gracefully handle this error
-		return err
+		return fmt.Errorf("get or create counter %s: %w", name, err)
 	}
 	counter.Add(ctx, 1, metric.WithAttributes(attrs...))
 

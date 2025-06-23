@@ -169,7 +169,7 @@ func (c *ChatClient) LoadToolsetTools(
 ) ([]AgentTool, error) {
 	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load toolset: %w", err)
+		return nil, err
 	}
 
 	if toolset.DefaultEnvironmentSlug == nil {
@@ -303,7 +303,12 @@ func (w *toolCallResponseWriter) WriteHeader(statusCode int) {
 }
 
 func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
-	return w.body.Write(p)
+	n, err := w.body.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write response body error: %w", err)
+	}
+
+	return n, nil
 }
 
 var jsonRE = regexp.MustCompile(`\bjson\b`)

@@ -3,6 +3,7 @@ package projects
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"time"
@@ -75,7 +76,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get session user info: %w", err)
 	}
 
 	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
@@ -95,9 +96,9 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		if pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "project slug already exists")
 		}
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "database error creating project").Log(ctx, s.logger, slog.String("org_id", payload.OrganizationID), slog.String("project_name", payload.Name))
 	case err != nil:
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating project").Log(ctx, s.logger, slog.String("org_id", payload.OrganizationID), slog.String("project_name", payload.Name))
 	}
 
 	_, err = s.envRepo.CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
@@ -133,7 +134,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get session user info: %w", err)
 	}
 
 	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
@@ -148,7 +149,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	projects, err := s.repo.ListProjectsByOrganization(ctx, payload.OrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list projects by organization %s: %w", payload.OrganizationID, err)
 	}
 
 	entries := make([]*gen.ProjectEntry, 0, len(projects))

@@ -102,7 +102,12 @@ func (l *LogHandler) Flush(ctx context.Context, db *pgxpool.Pool) (int64, error)
 	l.buffer.msgs = []repo.BatchLogEventsParams{}
 	l.mut.Unlock()
 
-	return repo.New(db).BatchLogEvents(ctx, msgs)
+	n, err := repo.New(db).BatchLogEvents(ctx, msgs)
+	if err != nil {
+		return n, fmt.Errorf("flush log events: %w", err)
+	}
+
+	return n, nil
 }
 
 func (l *LogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

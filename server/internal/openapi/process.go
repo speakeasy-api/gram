@@ -308,7 +308,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		"operation set", op != nil,
 		"server env var set", serverEnvVar != "",
 	); err != nil {
-		return repo.CreateOpenAPIv3ToolDefinitionParams{}, err
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("not enough information to create tool definition: %w", err)
 	}
 
 	switch {
@@ -726,7 +726,12 @@ func serializeSecurity(security []*base.SecurityRequirement) ([]byte, error) {
 		acc = append(acc, req)
 	}
 
-	return json.Marshal(acc)
+	bs, err := json.Marshal(acc)
+	if err != nil {
+		return nil, fmt.Errorf("error serializing security requirements: %w", err)
+	}
+
+	return bs, nil
 }
 
 func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string]*repo.CreateHTTPSecurityParams, []error) {

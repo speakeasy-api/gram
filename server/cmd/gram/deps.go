@@ -48,7 +48,12 @@ func newDBClient(ctx context.Context, logger *slog.Logger, connstring string, op
 		o11y.NewPGXLogger(logger, consoleLogLevel),
 	)
 
-	return pgxpool.NewWithConfig(ctx, poolcfg)
+	pool, err := pgxpool.NewWithConfig(ctx, poolcfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pgx pool: %w", err)
+	}
+
+	return pool, nil
 }
 
 type assetStorageOptions struct {
@@ -62,12 +67,12 @@ func newAssetStorage(ctx context.Context, opts assetStorageOptions) (assets.Blob
 	case "fs":
 		assetsURI := filepath.Clean(opts.assetsURI)
 		if err := os.MkdirAll(assetsURI, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
-			return nil, shutdown, err
+			return nil, shutdown, fmt.Errorf("create assets directory: %w", err)
 		}
 
 		root, err := os.OpenRoot(assetsURI)
 		if err != nil {
-			return nil, shutdown, err
+			return nil, shutdown, fmt.Errorf("open fs assets root: %w", err)
 		}
 
 		shutdown = func(context.Context) error {
@@ -78,7 +83,7 @@ func newAssetStorage(ctx context.Context, opts assetStorageOptions) (assets.Blob
 	case "gcs":
 		gcsStore, err := assets.NewGCSBlobStore(ctx, opts.assetsURI)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("create gcs blob store: %w", err)
 		}
 
 		return gcsStore, shutdown, nil

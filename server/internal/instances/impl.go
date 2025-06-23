@@ -3,6 +3,7 @@ package instances
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -266,7 +267,11 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	_, err = w.Write(interceptor.buffer.Bytes())
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to write response: %w", err)
+	}
+
+	return nil
 }
 
 // ResponseInterceptor completely intercepts the response, allowing modifications before sending to client
@@ -306,7 +311,12 @@ func (w *responseInterceptor) WriteHeader(statusCode int) {
 
 // TODO: if we support tool streaming, we will need to handle that here
 func (w *responseInterceptor) Write(b []byte) (int, error) {
-	return w.buffer.Write(b)
+	n, err := w.buffer.Write(b)
+	if err != nil {
+		return n, fmt.Errorf("write response body error: %w", err)
+	}
+
+	return n, nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

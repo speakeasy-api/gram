@@ -99,7 +99,12 @@ func (e *ShareableError) Unwrap() error {
 }
 
 func (e *ShareableError) MarshalJSON() ([]byte, error) {
-	return json.Marshal(e.public)
+	bs, err := json.Marshal(e.public)
+	if err != nil {
+		return nil, fmt.Errorf("marshal shareable error: %w", err)
+	}
+
+	return bs, nil
 }
 
 func (e *ShareableError) MarshalText() (text []byte, err error) {

@@ -179,7 +179,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
 	if payload.OrganizationID != nil {
@@ -208,7 +208,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
 	}); err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").Log(ctx, s.logger)
 	}
 
 	return &gen.SwitchScopesResult{
@@ -225,7 +225,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
 	}
 
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
@@ -233,7 +233,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
 	}); err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").Log(ctx, s.logger)
 	}
 	return &gen.LogoutResult{SessionCookie: ""}, nil
 }
@@ -246,7 +246,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 
 	userInfo, fromCache, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
 	// For admins we only return the active organization to avoid overloaded returns

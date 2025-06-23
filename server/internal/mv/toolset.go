@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -252,7 +253,7 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindT
 	for _, tool := range tools {
 		securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.HttpToolDefinition.Security)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("http tool security keys: %w", err)
 		}
 
 		for _, key := range securityKeys {
@@ -274,7 +275,7 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindT
 		DeploymentIds: slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read toolset security definitions: %w", err)
 	}
 
 	relevantEnvVarsMap := make(map[string]bool)

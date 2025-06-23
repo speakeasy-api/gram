@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -112,13 +113,28 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 }
 
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {
-	return s.sessionCache.Store(ctx, session)
+	err := s.sessionCache.Store(ctx, session)
+	if err != nil {
+		return fmt.Errorf("store session: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Manager) UpdateSession(ctx context.Context, session Session) error {
-	return s.sessionCache.Update(ctx, session)
+	err := s.sessionCache.Update(ctx, session)
+	if err != nil {
+		return fmt.Errorf("update session: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Manager) ClearSession(ctx context.Context, session Session) error {
-	return s.sessionCache.Delete(ctx, session)
+	err := s.sessionCache.Delete(ctx, session)
+	if err != nil {
+		return fmt.Errorf("clear session: %w", err)
+	}
+
+	return nil
 }

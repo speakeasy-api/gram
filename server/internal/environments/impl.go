@@ -2,6 +2,8 @@ package environments
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -253,10 +255,15 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	return s.repo.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{
+	err := s.repo.DeleteEnvironment(ctx, repo.DeleteEnvironmentParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete environment").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

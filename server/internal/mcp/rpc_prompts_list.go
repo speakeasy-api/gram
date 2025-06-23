@@ -10,6 +10,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type promptsListResult struct {
@@ -99,5 +100,10 @@ func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 		},
 	}
 
-	return json.Marshal(result)
+	bs, err := json.Marshal(result)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize prompts/list response").Log(ctx, logger)
+	}
+
+	return bs, nil
 }

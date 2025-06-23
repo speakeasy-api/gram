@@ -29,14 +29,14 @@ func NewEnvironmentEntries(logger *slog.Logger, repo *repo.Queries, enc *encrypt
 func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, environmentID uuid.UUID, redacted bool) ([]repo.EnvironmentEntry, error) {
 	entries, err := e.repo.ListEnvironmentEntries(ctx, environmentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list environment entries: %w", err)
 	}
 
 	decryptedEntries := make([]repo.EnvironmentEntry, len(entries))
 	for i, entry := range entries {
 		value, err := e.enc.Decrypt(entry.Value)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt entry %s: %w", entry.Name, err)
+			return nil, fmt.Errorf("decrypt entry %s: %w", entry.Name, err)
 		}
 
 		if redacted {

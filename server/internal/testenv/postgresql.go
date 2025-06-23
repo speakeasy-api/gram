@@ -44,17 +44,17 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("start postgres container: %w", err)
 	}
 
 	uri, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("read connection string: %w", err)
 	}
 
 	conn, err := pgx.Connect(ctx, uri)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("connect to template database: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return conn.Close(ctx)
@@ -62,7 +62,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 
 	_, err = conn.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("mark template database: %w", err)
 	}
 
 	return container, newPostgresCloneFunc(container), nil

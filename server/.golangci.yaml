@@ -42,6 +42,13 @@ linters:
     - unconvert
     - unused
     - usetesting
+    - wrapcheck
+
+  exclusions:
+    rules:
+      - path: internal/o11y/setup\.go
+        linters:
+          - wrapcheck
   settings:
     sloglint:
       no-mixed-args: true
@@ -118,3 +125,24 @@ linters:
     nolintlint:
       require-specific: true
       require-explanation: true
+    wrapcheck:
+      ignore-sigs:
+        - "errors.New("
+        - "fmt.Errorf("
+
+        - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("
+        - "go.temporal.io/sdk/temporal.NewApplicationErrorWithOptions("
+        - "go.temporal.io/sdk/temporal.NewNonRetryableApplicationError("
+        - "go.temporal.io/sdk/workflow.NewContinueAsNewError("
+        - "(go.temporal.io/sdk/client.Client).ExecuteWorkflow("
+        - "(go.temporal.io/sdk/internal.WorkflowInboundInterceptor).ExecuteWorkflow("
+        - "(go.temporal.io/sdk/internal.ActivityInboundInterceptor).ExecuteActivity("
+        - "(go.temporal.io/sdk/internal.Future).Get("
+        
+        - "(*github.com/speakeasy-api/gram/internal/auth.Auth).Authorize("
+        - "(*github.com/speakeasy-api/gram/internal/auth/sessions.Manager).Authenticate("
+        - "(*github.com/speakeasy-api/gram/internal/openapi.ToolExtractor).Do("
+
+      ignore-sig-regexps:
+        - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/internal\\/background\\/activities\\..+\\)\\.Do\\("
+        - "github\\.com\\/speakeasy-api\\/gram\\/internal\\/mv\\.Describe.+\\("

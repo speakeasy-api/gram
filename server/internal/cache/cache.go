@@ -73,7 +73,7 @@ func (d *Cache[T]) WithRawCache(ctx context.Context, key string, f func(ctx cont
 		return f(ctx)
 	}
 
-	return returnObj, err
+	return returnObj, fmt.Errorf("%s: cache function error: %w", d.fullKey(key), err)
 }
 
 func (d *Cache[T]) fullKey(key string) string {
@@ -89,13 +89,13 @@ func (d *Cache[T]) Delete(ctx context.Context, obj T) error {
 	d.logger.DebugContext(ctx, "invalidating cache", slog.String("key", cacheKey))
 	err := d.cache.Delete(ctx, cacheKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete: %s: %w", cacheKey, err)
 	}
 
 	for _, key := range obj.AdditionalCacheKeys() {
 		err := d.cache.Delete(ctx, d.fullKey(key))
 		if err != nil {
-			return err
+			return fmt.Errorf("delete additional: %s: %w", d.fullKey(key), err)
 		}
 	}
 
@@ -110,8 +110,11 @@ func (d *Cache[T]) Get(context context.Context, key string) (T, error) { //nolin
 	var returnObj T
 
 	err := d.cache.Get(context, d.fullKey(key), &returnObj)
+	if err != nil {
+		return returnObj, fmt.Errorf("%s: get: %w", d.fullKey(key), err)
+	}
 
-	return returnObj, err
+	return returnObj, nil
 }
 
 func (d *Cache[T]) Store(context context.Context, obj T) error {
@@ -126,7 +129,7 @@ func (d *Cache[T]) Store(context context.Context, obj T) error {
 		TTL:   d.ttl,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("store: %s: %w", d.fullKey(obj.CacheKey()), err)
 	}
 	for _, key := range obj.AdditionalCacheKeys() {
 		err := d.cache.Set(&redisCache.Item{
@@ -136,7 +139,7 @@ func (d *Cache[T]) Store(context context.Context, obj T) error {
 			TTL:   d.ttl,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("store additional: %s: %w", d.fullKey(key), err)
 		}
 	}
 	return nil

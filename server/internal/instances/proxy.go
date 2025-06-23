@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/serialization"
@@ -294,7 +295,7 @@ func retryWithBackoff(
 			select {
 			case <-time.After(delayInterval):
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, fmt.Errorf("retry context done: %w", ctx.Err())
 			}
 
 			delayInterval = min(time.Duration(float64(delayInterval)*retryBackoff.backoffFactor), retryBackoff.maxInterval)
@@ -365,7 +366,7 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 		if req.Body != nil && req.GetBody != nil {
 			freshBody, err := req.GetBody()
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("retry: clone request body: %w", err)
 			}
 			retryReq.Body = freshBody
 		}
@@ -468,15 +469,15 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 			}
 		}
 	} else {
-		fmt.Println("autoSummarizeConfig.autoSummarizeMessage", autoSummarizeConfig.autoSummarizeMessage)
-		fmt.Println("autoSummarizeConfig.authenticatedOrg", autoSummarizeConfig.authenticatedOrg)
+		logger.DebugContext(ctx, "autoSummarizeConfig.autoSummarizeMessage", slog.String("value", autoSummarizeConfig.autoSummarizeMessage))
+		logger.DebugContext(ctx, "autoSummarizeConfig.authenticatedOrg", slog.String("value", conv.PtrValOr(autoSummarizeConfig.authenticatedOrg, "<!nil>")))
 		if autoSummarizeConfig.autoSummarizeMessage != "" && autoSummarizeConfig.authenticatedOrg != nil {
 			// Only read entire body if we might need to summarize
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
 				span.SetStatus(codes.Error, err.Error())
 				logger.ErrorContext(ctx, "failed to read response body", slog.String("error", err.Error()))
-				return err
+				return oops.E(oops.CodeUnexpected, err, "failed to read response body").Log(ctx, logger)
 			}
 
 			responseBody := string(bodyBytes)
@@ -486,7 +487,7 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 				if err != nil {
 					return oops.E(oops.CodeUnexpected, err, "failed to summarize response").Log(ctx, logger)
 				}
-				fmt.Println("summarizedResponse", summarizedResponse)
+				logger.DebugContext(ctx, "summarizedResponse", slog.String("value", summarizedResponse))
 				responseBody = summarizedResponse
 			}
 
@@ -700,7 +701,7 @@ func summarizeResponse(ctx context.Context, logger *slog.Logger, orgID string, r
 	chatResponse, err := chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
 	if err != nil {
 		logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
-		return "", err
+		return "", fmt.Errorf("summarize: completion error: %w", err)
 	}
 
 	return chatResponse.Content, nil

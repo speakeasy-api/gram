@@ -39,5 +39,9 @@ func NewTemporalDevServer(t *testing.T, ctx context.Context) (*testsuite.DevServ
 		}
 	}
 
-	return temporal, err
+	if err != nil {
+		return nil, fmt.Errorf("start temporal dev server: %w", err)
+	}
+
+	return temporal, nil
 }

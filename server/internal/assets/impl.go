@@ -418,7 +418,7 @@ func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		if err := dst.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
-			return err
+			return fmt.Errorf("close blob storage: %w", err)
 		}
 		return nil
 	})

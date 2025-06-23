@@ -306,13 +306,13 @@ func (m *Map[K, V]) MarshalJSON() ([]byte, error) {
 		ks := fmt.Sprintf("%v", element.Key)
 		kb, err := json.Marshal(ks)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("marshal key: %w", err)
 		}
 		buf.Write(kb)
 		buf.WriteString(":")
 		vb, err := json.Marshal(element.Value)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("marshal value: %w", err)
 		}
 		buf.Write(vb)
 

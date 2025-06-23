@@ -146,7 +146,7 @@ func newWorkerCommand() *cli.Command {
 				Discard: !c.Bool("observe"),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
@@ -165,12 +165,12 @@ func newWorkerCommand() *cli.Command {
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
 			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create k8s client: %w", err)
 			}
 
 			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
@@ -178,7 +178,7 @@ func newWorkerCommand() *cli.Command {
 				assetsURI:     c.String("assets-uri"),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create asset storage: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
@@ -195,7 +195,7 @@ func newWorkerCommand() *cli.Command {
 					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalClient}},
 				))
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to start control server: %w", err)
 				}
 
 				shutdownFuncs = append(shutdownFuncs, shutdown)

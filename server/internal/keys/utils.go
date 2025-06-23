@@ -3,6 +3,7 @@ package keys
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 )
 
 type APIKeyScopes string
@@ -18,7 +19,7 @@ func (s *Service) generateToken() (string, error) {
 	randomBytes := make([]byte, randomKeyLength/2) // there are 2 hex chars per byte, we can guarantee output of 64 chars this way
 	_, err := rand.Read(randomBytes)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("generate random token bytes: %w", err)
 	}
 	return hex.EncodeToString(randomBytes), nil
 }

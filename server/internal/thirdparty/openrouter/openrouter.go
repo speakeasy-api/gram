@@ -71,7 +71,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			MonthlyCredits: DefaultMonthlyCredits,
 		})
 		if err != nil {
-			return "", err
+			return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").Log(ctx, o.logger)
 		}
 
 		if o.refresher != nil {
@@ -83,14 +83,14 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 		openrouterKey = *keyResponse.Key
 
 	case err != nil:
-		return "", err
+		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").Log(ctx, o.logger)
 
 	default:
 		openrouterKey = key.Key
 	}
 
 	if err := inv.Check("openrouter provisioning", "key is set", openrouterKey != ""); err != nil {
-		return "", err
+		return "", fmt.Errorf("assertion error: %w", err)
 	}
 
 	return openrouterKey, nil
@@ -99,7 +99,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error) {
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
 
 	if key.MonthlyCredits == 0 && !key.Disabled {
@@ -144,13 +144,13 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, k
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to marshal create openrouter key request body", slog.String("error", err.Error()))
-		return nil, err
+		return nil, fmt.Errorf("failed to serialize create key request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterBaseURL+"/v1/keys", bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", slog.String("error", err.Error()))
-		return nil, err
+		return nil, fmt.Errorf("failed to build create key request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
@@ -159,7 +159,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, k
 	resp, err := o.orClient.Do(req)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
-		return nil, err
+		return nil, fmt.Errorf("failed to send create key request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {
@@ -173,7 +173,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, k
 	var response keyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		o.logger.ErrorContext(ctx, "failed to decode create openrouter key response body", slog.String("error", err.Error()))
-		return nil, err
+		return nil, fmt.Errorf("failed to decode create openrouter key response body: %w", err)
 	}
 
 	if response.Key == nil {
@@ -188,13 +188,13 @@ func (o *OpenRouter) updateOpenRouterAPIKey(ctx context.Context, keyHash string,
 	bodyBytes, err := json.Marshal(request)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to marshal update openrouter key request body", slog.String("error", err.Error()))
-		return err
+		return fmt.Errorf("failed to serialize update key request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "PATCH", OpenRouterBaseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", slog.String("error", err.Error()))
-		return err
+		return fmt.Errorf("failed to create update key request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
@@ -203,7 +203,7 @@ func (o *OpenRouter) updateOpenRouterAPIKey(ctx context.Context, keyHash string,
 	resp, err := o.orClient.Do(req)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
-		return err
+		return fmt.Errorf("failed to send update key request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {

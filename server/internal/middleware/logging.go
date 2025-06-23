@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -24,7 +25,12 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func (rw *responseWriter) Write(b []byte) (int, error) {
-	return rw.ResponseWriter.Write(b)
+	n, err := rw.ResponseWriter.Write(b)
+	if err != nil {
+		return n, fmt.Errorf("responseWriter.Write: %w", err)
+	}
+
+	return n, nil
 }
 
 func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {

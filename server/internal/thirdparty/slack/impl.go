@@ -258,7 +258,7 @@ func (s *Service) UpdateSlackConnection(ctx context.Context, payload *gen.Update
 
 	// Ensure the toolset exists for the given slug and project
 	if _, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(sanitizedSlug)); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
+		return nil, err
 	}
 
 	result, err := s.repo.UpdateSlackAppConnection(ctx, repo.UpdateSlackAppConnectionParams{

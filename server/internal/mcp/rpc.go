@@ -61,14 +61,22 @@ func (m msgID) Value() string {
 }
 
 func (m msgID) MarshalJSON() ([]byte, error) {
+	var bs []byte
+	var err error
+
 	switch m.format {
 	case 1:
-		return json.Marshal(m.Number)
+		bs, err = json.Marshal(m.Number)
 	case 2:
-		return json.Marshal(m.String)
+		bs, err = json.Marshal(m.String)
 	default:
-		return nil, fmt.Errorf("invalid message id format: %d", m.format)
+		bs, err = nil, fmt.Errorf("invalid message id format: %d", m.format)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("marshal message id: %w", err)
+	}
+
+	return bs, nil
 }
 
 func (m *msgID) UnmarshalJSON(data []byte) error {
@@ -102,17 +110,22 @@ type result[T any] struct {
 }
 
 func (m result[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(resultEnvelope[T]{
+	bs, err := json.Marshal(resultEnvelope[T]{
 		JSONRPC: "2.0",
 		ID:      m.ID,
 		Result:  m.Result,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal result: %w", err)
+	}
+
+	return bs, nil
 }
 
 func (m *result[T]) UnmarshalJSON(data []byte) error {
 	var envelope resultEnvelope[T]
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return err
+		return fmt.Errorf("unmarshal result envelope: %w", err)
 	}
 
 	if envelope.JSONRPC != "2.0" {
@@ -209,7 +222,7 @@ func (e *rpcError) MarshalJSON() ([]byte, error) {
 		msg = e.Code.UserMessage()
 	}
 
-	return json.Marshal(map[string]any{
+	bs, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      e.ID,
 		"error": map[string]any{
@@ -218,6 +231,11 @@ func (e *rpcError) MarshalJSON() ([]byte, error) {
 			"data":    e.Data,
 		},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal jsonrpc error: %w", err)
+	}
+
+	return bs, nil
 }
 
 func respondWithNoContent(ack bool, w http.ResponseWriter) error {

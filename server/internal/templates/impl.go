@@ -127,7 +127,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	pt, err := mv.DescribePromptTemplate(ctx, logger, s.db, mv.ProjectID(projectID), mv.PromptTemplateID(uuid.NullUUID{UUID: id, Valid: true}), mv.PromptTemplateName(nil))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to read template").Log(ctx, logger)
+		return nil, err
 	}
 
 	return &gen.CreatePromptTemplateResult{Template: pt}, nil
@@ -211,11 +211,8 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		mv.PromptTemplateID(uuid.NullUUID{UUID: nextid, Valid: true}),
 		mv.PromptTemplateName(nil),
 	)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "updated template not found").Log(ctx, logger)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to read updated template").Log(ctx, logger)
+	if err != nil {
+		return nil, err
 	}
 
 	return &gen.UpdatePromptTemplateResult{Template: pt}, nil

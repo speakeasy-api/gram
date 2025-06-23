@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -118,7 +119,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
+		return nil, err
 	}
 
 	return toolsetDetails, nil
@@ -139,7 +140,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 	for i, toolset := range toolsets {
 		toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, s.logger)
+			return nil, err
 		}
 		result[i] = toolsetDetails
 	}
@@ -292,22 +293,30 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset details").Log(ctx, logger)
+		return nil, err
 	}
 
 	return toolsetDetails, nil
 }
 
-func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetPayload) (err error) {
+func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	return s.repo.DeleteToolset(ctx, repo.DeleteToolsetParams{
+	err := s.repo.DeleteToolset(ctx, repo.DeleteToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*types.Toolset, error) {

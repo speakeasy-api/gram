@@ -2,6 +2,8 @@ package keys
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -87,7 +89,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error hashing api key").Log(ctx, s.logger)
 	}
 
 	var projectID uuid.NullUUID
@@ -107,7 +109,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		ProjectID:       projectID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating api key").Log(ctx, s.logger)
 	}
 
 	return &gen.Key{
@@ -132,7 +134,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 
 	keys, err := s.repo.ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing api keys").Log(ctx, s.logger)
 	}
 
 	var result []*gen.Key
@@ -154,7 +156,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	return &gen.ListKeysResult{Keys: result}, nil
 }
 
-func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) (err error) {
+func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
@@ -165,10 +167,15 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
 	}
 
-	return s.repo.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
+	err = s.repo.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
 		ID:             keyID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "error revoking api key").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

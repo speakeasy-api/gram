@@ -2,6 +2,7 @@ package security
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 type SecurityData []map[string][]string
@@ -13,7 +14,7 @@ func ParseHTTPToolSecurityKeys(securityPayload []byte) ([]string, error) {
 
 	var securityData SecurityData
 	if err := json.Unmarshal(securityPayload, &securityData); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse security data: %w", err)
 	}
 
 	keys := make([]string, 0)

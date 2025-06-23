@@ -164,7 +164,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case errors.Is(err, io.EOF):
 		return nil
 	case err != nil:
-		return err
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
 	}
 
 	if len(batch) == 0 {
@@ -256,7 +256,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	case errors.Is(err, io.EOF):
 		return nil
 	case err != nil:
-		return err
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
 	}
 
 	if len(batch) == 0 {
@@ -299,7 +299,7 @@ func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch bat
 		case err != nil:
 			bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
 			if merr != nil {
-				return nil, merr
+				return nil, oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
 			}
 
 			result = bs
@@ -341,9 +341,9 @@ func parseMcpEnvVariables(r *http.Request) map[string]string {
 func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
 	switch req.Method {
 	case "ping":
-		return handlePing(req.ID)
+		return handlePing(ctx, s.logger, req.ID)
 	case "initialize":
-		return handleInitialize(req)
+		return handleInitialize(ctx, s.logger, req)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":

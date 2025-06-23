@@ -107,7 +107,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
-		return "", err
+		return "", fmt.Errorf("error getting chat response: %w", err)
 	}
 
 	// Check if chatResponse contains non-Slack formatting and ask the LLM to fix it
@@ -127,7 +127,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		})
 		if err != nil {
 			s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
-			return "", err
+			return "", fmt.Errorf("error getting formatted chat response: %w", err)
 		}
 	}
 

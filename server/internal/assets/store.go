@@ -65,7 +65,12 @@ func (fbs *FSBlobStore) Read(ctx context.Context, u *url.URL) (io.ReadCloser, er
 	fbs.mut.Lock()
 	defer fbs.mut.Unlock()
 
-	return fbs.Root.Open(filepath)
+	f, err := fbs.Root.Open(filepath)
+	if err != nil {
+		return nil, fmt.Errorf("open file for reading: %w", err)
+	}
+
+	return f, nil
 }
 
 func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, src io.Reader, contentType string) (io.WriteCloser, *url.URL, error) {
@@ -79,7 +84,7 @@ func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, src io.Reade
 
 	dst, err := fbs.Root.OpenFile(fspath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("open file for writing: %w", err)
 	}
 
 	return dst, &url.URL{Scheme: "file", Path: fspath}, nil
@@ -109,7 +114,7 @@ func (fbs *FSBlobStore) mkdirAll(filename string) error {
 
 	for _, seg := range slices.Backward(segments) {
 		if err := fbs.Root.Mkdir(seg, 0755); err != nil && !os.IsExist(err) {
-			return err
+			return fmt.Errorf("create directory %s: %w", seg, err)
 		}
 	}
 
@@ -193,7 +198,12 @@ func (gbs *GCSBlobStore) Read(ctx context.Context, u *url.URL) (io.ReadCloser, e
 		return nil, fmt.Errorf("generate asset path: %w", err)
 	}
 
-	return gbs.bucket.Object(subpath).NewReader(ctx)
+	rdr, err := gbs.bucket.Object(subpath).NewReader(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read object: %w", err)
+	}
+
+	return rdr, nil
 }
 
 func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, src io.Reader, contentType string) (io.WriteCloser, *url.URL, error) {

@@ -11,11 +11,10 @@ import (
 
 func TestKeysService_ListKeys(t *testing.T) {
 	t.Parallel()
-
-	ctx, ti := newTestKeysService(t)
-
 	t.Run("list empty keys", func(t *testing.T) {
 		t.Parallel()
+
+		ctx, ti := newTestKeysService(t)
 
 		result, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{
 			SessionToken: nil,
@@ -27,6 +26,8 @@ func TestKeysService_ListKeys(t *testing.T) {
 
 	t.Run("list keys after creating some", func(t *testing.T) {
 		t.Parallel()
+
+		ctx, ti := newTestKeysService(t)
 
 		// Create a few keys
 		key1, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
@@ -95,6 +96,8 @@ func TestKeysService_ListKeys(t *testing.T) {
 
 	t.Run("unauthorized without auth context", func(t *testing.T) {
 		t.Parallel()
+
+		_, ti := newTestKeysService(t)
 
 		// Create a context without auth
 		ctxWithoutAuth := t.Context()

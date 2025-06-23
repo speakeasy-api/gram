@@ -2,6 +2,7 @@ package deployments_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"sync"
 	"testing"
@@ -146,7 +147,7 @@ func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 			})
 
 			if err != nil {
-				return err
+				return fmt.Errorf("create deployment: %w", err)
 			}
 
 			idmap.Store(dep.Deployment.ID, struct{}{})

@@ -3,6 +3,7 @@ package serialization
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"reflect"
@@ -17,8 +18,9 @@ func ParseParameterSettings(settings []byte) (map[string]*openapi.OpenapiV3Param
 	}
 
 	if err := json.Unmarshal(settings, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse parameter settings: %w", err)
 	}
+
 	return result, nil
 }
 

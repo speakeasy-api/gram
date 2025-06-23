@@ -33,7 +33,7 @@ func (s Semver) String() string {
 func ParseSemver(s string) (Semver, error) {
 	v, err := semver.NewVersion(s)
 	if err != nil {
-		return Semver{}, err
+		return Semver{}, fmt.Errorf("parse semver %.100q: %w", s, err)
 	}
 
 	parsedMajor, parsedMinor, parsedPatch := v.Major(), v.Minor(), v.Patch()

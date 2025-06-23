@@ -2,6 +2,7 @@ package o11y
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -94,7 +95,12 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 		record.Add("goa_method", method)
 	}
 
-	return h.Handler.Handle(ctx, record)
+	err := h.Handler.Handle(ctx, record)
+	if err != nil {
+		return fmt.Errorf("contexthandler: handle slog record: %w", err)
+	}
+
+	return nil
 }
 
 func LogDefer(ctx context.Context, logger *slog.Logger, cb func() error) error {

@@ -125,7 +125,7 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 
 	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(*toolID), uuid.UUID(projectID))
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool execution plan").Log(ctx, logger)
 	}
 
 	rw := &toolCallResponseWriter{
@@ -136,21 +136,26 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 
 	err = instances.InstanceToolProxy(ctx, tracer, logger, metrics, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan, instances.ToolCallSourceMCP, chatClient)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
 
 	chunk, err := formatResult(*rw)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to format tool call result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)
 	}
 
-	return json.Marshal(result[toolCallResult]{
+	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
 			Content: []json.RawMessage{chunk},
 			IsError: rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").Log(ctx, logger)
+	}
+
+	return bs, nil
 }
 
 type toolCallResponseWriter struct {
@@ -168,7 +173,12 @@ func (w *toolCallResponseWriter) WriteHeader(statusCode int) {
 }
 
 func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
-	return w.body.Write(p)
+	n, err := w.body.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write response body: %w", err)
+	}
+
+	return n, nil
 }
 
 var jsonRE = regexp.MustCompile(`\bjson\b`)
@@ -185,13 +195,18 @@ func formatHigherOrderToolResult(ctx context.Context, logger *slog.Logger, req *
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal content chunk").Log(ctx, logger)
 	}
 
-	return json.Marshal(result[toolCallResult]{
+	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
 			Content: []json.RawMessage{content},
 			IsError: false,
 		},
 	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal custom tool call result").Log(ctx, logger)
+	}
+
+	return bs, nil
 }
 
 func formatResult(rw toolCallResponseWriter) (json.RawMessage, error) {
@@ -208,28 +223,43 @@ func formatResult(rw toolCallResponseWriter) (json.RawMessage, error) {
 
 	switch {
 	case strings.HasPrefix(mt, "text/"), jsonRE.MatchString(mt), yamlRE.MatchString(mt):
-		return json.Marshal(contentChunk[string, json.RawMessage]{
+		bs, err := json.Marshal(contentChunk[string, json.RawMessage]{
 			Type:     "text",
 			Text:     string(body),
 			MimeType: nil,
 			Data:     nil,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("serialize text content: %w", err)
+		}
+
+		return bs, nil
 	case strings.HasPrefix(mt, "image/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
-		return json.Marshal(contentChunk[json.RawMessage, string]{
+		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
 			Type:     "image",
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("serialize image content: %w", err)
+		}
+
+		return bs, nil
 	case strings.HasPrefix(mt, "audio/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
-		return json.Marshal(contentChunk[json.RawMessage, string]{
+		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
 			Type:     "audio",
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("serialize audio content: %w", err)
+		}
+
+		return bs, nil
 	default:
 		return nil, fmt.Errorf("unsupported content type %q", ct)
 	}

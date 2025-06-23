@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"maps"
@@ -85,7 +86,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
 	}
 
 	result := make([]*gen.ChatOverview, len(chats))
@@ -116,12 +117,12 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
 	}
 
 	messages, err := s.repo.ListChatMessages(ctx, chat.ID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
 	}
 
 	resultMessages := make([]*gen.ChatMessage, len(messages))
@@ -423,8 +424,12 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 		r.messageWritten = true
 	}
 
-	// Forward the bytes to the client
-	return r.ResponseWriter.Write(b)
+	n, err := r.ResponseWriter.Write(b)
+	if err != nil {
+		return n, fmt.Errorf("failed to write completion response: %w", err)
+	}
+
+	return n, nil
 }
 
 func (r *responseCaptor) processLine(line string) {

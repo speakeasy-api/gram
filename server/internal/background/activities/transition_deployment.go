@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type TransitionDeployment struct {
@@ -38,7 +39,7 @@ func (t *TransitionDeployment) Do(ctx context.Context, projectID uuid.UUID, depl
 		Message:      fmt.Sprintf("Deployment moved to %s state", status),
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error transitioning deployment").Log(ctx, t.logger)
 	}
 
 	return &TransitionDeploymentResult{

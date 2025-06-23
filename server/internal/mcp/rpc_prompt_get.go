@@ -85,11 +85,16 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal content chunk").Log(ctx, logger)
 	}
 
-	return json.Marshal(result[promptGetResult]{
+	bs, err := json.Marshal(result[promptGetResult]{
 		ID: req.ID,
 		Result: promptGetResult{
 			Description: description,
 			Messages:    []promptMessage{{Role: "user", Content: content}},
 		},
 	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize prompts/get result").Log(ctx, logger)
+	}
+
+	return bs, nil
 }

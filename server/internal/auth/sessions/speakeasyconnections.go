@@ -112,7 +112,12 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	return s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false})
+	err := s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false})
+	if err != nil {
+		return fmt.Errorf("cache delete: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*CachedUserInfo, bool, error) {
@@ -129,14 +134,15 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 		userInfo, err = s.GetUserInfoFromSpeakeasy(ctx, sessionID)
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("fetch user info: %w", err)
 	}
 
 	if err = s.userInfoCache.Store(ctx, *userInfo); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
+		return userInfo, false, fmt.Errorf("cache user info: %w", err)
 	}
 
-	return userInfo, false, err
+	return userInfo, false, nil
 }
 
 func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.OrganizationEntry, bool) {

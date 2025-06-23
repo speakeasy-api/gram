@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/internal/oops"
 )
 
 type toolsListResult struct {
@@ -63,5 +64,10 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 		},
 	}
 
-	return json.Marshal(result)
+	bs, err := json.Marshal(result)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").Log(ctx, logger)
+	}
+
+	return bs, nil
 }

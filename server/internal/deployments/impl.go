@@ -144,7 +144,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 		Cursor:       cursor,
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment logs").Log(ctx, s.logger)
 	}
 
 	status := "unknown"
@@ -239,7 +239,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 		Cursor:    cursor,
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing deployments").Log(ctx, s.logger)
 	}
 
 	items := make([]*gen.DeploymentSummary, 0, len(rows))

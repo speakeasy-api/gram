@@ -24,7 +24,12 @@ type CustomDomainRegistrationClient struct {
 
 func (c *CustomDomainRegistrationClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	id := c.GetID(orgID, domain)
-	return c.Temporal.DescribeWorkflowExecution(ctx, id, "")
+	info, err := c.Temporal.DescribeWorkflowExecution(ctx, id, "")
+	if err != nil {
+		return nil, fmt.Errorf("describe workflow execution: %w", err)
+	}
+
+	return info, nil
 }
 
 func (c *CustomDomainRegistrationClient) GetID(orgID string, domain string) string {

@@ -240,7 +240,7 @@ func newStartCommand() *cli.Command {
 				Discard: !c.Bool("observe"),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
@@ -248,7 +248,7 @@ func newStartCommand() *cli.Command {
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			// Ping the database to ensure connectivity
 			if err := db.Ping(ctx); err != nil {
@@ -262,7 +262,7 @@ func newStartCommand() *cli.Command {
 				assetsURI:     c.String("assets-uri"),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to initialize asset storage: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
@@ -271,7 +271,7 @@ func newStartCommand() *cli.Command {
 				redisPassword: c.String("redis-cache-password"),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")
@@ -282,7 +282,7 @@ func newStartCommand() *cli.Command {
 				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
 				s, err := sessions.NewUnsafeManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.Suffix("gram-local"), localEnvPath)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to create unsafe session manager: %w", err)
 				}
 
 				sessionManager = s
@@ -290,12 +290,12 @@ func newStartCommand() *cli.Command {
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
 			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
 
 			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
@@ -305,7 +305,7 @@ func newStartCommand() *cli.Command {
 				keyPEMBlock:  []byte(c.String("temporal-client-key")),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
 
 			if temporalClient == nil {
@@ -339,7 +339,7 @@ func newStartCommand() *cli.Command {
 					temporals,
 				))
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to start control server: %w", err)
 				}
 
 				shutdownFuncs = append(shutdownFuncs, shutdown)
