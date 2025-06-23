@@ -32,10 +32,14 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	tools := make([]*toolListEntry, 0)
 
 	for _, tool := range toolset.HTTPTools {
+		toolSchema := tool.Schema
+		if toolSchema == "" {
+			toolSchema = "{}"
+		}
 		tools = append(tools, &toolListEntry{
 			Name:        tool.Name,
 			Description: tool.Description,
-			InputSchema: json.RawMessage(tool.Schema),
+			InputSchema: json.RawMessage(toolSchema),
 		})
 	}
 
