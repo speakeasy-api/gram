@@ -26,7 +26,7 @@ require (
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.10.0
 	github.com/redis/go-redis/v9 v9.10.0
-	github.com/samber/lo v1.49.1
+	github.com/samber/lo v1.51.0
 	github.com/samber/slog-multi v1.4.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
