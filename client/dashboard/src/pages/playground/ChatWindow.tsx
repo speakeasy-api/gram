@@ -322,7 +322,8 @@ function ChatInner({
     return result.toDataStreamResponse();
   };
 
-  const initialMessagesInner: Message[] = initialMessages ?? chatHistory ?? [];
+  const initialMessagesInner: Message[] =
+    chatHistory.length > 0 ? chatHistory : initialMessages ?? [];
 
   const toolCallApproval = useToolCallApproval({
     // Disclaimer: this is a bit weird, because the tool's execute function actually seems to be called by the useChat hook
