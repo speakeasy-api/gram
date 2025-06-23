@@ -14,14 +14,17 @@ import {
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { useGetDomain } from "@gram/client/react-query";
+import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy, Trash2, Check } from "lucide-react";
-import { useState } from "react";
-import { useOrganization } from "@/contexts/Auth";
+import { CheckCircle2, Copy, Trash2, Check, X, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useOrganization, useSession } from "@/contexts/Auth";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 export default function Settings() {
   const organization = useOrganization();
+  const session = useSession();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
@@ -31,10 +34,39 @@ export default function Settings() {
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
+  const [domainInput, setDomainInput] = useState("");
+  const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
   const SUBDOMAIN = "sub.yourdomain.com";
   const TXT_NAME = `_gram.${SUBDOMAIN}`;
   const TXT_VALUE = `gram-domain-verify=${SUBDOMAIN},${organization.id}`;
+
+  const { data: keysData } = useListAPIKeysSuspense();
+  const domain = useGetDomain(undefined, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  // Initialize domain input with existing domain if available
+  useEffect(() => {
+    if (domain.data?.domain && !domainInput) {
+      setDomainInput(domain.data.domain);
+    }
+  }, [domain.data?.domain, domainInput]);
+
+  // Domain validation regex (same as used in the backend)
+  const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
+  
+  const validateDomain = (domain: string): string => {
+    if (!domain.trim()) {
+      return "Domain is required";
+    }
+    if (!domainRegex.test(domain)) {
+      return "Please enter a valid domain name";
+    }
+    return "";
+  };
+
   const handleCopyCname = async () => {
     await navigator.clipboard.writeText(CNAME_VALUE);
     setIsCnameCopied(true);
@@ -45,12 +77,6 @@ export default function Settings() {
     setIsTxtCopied(true);
     setTimeout(() => setIsTxtCopied(false), 2000);
   };
-
-  const { data: keysData } = useListAPIKeysSuspense();
-  const domain = useGetDomain(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
 
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
@@ -70,6 +96,21 @@ export default function Settings() {
       await queryClient.refetchQueries({
         queryKey: ["@gram/client", "keys", "list"],
       });
+    },
+  });
+
+  const registerDomainMutation = useRegisterDomainMutation({
+    onSuccess: () => {
+      setIsAddDomainDialogOpen(false);
+      setDomainInput("");
+      setDomainError("");
+      // Wait 2 seconds before refetching domain data
+      setTimeout(() => {
+        domain.refetch();
+      }, 2000);
+    },
+    onError: (error) => {
+      setDomainError(error.message || "Failed to register domain");
     },
   });
 
@@ -107,6 +148,28 @@ export default function Settings() {
     setIsCreateDialogOpen(false);
     setNewlyCreatedKey(null);
     setIsCopied(false);
+  };
+
+  const handleDomainInputChange = (value: string) => {
+    setDomainInput(value);
+    setDomainError(validateDomain(value));
+  };
+
+  const handleRegisterDomain = () => {
+    const error = validateDomain(domainInput);
+    if (error) {
+      setDomainError(error);
+      return;
+    }
+
+    registerDomainMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        createDomainRequestBody: {
+          domain: domainInput.trim(),
+        },
+      },
+    });
   };
 
   const apiKeyColumns: Column<Key>[] = [
@@ -150,6 +213,15 @@ export default function Settings() {
       ),
     },
   ];
+
+  // refetch as domain is being verified
+  useEffect(() => {
+    if (!domain.data?.isUpdating) return;
+    const interval = setInterval(() => {
+      domain.refetch();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [domain.data?.isUpdating, domain.refetch]);
 
   return (
     <Page>
@@ -268,16 +340,16 @@ export default function Settings() {
           <Heading variant="h4" className="mb-4">
             Custom Domains
           </Heading>
-          {!domain.data?.domain && (
+          {session.gramAccountType === "free" && (
             <Type className="text-muted-foreground mb-2">
-              Contact gram support to get access to adding a custom subdomain to
+              Contact gram support to get access to custom domains for
               your account.
             </Type>
           )}
-          {!domain.data?.domain && (
+          {!domain.isLoading && !domain.data?.verified && (
             <div className="flex justify-end mb-6">
-              <Button onClick={() => setIsAddDomainDialogOpen(true)}>
-                Add Domain
+              <Button onClick={() => setIsAddDomainDialogOpen(true)} disabled={session.gramAccountType === "free" || domain.data?.isUpdating}>
+                {domain.data?.domain ? "Verify Domain" : "Add Domain"}
               </Button>
             </div>
           )}
@@ -305,12 +377,18 @@ export default function Settings() {
                 width: "120px",
                 render: (row) => (
                   <span className="flex justify-center items-center">
-                    {row.verified ? (
+                    {row.isUpdating ? (
+                      <SimpleTooltip tooltip="Your domain is being verified. Please refresh the page in a minute or two.">
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                      </SimpleTooltip>
+                    ) : row.verified ? (
                       <Check
                         className={cn("w-5 h-5 stroke-3", "text-green-500")}
                       />
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <SimpleTooltip tooltip="Domain verification failed, please ensure your DNS records have been setup correctly">
+                        <X className="w-5 h-5 stroke-3 text-red-500" />
+                      </SimpleTooltip>
                     )}
                   </span>
                 ),
@@ -394,13 +472,33 @@ export default function Settings() {
                   Step 3
                 </Type>
                 <Type variant="body" className="text-muted-foreground mb-2">
-                  Contact the gram team to finish connecting your domain.
+                  Enter a custom domain:
                 </Type>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={() => setIsAddDomainDialogOpen(false)}>
-                  Close
-                </Button>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Enter your domain (chat.yourdomain.com)"
+                    value={domainInput}
+                    onChange={handleDomainInputChange}
+                    className={cn(
+                      domainError && "border-red-500",
+                      domain.data?.domain && "bg-muted text-muted-foreground cursor-not-allowed"
+                    )}
+                    readOnly={!!domain.data?.domain}
+                  />
+                  {domainError && (
+                    <Type variant="body" className="text-red-500 text-sm">
+                      {domainError}
+                    </Type>
+                  )}
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button
+                    onClick={handleRegisterDomain}
+                    disabled={!domainInput.trim() || !!domainError || registerDomainMutation.isPending}
+                  >
+                    {registerDomainMutation.isPending ? "Registering..." : domain.data?.domain ? "Verify" : "Register"}
+                  </Button>
+                </div>
               </div>
             </div>
           </Dialog.Content>

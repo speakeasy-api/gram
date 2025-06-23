@@ -82,6 +82,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const organization = useOrganization();
   const queryClient = useQueryClient();
   const session = useSession();
+  const { orgSlug, projectSlug } = useParams();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => invalidateAllToolset(queryClient),
@@ -163,10 +164,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
               action: "mcp_custom_domain_requested",
               slug: toolset.slug,
             });
+            alert(
+              "Custom domains for your account require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
+            );
+          } else {
+            window.location.href = `/${orgSlug}/${projectSlug}/settings`;
           }
-          alert(
-            "Custom domains require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly." 
-          );
         }}
       >
         Configure
@@ -270,7 +273,9 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
               <Type muted mono small>
                 {mcpSlug}
               </Type>
-              {!toolset.customDomainId && <div className="ml-auto">{customDomain}</div>}
+              {!toolset.customDomainId && (
+                <div className="ml-auto">{customDomain}</div>
+              )}
             </Stack>
           </BlockInner>
         </Block>
@@ -393,9 +398,8 @@ export function MCPJson({
       <Grid.Item>
         <Type className="font-medium">Public Server</Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item>
-    ) as // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
+    ) as // eslint-disable-next-line @typescript-eslint/no-explicit-any
     any);
 
   return (
