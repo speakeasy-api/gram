@@ -113,6 +113,7 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	if len(toolExecutionInfo.Tool.Schema) > 0 {
 		if validateErr := ValidateToolCallBody(ctx, logger, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
+			return oops.E(oops.CodeBadRequest, validateErr, "Use of the tool schema is invalid with the attached error. Please review the tool schema closely")
 		}
 	}
 
