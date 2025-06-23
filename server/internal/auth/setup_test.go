@@ -42,38 +42,38 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service         *auth.Service
-	conn            *pgxpool.Pool
-	sessionManager  *sessions.Manager
-	mockAuthServer  *httptest.Server
-	authConfigs     auth.AuthConfigurations
+	service        *auth.Service
+	conn           *pgxpool.Pool
+	sessionManager *sessions.Manager
+	mockAuthServer *httptest.Server
+	authConfigs    auth.AuthConfigurations
 }
 
 // MockUserInfo represents the user info returned by the mock auth server
 type MockUserInfo struct {
-	UserID               string                    `json:"user_id"`
-	Email                string                    `json:"email"`
-	Admin                bool                      `json:"admin"`
-	UserWhitelisted      bool                      `json:"user_whitelisted"`
-	Organizations        []MockOrganizationEntry   `json:"organizations"`
+	UserID          string                  `json:"user_id"`
+	Email           string                  `json:"email"`
+	Admin           bool                    `json:"admin"`
+	UserWhitelisted bool                    `json:"user_whitelisted"`
+	Organizations   []MockOrganizationEntry `json:"organizations"`
 }
 
 type MockOrganizationEntry struct {
-	ID                   string   `json:"id"`
-	Name                 string   `json:"name"`
-	Slug                 string   `json:"slug"`
-	SsoConnectionID      *string  `json:"sso_connection_id"`
-	UserWorkspaceSlugs   []string `json:"user_workspace_slugs"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Slug               string   `json:"slug"`
+	SsoConnectionID    *string  `json:"sso_connection_id"`
+	UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 }
 
 // createMockAuthServer creates an httptest.Server that serves mock auth responses
 func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
-	
+
 	// Mock the validate endpoint that sessions.GetUserInfoFromSpeakeasy calls
 	mux.HandleFunc("/v1/speakeasy_provider/validate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		// Convert our mock user info to the expected format
 		validateResp := struct {
 			User struct {
@@ -92,7 +92,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			} `json:"organizations"`
 		}{
-			User:          struct {
+			User: struct {
 				ID          string `json:"id"`
 				Email       string `json:"email"`
 				DisplayName string `json:"display_name"`
@@ -114,13 +114,13 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			}{},
 		}
-		
+
 		validateResp.User.ID = userInfo.UserID
 		validateResp.User.Email = userInfo.Email
 		validateResp.User.DisplayName = userInfo.Email
 		validateResp.User.Admin = userInfo.Admin
 		validateResp.User.Whitelisted = userInfo.UserWhitelisted
-		
+
 		validateResp.Organizations = make([]struct {
 			ID                 string   `json:"id"`
 			Name               string   `json:"name"`
@@ -129,7 +129,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
 			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 		}, len(userInfo.Organizations))
-		
+
 		for i, org := range userInfo.Organizations {
 			validateResp.Organizations[i].ID = org.ID
 			validateResp.Organizations[i].Name = org.Name
@@ -138,13 +138,13 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			validateResp.Organizations[i].SSOConnectionID = org.SsoConnectionID
 			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
 		}
-		
+
 		if err := json.NewEncoder(w).Encode(validateResp); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	})
-	
+
 	// Mock the login endpoint
 	mux.HandleFunc("/v1/speakeasy_provider/login", func(w http.ResponseWriter, r *http.Request) {
 		returnURL := r.URL.Query().Get("return_url")
@@ -187,11 +187,11 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	svc := auth.NewService(logger, conn, sessionManager, authConfigs)
 
 	return ctx, &testInstance{
-		service:         svc,
-		conn:            conn,
-		sessionManager:  sessionManager,
-		mockAuthServer:  mockServer,
-		authConfigs:     authConfigs,
+		service:        svc,
+		conn:           conn,
+		sessionManager: sessionManager,
+		mockAuthServer: mockServer,
+		authConfigs:    authConfigs,
 	}
 }
 
@@ -204,11 +204,11 @@ func defaultMockUserInfo() *MockUserInfo {
 		UserWhitelisted: true,
 		Organizations: []MockOrganizationEntry{
 			{
-				ID:                  "org-123",
-				Name:                "Test Organization",
-				Slug:                "test-org",
-				SsoConnectionID:     nil,
-				UserWorkspaceSlugs:  []string{"workspace1", "workspace2"},
+				ID:                 "org-123",
+				Name:               "Test Organization",
+				Slug:               "test-org",
+				SsoConnectionID:    nil,
+				UserWorkspaceSlugs: []string{"workspace1", "workspace2"},
 			},
 		},
 	}
@@ -219,22 +219,22 @@ func speakeasyMockUserInfo() *MockUserInfo {
 	return &MockUserInfo{
 		UserID:          "speakeasy-user-123",
 		Email:           "test@speakeasy.com",
-		Admin:           false,  
+		Admin:           false,
 		UserWhitelisted: true,
 		Organizations: []MockOrganizationEntry{
 			{
-				ID:                  "speakeasy-team-123",
-				Name:                "Speakeasy Team",
-				Slug:                "speakeasy-team",
-				SsoConnectionID:     nil,
-				UserWorkspaceSlugs:  []string{"speakeasy-workspace"},
+				ID:                 "speakeasy-team-123",
+				Name:               "Speakeasy Team",
+				Slug:               "speakeasy-team",
+				SsoConnectionID:    nil,
+				UserWorkspaceSlugs: []string{"speakeasy-workspace"},
 			},
 			{
-				ID:                  "other-org-123",
-				Name:                "Other Organization",
-				Slug:                "other-org",
-				SsoConnectionID:     nil,
-				UserWorkspaceSlugs:  []string{"other-workspace"},
+				ID:                 "other-org-123",
+				Name:               "Other Organization",
+				Slug:               "other-org",
+				SsoConnectionID:    nil,
+				UserWorkspaceSlugs: []string{"other-workspace"},
 			},
 		},
 	}
@@ -249,11 +249,11 @@ func adminMockUserInfo() *MockUserInfo {
 		UserWhitelisted: true,
 		Organizations: []MockOrganizationEntry{
 			{
-				ID:                  "admin-org-123",
-				Name:                "Admin Organization",
-				Slug:                "admin-org",
-				SsoConnectionID:     nil,
-				UserWorkspaceSlugs:  []string{"admin-workspace"},
+				ID:                 "admin-org-123",
+				Name:               "Admin Organization",
+				Slug:               "admin-org",
+				SsoConnectionID:    nil,
+				UserWorkspaceSlugs: []string{"admin-workspace"},
 			},
 		},
 	}
@@ -268,11 +268,11 @@ func nonWhitelistedMockUserInfo() *MockUserInfo {
 		UserWhitelisted: false,
 		Organizations: []MockOrganizationEntry{
 			{
-				ID:                  "org-123",
-				Name:                "Test Organization",
-				Slug:                "test-org",
-				SsoConnectionID:     nil,
-				UserWorkspaceSlugs:  []string{"workspace1"},
+				ID:                 "org-123",
+				Name:               "Test Organization",
+				Slug:               "test-org",
+				SsoConnectionID:    nil,
+				UserWorkspaceSlugs: []string{"workspace1"},
 			},
 		},
 	}

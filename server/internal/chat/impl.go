@@ -46,6 +46,7 @@ type Service struct {
 	tracer         trace.Tracer
 	openRouter     openrouter.Provisioner
 	logger         *slog.Logger
+	sessions       *sessions.Manager
 	proxyTransport http.RoundTripper
 }
 
@@ -53,6 +54,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	return &Service{
 		openaiAPIKey:   openaiAPIKey,
 		auth:           auth.New(logger, db, sessions),
+		sessions:       sessions,
 		logger:         logger,
 		repo:           repo.New(db),
 		tracer:         otel.Tracer("github.com/speakeasy-api/gram/internal/chat"),
@@ -80,24 +82,50 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) (*gen.ListChatsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
-	result := make([]*gen.ChatOverview, len(chats))
-	for i, chat := range chats {
-		result[i] = &gen.ChatOverview{
-			ID:          chat.ID.String(),
-			UserID:      chat.UserID.String,
-			Title:       chat.Title.String,
-			NumMessages: int(chat.NumMessages),
-			CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+	result := make([]*gen.ChatOverview, 0)
+	if userInfo.Admin {
+		chats, err := s.repo.ListChats(ctx, *authCtx.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
+		}
+
+		for _, chat := range chats {
+			result = append(result, &gen.ChatOverview{
+				ID:          chat.ID.String(),
+				UserID:      chat.UserID.String,
+				Title:       chat.Title.String,
+				NumMessages: int(chat.NumMessages),
+				CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+			})
+		}
+	} else {
+		chats, err := s.repo.ListChatsForUser(ctx, repo.ListChatsForUserParams{
+			ProjectID: *authCtx.ProjectID,
+			UserID:    conv.ToPGText(authCtx.UserID),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
+		}
+
+		for _, chat := range chats {
+			result = append(result, &gen.ChatOverview{
+				ID:          chat.ID.String(),
+				UserID:      chat.UserID.String,
+				Title:       chat.Title.String,
+				NumMessages: int(chat.NumMessages),
+				CreatedAt:   chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:   chat.UpdatedAt.Time.Format(time.RFC3339),
+			})
 		}
 	}
 
@@ -195,13 +223,13 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}
 
 	orgID := ""
-	if oid, ok := ctx.Value("organization_id").(string); ok {
-		orgID = oid
+	if authCtx.ActiveOrganizationID != "" {
+		orgID = authCtx.ActiveOrganizationID
 	}
 
 	userID := ""
-	if uid, ok := ctx.Value("user_id").(string); ok {
-		userID = uid
+	if authCtx.UserID != "" {
+		userID = authCtx.UserID
 	}
 
 	slogArgs := []any{

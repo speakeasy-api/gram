@@ -163,6 +163,76 @@ func (q *Queries) ListChats(ctx context.Context, projectID uuid.UUID) ([]ListCha
 	return items, nil
 }
 
+const listChatsForUser = `-- name: ListChatsForUser :many
+SELECT 
+    c.id, c.project_id, c.organization_id, c.user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as num_messages 
+    , (
+        COALESCE(
+            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as total_tokens
+FROM chats c 
+WHERE c.project_id = $1 AND c.user_id = $2
+`
+
+type ListChatsForUserParams struct {
+	ProjectID uuid.UUID
+	UserID    pgtype.Text
+}
+
+type ListChatsForUserRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+	NumMessages    int32
+	TotalTokens    int32
+}
+
+func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserParams) ([]ListChatsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listChatsForUser, arg.ProjectID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatsForUserRow
+	for rows.Next() {
+		var i ListChatsForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserID,
+			&i.Title,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.NumMessages,
+			&i.TotalTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertChat = `-- name: UpsertChat :one
 INSERT INTO chats (
     id

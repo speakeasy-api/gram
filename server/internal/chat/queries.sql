@@ -57,6 +57,24 @@ SELECT
 FROM chats c 
 WHERE c.project_id = @project_id;
 
+-- name: ListChatsForUser :many
+SELECT 
+    c.*,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as num_messages 
+    , (
+        COALESCE(
+            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as total_tokens
+FROM chats c 
+WHERE c.project_id = @project_id AND c.user_id = @user_id;
+
 -- name: GetChat :one
 SELECT * FROM chats WHERE id = @id;
 
