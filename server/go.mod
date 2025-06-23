@@ -52,9 +52,9 @@ require (
 	goa.design/clue v1.2.1
 	goa.design/goa/v3 v3.21.1
 	goa.design/plugins/v3 v3.21.1
-	k8s.io/api v0.33.1
-	k8s.io/apimachinery v0.33.1
-	k8s.io/client-go v0.33.1
+	k8s.io/api v0.33.2
+	k8s.io/apimachinery v0.33.2
+	k8s.io/client-go v0.33.2
 )
 
 require (
