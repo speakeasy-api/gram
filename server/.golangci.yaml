@@ -91,6 +91,8 @@ linters:
         - '^go.temporal.io/sdk/internal\..+Options$'
         - '^go.temporal.io/sdk/contrib/opentelemetry\..+Options$'
         - '^go.temporal.io/sdk/testsuite\.DevServerOptions$'
+        - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
+        - '^k8s.io/api/networking/v1\..+$'
     exhaustive:
       check:
         - switch

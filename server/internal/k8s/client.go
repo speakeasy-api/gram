@@ -74,7 +74,6 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (
 	return k8sClients, initErr
 }
 
-//nolint:exhaustruct // We intentionally do not exhaustively fill all struct fields for Kubernetes API objects, as only a subset are required and others are left to their zero values or managed by the API server.
 func (k *KubernetesClients) CreateOrUpdateIngress(ctx context.Context, ingressName string, ingress *networkingv1.Ingress) error {
 	existingIngress, err := k.GetIngress(ctx, ingressName)
 	if err != nil {
@@ -120,7 +119,6 @@ func (k *KubernetesClients) CreateOrUpdateIngress(ctx context.Context, ingressNa
 	return nil
 }
 
-//nolint:exhaustruct // We intentionally do not exhaustively fill all struct fields for Kubernetes API objects, as only a subset are required and others are left to their zero values or managed by the API server.
 func (k *KubernetesClients) GetIngress(ctx context.Context, ingressName string) (*networkingv1.Ingress, error) {
 	ingress, err := k.Clientset.NetworkingV1().Ingresses(k.namespace).Get(ctx, ingressName, metav1.GetOptions{})
 	if err != nil {
@@ -130,7 +128,6 @@ func (k *KubernetesClients) GetIngress(ctx context.Context, ingressName string) 
 	return ingress, nil
 }
 
-//nolint:exhaustruct // We intentionally do not exhaustively fill all struct fields for Kubernetes API objects, as only a subset are required and others are left to their zero values or managed by the API server.
 func (k *KubernetesClients) DeleteIngress(ctx context.Context, ingressName string, secretName string) error {
 	ingressErr := k.Clientset.NetworkingV1().Ingresses(k.namespace).Delete(ctx, ingressName, metav1.DeleteOptions{})
 	if ingressErr != nil {
@@ -159,7 +156,6 @@ func (k *KubernetesClients) DeleteIngress(ctx context.Context, ingressName strin
 	return nil
 }
 
-//nolint:exhaustruct // We intentionally do not exhaustively fill all struct fields for Kubernetes API objects, as only a subset are required and others are left to their zero values or managed by the API server.
 func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (string, string, *networkingv1.Ingress, error) {
 	nginxIngressClassName := "nginx"
 	pathTypePrefix := networkingv1.PathTypePrefix

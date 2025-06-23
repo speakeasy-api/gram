@@ -247,7 +247,6 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		isStreaming := chatRequest.Stream
 
 		// Create a custom response writer to capture the response
-		//nolint:exhaustruct // the other fields are set during processing
 		respCaptor = &responseCaptor{
 			ResponseWriter:       w,
 			logger:               s.logger,
@@ -257,6 +256,17 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			repo:                 s.repo,
 			messageContent:       &strings.Builder{},
 			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
+			messageID:            "",
+			model:                "",
+			isDone:               false,
+			messageWritten:       false,
+			finishReason:         nil,
+			toolCallID:           "",
+			usage: openrouter.Usage{
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+			},
 		}
 	}
 
@@ -335,17 +345,19 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 	// Most of the time, this just serves to store the new message the user just sent
 	if int(chatCount) < len(request.Messages) {
 		for _, msg := range request.Messages[int(chatCount):] {
-			//nolint:exhaustruct // Not all fields are relevant for user-supplied messages
 			_, err := s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{{
-				ChatID:       chatID,
-				Role:         msg.Role,
-				Model:        conv.ToPGText(request.Model),
-				Content:      msg.Content,
-				UserID:       conv.ToPGText(userID),
-				ToolCallID:   conv.ToPGText(msg.ToolCallID),
-				ToolCalls:    nil,
-				FinishReason: conv.ToPGTextEmpty(""),
-				MessageID:    conv.ToPGTextEmpty(""),
+				ChatID:           chatID,
+				Role:             msg.Role,
+				Model:            conv.ToPGText(request.Model),
+				Content:          msg.Content,
+				UserID:           conv.ToPGText(userID),
+				ToolCallID:       conv.ToPGText(msg.ToolCallID),
+				ToolCalls:        nil,
+				FinishReason:     conv.ToPGTextEmpty(""),
+				MessageID:        conv.ToPGTextEmpty(""),
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
 			}})
 
 			if err != nil {
