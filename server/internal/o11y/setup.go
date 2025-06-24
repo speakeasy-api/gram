@@ -55,6 +55,8 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	)
 
 	if options.Discard {
+		logger.InfoContext(ctx, "otel metrics disabled")
+
 		exp, err := stdoutmetric.New(stdoutmetric.WithWriter(io.Discard))
 		if err != nil {
 			handleErr(err)
@@ -63,6 +65,8 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
 		metricExporter = exp
 	} else {
+		logger.InfoContext(ctx, "otel metrics enabled")
+
 		exp, err := otlpmetricgrpc.New(ctx)
 		if err != nil {
 			handleErr(err)
@@ -73,6 +77,8 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	}
 
 	if options.Discard {
+		logger.InfoContext(ctx, "otel tracing disabled")
+
 		exp, err := stdouttrace.New(stdouttrace.WithWriter(io.Discard))
 		if err != nil {
 			handleErr(err)
@@ -81,6 +87,8 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
 		spanExporter = exp
 	} else {
+		logger.InfoContext(ctx, "otel tracing enabled")
+
 		exp, err := otlptracegrpc.New(ctx)
 		if err != nil {
 			handleErr(err)
