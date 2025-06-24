@@ -205,7 +205,7 @@ export function RegisterSection() {
             disabled={registerMutation.isPending || !companyName.trim()}
             className="w-full"
           >
-            "Create Organization"
+            Create Organization
           </Button>
         </form>
       </div>
