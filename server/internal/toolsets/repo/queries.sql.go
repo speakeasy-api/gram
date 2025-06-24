@@ -20,6 +20,22 @@ type AddToolsetPromptTemplatesParams struct {
 	PromptName       string
 }
 
+const checkMCPSlugAvailability = `-- name: CheckMCPSlugAvailability :one
+SELECT EXISTS (
+  SELECT 1
+  FROM toolsets
+  WHERE mcp_slug = $1
+  AND deleted IS FALSE
+)
+`
+
+func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.Text) (bool, error) {
+	row := q.db.QueryRow(ctx, checkMCPSlugAvailability, mcpSlug)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const clearToolsetPromptTemplates = `-- name: ClearToolsetPromptTemplates :exec
 DELETE FROM toolset_prompts
 WHERE project_id = $1

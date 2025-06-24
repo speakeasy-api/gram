@@ -103,3 +103,11 @@ INSERT INTO toolset_prompts (
   , prompt_template_id
   , prompt_name
 ) VALUES (@project_id, @toolset_id, @prompt_history_id, @prompt_template_id, @prompt_name);
+
+-- name: CheckMCPSlugAvailability :one
+SELECT EXISTS (
+  SELECT 1
+  FROM toolsets
+  WHERE mcp_slug = @mcp_slug
+  AND deleted IS FALSE
+);

@@ -37,6 +37,10 @@ type Client struct {
 	// endpoint.
 	GetToolsetDoer goahttp.Doer
 
+	// CheckMCPSlugAvailability Doer is the HTTP client used to make requests to
+	// the checkMCPSlugAvailability endpoint.
+	CheckMCPSlugAvailabilityDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -57,16 +61,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateToolsetDoer:   doer,
-		ListToolsetsDoer:    doer,
-		UpdateToolsetDoer:   doer,
-		DeleteToolsetDoer:   doer,
-		GetToolsetDoer:      doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateToolsetDoer:            doer,
+		ListToolsetsDoer:             doer,
+		UpdateToolsetDoer:            doer,
+		DeleteToolsetDoer:            doer,
+		GetToolsetDoer:               doer,
+		CheckMCPSlugAvailabilityDoer: doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
@@ -185,6 +190,30 @@ func (c *Client) GetToolset() goa.Endpoint {
 		resp, err := c.GetToolsetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "getToolset", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CheckMCPSlugAvailability returns an endpoint that makes HTTP requests to the
+// toolsets service checkMCPSlugAvailability server.
+func (c *Client) CheckMCPSlugAvailability() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCheckMCPSlugAvailabilityRequest(c.encoder)
+		decodeResponse = DecodeCheckMCPSlugAvailabilityResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCheckMCPSlugAvailabilityRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CheckMCPSlugAvailabilityDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "checkMCPSlugAvailability", err)
 		}
 		return decodeResponse(resp)
 	}

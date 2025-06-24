@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { ToolsetCard } from "./ToolsetCard";
+import { useEmptyProjectRedirect } from "../openapi/OpenAPI";
 
 export function useToolsets() {
   const { data: toolsets, refetch } = useListToolsetsSuspense();
@@ -63,6 +64,8 @@ export default function Toolsets() {
       },
     });
   };
+
+  useEmptyProjectRedirect();
 
   return (
     <Page>

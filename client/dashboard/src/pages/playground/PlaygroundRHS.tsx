@@ -26,23 +26,14 @@ export function PlaygroundRHS({
     />
   );
 
-  const initialMessages: Message[] | undefined = configRef.current.isOnboarding
-    ? [
-        {
-          id: "1",
-          role: "system",
-          content:
-            "Welcome to Gram! Upload an OpenAPI document to get started.",
-        },
-      ]
-    : [
-        {
-          id: "1",
-          role: "system",
-          content:
-            "This chat has access to the selected toolset on the left! Use it to test out your toolset.",
-        },
-      ];
+  const initialMessages: Message[] = [
+    {
+      id: "1",
+      role: "system",
+      content:
+        "This chat has access to the selected toolset on the left! Use it to test out your toolset.",
+    },
+  ];
 
   return (
     <Tabs

@@ -14,6 +14,7 @@ import FileUpload from "@/components/upload";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   Deployment,
@@ -45,15 +46,7 @@ export default function Onboarding() {
   );
 }
 
-export function OnboardingContent({
-  existingDocumentSlug,
-  onOnboardingComplete,
-  className,
-}: {
-  existingDocumentSlug?: string;
-  onOnboardingComplete?: (deployment: Deployment) => void;
-  className?: string;
-}) {
+export function useOnboardingSteps(existingDocumentSlug?: string) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -71,7 +64,17 @@ export function OnboardingContent({
 
   const { data: tools, refetch: refetchTools } = useListTools();
 
-  const handleUpload = async (file: File) => {
+  // If an existing document slug was NOT provided, then we need to make sure the provided slug
+  // isn't accidentally overwriting an existing document slug.
+  const apiNameValid =
+    apiName &&
+    apiName.length > 0 &&
+    (existingDocumentSlug ||
+      !latestDeployment?.deployment?.openapiv3Assets
+        .map((a) => a.slug)
+        .includes(apiName));
+
+  const handleSpecUpload = async (file: File) => {
     try {
       setFile(file);
 
@@ -98,7 +101,7 @@ export function OnboardingContent({
 
         setAsset(result);
         if (!apiName) {
-          setApiName(file?.name.split(".")[0] ?? "My API");
+          setApiName(slugify(file?.name.split(".")[0] ?? "My API"));
         }
       });
     } catch (error) {
@@ -119,7 +122,7 @@ export function OnboardingContent({
           {
             assetId: asset.asset.id,
             name: apiName,
-            slug: apiName.replace(" ", "-").toLowerCase(),
+            slug: slugify(apiName),
           },
         ],
       },
@@ -152,15 +155,49 @@ export function OnboardingContent({
 
   const numTools = deploymentNumTools(deployment);
 
-  // If an existing document slug was NOT provided, then we need to make sure the provided slug
-  // isn't accidentally overwriting an existing document slug.
-  const apiNameValid =
-    apiName &&
-    apiName.length > 0 &&
-    (existingDocumentSlug ||
-      !latestDeployment?.deployment?.openapiv3Assets
-        .map((a) => a.slug)
-        .includes(apiName));
+  const undoSpecUpload = () => {
+    setFile(undefined);
+    setAsset(undefined);
+  };
+
+  return {
+    apiNameValid,
+    handleSpecUpload,
+    undoSpecUpload,
+    apiName,
+    setApiName,
+    createDeployment,
+    file,
+    asset,
+    numTools,
+    createdDeployment: deployment,
+    creatingDeployment,
+  };
+}
+
+export function OnboardingContent({
+  existingDocumentSlug,
+  onOnboardingComplete,
+  className,
+}: {
+  existingDocumentSlug?: string;
+  onOnboardingComplete?: (deployment: Deployment) => void;
+  className?: string;
+}) {
+  const {
+    handleSpecUpload,
+    undoSpecUpload,
+    apiName,
+    setApiName,
+    createDeployment,
+    numTools,
+    createdDeployment,
+    creatingDeployment,
+    apiNameValid,
+    file,
+    asset,
+  } = useOnboardingSteps(existingDocumentSlug);
+
 
   const steps: StepProps[] = [
     {
@@ -168,7 +205,7 @@ export function OnboardingContent({
       description: "Upload your OpenAPI specification to get started.",
       display: (
         <FileUpload
-          onUpload={handleUpload}
+          onUpload={handleSpecUpload}
           allowedExtensions={["yaml", "yml", "json"]}
         />
       ),
@@ -177,10 +214,7 @@ export function OnboardingContent({
           <Type>✓ Uploaded {file?.name}</Type>
           <Button
             variant={"outline"}
-            onClick={() => {
-              setFile(undefined);
-              setAsset(undefined);
-            }}
+            onClick={undoSpecUpload}
           >
             Change
           </Button>
@@ -212,7 +246,7 @@ export function OnboardingContent({
         </Stack>
       ),
       displayComplete: <Type>✓ Source named "{apiName}"</Type>,
-      isComplete: creatingDeployment || !!deployment,
+      isComplete: creatingDeployment || !!createdDeployment,
     },
     {
       heading: "Generate Tools",
@@ -227,21 +261,21 @@ export function OnboardingContent({
       ),
       displayComplete: (
         <div>
-          {deployment ? (
-            <Accordion type="single" collapsible>
+          {createdDeployment ? (
+            <Accordion type="single" collapsible className="max-w-2xl">
               <AccordionItem value="logs">
                 <AccordionTrigger className="text-base">
                   ✓ Created {numTools} tools
                 </AccordionTrigger>
                 <AccordionContent>
-                  <DeploymentLogs deploymentId={deployment?.id} onlyErrors />
+                  <DeploymentLogs deploymentId={createdDeployment?.id} onlyErrors />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
           ) : null}
         </div>
       ),
-      isComplete: !!deployment,
+      isComplete: !!createdDeployment,
     },
   ];
 
@@ -249,13 +283,13 @@ export function OnboardingContent({
     <Page.Body className={className}>
       <Stepper
         steps={steps}
-        onComplete={() => onOnboardingComplete?.(deployment!)}
+        onComplete={() => onOnboardingComplete?.(createdDeployment!)}
       />
     </Page.Body>
   );
 }
 
-function DeploymentLogs(props: { deploymentId: string, onlyErrors?: boolean }) {
+function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boolean }) {
   const { data, status, error } = useDeploymentLogs({
     deploymentId: props.deploymentId,
   });
@@ -277,10 +311,11 @@ function DeploymentLogs(props: { deploymentId: string, onlyErrors?: boolean }) {
     return null;
   }
 
-  const lines = (props.onlyErrors
-    ? data.events.filter((e) => e.event.includes("error"))
-    : data.events)
-  .map((e) => {
+  const lines = (
+    props.onlyErrors
+      ? data.events.filter((e) => e.event.includes("error"))
+      : data.events
+  ).map((e) => {
     return (
       <p
         key={e.id}
@@ -296,7 +331,7 @@ function DeploymentLogs(props: { deploymentId: string, onlyErrors?: boolean }) {
 
   return (
     <div className="font-mono text-sm max-h-[250px] overflow-y-auto">
-      {lines}
+      {lines.length > 0 ? lines : "OpenAPI document processed without issue"}
     </div>
   );
 }

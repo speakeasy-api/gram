@@ -21,7 +21,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { MUSTACHE_VAR_REGEX, TOOL_NAME_REGEX } from "@/lib/constants";
+import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
 import { useGroupedTools } from "@/lib/toolNames";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -39,6 +39,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Message } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
+import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
@@ -52,7 +53,6 @@ import {
   Step,
 } from "./components";
 import { useToolifyContext } from "./Toolify";
-import { toast } from "sonner";
 
 export function ToolBuilderNew() {
   const ctx = useToolifyContext();
@@ -70,7 +70,7 @@ export function ToolBuilderNew() {
   // If we came from the toolify dialog, pull in the suggestion
   if (ctx.toolset) {
     newTemplate.toolset = ctx.toolset;
-    newTemplate.name = ctx.suggestion.name;
+    newTemplate.name = slugify(ctx.suggestion.name);
     newTemplate.description = ctx.suggestion.description;
     newTemplate.purpose = ctx.purpose;
     newTemplate.inputs = ctx.suggestion.inputs;
@@ -479,7 +479,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       className="h-full [&>[role='separator']]:border-border [&>[role='separator']]:mx-8 [&>[role='separator']]:border-1"
     >
       <ResizablePanel.Pane minSize={35}>
-        <Stack gap={1}  className="h-full overflow-y-scroll">
+        <Stack gap={1} className="h-full overflow-y-scroll">
           <Stack direction="horizontal" align="center" className="w-full">
             <Block label="Tool name" className="w-2/3">
               <BlockInner>{toolName}</BlockInner>
@@ -575,8 +575,30 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                   <StepCard
                     step={step}
                     tools={tools}
-                    removeStep={() =>
+                    remove={() =>
                       setSteps(steps.filter((s) => s.id !== step.id))
+                    }
+                    moveUp={
+                      index > 0
+                        ? () => {
+                            const newSteps = [...steps];
+                            const temp = newSteps[index]!;
+                            newSteps[index] = newSteps[index - 1]!;
+                            newSteps[index - 1] = temp;
+                            setSteps(newSteps);
+                          }
+                        : undefined
+                    }
+                    moveDown={
+                      index < steps.length - 1
+                        ? () => {
+                            const newSteps = [...steps];
+                            const temp = newSteps[index]!;
+                            newSteps[index] = newSteps[index + 1]!;
+                            newSteps[index + 1] = temp;
+                            setSteps(newSteps);
+                          }
+                        : undefined
                     }
                   />
                   <StepSeparator />
@@ -645,11 +667,15 @@ export const MustacheHighlight = ({
 const StepCard = ({
   step,
   tools,
-  removeStep,
+  remove,
+  moveUp,
+  moveDown,
 }: {
   step: Step;
   tools: ToolDefinition[];
-  removeStep: (step: Step) => void;
+  remove: () => void;
+  moveUp?: () => void;
+  moveDown?: () => void;
 }) => {
   const [open, setOpen] = useState(false);
   const tool = tools.find((t) => t.name === step.tool);
@@ -683,15 +709,32 @@ const StepCard = ({
           direction="horizontal"
           align="center"
           justify="space-between"
-          className="px-4 py-3 border-b border-stone-300 dark:border-stone-700"
+          className="px-4 py-3 border-b border-stone-300 dark:border-stone-700 group/heading"
         >
           <Type variant="subheading">Use the {toolBadge} tool to...</Type>
-          <DeleteButton
-            size="sm"
-            tooltip="Delete step"
-            onClick={() => removeStep(step)}
-            className="mr-[-8px] mt-[-8px]"
-          />
+          <Stack direction="horizontal" className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans">
+            {moveUp && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                tooltip="Move up"
+                onClick={moveUp}
+                icon="arrow-up"
+                className="mr-[-4px]"
+              />
+            )}
+            {moveDown && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                tooltip="Move down"
+                onClick={moveDown}
+                icon="arrow-down"
+                className="mr-[-4px]"
+              />
+            )}
+            <DeleteButton size="sm" tooltip="Delete step" onClick={remove} />
+          </Stack>
         </Stack>
         <div className={cn("px-4 py-3", blockBackground)}>
           <EditableText

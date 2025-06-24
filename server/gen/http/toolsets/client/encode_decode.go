@@ -1193,6 +1193,239 @@ func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildCheckMCPSlugAvailabilityRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service
+// "checkMCPSlugAvailability" endpoint
+func (c *Client) BuildCheckMCPSlugAvailabilityRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CheckMCPSlugAvailabilityToolsetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "checkMCPSlugAvailability", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCheckMCPSlugAvailabilityRequest returns an encoder for requests sent
+// to the toolsets checkMCPSlugAvailability server.
+func EncodeCheckMCPSlugAvailabilityRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.CheckMCPSlugAvailabilityPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "checkMCPSlugAvailability", "*toolsets.CheckMCPSlugAvailabilityPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCheckMCPSlugAvailabilityResponse returns a decoder for responses
+// returned by the toolsets checkMCPSlugAvailability endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCheckMCPSlugAvailabilityResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCheckMCPSlugAvailabilityResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body bool
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return body, nil
+		case http.StatusUnauthorized:
+			var (
+				body CheckMCPSlugAvailabilityUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CheckMCPSlugAvailabilityForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CheckMCPSlugAvailabilityBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CheckMCPSlugAvailabilityNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CheckMCPSlugAvailabilityConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CheckMCPSlugAvailabilityUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CheckMCPSlugAvailabilityInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CheckMCPSlugAvailabilityInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				err = ValidateCheckMCPSlugAvailabilityInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				return nil, NewCheckMCPSlugAvailabilityInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CheckMCPSlugAvailabilityUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				err = ValidateCheckMCPSlugAvailabilityUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				return nil, NewCheckMCPSlugAvailabilityUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "checkMCPSlugAvailability", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CheckMCPSlugAvailabilityGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			err = ValidateCheckMCPSlugAvailabilityGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+			}
+			return nil, NewCheckMCPSlugAvailabilityGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "checkMCPSlugAvailability", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition builds a
 // value of type *types.HTTPToolDefinition from a value of type
 // *HTTPToolDefinitionResponseBody.

@@ -13,36 +13,53 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useRoutes } from "@/routes";
 import { HTTPToolDefinition } from "@gram/client/models/components";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
 import {
   useDeploymentSuspense,
   useLatestDeployment,
+  useListToolsets,
   useListToolsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
 import { Suspense, useState } from "react";
+import { useNavigate } from "react-router";
 import { OnboardingContent } from "../onboarding/Onboarding";
 
-function DeploymentCards() {
-  const { data: deployment, refetch, isLoading } = useLatestDeployment();
-  const routes = useRoutes();
+export function useEmptyProjectRedirect() {
+  const session = useSession();
+  const project = useProject();
+  const navigate = useNavigate();
 
-  const deploymentEmpty =
-    !deployment?.deployment ||
-    (deployment.deployment.openapiv3Assets.length === 0 &&
-      deployment.deployment.packages.length === 0);
+  const { data: deployment } = useLatestDeployment();
+  const { data: toolsets } = useListToolsets();
 
-  if (isLoading) {
-    return <Cards loading={true} />;
+  const deploymentEmpty = isDeploymentEmpty(deployment?.deployment);
+
+  if (deploymentEmpty && toolsets?.toolsets.length === 0) {
+    navigate(`/${session.organization.slug}/${project.slug}/onboarding`);
   }
+}
 
-  if (deploymentEmpty) {
-    routes.playground.goTo();
-    return null;
+function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
+  return (
+    !deployment ||
+    (deployment.openapiv3Assets.length === 0 &&
+      deployment.packages.length === 0)
+  );
+}
+
+function DeploymentCards() {
+  const { data: deployment, refetch } = useLatestDeployment();
+
+  useEmptyProjectRedirect();
+
+  // If the deployment is empty, show the in-page onboarding
+  if (isDeploymentEmpty(deployment?.deployment)) {
+    return <OnboardingContent onOnboardingComplete={() => refetch()} />;
   }
 
   return (

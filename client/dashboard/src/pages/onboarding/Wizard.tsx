@@ -1,0 +1,685 @@
+import { GramLogo } from "@/components/gram-logo";
+import { InputField } from "@/components/moon/input-field";
+import { ToolBadge } from "@/components/tool-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SkeletonParagraph } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Type } from "@/components/ui/type";
+import FileUpload from "@/components/upload";
+import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { slugify } from "@/lib/constants";
+import { useGroupedHttpTools } from "@/lib/toolNames";
+import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import { Toolset } from "@gram/client/models/components";
+import { invalidateAllToolset, useListTools } from "@gram/client/react-query";
+import { Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Check,
+  ChevronRight,
+  FileJson2,
+  ServerCog,
+  Upload,
+  Wrench,
+} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { randSlug, useMcpSlugValidation } from "../mcp/MCPDetails";
+import { useOnboardingSteps } from "./Onboarding";
+
+export function OnboardingWizard() {
+  const [currentStep, setCurrentStep] = useState<"upload" | "toolset" | "mcp">(
+    "upload"
+  );
+  const [toolsetName, setToolsetName] = useState<string>();
+  const [mcpSlug, setMcpSlug] = useState<string>();
+  const organization = useOrganization();
+
+  // Initialize mcpSlug when toolsetName changes
+  useEffect(() => {
+    if (toolsetName && !mcpSlug) {
+      setMcpSlug(`${organization.slug}-${toolsetName}-${randSlug()}`);
+    }
+  }, [toolsetName, mcpSlug]);
+
+  return (
+    <Stack direction={"horizontal"} className="h-[100vh] w-full">
+      <div className="w-1/2 h-full border-r-1 border-r-[#BCBCBC]">
+        <LHS
+          currentStep={currentStep}
+          setCurrentStep={setCurrentStep}
+          toolsetName={toolsetName}
+          setToolsetName={setToolsetName}
+          mcpSlug={mcpSlug}
+          setMcpSlug={setMcpSlug}
+        />
+      </div>
+      <div className="w-1/2 h-full bg-stone-200 overflow-hidden">
+        <AnimatedRightSide
+          currentStep={currentStep}
+          toolsetName={toolsetName}
+          mcpSlug={mcpSlug}
+        />
+      </div>
+    </Stack>
+  );
+}
+
+const Step = ({
+  text,
+  icon,
+  active,
+  completed,
+}: {
+  text: string;
+  icon: React.ReactNode;
+  active?: boolean;
+  completed?: boolean;
+}) => {
+  return (
+    <Stack direction={"horizontal"} gap={2} align={"center"}>
+      <span
+        className={cn(
+          "rounded-full bg-stone-200 h-8 w-8 flex items-center justify-center",
+          active && "bg-green-200 text-green-900"
+        )}
+      >
+        {completed ? <Check className="w-4 h-4" /> : icon}
+      </span>
+      <span className={cn(!active && "text-stone-400!", "text-body-sm")}>
+        {text}
+      </span>
+    </Stack>
+  );
+};
+
+const LHS = ({
+  currentStep,
+  setCurrentStep,
+  toolsetName,
+  setToolsetName,
+  mcpSlug,
+  setMcpSlug,
+}: {
+  currentStep: "upload" | "toolset" | "mcp";
+  setCurrentStep: (step: "upload" | "toolset" | "mcp") => void;
+  toolsetName: string | undefined;
+  setToolsetName: (name: string) => void;
+  mcpSlug: string | undefined;
+  setMcpSlug: (slug: string) => void;
+}) => {
+  const [createdToolset, setCreatedToolset] = useState<Toolset>();
+
+  return (
+    <div className="h-full flex flex-col relative bg-white">
+      {/* Fixed Header */}
+      <Stack align={"center"}>
+        <Stack
+          direction={"horizontal"}
+          align={"center"}
+          justify={"space-between"}
+          className="w-full border-b h-16 px-6 mb-8 border-b-[#BCBCBC]"
+        >
+          <GramLogo className="text-[28px]" />
+          <a href="https://docs.getgram.ai/" target="_blank">
+            <Type mono className="text-[15px] font-normal">
+              VIEW DOCS
+            </Type>
+          </a>
+        </Stack>
+        <Stack direction={"horizontal"} gap={6} align={"center"}>
+          <Step
+            text="Upload OpenAPI"
+            icon={<Upload className="w-4 h-4" />}
+            active={currentStep === "upload"}
+            completed={currentStep !== "upload"}
+          />
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          <Step
+            text="Create Toolset"
+            icon={<Wrench className="w-4 h-4" />}
+            active={currentStep === "toolset"}
+            completed={currentStep === "mcp"}
+          />
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          <Step
+            text="Configure MCP"
+            icon={<ServerCog className="w-4 h-4" />}
+            active={currentStep === "mcp"}
+          />
+        </Stack>
+      </Stack>
+
+      {/* Content - absolutely positioned within left container */}
+      <div className="absolute inset-x-0 top-0 bottom-0 flex items-center justify-center px-16 pointer-events-none">
+        <Stack className="w-full max-w-3xl gap-8 pointer-events-auto">
+          {currentStep === "upload" && (
+            <UploadStep
+              setCurrentStep={setCurrentStep}
+              setToolsetName={setToolsetName}
+            />
+          )}
+          {currentStep === "toolset" && (
+            <ToolsetStep
+              toolsetName={toolsetName}
+              setToolsetName={setToolsetName}
+              setCreatedToolset={setCreatedToolset}
+              setCurrentStep={setCurrentStep}
+            />
+          )}
+          {currentStep === "mcp" && (
+            <McpStep
+              createdToolset={createdToolset}
+              mcpSlug={mcpSlug}
+              setMcpSlug={setMcpSlug}
+            />
+          )}
+        </Stack>
+      </div>
+
+      {/* Footer - pinned to bottom */}
+      <Stack
+        direction={"horizontal"}
+        justify={"space-between"}
+        align={"center"}
+        className="px-6 h-16 mt-auto"
+      >
+        <span className="text-body-sm text-muted-foreground">
+          © 2025 speakeasy
+        </span>
+        <a href="https://x.com/speakeasydev" target="_blank">
+          <TwitterIcon className="w-4 h-4 fill-muted-foreground" />
+        </a>
+      </Stack>
+    </div>
+  );
+};
+
+const UploadStep = ({
+  setCurrentStep,
+  setToolsetName,
+}: {
+  setCurrentStep: (step: "upload" | "toolset") => void;
+  setToolsetName: (toolsetName: string) => void;
+}) => {
+  const { file, handleSpecUpload, createDeployment, apiName } =
+    useOnboardingSteps();
+  const [fileText, setFileText] = useState<string>();
+
+  useEffect(() => {
+    if (!file) return;
+    file.text().then(setFileText);
+  }, [file]);
+
+  const content = file ? (
+    <div className="rounded-md border-1 overflow-clip">
+      <Stack
+        direction={"horizontal"}
+        gap={2}
+        align={"center"}
+        className="border-b-1 px-4 py-2 bg-stone-50"
+      >
+        <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
+        <Type small mono>
+          {file.name}
+        </Type>
+      </Stack>
+      <div className="text-xs p-4 bg-stone-100 h-64">
+        {fileText?.length ? (
+          <pre className="whitespace-pre-wrap">{fileText}</pre>
+        ) : (
+          <SkeletonParagraph lines={12} />
+        )}
+      </div>
+    </div>
+  ) : (
+    <FileUpload
+      label={<span className="text-body-sm">Drop your OpenAPI spec here</span>}
+      onUpload={handleSpecUpload}
+      allowedExtensions={["yaml", "yml", "json"]}
+      className="max-w-full"
+    />
+  );
+
+  const onContinue = async () => {
+    setToolsetName(slugify(apiName || "my-toolset"));
+    await createDeployment();
+    setCurrentStep("toolset");
+  };
+
+  return (
+    <>
+      <Stack gap={1}>
+        <span className="text-heading-md">Upload your OpenAPI spec</span>
+        <span className="text-body-sm">
+          We will use this to create tools for your API
+        </span>
+      </Stack>
+      {content}
+      <ContinueButton
+        disabled={!file}
+        onClick={onContinue}
+        inProgressText="Generating tools"
+      />
+    </>
+  );
+};
+
+const ToolsetStep = ({
+  toolsetName,
+  setToolsetName,
+  setCreatedToolset,
+  setCurrentStep,
+}: {
+  toolsetName: string | undefined;
+  setToolsetName: (toolsetName: string) => void;
+  setCreatedToolset: (toolset: Toolset) => void;
+  setCurrentStep: (step: "toolset" | "mcp") => void;
+}) => {
+  const client = useSdkClient();
+  const { data: tools, isLoading: toolsLoading } = useListTools();
+
+  const onContinue = async () => {
+    if (!toolsetName) {
+      throw new Error("No toolset name found");
+    }
+    if (!tools?.tools.length) {
+      throw new Error("No tools found");
+    }
+
+    const toolset = await client.toolsets.create({
+      createToolsetRequestBody: {
+        name: toolsetName,
+        description: `A toolset created from your OpenAPI document`,
+        httpToolNames: tools?.tools.map((tool) => tool.name) ?? [],
+      },
+    });
+
+    setCreatedToolset(toolset);
+
+    setCurrentStep("mcp");
+  };
+
+  const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
+  const flattened = groupedTools.flatMap((group) => group.tools);
+  const toolsToShow = flattened.slice(0, 25);
+  const additionalTools = flattened.slice(25);
+
+  return (
+    <>
+      <Stack gap={1}>
+        <span className="text-heading-md">Create Toolset</span>
+        <span className="text-body-sm">Give this toolset a name</span>
+      </Stack>
+      <InputField
+        placeholder="my-toolset"
+        value={toolsetName}
+        onChange={(e) => setToolsetName(e.target.value)}
+        maxLength={30}
+        label="Name"
+        error={!toolsetName ? "This field is required" : undefined}
+        hint={"Don't worry, you can change this later."}
+        required
+      />
+      {toolsLoading ? (
+        <Spinner />
+      ) : (
+        <Stack
+          gap={1}
+          direction={"horizontal"}
+          align={"center"}
+          wrap="wrap"
+          className="w-full"
+        >
+          {toolsToShow.map((tool) => (
+            <ToolBadge
+              key={tool.name}
+              variant={"secondary"}
+              tool={{ ...tool, name: tool.displayName, type: "http" }}
+            />
+          ))}
+          {additionalTools.length > 0 && (
+            <Badge
+              variant={"secondary"}
+              className="text-muted-foreground"
+              tooltip={
+                <Stack>
+                  {additionalTools.map((tool) => (
+                    <span key={tool.name}>{tool.displayName}</span>
+                  ))}
+                </Stack>
+              }
+            >
+              + {additionalTools.length} more
+            </Badge>
+          )}
+        </Stack>
+      )}
+      <ContinueButton
+        disabled={!toolsetName}
+        onClick={onContinue}
+        inProgressText="Creating toolset"
+      />
+    </>
+  );
+};
+
+const McpStep = ({
+  createdToolset,
+  mcpSlug,
+  setMcpSlug,
+}: {
+  createdToolset: Toolset | undefined;
+  mcpSlug: string | undefined;
+  setMcpSlug: (slug: string) => void;
+}) => {
+  const queryClient = useQueryClient();
+  const client = useSdkClient();
+  const routes = useRoutes();
+
+  const slugError = useMcpSlugValidation(mcpSlug);
+
+  const onContinue = async () => {
+    if (!createdToolset) {
+      throw new Error("No toolset found");
+    }
+
+    await client.toolsets.updateBySlug({
+      slug: createdToolset.slug,
+      updateToolsetRequestBody: {
+        mcpSlug: mcpSlug || undefined,
+      },
+    });
+
+    invalidateAllToolset(queryClient);
+
+    toast.success("MCP server created successfully");
+    routes.toolsets.toolset.goTo(createdToolset.slug);
+  };
+
+
+  return (
+    <>
+      <Stack gap={1}>
+        <span className="text-heading-md">Configure MCP</span>
+        <span className="text-body-sm">
+          Set the slug this MCP server will be hosted at. Custom domains can be
+          configured later on.
+        </span>
+      </Stack>
+      <InputField
+        placeholder="my-mcp"
+        value={mcpSlug || createdToolset?.slug || "my-mcp"}
+        onChange={(e) => setMcpSlug(e.target.value)}
+        maxLength={40}
+        label="MCP Server Slug"
+        error={slugError}
+        hint={"☑︎ This slug is available!"}
+        required
+      />
+      <ContinueButton disabled={!!slugError} onClick={onContinue} />
+    </>
+  );
+};
+
+const ContinueButton = ({
+  disabled,
+  inProgressText,
+  onClick,
+}: {
+  disabled?: boolean;
+  inProgressText?: string;
+  onClick: () => Promise<void>;
+}) => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  // TODO: rainbowify
+  return (
+    <Button
+      disabled={disabled || isLoading}
+      onClick={() => {
+        setIsLoading(true);
+        onClick();
+      }}
+    >
+      {isLoading && <Spinner />}
+      {isLoading && inProgressText ? inProgressText : "Continue"}
+    </Button>
+  );
+};
+
+const AnimatedRightSide = ({
+  currentStep,
+  toolsetName,
+  mcpSlug,
+}: {
+  currentStep: "upload" | "toolset" | "mcp";
+  toolsetName: string | undefined;
+  mcpSlug: string | undefined;
+}) => {
+  return (
+    <div className="w-full h-full bg-stone-50 flex items-center justify-center relative overflow-hidden">
+      <AnimatePresence mode="wait">
+        {currentStep === "toolset" ? (
+          <ToolsetAnimation key="toolset" toolsetName={toolsetName} />
+        ) : currentStep === "mcp" ? (
+          <McpAnimation key="mcp" mcpSlug={mcpSlug} />
+        ) : (
+          <DefaultLogo key="default" />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const DefaultLogo = () => (
+  <motion.div
+    layoutId="main-container"
+    className="w-32 h-32 bg-white rounded-lg border border-[#bcbcbc] flex items-center justify-center"
+    transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+  >
+    <motion.span
+      layoutId="main-icon"
+      className="font-thin text-black text-6xl select-none"
+      style={{
+        fontFamily: "Tobias, sans-serif",
+        letterSpacing: "-0.05em",
+        transform: "translateY(-0.17em)", // Optical centering
+      }}
+      transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+    >
+      g
+    </motion.span>
+  </motion.div>
+);
+
+const ToolsetAnimation = ({
+  toolsetName,
+}: {
+  toolsetName: string | undefined;
+}) => {
+  return (
+    <div className="flex flex-col items-start gap-3">
+      {/* Toolset name that appears after the main animation */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{
+          delay: 0.5,
+          type: "spring",
+          duration: 0.4,
+          bounce: 0.1,
+        }}
+        className="w-70 pl-1"
+      >
+        <h3 className="text-lg font-medium text-stone-800 mb-1">
+          {toolsetName || "my-toolset"}
+        </h3>
+      </motion.div>
+
+      {/* Main logo that morphs from the default logo */}
+      <motion.div
+        layoutId="main-container"
+        className="w-70 h-12 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+        transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+      >
+        <motion.div
+          layoutId="main-icon"
+          className="w-6 h-6 bg-stone-100 rounded flex items-center justify-center flex-shrink-0"
+          transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{
+              delay: 0.3,
+              type: "spring",
+              duration: 0.4,
+              bounce: 0.3,
+            }}
+          >
+            <Wrench className="w-3 h-3 text-stone-600" />
+          </motion.div>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{
+            delay: 0.2,
+            type: "spring",
+            duration: 0.5,
+            bounce: 0.2,
+          }}
+          className="ml-3 flex-1"
+        >
+          <div className="h-3 bg-stone-200 rounded w-full" />
+        </motion.div>
+      </motion.div>
+
+      {/* Additional tool items that stagger in */}
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.8 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            delay: 0.4,
+            type: "spring",
+            duration: 0.5,
+            bounce: 0.2,
+          }}
+          className="w-70 h-12 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+        >
+          <div className="w-6 h-6 bg-stone-100 rounded flex items-center justify-center">
+            <Wrench className="w-3 h-3 text-stone-600" />
+          </div>
+          <div className="ml-3 h-3 bg-stone-200 rounded w-full" />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.8 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            delay: 0.6,
+            type: "spring",
+            duration: 0.5,
+            bounce: 0.2,
+          }}
+          className="w-70 h-12 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+        >
+          <div className="w-6 h-6 bg-stone-100 rounded flex items-center justify-center">
+            <Wrench className="w-3 h-3 text-stone-600" />
+          </div>
+          <div className="ml-3 h-3 bg-stone-200 rounded w-full" />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
+  const slug = mcpSlug
+    ? `https://app.getgram.ai/mcp/${mcpSlug}`
+    : "https://app.getgram.ai/mcp/my-toolset";
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      {/* Server rack units */}
+      <div className="flex flex-col items-center gap-2">
+        {/* First tool transforms into server rack unit */}
+        <motion.div
+          layoutId="main-container"
+          className="w-48 h-10 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+          transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+        >
+          <motion.div
+            layoutId="main-icon"
+            className="flex items-center justify-center flex-shrink-0"
+            transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{
+                delay: 0.3,
+                type: "spring",
+                duration: 0.4,
+                bounce: 0.3,
+              }}
+              className="w-3 h-3 bg-stone-400 rounded-full"
+            />
+          </motion.div>
+        </motion.div>
+
+        {/* Second server rack unit */}
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.8 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            delay: 0.4,
+            type: "spring",
+            duration: 0.5,
+            bounce: 0.2,
+          }}
+          className="w-48 h-10 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+        >
+          <div className="w-3 h-3 bg-stone-400 rounded-full" />
+        </motion.div>
+      </div>
+
+      {/* Slug label below the server rack */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{
+          delay: 0.6,
+          type: "spring",
+          duration: 0.4,
+          bounce: 0.1,
+        }}
+        className="text-center"
+      >
+        <div className="bg-stone-50 border border-stone-200 rounded-md px-3 py-2">
+          <p className="text-sm font-mono text-stone-700">{slug}</p>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const TwitterIcon = ({ className }: { className?: string }) => {
+  return (
+    <svg
+      role="img"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <title>X</title>
+      <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />
+    </svg>
+  );
+};

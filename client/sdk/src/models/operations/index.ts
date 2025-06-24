@@ -4,6 +4,7 @@
 
 export * from "./authcallback.js";
 export * from "./authlogin.js";
+export * from "./checkmcpslugavailability.js";
 export * from "./createapikey.js";
 export * from "./createdeployment.js";
 export * from "./createenvironment.js";

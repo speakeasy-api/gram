@@ -31,3 +31,8 @@ func DeleteToolsetToolsetsPath() string {
 func GetToolsetToolsetsPath() string {
 	return "/rpc/toolsets.get"
 }
+
+// CheckMCPSlugAvailabilityToolsetsPath returns the URL path to the toolsets service checkMCPSlugAvailability HTTP endpoint.
+func CheckMCPSlugAvailabilityToolsetsPath() string {
+	return "/rpc/toolsets.checkMCPSlugAvailability"
+}

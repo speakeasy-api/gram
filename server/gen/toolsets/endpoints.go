@@ -16,11 +16,12 @@ import (
 
 // Endpoints wraps the "toolsets" service endpoints.
 type Endpoints struct {
-	CreateToolset goa.Endpoint
-	ListToolsets  goa.Endpoint
-	UpdateToolset goa.Endpoint
-	DeleteToolset goa.Endpoint
-	GetToolset    goa.Endpoint
+	CreateToolset            goa.Endpoint
+	ListToolsets             goa.Endpoint
+	UpdateToolset            goa.Endpoint
+	DeleteToolset            goa.Endpoint
+	GetToolset               goa.Endpoint
+	CheckMCPSlugAvailability goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "toolsets" service with endpoints.
@@ -28,11 +29,12 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateToolset: NewCreateToolsetEndpoint(s, a.APIKeyAuth),
-		ListToolsets:  NewListToolsetsEndpoint(s, a.APIKeyAuth),
-		UpdateToolset: NewUpdateToolsetEndpoint(s, a.APIKeyAuth),
-		DeleteToolset: NewDeleteToolsetEndpoint(s, a.APIKeyAuth),
-		GetToolset:    NewGetToolsetEndpoint(s, a.APIKeyAuth),
+		CreateToolset:            NewCreateToolsetEndpoint(s, a.APIKeyAuth),
+		ListToolsets:             NewListToolsetsEndpoint(s, a.APIKeyAuth),
+		UpdateToolset:            NewUpdateToolsetEndpoint(s, a.APIKeyAuth),
+		DeleteToolset:            NewDeleteToolsetEndpoint(s, a.APIKeyAuth),
+		GetToolset:               NewGetToolsetEndpoint(s, a.APIKeyAuth),
+		CheckMCPSlugAvailability: NewCheckMCPSlugAvailabilityEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateToolset = m(e.UpdateToolset)
 	e.DeleteToolset = m(e.DeleteToolset)
 	e.GetToolset = m(e.GetToolset)
+	e.CheckMCPSlugAvailability = m(e.CheckMCPSlugAvailability)
 }
 
 // NewCreateToolsetEndpoint returns an endpoint function that calls the method
@@ -217,5 +220,40 @@ func NewGetToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.GetToolset(ctx, p)
+	}
+}
+
+// NewCheckMCPSlugAvailabilityEndpoint returns an endpoint function that calls
+// the method "checkMCPSlugAvailability" of service "toolsets".
+func NewCheckMCPSlugAvailabilityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CheckMCPSlugAvailabilityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CheckMCPSlugAvailability(ctx, p)
 	}
 }

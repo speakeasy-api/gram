@@ -248,3 +248,38 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 
 	return v, nil
 }
+
+// BuildCheckMCPSlugAvailabilityPayload builds the payload for the toolsets
+// checkMCPSlugAvailability endpoint from CLI flags.
+func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsCheckMCPSlugAvailabilitySlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsCheckMCPSlugAvailabilitySessionToken != "" {
+			sessionToken = &toolsetsCheckMCPSlugAvailabilitySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsCheckMCPSlugAvailabilityProjectSlugInput != "" {
+			projectSlugInput = &toolsetsCheckMCPSlugAvailabilityProjectSlugInput
+		}
+	}
+	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

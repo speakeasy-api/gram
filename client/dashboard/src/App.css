@@ -40,6 +40,25 @@
   font-display: block;
 }
 
+/* TODO factor me somewhere else */
+@utility text-heading-md {
+  font-size: 1.625rem;
+  font-weight: 300;
+  line-height: 1.6;
+  letter-spacing: 0.0015em;
+  font-family: var(--font-diatype);
+  color: #111;
+}
+
+@utility text-body-sm {
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.0015em;
+  font-family: var(--font-diatype);
+  color: #383838;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

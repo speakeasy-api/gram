@@ -51,15 +51,15 @@ projects (create-project|list-projects)
 slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)
 templates (create-template|update-template|get-template|list-templates|delete-template|render-template)
 tools list-tools
-toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset)
+toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability)
 variations (upsert-global|delete-global|list-global)
 `
 }
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets serve-image --id "Corrupti molestias velit." --session-token "Et rerum error aut."` + "\n" +
-		os.Args[0] + ` auth callback --id-token "Non sed."` + "\n" +
+	return os.Args[0] + ` assets serve-image --id "Ullam expedita totam quos fugit sed consequatur." --session-token "Officia error distinctio quia commodi ad."` + "\n" +
+		os.Args[0] + ` auth callback --id-token "Iste ex incidunt et deleniti qui quasi."` + "\n" +
 		os.Args[0] + ` chat list-chats --session-token "Et qui eaque." --project-slug-input "Reiciendis quibusdam."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Ab nemo maiores reprehenderit." --apikey-token "Cumque fuga cumque provident rem tenetur fuga." --session-token "Enim deleniti facere quod." --project-slug-input "Aut veritatis ut totam quam."` + "\n" +
 		os.Args[0] + ` domains get-domain --session-token "Ullam iusto non et dolor." --project-slug-input "Aut doloremque animi assumenda rem tempore."` + "\n" +
@@ -381,6 +381,11 @@ func ParseEndpoint(
 		toolsetsGetToolsetSessionTokenFlag     = toolsetsGetToolsetFlags.String("session-token", "", "")
 		toolsetsGetToolsetProjectSlugInputFlag = toolsetsGetToolsetFlags.String("project-slug-input", "", "")
 
+		toolsetsCheckMCPSlugAvailabilityFlags                = flag.NewFlagSet("check-mcp-slug-availability", flag.ExitOnError)
+		toolsetsCheckMCPSlugAvailabilitySlugFlag             = toolsetsCheckMCPSlugAvailabilityFlags.String("slug", "REQUIRED", "")
+		toolsetsCheckMCPSlugAvailabilitySessionTokenFlag     = toolsetsCheckMCPSlugAvailabilityFlags.String("session-token", "", "")
+		toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag = toolsetsCheckMCPSlugAvailabilityFlags.String("project-slug-input", "", "")
+
 		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
 
 		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
@@ -482,6 +487,7 @@ func ParseEndpoint(
 	toolsetsUpdateToolsetFlags.Usage = toolsetsUpdateToolsetUsage
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
+	toolsetsCheckMCPSlugAvailabilityFlags.Usage = toolsetsCheckMCPSlugAvailabilityUsage
 
 	variationsFlags.Usage = variationsUsage
 	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
@@ -767,6 +773,9 @@ func ParseEndpoint(
 			case "get-toolset":
 				epf = toolsetsGetToolsetFlags
 
+			case "check-mcp-slug-availability":
+				epf = toolsetsCheckMCPSlugAvailabilityFlags
+
 			}
 
 		case "variations":
@@ -1025,6 +1034,9 @@ func ParseEndpoint(
 			case "get-toolset":
 				endpoint = c.GetToolset()
 				data, err = toolsetsc.BuildGetToolsetPayload(*toolsetsGetToolsetSlugFlag, *toolsetsGetToolsetSessionTokenFlag, *toolsetsGetToolsetProjectSlugInputFlag)
+			case "check-mcp-slug-availability":
+				endpoint = c.CheckMCPSlugAvailability()
+				data, err = toolsetsc.BuildCheckMCPSlugAvailabilityPayload(*toolsetsCheckMCPSlugAvailabilitySlugFlag, *toolsetsCheckMCPSlugAvailabilitySessionTokenFlag, *toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -1071,7 +1083,7 @@ Serve an image from Gram.
     -session-token STRING: 
 
 Example:
-    %[1]s assets serve-image --id "Corrupti molestias velit." --session-token "Et rerum error aut."
+    %[1]s assets serve-image --id "Ullam expedita totam quos fugit sed consequatur." --session-token "Officia error distinctio quia commodi ad."
 `, os.Args[0])
 }
 
@@ -1087,7 +1099,7 @@ Upload an image to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-image --content-type "Eveniet aut in non ea reprehenderit blanditiis." --content-length 2931763587026244014 --apikey-token "Dolor officiis." --project-slug-input "Earum non." --session-token "Consequuntur aut in praesentium voluptates reprehenderit vel." --stream "goa.png"
+    %[1]s assets upload-image --content-type "Praesentium voluptates reprehenderit vel sed." --content-length 1159453301218142136 --apikey-token "Sed et qui officia repellendus." --project-slug-input "Necessitatibus aut dignissimos sit ullam." --session-token "Error unde tempora itaque nemo qui." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -1103,7 +1115,7 @@ Upload an OpenAPI v3 document to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Assumenda perferendis est maxime." --content-length 2297909264413267082 --apikey-token "Nisi quo." --project-slug-input "Et delectus atque maiores." --session-token "Consequatur cupiditate architecto." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Quia sed." --content-length 1425731124945577239 --apikey-token "Ipsum exercitationem eum eveniet et eum et." --project-slug-input "Sed aliquam quisquam aperiam adipisci." --session-token "Explicabo aut." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -1131,7 +1143,7 @@ Handles the authentication callback.
     -id-token STRING: 
 
 Example:
-    %[1]s auth callback --id-token "Non sed."
+    %[1]s auth callback --id-token "Iste ex incidunt et deleniti qui quasi."
 `, os.Args[0])
 }
 
@@ -1154,7 +1166,7 @@ Switches the authentication scope to a different organization.
     -session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Doloribus nihil et in non." --project-id "Facilis et maxime repellendus est facere." --session-token "Qui minima voluptatem aut et ratione."
+    %[1]s auth switch-scopes --organization-id "Aut et ratione." --project-id "In ipsam fugiat in et." --session-token "Repellat sed ipsam ipsam saepe."
 `, os.Args[0])
 }
 
@@ -1165,7 +1177,7 @@ Logs out the current user by clearing their session.
     -session-token STRING: 
 
 Example:
-    %[1]s auth logout --session-token "Fuga ipsum dignissimos eligendi."
+    %[1]s auth logout --session-token "Est non voluptatum totam dignissimos."
 `, os.Args[0])
 }
 
@@ -1176,7 +1188,7 @@ Provides information about the current authentication status.
     -session-token STRING: 
 
 Example:
-    %[1]s auth info --session-token "Non nesciunt porro officiis non."
+    %[1]s auth info --session-token "Mollitia voluptatem consequuntur architecto natus cumque."
 `, os.Args[0])
 }
 
@@ -2096,6 +2108,7 @@ COMMAND:
     update-toolset: Update a toolset's properties including name, description, and HTTP tools
     delete-toolset: Delete a toolset by its ID
     get-toolset: Get detailed information about a toolset including full HTTP tool definitions
+    check-mcp-slug-availability: Check if a MCP slug is available
 
 Additional help:
     %[1]s toolsets COMMAND --help
@@ -2192,6 +2205,19 @@ Example:
 `, os.Args[0])
 }
 
+func toolsetsCheckMCPSlugAvailabilityUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] toolsets check-mcp-slug-availability -slug STRING -session-token STRING -project-slug-input STRING
+
+Check if a MCP slug is available
+    -slug STRING: 
+    -session-token STRING: 
+    -project-slug-input STRING: 
+
+Example:
+    %[1]s toolsets check-mcp-slug-availability --slug "zbw" --session-token "Ab perferendis consequatur voluptatem." --project-slug-input "Accusamus ea quidem dolores dignissimos."
+`, os.Args[0])
+}
+
 // variationsUsage displays the usage of the variations command and its
 // subcommands.
 func variationsUsage() {
@@ -2219,20 +2245,19 @@ Create or update a globally defined tool variation.
 
 Example:
     %[1]s variations upsert-global --body '{
-      "confirm": "session",
-      "confirm_prompt": "Accusamus ea quidem dolores dignissimos.",
-      "description": "Cumque perferendis.",
-      "name": "Vel culpa illum reiciendis qui error.",
-      "src_tool_name": "Asperiores voluptas reiciendis quia ab perferendis consequatur.",
-      "summarizer": "Numquam sit est veniam hic et sed.",
-      "summary": "Soluta enim quia nobis facilis.",
+      "confirm": "never",
+      "confirm_prompt": "Molestiae et incidunt eaque quam numquam sit.",
+      "description": "Natus quos officia quisquam.",
+      "name": "Veniam hic et sed facere.",
+      "src_tool_name": "Est totam vel aperiam deserunt.",
+      "summarizer": "Et et aut minus ea doloremque.",
+      "summary": "Non reiciendis optio dignissimos fugit nihil dignissimos.",
       "tags": [
-         "Vel est vel quibusdam excepturi at placeat.",
-         "Voluptas fugit nostrum.",
-         "Nostrum accusamus iure est totam vel.",
-         "Deserunt laboriosam in molestiae et incidunt eaque."
+         "Suscipit vitae.",
+         "Provident qui temporibus.",
+         "Impedit vel accusantium provident qui ut."
       ]
-   }' --session-token "Optio non reiciendis." --apikey-token "Dignissimos fugit nihil dignissimos." --project-slug-input "Natus quos officia quisquam."
+   }' --session-token "Molestiae non aut minima et molestiae amet." --apikey-token "Numquam saepe ex architecto id." --project-slug-input "Est sit ut facere quasi magni cum."
 `, os.Args[0])
 }
 
@@ -2246,7 +2271,7 @@ Create or update a globally defined tool variation.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations delete-global --variation-id "Numquam saepe ex architecto id." --session-token "Est sit ut facere quasi magni cum." --apikey-token "Necessitatibus ea nemo." --project-slug-input "Aut qui reiciendis culpa quae aliquam."
+    %[1]s variations delete-global --variation-id "Est aperiam fugiat voluptate et esse eum." --session-token "Ut dicta praesentium." --apikey-token "Repellat quidem sit architecto." --project-slug-input "Et sunt et sint odio a a."
 `, os.Args[0])
 }
 
@@ -2259,6 +2284,6 @@ List globally defined tool variations.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations list-global --session-token "Error et sunt et sint." --apikey-token "A a modi fugiat aperiam iure." --project-slug-input "Quia perspiciatis minus ea cum."
+    %[1]s variations list-global --session-token "A aut placeat occaecati natus et sit." --apikey-token "Sunt quasi ab ut velit nobis." --project-slug-input "Sit pariatur sit provident quia minus."
 `, os.Args[0])
 }

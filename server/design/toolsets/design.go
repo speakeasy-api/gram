@@ -125,6 +125,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getBySlug")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Toolset"}`)
 	})
+
+	Method("checkMCPSlugAvailability", func() {
+		Description("Check if a MCP slug is available")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug to check")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Boolean)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.checkMCPSlugAvailability")
+			Param("slug")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "checkMCPSlugAvailability")
+		Meta("openapi:extension:x-speakeasy-name-override", "checkMCPSlugAvailability")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckMCPSlugAvailability"}`)
+	})
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {

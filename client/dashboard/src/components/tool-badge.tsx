@@ -10,12 +10,18 @@ import {
 } from "./ui/tooltip";
 import { Type } from "./ui/type";
 
-export function ToolBadge({ tool }: { tool: ToolDefinition }) {
+export function ToolBadge({
+  tool,
+  variant = "secondary",
+}: {
+  tool: ToolDefinition;
+  variant?: "default" | "secondary";
+}) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge>{tool.name}</Badge>
+          <Badge variant={variant} size="sm">{tool.name}</Badge>
         </TooltipTrigger>
         <TooltipContent inverted>
           <Stack className="max-w-md">

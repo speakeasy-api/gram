@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: fab2a1bb6442504f4e7b6bb9f10b7fbd
+  docChecksum: ea6a24a7c1ba8564336d4a926244bfd6
   docVersion: 0.0.1
-  speakeasyVersion: 1.567.0
-  generationVersion: 2.632.0
-  releaseVersion: 0.12.19
-  configChecksum: 428d32ea087be71312f27bc281a1b546
+  speakeasyVersion: 1.568.2
+  generationVersion: 2.634.2
+  releaseVersion: 0.12.22
+  configChecksum: c47555f291bd22372fdb1412731917fb
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -130,6 +130,8 @@ generatedFiles:
   - docs/models/operations/authcallbackrequest.md
   - docs/models/operations/authcallbackresponse.md
   - docs/models/operations/authloginresponse.md
+  - docs/models/operations/checkmcpslugavailabilityrequest.md
+  - docs/models/operations/checkmcpslugavailabilitysecurity.md
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createdeploymentrequest.md
@@ -361,6 +363,7 @@ generatedFiles:
   - src/funcs/templatesRender.ts
   - src/funcs/templatesUpdate.ts
   - src/funcs/toolsList.ts
+  - src/funcs/toolsetsCheckMCPSlugAvailability.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
   - src/funcs/toolsetsGetBySlug.ts
@@ -480,6 +483,7 @@ generatedFiles:
   - src/models/errors/serviceerror.ts
   - src/models/operations/authcallback.ts
   - src/models/operations/authlogin.ts
+  - src/models/operations/checkmcpslugavailability.ts
   - src/models/operations/createapikey.ts
   - src/models/operations/createdeployment.ts
   - src/models/operations/createenvironment.ts
@@ -537,6 +541,7 @@ generatedFiles:
   - src/models/operations/upsertglobalvariation.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
+  - src/react-query/checkMCPSlugAvailability.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
@@ -1212,5 +1217,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  checkMCPSlugAvailability:
+    speakeasy-default-check-MCP-slug-availability:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: true
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

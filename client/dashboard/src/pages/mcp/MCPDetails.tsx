@@ -21,11 +21,12 @@ import {
 } from "@gram/client/react-query";
 import { Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { useSdkClient } from "@/contexts/Sdk";
 
 export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
@@ -97,29 +98,15 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     toolset.mcpSlug || `${organization.slug}-${project.slug}-${randSlug()}`
   );
   const [mcpIsPublic, setMcpIsPublic] = useState(toolset.mcpIsPublic);
-  const [mcpSlugError, setMcpSlugError] = useState<string | null>(null);
+
+  const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
   const { url: mcpUrl, customServerURL } = useMcpUrl(toolset);
-
-  // MCP Slug validation
-  const validateMcpSlug = (slug: string) => {
-    if (!slug) return "MCP Slug is required";
-    if (slug.length > 40) return "Must be 40 characters or less";
-    if (!/^[a-z0-9_-]+$/.test(slug))
-      return "Lowercase letters, numbers, _ or - only";
-    return null;
-  };
 
   const handleMcpSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
     value = value.slice(0, 40);
     setMcpSlug(value);
-    setMcpSlugError(validateMcpSlug(value));
-
-    telemetry.capture("mcp_event", {
-      action: "mcp_slug_changed",
-      slug: value,
-    });
   };
 
   const linkDomainButton = domain && (
@@ -170,6 +157,9 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           } else {
             window.location.href = `/${orgSlug}/${projectSlug}/settings`;
           }
+          alert(
+            "Custom domains require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
+          );
         }}
       >
         Configure
@@ -425,7 +415,41 @@ export function MCPJson({
   );
 }
 
-const randSlug = () => {
+export function useMcpSlugValidation(mcpSlug: string | undefined, currentSlug?: string) {
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const client = useSdkClient();
+
+  function validateMcpSlug(slug: string) {
+    if (!slug) return "MCP Slug is required";
+    if (slug.length > 40) return "Must be 40 characters or less";
+    if (!/^[a-z0-9_-]+$/.test(slug))
+      return "Lowercase letters, numbers, _ or - only";
+    return null;
+  }
+
+  useEffect(() => {
+    setSlugError(null);
+
+    if (mcpSlug && mcpSlug !== currentSlug) {
+      const validationError = validateMcpSlug(mcpSlug);
+      if (validationError) {
+        setSlugError(validationError);
+        return;
+      }
+      client.toolsets
+        .checkMCPSlugAvailability({ slug: mcpSlug })
+        .then((res) => {
+          if (res) {
+            setSlugError("This slug is already taken");
+          }
+        });
+    }
+  }, [mcpSlug]);
+
+  return slugError;
+}
+
+export const randSlug = () => {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let rand = "";
   for (let i = 0; i < 5; i++) {

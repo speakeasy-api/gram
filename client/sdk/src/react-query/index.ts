@@ -5,6 +5,7 @@
 export { GramProvider, useGramContext } from "./_context.js";
 export * from "./_types.js";
 
+export * from "./checkMCPSlugAvailability.js";
 export * from "./createAPIKey.js";
 export * from "./createDeployment.js";
 export * from "./createEnvironment.js";

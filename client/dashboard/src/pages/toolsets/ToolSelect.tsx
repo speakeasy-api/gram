@@ -30,6 +30,7 @@ import { useParams } from "react-router";
 import { useCustomTools } from "../toolBuilder/CustomTools";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./ToolsetHeader";
+import { useRoutes } from "@/routes";
 
 type Tool = HTTPToolDefinition & { displayName: string };
 
@@ -432,7 +433,7 @@ function CustomToolCard({
   toggleEnabled: () => void;
 }) {
   const { data: tools } = useListTools();
-
+  const routes = useRoutes();
   const isToolInToolset = (t: string) =>
     currentTools.some((t2) => t2.canonicalName === t);
 
@@ -506,7 +507,9 @@ function CustomToolCard({
           justify={"space-between"}
           wrap="wrap"
         >
-          <Card.Title className="normal-case">{template.name}</Card.Title>
+          <routes.customTools.toolBuilder.Link params={[template.name]}>
+            <Card.Title className="normal-case">{template.name}</Card.Title>
+          </routes.customTools.toolBuilder.Link>
           {badge}
         </Stack>
         <Type variant="body" muted className="text-sm italic">

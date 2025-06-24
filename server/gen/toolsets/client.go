@@ -16,21 +16,23 @@ import (
 
 // Client is the "toolsets" service client.
 type Client struct {
-	CreateToolsetEndpoint goa.Endpoint
-	ListToolsetsEndpoint  goa.Endpoint
-	UpdateToolsetEndpoint goa.Endpoint
-	DeleteToolsetEndpoint goa.Endpoint
-	GetToolsetEndpoint    goa.Endpoint
+	CreateToolsetEndpoint            goa.Endpoint
+	ListToolsetsEndpoint             goa.Endpoint
+	UpdateToolsetEndpoint            goa.Endpoint
+	DeleteToolsetEndpoint            goa.Endpoint
+	GetToolsetEndpoint               goa.Endpoint
+	CheckMCPSlugAvailabilityEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability goa.Endpoint) *Client {
 	return &Client{
-		CreateToolsetEndpoint: createToolset,
-		ListToolsetsEndpoint:  listToolsets,
-		UpdateToolsetEndpoint: updateToolset,
-		DeleteToolsetEndpoint: deleteToolset,
-		GetToolsetEndpoint:    getToolset,
+		CreateToolsetEndpoint:            createToolset,
+		ListToolsetsEndpoint:             listToolsets,
+		UpdateToolsetEndpoint:            updateToolset,
+		DeleteToolsetEndpoint:            deleteToolset,
+		GetToolsetEndpoint:               getToolset,
+		CheckMCPSlugAvailabilityEndpoint: checkMCPSlugAvailability,
 	}
 }
 
@@ -138,4 +140,27 @@ func (c *Client) GetToolset(ctx context.Context, p *GetToolsetPayload) (res *typ
 		return
 	}
 	return ires.(*types.Toolset), nil
+}
+
+// CheckMCPSlugAvailability calls the "checkMCPSlugAvailability" endpoint of
+// the "toolsets" service.
+// CheckMCPSlugAvailability may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CheckMCPSlugAvailability(ctx context.Context, p *CheckMCPSlugAvailabilityPayload) (res bool, err error) {
+	var ires any
+	ires, err = c.CheckMCPSlugAvailabilityEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(bool), nil
 }

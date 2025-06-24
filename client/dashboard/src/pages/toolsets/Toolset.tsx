@@ -1,13 +1,11 @@
 import { AddButton } from "@/components/add-button";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { DeleteButton } from "@/components/delete-button";
-import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Cards } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -15,19 +13,16 @@ import {
 } from "@/contexts/Telemetry";
 import { useGroupedTools } from "@/lib/toolNames";
 import { useRoutes } from "@/routes";
-import { EnvironmentEntryInput } from "@gram/client/models/components";
 import {
   queryKeyInstance,
   useDeleteToolsetMutation,
   useToolset,
-  useUpdateEnvironmentMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
-import { Alert, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
-import { useEnvironment } from "../environments/Environment";
 import { MCPDetails } from "../mcp/MCPDetails";
 import { PromptsTabContent } from "./PromptsTab";
 import { ToolCard } from "./ToolCard";
@@ -155,13 +150,6 @@ export function ToolsetView({
     queryClient.invalidateQueries({ queryKey });
   };
 
-  const environment = useEnvironment(
-    environmentSlug || toolset?.defaultEnvironmentSlug
-  );
-
-  const [envVarsDialogOpen, setEnvVarsDialogOpen] = useState(false);
-  const [envVars, setEnvVars] = useState<Record<string, string>>({});
-
   const onUpdate = () => {
     refetch?.();
     refetchInstance();
@@ -175,18 +163,6 @@ export function ToolsetView({
     onError: (error) => {
       telemetry.capture("toolset_event", {
         action: "toolset_update_failed",
-        error: error.message,
-      });
-    },
-  });
-
-  const updateEnvironmentMutation = useUpdateEnvironmentMutation({
-    onSuccess: () => {
-      telemetry.capture("environment_event", { action: "environment_updated" });
-    },
-    onError: (error) => {
-      telemetry.capture("environment_event", {
-        action: "environment_update_failed",
         error: error.message,
       });
     },
@@ -219,95 +195,6 @@ export function ToolsetView({
 
   // For now to reduce user confusion we omit server url env variables
   // If a spec already has a security env variable set we will not surface variables as missing for that spec
-  const relevantEnvVars = toolset?.relevantEnvironmentVariables?.filter(
-    (varName) =>
-      !varName.includes("SERVER_URL")
-  );
-
-  const missingEnvVars = relevantEnvVars?.filter(
-        (varName) =>
-          !environment?.entries?.find((entry) => {
-            const entryPrefix = entry.name.split('_')[0];
-            const varPrefix = varName.split('_')[0];
-            return entryPrefix === varPrefix;
-          })
-      ) || [];
-
-  const isMissingRequiredEnvVars = missingEnvVars?.length > 0;
-
-  const submitEnvVars = () => {
-    if (!environment) {
-      throw new Error("Environment not found");
-    }
-
-    const envVarsToUpdate = missingEnvVars
-      ?.map((envVar) => ({
-        name: envVar,
-        value: envVars[envVar],
-      }))
-      .filter((envVar): envVar is EnvironmentEntryInput => !!envVar.value);
-
-    if (envVarsToUpdate) {
-      updateEnvironmentMutation.mutate(
-        {
-          request: {
-            slug: environment.slug,
-            updateEnvironmentRequestBody: {
-              entriesToUpdate: envVarsToUpdate,
-              entriesToRemove: [],
-            },
-          },
-        },
-        {
-          onError: (error) => {
-            console.log("error", error);
-          },
-        }
-      );
-    }
-  };
-
-  const missingEnvVarsAlert = isMissingRequiredEnvVars && (
-    <Alert
-      variant="warning"
-      className="rounded-md my-2 p-4 max-w-4xl bg-orange-300 dark:bg-orange-900"
-      dismissible={false}
-    >
-      <Stack gap={4}>
-        <Type>
-          The following environment variables are missing from the{" "}
-          {environmentSlug ? "selected" : "default"} environment:{" "}
-          {missingEnvVars!.join(", ")}
-        </Type>
-        <Button
-          size="sm"
-          className="w-fit"
-          onClick={() => setEnvVarsDialogOpen(true)}
-        >
-          Fill Variables
-        </Button>
-      </Stack>
-      <InputDialog
-        open={envVarsDialogOpen}
-        onOpenChange={setEnvVarsDialogOpen}
-        title="Environment Variables"
-        description="Enter values for the environment variables in order to use this toolset."
-        onSubmit={submitEnvVars}
-        inputs={missingEnvVars!.map((envVar) => ({
-          label: envVar,
-          name: envVar,
-          placeholder: "<EMPTY>",
-          value: envVars[envVar] || "",
-          validate: (value) =>
-            value.length > 0 && value !== "<EMPTY>" && !value.includes(" "),
-          onChange: (value) => {
-            setEnvVars({ ...envVars, [envVar]: value });
-          },
-          optional: envVar.includes("SERVER_URL"), // Generally not required
-        }))}
-      />
-    </Alert>
-  );
 
   const gotoAddTools = () => {
     if (addToolsStyle === "modal") {
@@ -361,7 +248,6 @@ export function ToolsetView({
       <div className="max-w-2xl">
         <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
         {groupFilterItems.length > 1 && filterButton}
-        {missingEnvVarsAlert}
       </div>
       <Tabs
         value={activeTab}

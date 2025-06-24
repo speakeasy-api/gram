@@ -20,8 +20,12 @@ generation:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
   sdkHooksConfigAccess: true
+  tests:
+    generateTests: true
+    generateNewTests: false
+    skipResponseBodyAssertions: false
 typescript:
-  version: 0.12.19
+  version: 0.12.22
   additionalDependencies:
     dependencies: {}
     devDependencies:

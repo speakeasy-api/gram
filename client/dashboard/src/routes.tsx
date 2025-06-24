@@ -11,6 +11,7 @@ import Login from "./pages/login/Login";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import Onboarding from "./pages/onboarding/Onboarding";
+import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import OpenAPIDocuments from "./pages/openapi/OpenAPI";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
@@ -87,6 +88,11 @@ const ROUTE_STRUCTURE = {
     url: "/login",
     component: Login,
     unauthenticated: true,
+  },
+  onboarding: {
+    title: "Onboarding",
+    url: ":orgSlug/:projectSlug/onboarding", // Route is like this to break us out of the normal page structure
+    component: OnboardingWizard,
   },
   openapi: {
     title: "Your APIs",
@@ -208,7 +214,7 @@ const ROUTE_STRUCTURE = {
   },
   uploadOpenAPI: {
     title: "Upload OpenAPI",
-    url: "onboarding",
+    url: "upload",
     icon: "upload",
     component: Onboarding,
   },

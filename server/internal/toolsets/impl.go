@@ -331,3 +331,8 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
+
+func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.CheckMCPSlugAvailabilityPayload) (bool, error) {
+	//nolint:wrapcheck // Wrapping adds no value here
+	return s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
+}

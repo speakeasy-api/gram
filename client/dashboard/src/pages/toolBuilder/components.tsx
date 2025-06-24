@@ -57,26 +57,30 @@ export const Block = ({
     >
       <Stack
         direction={"horizontal"}
-        className={cn(!labelRHS && "mb-[-3px]")}
+        className={cn(!labelRHS && "mb-[-2px]")}
         gap={2}
       >
         <Stack
           direction="horizontal"
           align="center"
           justify="space-between"
-          className={cn("px-2 pt-1 rounded-sm rounded-b-none", blockBackground)}
+          className={cn(
+            "px-2 pt-1 rounded-sm rounded-b-none",
+            blockBackground,
+            labelRHS && "w-full"
+          )}
         >
-          <Type small className={cn("z-1", error && "text-destructive!")}>
+          <Type small className={cn("z-1", error && "text-destructive! text-nowrap")}>
             {label}
           </Type>
           {labelRHS && (
-            <Type muted variant="small">
+            <Type muted variant="small" className="z-1">
               {labelRHS}
             </Type>
           )}
         </Stack>
         {error && !labelRHS && (
-          <Type small italic className="pt-1 text-destructive!">
+          <Type small italic className="pt-1 text-destructive! w-full z-1">
             {error}
           </Type>
         )}

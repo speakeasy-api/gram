@@ -1,9 +1,11 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
 import { Asset, UploadImageResult } from "@gram/client/models/components";
+import { Stack } from "@speakeasy-api/moonshine";
 import { UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
+import { Type } from "./ui/type";
 
 export function ImageUpload({
   onUpload,
@@ -69,9 +71,11 @@ export default function FileUpload({
   onUpload,
   className,
   allowedExtensions,
+  label,
 }: {
   onUpload: (file: File) => void;
   allowedExtensions?: string[];
+  label?: React.ReactNode;
   className?: string;
 }) {
   const [isInvalidFile, setIsInvalidFile] = useState(false);
@@ -122,23 +126,27 @@ export default function FileUpload({
       <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
-          className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-card trans ${
+          className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${
             isInvalidFile
               ? "border-destructive bg-destructive/10"
-              : "border-muted-foreground/50 hover:bg-input"
+              : "border-muted-foreground/50 hover:bg-card"
           }`}
         >
-          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            <UploadIcon className="w-8 h-8 text-muted-foreground" />
+          <Stack align={"center"} justify={"center"} gap={3}>
+            <UploadIcon className="w-4 h-4" />
             <p className="my-2 text-sm text-card-foreground">
-              <span className="font-semibold">Click to upload</span> or drag and
-              drop
+              {label ?? (
+                <>
+                  <span className="font-semibold">Click to upload</span> or drag
+                  and drop
+                </>
+              )}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <Type small mono muted>
               {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max
               8MiB)
-            </p>
-          </div>
+            </Type>
+          </Stack>
           <input
             id="dropzone-file"
             type="file"

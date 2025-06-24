@@ -4,7 +4,7 @@ import "./App.css"; // Import this second to override certain values in moonshin
 import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
-import { AppLayout } from "./components/app-layout.tsx";
+import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
 import { ThemeContext } from "./components/ui/theme-toggle.tsx";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
@@ -83,8 +83,12 @@ const RouteProvider = () => {
     (route) => route.unauthenticated
   );
 
+  const outsideStructureRoutes = Object.values(routes).filter(
+    (route) => route.url.startsWith(":orgSlug/:projectSlug/")
+  );
+
   const authenticatedRoutes = Object.values(routes).filter(
-    (route) => !route.unauthenticated
+    (route) => !outsideStructureRoutes.includes(route) && !route.unauthenticated
   );
 
   const routeElements = useMemo(
@@ -92,8 +96,9 @@ const RouteProvider = () => {
       <Routes>
         {/* Register these unauthenticated paths outside of root layout */}
         {routesWithSubroutes(unauthenticatedRoutes)}
-        <Route path="/" element={<AppLayout />}>
-          <Route path=":orgSlug/:projectSlug">
+        <Route path="/" element={<LoginCheck />}>
+          {routesWithSubroutes(outsideStructureRoutes)}
+          <Route path=":orgSlug/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
           </Route>
         </Route>

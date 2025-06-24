@@ -1070,6 +1070,196 @@ type GetToolsetGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CheckMCPSlugAvailabilityUnauthorizedResponseBody is the type of the
+// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
+// for the "unauthorized" error.
+type CheckMCPSlugAvailabilityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityForbiddenResponseBody is the type of the "toolsets"
+// service "checkMCPSlugAvailability" endpoint HTTP response body for the
+// "forbidden" error.
+type CheckMCPSlugAvailabilityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityBadRequestResponseBody is the type of the "toolsets"
+// service "checkMCPSlugAvailability" endpoint HTTP response body for the
+// "bad_request" error.
+type CheckMCPSlugAvailabilityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityNotFoundResponseBody is the type of the "toolsets"
+// service "checkMCPSlugAvailability" endpoint HTTP response body for the
+// "not_found" error.
+type CheckMCPSlugAvailabilityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityConflictResponseBody is the type of the "toolsets"
+// service "checkMCPSlugAvailability" endpoint HTTP response body for the
+// "conflict" error.
+type CheckMCPSlugAvailabilityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
+// for the "unsupported_media" error.
+type CheckMCPSlugAvailabilityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityInvalidResponseBody is the type of the "toolsets"
+// service "checkMCPSlugAvailability" endpoint HTTP response body for the
+// "invalid" error.
+type CheckMCPSlugAvailabilityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityInvariantViolationResponseBody is the type of the
+// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
+// for the "invariant_violation" error.
+type CheckMCPSlugAvailabilityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityUnexpectedResponseBody is the type of the "toolsets"
+// service "checkMCPSlugAvailability" endpoint HTTP response body for the
+// "unexpected" error.
+type CheckMCPSlugAvailabilityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMCPSlugAvailabilityGatewayErrorResponseBody is the type of the
+// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
+// for the "gateway_error" error.
+type CheckMCPSlugAvailabilityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // HTTPToolDefinitionResponseBody is used to define fields on response body
 // types.
 type HTTPToolDefinitionResponseBody struct {
@@ -2092,6 +2282,156 @@ func NewGetToolsetGatewayErrorResponseBody(res *goa.ServiceError) *GetToolsetGat
 	return body
 }
 
+// NewCheckMCPSlugAvailabilityUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "checkMCPSlugAvailability" endpoint of the
+// "toolsets" service.
+func NewCheckMCPSlugAvailabilityUnauthorizedResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnauthorizedResponseBody {
+	body := &CheckMCPSlugAvailabilityUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityForbiddenResponseBody builds the HTTP response
+// body from the result of the "checkMCPSlugAvailability" endpoint of the
+// "toolsets" service.
+func NewCheckMCPSlugAvailabilityForbiddenResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityForbiddenResponseBody {
+	body := &CheckMCPSlugAvailabilityForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityBadRequestResponseBody builds the HTTP response
+// body from the result of the "checkMCPSlugAvailability" endpoint of the
+// "toolsets" service.
+func NewCheckMCPSlugAvailabilityBadRequestResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityBadRequestResponseBody {
+	body := &CheckMCPSlugAvailabilityBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityNotFoundResponseBody builds the HTTP response
+// body from the result of the "checkMCPSlugAvailability" endpoint of the
+// "toolsets" service.
+func NewCheckMCPSlugAvailabilityNotFoundResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityNotFoundResponseBody {
+	body := &CheckMCPSlugAvailabilityNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityConflictResponseBody builds the HTTP response
+// body from the result of the "checkMCPSlugAvailability" endpoint of the
+// "toolsets" service.
+func NewCheckMCPSlugAvailabilityConflictResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityConflictResponseBody {
+	body := &CheckMCPSlugAvailabilityConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "checkMCPSlugAvailability" endpoint of
+// the "toolsets" service.
+func NewCheckMCPSlugAvailabilityUnsupportedMediaResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnsupportedMediaResponseBody {
+	body := &CheckMCPSlugAvailabilityUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityInvalidResponseBody builds the HTTP response body
+// from the result of the "checkMCPSlugAvailability" endpoint of the "toolsets"
+// service.
+func NewCheckMCPSlugAvailabilityInvalidResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityInvalidResponseBody {
+	body := &CheckMCPSlugAvailabilityInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "checkMCPSlugAvailability" endpoint of
+// the "toolsets" service.
+func NewCheckMCPSlugAvailabilityInvariantViolationResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityInvariantViolationResponseBody {
+	body := &CheckMCPSlugAvailabilityInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityUnexpectedResponseBody builds the HTTP response
+// body from the result of the "checkMCPSlugAvailability" endpoint of the
+// "toolsets" service.
+func NewCheckMCPSlugAvailabilityUnexpectedResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnexpectedResponseBody {
+	body := &CheckMCPSlugAvailabilityUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMCPSlugAvailabilityGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "checkMCPSlugAvailability" endpoint of the
+// "toolsets" service.
+func NewCheckMCPSlugAvailabilityGatewayErrorResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityGatewayErrorResponseBody {
+	body := &CheckMCPSlugAvailabilityGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
@@ -2175,6 +2515,17 @@ func NewDeleteToolsetPayload(slug string, sessionToken *string, projectSlugInput
 // NewGetToolsetPayload builds a toolsets service getToolset endpoint payload.
 func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
 	v := &toolsets.GetToolsetPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCheckMCPSlugAvailabilityPayload builds a toolsets service
+// checkMCPSlugAvailability endpoint payload.
+func NewCheckMCPSlugAvailabilityPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.CheckMCPSlugAvailabilityPayload {
+	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

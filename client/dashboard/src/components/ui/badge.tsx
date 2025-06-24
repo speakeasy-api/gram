@@ -19,11 +19,11 @@ const badgeVariants = cva(
         default:
           "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+          "border-transparent bg-primary/5 text-secondary-foreground [a&]:hover:bg-secondary/90",
         destructive:
           "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         warning:
-          "border-transparent bg-yellow-500 text-white [a&]:hover:bg-yellow-500/90 focus-visible:ring-yellow-500/20 dark:focus-visible:ring-yellow-500/40 dark:bg-yellow-500/60",
+          "border-transparent bg-yellow-500 [a&]:hover:bg-yellow-500/90 focus-visible:ring-yellow-500/20 dark:focus-visible:ring-yellow-500/40 dark:bg-yellow-700",
         outline:
           "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
       },
@@ -51,17 +51,9 @@ export function Badge({
   }) {
   const Comp = asChild ? Slot : "span";
 
-  const heightModifier = {
-    outline: 2, // Outline badges look smaller than they really are
-    default: 0,
-    secondary: 0,
-    destructive: 0,
-    warning: 0,
-  }[variant ?? "default"];
-
   const sizeClass = {
-    sm: `text-xs px-1 rounded-sm h-${5 + heightModifier}`,
-    md: `text-sm px-2 rounded-md h-${6 + heightModifier}`,
+    sm: `text-sm px-1 rounded-sm h-${6}`,
+    md: `text-sm px-2 rounded-md h-${7}`,
   }[size];
 
   if (isLoading || props.children === undefined) {

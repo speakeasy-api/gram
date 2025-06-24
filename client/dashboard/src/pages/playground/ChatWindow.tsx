@@ -48,7 +48,6 @@ const availableModels = [
 export type ChatConfig = React.RefObject<{
   toolsetSlug: string | null;
   environmentSlug: string | null;
-  isOnboarding: boolean;
 }>;
 
 const MAX_TOOL_RESPONSE_LENGTH = 50_000; // Characters

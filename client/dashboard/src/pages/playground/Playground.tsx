@@ -4,7 +4,6 @@ import { Combobox, DropdownItem } from "@/components/ui/combobox";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -12,7 +11,7 @@ import {
 } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import { capitalize, cn } from "@/lib/utils";
-import { Deployment } from "@gram/client/models/components";
+import { useRoutes } from "@/routes";
 import {
   useListChats,
   useListEnvironments,
@@ -21,15 +20,14 @@ import {
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
-import { OnboardingContent } from "../onboarding/Onboarding";
 import { ToolsetView } from "../toolsets/Toolset";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { AgentifyProvider } from "./Agentify";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { PlaygroundRHS } from "./PlaygroundRHS";
-import { toast } from "sonner";
 
 export default function Playground() {
   return (
@@ -165,44 +163,6 @@ function PlaygroundInner() {
   );
 }
 
-export function OnboardingPanel({
-  selectToolset,
-}: {
-  selectToolset: (toolsetSlug: string) => void;
-}) {
-  const client = useSdkClient();
-
-  const onOnboardingComplete = async (deployment: Deployment) => {
-    const assetName = deployment.openapiv3Assets[0]?.name;
-
-    if (!assetName) {
-      throw new Error("No asset name found");
-    }
-
-    // Auto-create a default toolset
-    const res = await client.toolsets.create({
-      createToolsetRequestBody: {
-        name: assetName,
-        description: `A toolset created from OpenAPI document: ${assetName}`,
-      },
-    });
-
-    const allTools = await client.tools.list();
-
-    // Add all tools to the toolset
-    await client.toolsets.updateBySlug({
-      slug: res.slug,
-      updateToolsetRequestBody: {
-        httpToolNames: allTools.tools.map((tool) => tool.name),
-      },
-    });
-
-    selectToolset(res.slug);
-  };
-
-  return <OnboardingContent onOnboardingComplete={onOnboardingComplete} />;
-}
-
 export function ToolsetPanel({
   configRef,
   setSelectedToolset,
@@ -219,6 +179,7 @@ export function ToolsetPanel({
   const { data: toolsetsData } = useListToolsets();
   const { data: environmentsData } = useListEnvironments();
   const isAdmin = useIsAdmin();
+  const routes = useRoutes();
 
   const toolsets = toolsetsData?.toolsets;
   const environments = environmentsData?.environments;
@@ -278,10 +239,29 @@ export function ToolsetPanel({
     return <div>Loading...</div>;
   }
 
+  let content = (
+    <ToolsetView
+      toolsetSlug={selectedToolset ?? ""}
+      className="p-8 2xl:p-12"
+      environmentSlug={selectedEnvironment ?? undefined}
+      addToolsStyle={"modal"}
+    />
+  );
+
   // If listToolsets has completed and there's nothing there, show the onboarding panel
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
-    configRef.current.isOnboarding = true;
-    return <OnboardingPanel selectToolset={setSelectedToolset} />;
+    // This should only be reachable if the user has an OpenAPI document but no toolsets
+    content = (
+      <Type className="p-8">
+        Looks like you don't have any toolsets yet. Head to the{" "}
+        <routes.toolsets.Link>
+          <Button size="inline" icon="arrow-right" iconAfter>
+            Toolsets
+          </Button>
+        </routes.toolsets.Link>{" "}
+        page to get started
+      </Type>
+    );
   }
 
   return (
@@ -318,12 +298,7 @@ export function ToolsetPanel({
           )}
         </Stack>
       </PanelHeader>
-      <ToolsetView
-        toolsetSlug={selectedToolset ?? ""}
-        className="p-8 2xl:p-12"
-        environmentSlug={selectedEnvironment ?? undefined}
-        addToolsStyle={"modal"}
-      />
+      {content}
     </div>
   );
 }
