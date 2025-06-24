@@ -12,6 +12,10 @@ export const LoginCheck = () => {
     return <Navigate to={`/login${location.search}`} />;
   }
 
+  if (!session.activeOrganizationId) {
+    return <Navigate to={`/register${location.search}`} />;
+  }
+
   return <Outlet />;
 };
 

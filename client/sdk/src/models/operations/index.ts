@@ -43,6 +43,7 @@ export * from "./listversions.js";
 export * from "./loadchat.js";
 export * from "./logout.js";
 export * from "./publish.js";
+export * from "./register.js";
 export * from "./registerdomain.js";
 export * from "./rendertemplate.js";
 export * from "./revokeapikey.js";

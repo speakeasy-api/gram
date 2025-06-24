@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgerrcode"
@@ -104,9 +105,24 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}, nil
 	}
 
-	if len(userInfo.Organizations) == 0 {
-		return redirectWithError(errors.New("you currently don't have access to a speakeasy organization, ask to be added to a speakeasy account"))
+	session := sessions.Session{
+		SessionID:            payload.IDToken,
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
 	}
+
+	if len(userInfo.Organizations) == 0 {
+		if err := s.sessions.StoreSession(ctx, session); err != nil {
+			return redirectWithError(err)
+		}
+
+		return &gen.CallbackResult{
+			Location:      s.cfg.SignInRedirectURL,
+			SessionToken:  session.SessionID,
+			SessionCookie: session.SessionID,
+		}, nil
+	}
+
 	activeOrg := userInfo.Organizations[0]
 
 	// For speakeasy users and admins we default speakeasy-team being the active organization if present
@@ -134,12 +150,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(err)
 	}
 
-	session := sessions.Session{
-		SessionID:            payload.IDToken,
-		UserID:               userInfo.UserID,
-		ActiveOrganizationID: activeOrg.ID,
-	}
-
+	session.ActiveOrganizationID = activeOrg.ID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(err)
 	}
@@ -182,26 +193,29 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
+	selectedOrg := authCtx.ActiveOrganizationID
 	if payload.OrganizationID != nil {
-		orgFound := false
-		for _, org := range userInfo.Organizations {
-			if org.ID == *payload.OrganizationID {
-				orgFound = true
-				if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-					ID:   org.ID,
-					Name: org.Name,
-					Slug: org.Slug,
-				}); err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-				}
-				break
-			}
-		}
-		if !orgFound {
-			return nil, oops.E(oops.CodeInvalid, nil, "organization not found in user info")
-		}
-		authCtx.ActiveOrganizationID = *payload.OrganizationID
+		selectedOrg = *payload.OrganizationID
 	}
+
+	orgFound := false
+	for _, org := range userInfo.Organizations {
+		if org.ID == selectedOrg {
+			orgFound = true
+			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+				ID:   org.ID,
+				Name: org.Name,
+				Slug: org.Slug,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+			}
+			break
+		}
+	}
+	if !orgFound {
+		return nil, oops.E(oops.CodeInvalid, nil, "organization not found in user info")
+	}
+	authCtx.ActiveOrganizationID = selectedOrg
 
 	if err := s.sessions.UpdateSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
@@ -308,6 +322,61 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		IsAdmin:              userInfo.Admin,
 		Organizations:        organizations,
 	}, nil
+}
+
+func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if authCtx.ActiveOrganizationID != "" {
+		return oops.E(oops.CodeInvalid, errors.New("user already has an active organization"), "user already has an active organization")
+	}
+
+	if payload.OrgName == "" {
+		return oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
+	}
+
+	// Only allow alphanumeric characters, spaces, hyphens, and underscores
+	validOrgNameRegex := regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
+	if !validOrgNameRegex.MatchString(payload.OrgName) {
+		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
+	}
+
+	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, *authCtx.SessionID, payload.OrgName)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error creating org").Log(ctx, s.logger)
+	}
+
+	if len(info.Organizations) == 0 {
+		return oops.E(oops.CodeUnexpected, errors.New("no organizations returned from speakeasy"), "no organizations returned from speakeasy")
+	}
+
+	// invalid to insure we pull in the new org info on the next auth.info call
+	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
+	}
+
+	session := sessions.Session{
+		SessionID:            *authCtx.SessionID,
+		UserID:               authCtx.UserID,
+		ActiveOrganizationID: info.Organizations[0].ID,
+	}
+
+	if err := s.sessions.StoreSession(ctx, session); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
+	}
+
+	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:   info.Organizations[0].ID,
+		Name: info.Organizations[0].Name,
+		Slug: info.Organizations[0].Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]projectsRepo.Project, error) {

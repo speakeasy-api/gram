@@ -27,6 +27,11 @@ func LogoutAuthPath() string {
 	return "/rpc/auth.logout"
 }
 
+// RegisterAuthPath returns the URL path to the auth service register HTTP endpoint.
+func RegisterAuthPath() string {
+	return "/rpc/auth.register"
+}
+
 // InfoAuthPath returns the URL path to the auth service info HTTP endpoint.
 func InfoAuthPath() string {
 	return "/rpc/auth.info"

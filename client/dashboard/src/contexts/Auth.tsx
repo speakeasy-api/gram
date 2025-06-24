@@ -33,6 +33,13 @@ export type User = {
   isAdmin: boolean;
 };
 
+const emptyOrganization: OrganizationEntry = {
+  id: "",
+  name: "",
+  slug: "",
+  projects: [],
+};
+
 const emptySession: Session = {
   user: {
     id: "",
@@ -43,12 +50,7 @@ const emptySession: Session = {
   activeOrganizationId: "",
   session: "",
   gramAccountType: "",
-  organization: {
-    id: "",
-    name: "",
-    slug: "",
-    projects: [],
-  },
+  organization: emptyOrganization,
   refetch: () => Promise.resolve(emptySession),
 };
 
@@ -199,13 +201,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         (org) => org.id === result.activeOrganizationId
       ) ?? result.organizations[0];
 
-    if (!organization) {
-      throw new Error("No organization found");
-    }
-
     return {
       ...result,
-      organization,
+      organization: organization ?? emptyOrganization,
       user: {
         id: result.userId,
         email: result.userEmail,
@@ -230,9 +228,17 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return null;
   }
 
-  if (error || !session || !session.session || !session.organization) {
+  if (error || !session || !session.session) {
     return (
       <SessionContext.Provider value={emptySession}>
+        {children}
+      </SessionContext.Provider>
+    );
+  }
+
+  if (!session.activeOrganizationId) {
+    return (
+      <SessionContext.Provider value={session}>
         {children}
       </SessionContext.Provider>
     );

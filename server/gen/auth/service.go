@@ -25,6 +25,8 @@ type Service interface {
 	SwitchScopes(context.Context, *SwitchScopesPayload) (res *SwitchScopesResult, err error)
 	// Logs out the current user by clearing their session.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
+	// Register a new org for a user with their session information.
+	Register(context.Context, *RegisterPayload) (err error)
 	// Provides information about the current authentication status.
 	Info(context.Context, *InfoPayload) (res *InfoResult, err error)
 }
@@ -49,7 +51,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"callback", "login", "switchScopes", "logout", "info"}
+var MethodNames = [6]string{"callback", "login", "switchScopes", "logout", "register", "info"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -119,6 +121,13 @@ type ProjectEntry struct {
 	Name string
 	// The slug of the project
 	Slug types.Slug
+}
+
+// RegisterPayload is the payload type of the auth service register method.
+type RegisterPayload struct {
+	SessionToken *string
+	// The name of the org to register
+	OrgName string
 }
 
 // SwitchScopesPayload is the payload type of the auth service switchScopes

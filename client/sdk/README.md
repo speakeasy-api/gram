@@ -137,6 +137,7 @@ run();
 * [info](docs/sdks/auth/README.md#info) - info auth
 * [login](docs/sdks/auth/README.md#login) - login auth
 * [logout](docs/sdks/auth/README.md#logout) - logout auth
+* [register](docs/sdks/auth/README.md#register) - register auth
 * [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
 ### [chat](docs/sdks/chat/README.md)
@@ -256,6 +257,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`authLogin`](docs/sdks/auth/README.md#login) - login auth
 - [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
+- [`authRegister`](docs/sdks/auth/README.md#register) - register auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
@@ -369,6 +371,7 @@ To learn about this feature and how to get started, check
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+- [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets

@@ -1,21 +1,20 @@
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { JourneyDemo } from "./components/journey-demo";
-import { LoginSection } from "./components/login-section";
+import { RegisterSection } from "./components/login-section";
 
-export default function Login() {
+export default function Register() {
   const routes = useRoutes();
   const session = useSession();
 
-  if (session.session !== "") {
-    // we are logged in, redirect to the home page
-    routes.toolsets.goTo(); // TODO: redirect to onboarding for new workspaces
+  if (session.activeOrganizationId !== "") {
+    routes.toolsets.goTo();
   }
 
   return (
     <main className="flex min-h-screen flex-col md:flex-row">
       <JourneyDemo />
-      <LoginSection />
+      <RegisterSection />
     </main>
   );
 }

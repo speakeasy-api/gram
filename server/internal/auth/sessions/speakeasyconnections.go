@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -100,6 +101,79 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	// If applicable we will only utilize non-free organizations, plus an applied admin override
 	if len(nonFreeOrganizations) > 0 {
 		organizations = nonFreeOrganizations
+	}
+
+	return &CachedUserInfo{
+		UserID:          validateResp.User.ID,
+		UserWhitelisted: validateResp.User.Whitelisted,
+		Email:           validateResp.User.Email,
+		Admin:           validateResp.User.Admin,
+		Organizations:   organizations,
+	}, nil
+}
+
+type createOrgRequest struct {
+	OrganizationName string `json:"organization_name"`
+	AccountType      string `json:"account_type"`
+}
+
+func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, orgName string) (*CachedUserInfo, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	orgReq := createOrgRequest{
+		OrganizationName: orgName,
+		AccountType:      "free",
+	}
+
+	// Marshal the request body to JSON
+	jsonBody, err := json.Marshal(orgReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/register", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
+	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logger.ErrorContext(context.Background(), "failed to make request", slog.String("error", err.Error()))
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			s.logger.ErrorContext(context.Background(), "failed to close response body", slog.String("error", err.Error()))
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var validateResp validateTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&validateResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	organizations := make([]auth.OrganizationEntry, len(validateResp.Organizations))
+	for i, org := range validateResp.Organizations {
+		authOrg := auth.OrganizationEntry{
+			ID:                 org.ID,
+			Name:               org.Name,
+			Slug:               org.Slug,
+			SsoConnectionID:    org.SSOConnectionID,
+			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
+			Projects:           []*auth.ProjectEntry{},
+		}
+
+		organizations[i] = authOrg
 	}
 
 	return &CachedUserInfo{

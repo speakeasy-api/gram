@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: ea6a24a7c1ba8564336d4a926244bfd6
+  docChecksum: b4b5893f31ff782defe896c234e48c4b
   docVersion: 0.0.1
   speakeasyVersion: 1.568.2
   generationVersion: 2.634.2
-  releaseVersion: 0.12.22
-  configChecksum: c47555f291bd22372fdb1412731917fb
+  releaseVersion: 0.12.23
+  configChecksum: 27c3550bd7aaeb5d7fcf41b25abc85bd
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -108,6 +108,7 @@ generatedFiles:
   - docs/models/components/prompttemplatekind.md
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
+  - docs/models/components/registerrequestbody.md
   - docs/models/components/rendertemplaterequestbody.md
   - docs/models/components/rendertemplateresult.md
   - docs/models/components/toolset.md
@@ -246,6 +247,8 @@ generatedFiles:
   - docs/models/operations/publishsecurityoption2.md
   - docs/models/operations/registerdomainrequest.md
   - docs/models/operations/registerdomainsecurity.md
+  - docs/models/operations/registerrequest.md
+  - docs/models/operations/registersecurity.md
   - docs/models/operations/rendertemplaterequest.md
   - docs/models/operations/rendertemplatesecurity.md
   - docs/models/operations/rendertemplatesecurityoption1.md
@@ -322,6 +325,7 @@ generatedFiles:
   - src/funcs/authInfo.ts
   - src/funcs/authLogin.ts
   - src/funcs/authLogout.ts
+  - src/funcs/authRegister.ts
   - src/funcs/authSwitchScopes.ts
   - src/funcs/chatList.ts
   - src/funcs/chatLoad.ts
@@ -459,6 +463,7 @@ generatedFiles:
   - src/models/components/prompttemplate.ts
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
+  - src/models/components/registerrequestbody.ts
   - src/models/components/rendertemplaterequestbody.ts
   - src/models/components/rendertemplateresult.ts
   - src/models/components/toolset.ts
@@ -523,6 +528,7 @@ generatedFiles:
   - src/models/operations/loadchat.ts
   - src/models/operations/logout.ts
   - src/models/operations/publish.ts
+  - src/models/operations/register.ts
   - src/models/operations/registerdomain.ts
   - src/models/operations/rendertemplate.ts
   - src/models/operations/revokeapikey.ts
@@ -578,6 +584,7 @@ generatedFiles:
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
   - src/react-query/publishPackage.ts
+  - src/react-query/register.ts
   - src/react-query/registerDomain.ts
   - src/react-query/renderTemplate.ts
   - src/react-query/revokeAPIKey.ts
@@ -1229,5 +1236,14 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  register:
+    speakeasy-default-register:
+      requestBody:
+        application/json: {"org_name": "<value>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

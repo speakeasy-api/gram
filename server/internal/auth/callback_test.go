@@ -111,7 +111,7 @@ func TestService_Callback(t *testing.T) {
 		require.Empty(t, result.SessionCookie)
 	})
 
-	t.Run("user with no organizations returns error", func(t *testing.T) {
+	t.Run("user with no organizations returns successful redirect", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
@@ -126,8 +126,10 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		require.Contains(t, result.Location, "signin_error=")
-		require.Empty(t, result.SessionToken)
+		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
+		require.NotEmpty(t, result.SessionToken)
+		require.NotEmpty(t, result.SessionCookie)
+		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
 	t.Run("invalid token returns error", func(t *testing.T) {

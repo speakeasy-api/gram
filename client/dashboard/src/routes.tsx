@@ -28,6 +28,7 @@ import {
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
+import Register from "./pages/login/Register";
 
 type AppRouteBasic = {
   title: string;
@@ -87,6 +88,12 @@ const ROUTE_STRUCTURE = {
     title: "Login",
     url: "/login",
     component: Login,
+    unauthenticated: true,
+  },
+  register: {
+    title: "Register",
+    url: "/register",
+    component: Register,
     unauthenticated: true,
   },
   onboarding: {

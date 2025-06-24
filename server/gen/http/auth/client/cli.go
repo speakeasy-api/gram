@@ -8,6 +8,9 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	auth "github.com/speakeasy-api/gram/gen/auth"
 )
 
@@ -63,6 +66,31 @@ func BuildLogoutPayload(authLogoutSessionToken string) (*auth.LogoutPayload, err
 		}
 	}
 	v := &auth.LogoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRegisterPayload builds the payload for the auth register endpoint from
+// CLI flags.
+func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken string) (*auth.RegisterPayload, error) {
+	var err error
+	var body RegisterRequestBody
+	{
+		err = json.Unmarshal([]byte(authRegisterBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Mollitia voluptatem consequuntur architecto natus cumque.\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if authRegisterSessionToken != "" {
+			sessionToken = &authRegisterSessionToken
+		}
+	}
+	v := &auth.RegisterPayload{
+		OrgName: body.OrgName,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

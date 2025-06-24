@@ -127,6 +127,26 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Logout"}`)
 	})
 
+	Method("register", func() {
+		Description("Register a new org for a user with their session information.")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("org_name", String, "The name of the org to register")
+			Required("org_name")
+		})
+
+		HTTP(func() {
+			POST("/rpc/auth.register")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "register")
+		Meta("openapi:extension:x-speakeasy-name-override", "register")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Register"}`)
+	})
+
 	Method("info", func() {
 		Description("Provides information about the current authentication status.")
 

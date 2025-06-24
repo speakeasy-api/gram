@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// RegisterRequestBody is the type of the "auth" service "register" endpoint
+// HTTP request body.
+type RegisterRequestBody struct {
+	// The name of the org to register
+	OrgName *string `form:"org_name,omitempty" json:"org_name,omitempty" xml:"org_name,omitempty"`
+}
+
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
@@ -729,6 +736,186 @@ type LogoutUnexpectedResponseBody struct {
 // LogoutGatewayErrorResponseBody is the type of the "auth" service "logout"
 // endpoint HTTP response body for the "gateway_error" error.
 type LogoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterUnauthorizedResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "unauthorized" error.
+type RegisterUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterForbiddenResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "forbidden" error.
+type RegisterForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterBadRequestResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "bad_request" error.
+type RegisterBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterNotFoundResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "not_found" error.
+type RegisterNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterConflictResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "conflict" error.
+type RegisterConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterUnsupportedMediaResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "unsupported_media" error.
+type RegisterUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterInvalidResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "invalid" error.
+type RegisterInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterInvariantViolationResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "invariant_violation" error.
+type RegisterInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterUnexpectedResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "unexpected" error.
+type RegisterUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterGatewayErrorResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "gateway_error" error.
+type RegisterGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1526,6 +1713,146 @@ func NewLogoutGatewayErrorResponseBody(res *goa.ServiceError) *LogoutGatewayErro
 	return body
 }
 
+// NewRegisterUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "register" endpoint of the "auth" service.
+func NewRegisterUnauthorizedResponseBody(res *goa.ServiceError) *RegisterUnauthorizedResponseBody {
+	body := &RegisterUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterForbiddenResponseBody builds the HTTP response body from the
+// result of the "register" endpoint of the "auth" service.
+func NewRegisterForbiddenResponseBody(res *goa.ServiceError) *RegisterForbiddenResponseBody {
+	body := &RegisterForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterBadRequestResponseBody builds the HTTP response body from the
+// result of the "register" endpoint of the "auth" service.
+func NewRegisterBadRequestResponseBody(res *goa.ServiceError) *RegisterBadRequestResponseBody {
+	body := &RegisterBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterNotFoundResponseBody builds the HTTP response body from the
+// result of the "register" endpoint of the "auth" service.
+func NewRegisterNotFoundResponseBody(res *goa.ServiceError) *RegisterNotFoundResponseBody {
+	body := &RegisterNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterConflictResponseBody builds the HTTP response body from the
+// result of the "register" endpoint of the "auth" service.
+func NewRegisterConflictResponseBody(res *goa.ServiceError) *RegisterConflictResponseBody {
+	body := &RegisterConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "register" endpoint of the "auth" service.
+func NewRegisterUnsupportedMediaResponseBody(res *goa.ServiceError) *RegisterUnsupportedMediaResponseBody {
+	body := &RegisterUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterInvalidResponseBody builds the HTTP response body from the result
+// of the "register" endpoint of the "auth" service.
+func NewRegisterInvalidResponseBody(res *goa.ServiceError) *RegisterInvalidResponseBody {
+	body := &RegisterInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "register" endpoint of the "auth" service.
+func NewRegisterInvariantViolationResponseBody(res *goa.ServiceError) *RegisterInvariantViolationResponseBody {
+	body := &RegisterInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterUnexpectedResponseBody builds the HTTP response body from the
+// result of the "register" endpoint of the "auth" service.
+func NewRegisterUnexpectedResponseBody(res *goa.ServiceError) *RegisterUnexpectedResponseBody {
+	body := &RegisterUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "register" endpoint of the "auth" service.
+func NewRegisterGatewayErrorResponseBody(res *goa.ServiceError) *RegisterGatewayErrorResponseBody {
+	body := &RegisterGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewInfoUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "info" endpoint of the "auth" service.
 func NewInfoUnauthorizedResponseBody(res *goa.ServiceError) *InfoUnauthorizedResponseBody {
@@ -1692,10 +2019,29 @@ func NewLogoutPayload(sessionToken *string) *auth.LogoutPayload {
 	return v
 }
 
+// NewRegisterPayload builds a auth service register endpoint payload.
+func NewRegisterPayload(body *RegisterRequestBody, sessionToken *string) *auth.RegisterPayload {
+	v := &auth.RegisterPayload{
+		OrgName: *body.OrgName,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewInfoPayload builds a auth service info endpoint payload.
 func NewInfoPayload(sessionToken *string) *auth.InfoPayload {
 	v := &auth.InfoPayload{}
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// ValidateRegisterRequestBody runs the validations defined on
+// RegisterRequestBody
+func ValidateRegisterRequestBody(body *RegisterRequestBody) (err error) {
+	if body.OrgName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_name", "body"))
+	}
+	return
 }

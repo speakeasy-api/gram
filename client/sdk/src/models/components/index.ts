@@ -68,6 +68,7 @@ export * from "./projectentry.js";
 export * from "./prompttemplate.js";
 export * from "./publishpackageform.js";
 export * from "./publishpackageresult.js";
+export * from "./registerrequestbody.js";
 export * from "./rendertemplaterequestbody.js";
 export * from "./rendertemplateresult.js";
 export * from "./toolset.js";

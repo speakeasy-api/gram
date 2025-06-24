@@ -86,7 +86,12 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		ProjectSlug:          nil,
 	}
 
-	org, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID)
+	if session.ActiveOrganizationID == "" {
+		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+		return ctx, nil
+	}
+
+	_, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID)
 	if !ok {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
@@ -94,15 +99,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	var orgMetadata orgRepo.OrganizationMetadatum
 	orgMetadata, err = s.orgRepo.GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
 	if err != nil {
-		// TODO: Temporary measure while we are backfilling org metadata
-		orgMetadata, err = s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-			ID:   session.ActiveOrganizationID,
-			Name: org.Name,
-			Slug: org.Slug,
-		})
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").Log(ctx, s.logger)
-		}
+		return ctx, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").Log(ctx, s.logger)
 	}
 	authCtx.AccountType = orgMetadata.GramAccountType
 	authCtx.OrganizationSlug = orgMetadata.Slug

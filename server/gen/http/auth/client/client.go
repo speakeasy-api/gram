@@ -31,6 +31,10 @@ type Client struct {
 	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
 	LogoutDoer goahttp.Doer
 
+	// Register Doer is the HTTP client used to make requests to the register
+	// endpoint.
+	RegisterDoer goahttp.Doer
+
 	// Info Doer is the HTTP client used to make requests to the info endpoint.
 	InfoDoer goahttp.Doer
 
@@ -58,6 +62,7 @@ func NewClient(
 		LoginDoer:           doer,
 		SwitchScopesDoer:    doer,
 		LogoutDoer:          doer,
+		RegisterDoer:        doer,
 		InfoDoer:            doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -153,6 +158,30 @@ func (c *Client) Logout() goa.Endpoint {
 		resp, err := c.LogoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auth", "logout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Register returns an endpoint that makes HTTP requests to the auth service
+// register server.
+func (c *Client) Register() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRegisterRequest(c.encoder)
+		decodeResponse = DecodeRegisterResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRegisterRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RegisterDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "register", err)
 		}
 		return decodeResponse(resp)
 	}

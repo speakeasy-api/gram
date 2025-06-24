@@ -20,6 +20,7 @@ type Endpoints struct {
 	Login        goa.Endpoint
 	SwitchScopes goa.Endpoint
 	Logout       goa.Endpoint
+	Register     goa.Endpoint
 	Info         goa.Endpoint
 }
 
@@ -32,6 +33,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Login:        NewLoginEndpoint(s),
 		SwitchScopes: NewSwitchScopesEndpoint(s, a.APIKeyAuth),
 		Logout:       NewLogoutEndpoint(s, a.APIKeyAuth),
+		Register:     NewRegisterEndpoint(s, a.APIKeyAuth),
 		Info:         NewInfoEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -42,6 +44,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Login = m(e.Login)
 	e.SwitchScopes = m(e.SwitchScopes)
 	e.Logout = m(e.Logout)
+	e.Register = m(e.Register)
 	e.Info = m(e.Info)
 }
 
@@ -105,6 +108,29 @@ func NewLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Logout(ctx, p)
+	}
+}
+
+// NewRegisterEndpoint returns an endpoint function that calls the method
+// "register" of service "auth".
+func NewRegisterEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RegisterPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Register(ctx, p)
 	}
 }
 

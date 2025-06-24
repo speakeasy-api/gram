@@ -3,6 +3,9 @@
 import { Button } from "../components/button";
 import { getServerURL } from "@/lib/utils";
 import { useSearchParams } from "react-router";
+import { useState } from "react";
+import { useRegisterMutation } from "@gram/client/react-query";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 const Logo = () => {
   return (
@@ -94,6 +97,117 @@ export function LoginSection() {
         )}
 
         <Button onClick={handleLogin}>Login</Button>
+      </div>
+
+      <div className="bottom-16 left-0 right-0 absolute flex justify-center items-center">
+        <Logo />
+      </div>
+    </div>
+  );
+}
+
+export function RegisterSection() {
+  const [searchParams] = useSearchParams();
+  const signinError = searchParams.get("signin_error");
+  const telemetry = useTelemetry();
+  const [companyName, setCompanyName] = useState("");
+  const [validationError, setValidationError] = useState("");
+  
+  const registerMutation = useRegisterMutation({
+    onSuccess: () => {
+      // Redirect to app home after successful registration
+      window.location.href = "/";
+    },
+    onError: (error) => {
+      setValidationError(error.message);
+    },
+  });
+
+  const handleCompanyNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setCompanyName(value);
+    
+    // Clear previous errors
+    setValidationError("");
+    
+    // Validate using the regex on type
+    if (value.trim()) {
+      const validOrgNameRegex = /^[a-zA-Z0-9\s-_]+$/;
+      if (!validOrgNameRegex.test(value)) {
+        setValidationError("Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.");
+      }
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!companyName.trim()) {
+      setValidationError("Company name is required");
+      return;
+    }
+
+    telemetry.capture("onboarding_event", {
+      action: "new_org_created",
+      company_name: companyName,
+    });
+
+    // Call the register mutation
+    registerMutation.mutate({
+      request: {
+        registerRequestBody: {
+          orgName: companyName.trim(),
+        },
+      },
+    });
+  };
+
+  return (
+    <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
+      <div className="w-full flex flex-col items-center gap-8 max-w-xs">
+        <div className="flex flex-col items-center gap-4">
+          <h1 className="bsmnt-text-display-xl">gram</h1>
+          <p className="bsmnt-text-body-lg text-center">
+            Create, Curate and Host high quality MCP servers for every use case. Enable AI to connect with your APIs.
+          </p>
+        </div>
+
+        {signinError && (
+          <p className="text-red-600 text-center mb-4">
+            login error: {decodeURIComponent(signinError)}
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <label htmlFor="companyName" className="text-sm font-medium text-gray-700">
+              Company Name
+            </label>
+            <input
+              id="companyName"
+              type="text"
+              value={companyName}
+              onChange={handleCompanyNameChange}
+              placeholder="company name"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={registerMutation.isPending}
+            />
+          </div>
+          
+          {(validationError || registerMutation.error) && (
+            <p className="text-red-600 text-sm text-center">
+              {validationError || registerMutation.error?.message}
+            </p>
+          )}
+          
+          <Button 
+            type="submit" 
+            disabled={registerMutation.isPending || !companyName.trim()}
+            className="w-full"
+          >
+            "Create Organization"
+          </Button>
+        </form>
       </div>
 
       <div className="bottom-16 left-0 right-0 absolute flex justify-center items-center">

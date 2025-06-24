@@ -6,6 +6,7 @@ import { authCallback } from "../funcs/authCallback.js";
 import { authInfo } from "../funcs/authInfo.js";
 import { authLogin } from "../funcs/authLogin.js";
 import { authLogout } from "../funcs/authLogout.js";
+import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
@@ -75,6 +76,25 @@ export class Auth extends ClientSDK {
     options?: RequestOptions,
   ): Promise<operations.LogoutResponse | undefined> {
     return unwrapAsync(authLogout(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * register auth
+   *
+   * @remarks
+   * Register a new org for a user with their session information.
+   */
+  async register(
+    request: operations.RegisterRequest,
+    security?: operations.RegisterSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(authRegister(
       this,
       request,
       security,
