@@ -145,6 +145,94 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 		}
 	})
 
+	// Mock the register endpoint that CreateOrgFromSpeakeasy calls
+	mux.HandleFunc("/v1/speakeasy_provider/register", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Create a new organization and return updated user info
+		newOrg := MockOrganizationEntry{
+			ID:                 "new-org-123",
+			Name:               "New Organization",
+			Slug:               "new-org",
+			SsoConnectionID:    nil,
+			UserWorkspaceSlugs: []string{"new-workspace"},
+		}
+
+		// Add the new organization to the existing user info
+		updatedUserInfo := *userInfo
+		updatedUserInfo.Organizations = append(updatedUserInfo.Organizations, newOrg)
+
+		// Convert to validate response format
+		validateResp := struct {
+			User struct {
+				ID          string `json:"id"`
+				Email       string `json:"email"`
+				DisplayName string `json:"display_name"`
+				Admin       bool   `json:"admin"`
+				Whitelisted bool   `json:"whitelisted"`
+			} `json:"user"`
+			Organizations []struct {
+				ID                 string   `json:"id"`
+				Name               string   `json:"name"`
+				Slug               string   `json:"slug"`
+				AccountType        string   `json:"account_type"`
+				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+			} `json:"organizations"`
+		}{
+			User: struct {
+				ID          string `json:"id"`
+				Email       string `json:"email"`
+				DisplayName string `json:"display_name"`
+				Admin       bool   `json:"admin"`
+				Whitelisted bool   `json:"whitelisted"`
+			}{
+				ID:          "",
+				Email:       "",
+				DisplayName: "",
+				Admin:       false,
+				Whitelisted: false,
+			},
+			Organizations: []struct {
+				ID                 string   `json:"id"`
+				Name               string   `json:"name"`
+				Slug               string   `json:"slug"`
+				AccountType        string   `json:"account_type"`
+				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+			}{},
+		}
+
+		validateResp.User.ID = updatedUserInfo.UserID
+		validateResp.User.Email = updatedUserInfo.Email
+		validateResp.User.DisplayName = updatedUserInfo.Email
+		validateResp.User.Admin = updatedUserInfo.Admin
+		validateResp.User.Whitelisted = updatedUserInfo.UserWhitelisted
+
+		validateResp.Organizations = make([]struct {
+			ID                 string   `json:"id"`
+			Name               string   `json:"name"`
+			Slug               string   `json:"slug"`
+			AccountType        string   `json:"account_type"`
+			SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+		}, len(updatedUserInfo.Organizations))
+
+		for i, org := range updatedUserInfo.Organizations {
+			validateResp.Organizations[i].ID = org.ID
+			validateResp.Organizations[i].Name = org.Name
+			validateResp.Organizations[i].Slug = org.Slug
+			validateResp.Organizations[i].AccountType = "free"
+			validateResp.Organizations[i].SSOConnectionID = org.SsoConnectionID
+			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
+		}
+
+		if err := json.NewEncoder(w).Encode(validateResp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
 	// Mock the login endpoint
 	mux.HandleFunc("/v1/speakeasy_provider/login", func(w http.ResponseWriter, r *http.Request) {
 		returnURL := r.URL.Query().Get("return_url")
