@@ -84,6 +84,10 @@ func (c *caseInsensitiveEnv) Set(key, value string) {
 	c.data[strings.ToLower(key)] = value
 }
 
+type toolcallErrorSchema struct {
+	Error string `json:"error"`
+}
+
 func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, toolCallSource ToolCallSource, chatClient *openrouter.ChatClient) error {
 	logger = logger.With(
 		slog.String("project_id", toolExecutionInfo.Tool.ProjectID.String()),
@@ -113,7 +117,14 @@ func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Lo
 	if len(toolExecutionInfo.Tool.Schema) > 0 {
 		if validateErr := ValidateToolCallBody(ctx, logger, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
-			return oops.E(oops.CodeBadRequest, validateErr, "The input to the tool is invalid with the attached error. Please review the tool schema closely")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
+				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", validateErr.Error()),
+			}); err != nil {
+				logger.ErrorContext(ctx, "failed to encode tool call error", slog.String("error", err.Error()))
+			}
+			return nil
 		}
 	}
 
