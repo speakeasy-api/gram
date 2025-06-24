@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/internal/oops"
 )
 
+const defaultEmptySchema = `{"type":"object","properties":{}}`
+
 type toolsListResult struct {
 	Tools []*toolListEntry `json:"tools"`
 }
@@ -34,7 +36,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	for _, tool := range toolset.HTTPTools {
 		toolSchema := tool.Schema
 		if toolSchema == "" {
-			toolSchema = "{}"
+			toolSchema = defaultEmptySchema
 		}
 		tools = append(tools, &toolListEntry{
 			Name:        tool.Name,
@@ -44,7 +46,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	}
 
 	for _, prompt := range toolset.PromptTemplates {
-		promptArgs := "{}"
+		promptArgs := defaultEmptySchema
 		if prompt.Arguments != nil {
 			promptArgs = *prompt.Arguments
 		}
