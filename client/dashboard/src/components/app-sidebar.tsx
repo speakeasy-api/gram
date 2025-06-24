@@ -1,4 +1,4 @@
-import { NavMenu } from "@/components/nav-menu";
+import { NavButton, NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -14,14 +14,17 @@ import {
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Stack } from "@speakeasy-api/moonshine";
+import { ChartNoAxesCombinedIcon, TestTubeDiagonal } from "lucide-react";
 import * as React from "react";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
 import { Type } from "./ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
-
+  const telemetry = useTelemetry();
+  
   const topNavGroups = {
     create: [
       routes.openapi,
@@ -62,7 +65,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <GramLogo className="text-3xl" />
                 </routes.openapi.Link>
                 <Type variant="small" muted className="self-end">
-                  v0.6.0 (alpha)
+                  v0.6.5 (alpha)
                 </Type>
               </Stack>
             </SidebarMenuButton>
@@ -87,6 +90,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+        <SidebarGroup>
+          <SidebarGroupLabel>Evaluate</SidebarGroupLabel>
+          <SidebarGroupContent className="flex flex-col gap-6">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Metrics"
+                  Icon={ChartNoAxesCombinedIcon}
+                  onClick={() => {
+                    alert("Metrics are coming soon!");
+                    telemetry.capture("metrics_clicked");
+                  }}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <NavButton
+                  title="Evals"
+                  Icon={TestTubeDiagonal}
+                  onClick={() => {
+                    alert("Evals are coming soon!");
+                    telemetry.capture("evals_clicked");
+                  }}
+                />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         <SidebarGroup className="mt-auto">
           <SidebarGroupContent>
             <NavMenu items={bottomNav} />
