@@ -396,7 +396,7 @@ func newStartCommand() *cli.Command {
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
-				Handler:           otelhttp.NewHandler(mux, "/"),
+				Handler:           otelhttp.NewHandler(mux, "/", otelhttp.WithServerName("gram")),
 				ReadHeaderTimeout: 10 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
