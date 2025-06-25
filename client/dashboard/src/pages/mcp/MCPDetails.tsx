@@ -147,8 +147,8 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         size="sm"
         onClick={() => {
           if (session.gramAccountType === "free") {
-            telemetry.capture("mcp_event", {
-              action: "mcp_custom_domain_requested",
+            telemetry.capture("feature_requested", {
+              action: "mcp_custom_domain",
               slug: toolset.slug,
             });
             alert(

@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -19,12 +20,11 @@ import * as React from "react";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
 import { Type } from "./ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  
+
   const topNavGroups = {
     create: [
       routes.openapi,
@@ -73,26 +73,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem className="flex items-center gap-2">
-                {primaryCTA}
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
         {Object.entries(topNavGroups).map(([label, items]) => (
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
-            <SidebarGroupContent className="flex flex-col gap-6">
+            <SidebarGroupContent>
+              {label === "create" && (
+                <SidebarMenuItem className="flex items-center mb-2">
+                  {primaryCTA}
+                </SidebarMenuItem>
+              )}
               <NavMenu items={items} />
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
         <SidebarGroup>
           <SidebarGroupLabel>Evaluate</SidebarGroupLabel>
-          <SidebarGroupContent className="flex flex-col gap-6">
+          <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <NavButton
@@ -100,7 +96,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   Icon={ChartNoAxesCombinedIcon}
                   onClick={() => {
                     alert("Metrics are coming soon!");
-                    telemetry.capture("metrics_clicked");
+                    telemetry.capture("feature_requested", {
+                      action: "metrics",
+                    });
                   }}
                 />
               </SidebarMenuItem>
@@ -110,7 +108,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   Icon={TestTubeDiagonal}
                   onClick={() => {
                     alert("Evals are coming soon!");
-                    telemetry.capture("evals_clicked");
+                    telemetry.capture("feature_requested", {
+                      action: "evals",
+                    });
                   }}
                 />
               </SidebarMenuItem>

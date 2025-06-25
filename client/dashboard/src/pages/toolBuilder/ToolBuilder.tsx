@@ -112,7 +112,6 @@ export function ToolBuilderPage() {
 
   const parsed = parsePrompt(template.template.prompt);
 
-  //   const parsed = parsePrompt(template.template.prompt);
   return (
     <Page>
       <Page.Header>
@@ -328,7 +327,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
         chat.appendMessage({
           id: uuidv7(),
           role: "user",
-          content: `\`\`\`xml\n${buildPrompt(purpose, inputs, steps)}\n\`\`\``,
+          content: `\`\`\`xml\n${buildPrompt(name, purpose, inputs, steps)}\n\`\`\``,
         });
       }}
     >
@@ -401,7 +400,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               updatePromptTemplateForm: {
                 id: initial.id,
                 description,
-                prompt: buildPrompt(purpose, inputs, steps),
+                prompt: buildPrompt(name, purpose, inputs, steps),
                 arguments: JSON.stringify(argsJsonSchema),
                 toolsHint: steps.map((step) => step.canonicalTool),
               },
@@ -417,7 +416,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               name,
               description,
               kind: PromptTemplateKind.HigherOrderTool,
-              prompt: buildPrompt(purpose, inputs, steps),
+              prompt: buildPrompt(name, purpose, inputs, steps),
               arguments: JSON.stringify(argsJsonSchema),
               toolsHint: steps.map((step) => step.canonicalTool),
               engine: "mustache",
@@ -820,7 +819,7 @@ const StepSeparator = () => {
   );
 };
 
-const buildPrompt = (purpose: string, inputs: Input[], steps: Step[]) => {
+const buildPrompt = (toolName: string, purpose: string, inputs: Input[], steps: Step[]) => {
   const inputsPortion = inputs
     .map(
       (input) =>
@@ -844,7 +843,8 @@ const buildPrompt = (purpose: string, inputs: Input[], steps: Step[]) => {
     .join("\n");
 
   return `
-Here are instructions on how to use the other tools in this toolset to complete the task:
+Here are instructions on how to use the other tools in this toolset to complete the task.
+Do NOT use this tool (${toolName}) again when executing the plan.
 
 <Purpose>
   <Instruction>
