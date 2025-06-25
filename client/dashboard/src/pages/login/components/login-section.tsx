@@ -150,6 +150,7 @@ export function RegisterSection() {
     telemetry.capture("onboarding_event", {
       action: "new_org_created",
       company_name: companyName,
+      is_gram: true,
     });
 
     // Call the register mutation
