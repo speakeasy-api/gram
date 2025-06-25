@@ -76,9 +76,14 @@ func newWorkerCommand() *cli.Command {
 				Value:   false,
 			},
 			&cli.BoolFlag{
-				Name:    "observe",
-				Usage:   "Enable OpenTelemetry observability",
-				EnvVars: []string{"GRAM_ENABLE_OTEL"},
+				Name:    "with-otel-tracing",
+				Usage:   "Enable OpenTelemetry traces",
+				EnvVars: []string{"GRAM_ENABLE_OTEL_TRACES"},
+			},
+			&cli.BoolFlag{
+				Name:    "with-otel-metrics",
+				Usage:   "Enable OpenTelemetry metrics",
+				EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
 			},
 			&cli.StringFlag{
 				Name:     "assets-backend",
@@ -143,7 +148,8 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			shutdown, err = o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				Discard: !c.Bool("observe"),
+				EnableTracing: c.Bool("with-otel-tracing"),
+				EnableMetrics: c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)

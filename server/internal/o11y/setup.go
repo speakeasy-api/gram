@@ -3,8 +3,6 @@ package o11y
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
 
 	"github.com/go-logr/logr"
@@ -12,8 +10,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -21,7 +17,8 @@ import (
 )
 
 type SetupOTelSDKOptions struct {
-	Discard bool
+	EnableTracing bool
+	EnableMetrics bool
 }
 
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -54,17 +51,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		propagation.Baggage{},
 	)
 
-	if options.Discard {
-		logger.InfoContext(ctx, "otel metrics disabled")
-
-		exp, err := stdoutmetric.New(stdoutmetric.WithWriter(io.Discard))
-		if err != nil {
-			handleErr(err)
-			return nil, err
-		}
-		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
-		metricExporter = exp
-	} else {
+	if options.EnableMetrics {
 		logger.InfoContext(ctx, "otel metrics enabled")
 
 		exp, err := otlpmetricgrpc.New(ctx)
@@ -74,19 +61,12 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		}
 		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
 		metricExporter = exp
+	} else {
+		logger.InfoContext(ctx, "otel metrics disabled")
+		// nil metrics exporter tells clue.NewConfig to use a no-op metrics provider
 	}
 
-	if options.Discard {
-		logger.InfoContext(ctx, "otel tracing disabled")
-
-		exp, err := stdouttrace.New(stdouttrace.WithWriter(io.Discard))
-		if err != nil {
-			handleErr(err)
-			return nil, err
-		}
-		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
-		spanExporter = exp
-	} else {
+	if options.EnableTracing {
 		logger.InfoContext(ctx, "otel tracing enabled")
 
 		exp, err := otlptracegrpc.New(ctx)
@@ -96,17 +76,16 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		}
 		shutdownFuncs = append(shutdownFuncs, exp.Shutdown)
 		spanExporter = exp
+	} else {
+		logger.InfoContext(ctx, "otel tracing disabled")
+		// nil trace exporter tells clue.NewConfig to use a no-op tracer provider
 	}
 
 	appInfo := PullAppInfo(ctx)
-	serviceName := appInfo.Name
-	if appInfo.Command != "" {
-		serviceName = fmt.Sprintf("%s:%s", appInfo.Name, appInfo.Command)
-	}
 
 	cfg, err := clue.NewConfig(
 		ctx,
-		serviceName,
+		"gram",
 		appInfo.GitSHA,
 		metricExporter,
 		spanExporter,
