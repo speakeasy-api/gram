@@ -93,6 +93,8 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		clue.WithErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 			logger.ErrorContext(ctx, "otel error", slog.String("error", err.Error()))
 		})),
+		clue.WithMaxSamplingRate(2),
+		clue.WithSampleSize(10),
 	)
 	if err != nil {
 		handleErr(err)
