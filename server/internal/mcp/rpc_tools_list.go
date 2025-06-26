@@ -38,8 +38,8 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 			"project_id":          payload.projectID.String(),
 			"authenticated":       payload.authenticated,
 			"toolset":             toolset.Name,
-			"host":                requestContext.Host,
-			"url":                 requestContext.ReqURL,
+			"mcp_domain":          requestContext.Host,
+			"mcp_url":             requestContext.Host + requestContext.ReqURL,
 			"disable_noification": true,
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to capture mcp_list_tools event", slog.String("error", err.Error()))
