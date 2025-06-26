@@ -85,6 +85,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		UserID:               session.UserID,
 		ProjectID:            nil,
 		OrganizationSlug:     "",
+		Email:                nil,
 		AccountType:          "",
 		ProjectSlug:          nil,
 	}
@@ -94,7 +95,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		return ctx, nil
 	}
 
-	_, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID)
+	_, email, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID)
 	if !ok {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
@@ -106,6 +107,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	}
 	authCtx.AccountType = orgMetadata.GramAccountType
 	authCtx.OrganizationSlug = orgMetadata.Slug
+	authCtx.Email = &email
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 

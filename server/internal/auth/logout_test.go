@@ -37,6 +37,7 @@ func TestService_Logout(t *testing.T) {
 			AccountType:          "test",
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			ProjectSlug:          nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
@@ -91,6 +92,7 @@ func TestService_Logout(t *testing.T) {
 			AccountType:          "test",
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			ProjectSlug:          nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)

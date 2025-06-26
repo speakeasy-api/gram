@@ -236,16 +236,16 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 	return userInfo, false, nil
 }
 
-func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.OrganizationEntry, bool) {
+func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.OrganizationEntry, string, bool) {
 	userInfo, _, err := s.GetUserInfo(ctx, userID, sessionID)
 	if err != nil {
-		return nil, false
+		return nil, "", false
 	}
 
 	for _, org := range userInfo.Organizations {
 		if org.ID == organizationID {
-			return &org, true
+			return &org, userInfo.Email, true
 		}
 	}
-	return nil, false
+	return nil, userInfo.Email, false
 }

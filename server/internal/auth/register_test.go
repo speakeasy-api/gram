@@ -37,6 +37,7 @@ func TestService_Register(t *testing.T) {
 			ActiveOrganizationID: session.ActiveOrganizationID,
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
 		}
@@ -73,6 +74,7 @@ func TestService_Register(t *testing.T) {
 			ActiveOrganizationID: session.ActiveOrganizationID,
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
 		}
@@ -115,6 +117,7 @@ func TestService_Register(t *testing.T) {
 			ActiveOrganizationID: session.ActiveOrganizationID,
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
 		}
@@ -157,6 +160,7 @@ func TestService_Register(t *testing.T) {
 			ActiveOrganizationID: session.ActiveOrganizationID,
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
 		}
@@ -215,6 +219,7 @@ func TestService_Register(t *testing.T) {
 			ActiveOrganizationID: session.ActiveOrganizationID,
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
 		}
@@ -279,6 +284,7 @@ func TestService_Register(t *testing.T) {
 			SessionID:            nil,
 			ProjectID:            nil,
 			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
 		}

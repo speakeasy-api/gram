@@ -6,9 +6,11 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/internal/thirdparty/posthog"
 )
 
 const defaultEmptySchema = `{"type":"object","properties":{}}`
@@ -23,12 +25,25 @@ type toolListEntry struct {
 	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
 }
 
-func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
+func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)))
 	if err != nil {
 		return nil, err
+	}
+
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		if err := productMetrics.CaptureEvent(ctx, "mcp_list_tools", payload.projectID.String(), map[string]interface{}{
+			"project_id":          payload.projectID.String(),
+			"authenticated":       payload.authenticated,
+			"toolset":             toolset.Name,
+			"host":                requestContext.Host,
+			"url":                 requestContext.ReqURL,
+			"disable_noification": true,
+		}); err != nil {
+			logger.ErrorContext(ctx, "failed to capture mcp_list_tools event", slog.String("error", err.Error()))
+		}
 	}
 
 	tools := make([]*toolListEntry, 0)

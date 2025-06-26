@@ -14,6 +14,7 @@ type AuthContext struct {
 	SessionID            *string
 	ProjectID            *uuid.UUID
 	OrganizationSlug     string
+	Email                *string
 	AccountType          string
 	ProjectSlug          *string
 }
@@ -24,11 +25,18 @@ type CustomDomainContext struct {
 	DomainID       uuid.UUID
 }
 
+type RequestContext struct {
+	ReqURL string
+	Host   string
+	Method string
+}
+
 const (
 	SessionTokenContextKey  contextKey = "sessionTokenKey"
 	SessionValueContextKey  contextKey = "sessionValueKey"
 	AdminOverrideContextKey contextKey = "adminOverrideKey"
 	CustomDomainContextKey  contextKey = "customDomainKey"
+	RequestContextKey       contextKey = "requestContextKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -64,5 +72,14 @@ func SetCustomDomainContext(ctx context.Context, value *CustomDomainContext) con
 
 func GetCustomDomainContext(ctx context.Context) (*CustomDomainContext, bool) {
 	value, ok := ctx.Value(CustomDomainContextKey).(*CustomDomainContext)
+	return value, ok
+}
+
+func SetRequestContext(ctx context.Context, value *RequestContext) context.Context {
+	return context.WithValue(ctx, RequestContextKey, value)
+}
+
+func GetRequestContext(ctx context.Context) (*RequestContext, bool) {
+	value, ok := ctx.Value(RequestContextKey).(*RequestContext)
 	return value, ok
 }

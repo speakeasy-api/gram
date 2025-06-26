@@ -96,6 +96,7 @@ linters:
         - '^go.temporal.io/sdk/testsuite\.DevServerOptions$'
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
+        - '^github.com/posthog/posthog-go\..+$'
     exhaustive:
       check:
         - switch

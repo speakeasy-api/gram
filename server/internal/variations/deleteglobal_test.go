@@ -154,6 +154,7 @@ func TestVariationsService_DeleteGlobal_NoProjectID(t *testing.T) {
 		SessionID:            nil,
 		ProjectID:            nil, // No project ID
 		OrganizationSlug:     "test-org",
+		Email:                nil,
 		AccountType:          "free",
 		ProjectSlug:          nil,
 	}

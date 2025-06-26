@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/templates"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
@@ -240,6 +241,24 @@ func newStartCommand() *cli.Command {
 				EnvVars:  []string{"PYLON_VERIFICATION_SECRET"},
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "posthog-endpoint",
+				Usage:    "The endpoint to proxy product metrics too",
+				EnvVars:  []string{"POSTHOG_ENDPOINT"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "posthog-api-key",
+				Usage:    "The posthog public API key",
+				EnvVars:  []string{"POSTHOG_API_KEY"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "posthog-private-key",
+				Usage:    "The posthog public API key",
+				EnvVars:  []string{"POSTHOG_PRIVATE_KEY"},
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			o11y.PullAppInfo(c.Context).Command = "server"
@@ -326,6 +345,8 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
 
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-private-key"), c.String("posthog-endpoint"))
+
 			if temporalClient == nil {
 				logger.WarnContext(ctx, "temporal disabled")
 			} else {
@@ -395,7 +416,7 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient, baseChatClient))
-			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), db, sessionManager, encryptionClient, baseChatClient))
+			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), db, sessionManager, encryptionClient, baseChatClient, posthogClient))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 				GramServerURL:      c.String("server-url"),

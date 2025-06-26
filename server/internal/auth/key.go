@@ -75,6 +75,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		SessionID:            nil,
 		ProjectID:            nil,
 		OrganizationSlug:     org.Slug,
+		Email:                nil,
 		AccountType:          org.GramAccountType,
 		ProjectSlug:          nil,
 	})
