@@ -319,6 +319,9 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		GramAccountType:      authCtx.AccountType,
 		UserID:               userInfo.UserID,
 		UserEmail:            userInfo.Email,
+		UserSignature:        userInfo.UserPylonSignature,
+		UserDisplayName:      userInfo.DisplayName,
+		UserPhotoURL:         userInfo.PhotoURL,
 		IsAdmin:              userInfo.Admin,
 		Organizations:        organizations,
 	}, nil

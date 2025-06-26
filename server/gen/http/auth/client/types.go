@@ -26,6 +26,9 @@ type RegisterRequestBody struct {
 type InfoResponseBody struct {
 	UserID               *string                          `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	UserEmail            *string                          `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	UserSignature        *string                          `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
+	UserDisplayName      *string                          `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
+	UserPhotoURL         *string                          `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
 	IsAdmin              *bool                            `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
 	ActiveOrganizationID *string                          `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
 	GramAccountType      *string                          `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
@@ -1917,6 +1920,9 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 	v := &auth.InfoResult{
 		UserID:               *body.UserID,
 		UserEmail:            *body.UserEmail,
+		UserSignature:        body.UserSignature,
+		UserDisplayName:      body.UserDisplayName,
+		UserPhotoURL:         body.UserPhotoURL,
 		IsAdmin:              *body.IsAdmin,
 		ActiveOrganizationID: *body.ActiveOrganizationID,
 		GramAccountType:      *body.GramAccountType,

@@ -157,6 +157,9 @@ var _ = Service("auth", func() {
 		Result(func() {
 			Attribute("user_id", String)
 			Attribute("user_email", String)
+			Attribute("user_signature", String)
+			Attribute("user_display_name", String)
+			Attribute("user_photo_url", String)
 			Attribute("is_admin", Boolean)
 			Attribute("active_organization_id", String)
 			Attribute("gram_account_type", String)

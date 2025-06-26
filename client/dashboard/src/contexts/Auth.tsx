@@ -10,7 +10,7 @@ import {
   useListToolsetsSuspense,
   useSessionInfo,
 } from "@gram/client/react-query";
-import { createContext, Suspense, useContext, useState } from "react";
+import { createContext, Suspense, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useNavigate } from "react-router";
 import { useSlugs } from "./Sdk";
@@ -31,6 +31,9 @@ export type User = {
   id: string;
   email: string;
   isAdmin: boolean;
+  signature?: string;
+  displayName?: string;
+  photoUrl?: string;
 };
 
 const emptyOrganization: OrganizationEntry = {
@@ -208,6 +211,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         id: result.userId,
         email: result.userEmail,
         isAdmin: result.isAdmin,
+        signature: result.userSignature,
+        displayName: result.userDisplayName,
+        photoUrl: result.userPhotoUrl,
       },
       session: sessionId ?? "",
       refetch: sessionRefetch,
@@ -222,6 +228,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const session = sessionData ? asSession(sessionData) : undefined;
 
   useIdentifyUserForTelemetry(session?.user);
+
+  usePylonInAppChat(session?.user);
 
   // you need something like this so you don't redirect with empty session too soon
   if (isLoading) {
@@ -281,3 +289,36 @@ export const useIsAdmin = () => {
   const isLocal = devHostnames.some((h) => getServerURL().includes(h));
   return isAdmin || isLocal;
 };
+
+export function usePylonInAppChat(user: User | undefined) {
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    const random = Math.random().toString(36).substring(7) + "-anonymous";
+    const email = user.email
+    const displayName = user.displayName || random;
+
+    // @ts-expect-error global pylon object
+    window.pylon = {
+      chat_settings: {
+        app_id: "f9cade16-8d3c-4826-9a2a-034fad495102",
+        email: email,
+        name: displayName,
+        avatar_url: user?.photoUrl,
+        ...(user?.signature && { email_hash: user.signature }),
+      },
+    };
+
+    // @ts-expect-error global pylon object
+    if (window.Pylon) {
+      // @ts-expect-error global pylon object
+      window.Pylon("setNewIssueCustomFields", { gram: true });
+    }
+
+    // This is for the marketing site
+    localStorage.setItem("pylon_user_email", email);
+    localStorage.setItem("pylon_user_display_name", displayName);
+  }, [user]);
+}
+

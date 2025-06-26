@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/internal/thirdparty/pylon"
 )
 
 var unsafeSessionData = []byte(`
@@ -65,6 +66,11 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
 	}
 
+	fakePylon, err := pylon.NewPylon(logger, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create fake pylon: %w", err)
+	}
+
 	return &Manager{
 		logger:                 logger.With(slog.String("component", "sessions")),
 		sessionCache:           cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
@@ -74,6 +80,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		speakeasyServerAddress: "",
 		speakeasySecretKey:     "",
 		orgRepo:                orgRepo.New(db),
+		pylon:                  fakePylon,
 	}, nil
 }
 
@@ -85,11 +92,14 @@ func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, e
 
 	// Convert to CachedUserInfo format
 	result := &CachedUserInfo{
-		UserID:          userID,
-		UserWhitelisted: true,
-		Email:           userInfo.UserEmail,
-		Admin:           userInfo.Admin,
-		Organizations:   make([]auth.OrganizationEntry, len(userInfo.Organizations)),
+		UserID:             userID,
+		UserWhitelisted:    true,
+		Email:              userInfo.UserEmail,
+		Admin:              userInfo.Admin,
+		DisplayName:        nil,
+		PhotoURL:           nil,
+		UserPylonSignature: nil,
+		Organizations:      make([]auth.OrganizationEntry, len(userInfo.Organizations)),
 	}
 
 	// Convert organizations

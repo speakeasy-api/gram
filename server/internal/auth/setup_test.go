@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/testenv"
+	"github.com/speakeasy-api/gram/internal/thirdparty/pylon"
 )
 
 var (
@@ -263,8 +264,11 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	mockServer := createMockAuthServer(userInfo)
 	t.Cleanup(mockServer.Close)
 
+	pylon, err := pylon.NewPylon(logger, "")
+	require.NoError(t, err)
+
 	// Create session manager with mock server URL
-	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key")
+	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,

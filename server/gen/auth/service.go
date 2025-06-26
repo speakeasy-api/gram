@@ -78,6 +78,9 @@ type InfoPayload struct {
 type InfoResult struct {
 	UserID               string
 	UserEmail            string
+	UserSignature        *string
+	UserDisplayName      *string
+	UserPhotoURL         *string
 	IsAdmin              bool
 	ActiveOrganizationID string
 	GramAccountType      string

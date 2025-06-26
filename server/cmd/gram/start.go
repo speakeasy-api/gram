@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/projects"
 	"github.com/speakeasy-api/gram/internal/templates"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/internal/tools"
@@ -233,6 +234,12 @@ func newStartCommand() *cli.Command {
 				EnvVars:  []string{"SLACK_SIGNING_SECRET"},
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "pylon-verification-secret",
+				Usage:    "The identity verification secret for pylon",
+				EnvVars:  []string{"PYLON_VERIFICATION_SECRET"},
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			o11y.PullAppInfo(c.Context).Command = "server"
@@ -280,10 +287,15 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
 
+			pylonClient, err := pylon.NewPylon(logger, c.String("pylon-verification-secret"))
+			if err != nil {
+				return fmt.Errorf("failed to create pylon client: %w", err)
+			}
+
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"))
+				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
 				s, err := sessions.NewUnsafeManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.Suffix("gram-local"), localEnvPath)

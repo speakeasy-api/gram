@@ -107,12 +107,22 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		whitelisted = true
 	}
 
+	var userPylonSignature *string
+	if pylonSignature, err := s.pylon.Sign(validateResp.User.Email); err != nil {
+		s.logger.ErrorContext(ctx, "error signing user email", slog.String("error", err.Error()))
+	} else if pylonSignature != "" {
+		userPylonSignature = &pylonSignature
+	}
+
 	return &CachedUserInfo{
-		UserID:          validateResp.User.ID,
-		UserWhitelisted: whitelisted,
-		Email:           validateResp.User.Email,
-		Admin:           validateResp.User.Admin,
-		Organizations:   organizations,
+		UserID:             validateResp.User.ID,
+		UserWhitelisted:    whitelisted,
+		Email:              validateResp.User.Email,
+		Admin:              validateResp.User.Admin,
+		DisplayName:        &validateResp.User.DisplayName,
+		PhotoURL:           validateResp.User.PhotoURL,
+		UserPylonSignature: userPylonSignature,
+		Organizations:      organizations,
 	}, nil
 }
 
@@ -181,16 +191,19 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 	}
 
 	return &CachedUserInfo{
-		UserID:          validateResp.User.ID,
-		UserWhitelisted: validateResp.User.Whitelisted,
-		Email:           validateResp.User.Email,
-		Admin:           validateResp.User.Admin,
-		Organizations:   organizations,
+		UserID:             validateResp.User.ID,
+		UserWhitelisted:    validateResp.User.Whitelisted,
+		Email:              validateResp.User.Email,
+		Admin:              validateResp.User.Admin,
+		DisplayName:        &validateResp.User.DisplayName,
+		PhotoURL:           validateResp.User.PhotoURL,
+		UserPylonSignature: nil,
+		Organizations:      organizations,
 	}, nil
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	err := s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false})
+	err := s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false, DisplayName: nil, PhotoURL: nil, UserPylonSignature: nil})
 	if err != nil {
 		return fmt.Errorf("cache delete: %w", err)
 	}

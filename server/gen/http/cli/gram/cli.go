@@ -60,8 +60,8 @@ variations (upsert-global|delete-global|list-global)
 func UsageExamples() string {
 	return os.Args[0] + ` assets serve-image --id "Ullam expedita totam quos fugit sed consequatur." --session-token "Officia error distinctio quia commodi ad."` + "\n" +
 		os.Args[0] + ` auth callback --id-token "Iste ex incidunt et deleniti qui quasi."` + "\n" +
-		os.Args[0] + ` chat list-chats --session-token "A dolores labore accusamus non qui optio." --project-slug-input "Earum dolorum ipsam enim temporibus aut omnis."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Molestiae impedit voluptas veritatis minima dicta." --apikey-token "Quaerat voluptas mollitia hic repellendus in enim." --session-token "Ea provident ut id hic quas aperiam." --project-slug-input "Exercitationem eaque harum asperiores qui."` + "\n" +
+		os.Args[0] + ` chat list-chats --session-token "Rem ullam consectetur ex sed fugit est." --project-slug-input "Quos neque voluptatum rerum veniam commodi."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Id hic quas aperiam." --apikey-token "Exercitationem eaque harum asperiores qui." --session-token "Ut doloribus perferendis unde provident sed." --project-slug-input "Sint odio placeat et incidunt rem."` + "\n" +
 		os.Args[0] + ` domains get-domain --session-token "Iste est saepe." --project-slug-input "Reiciendis ut alias a at."` + "\n" +
 		""
 }
@@ -1240,7 +1240,7 @@ List all chats for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s chat list-chats --session-token "A dolores labore accusamus non qui optio." --project-slug-input "Earum dolorum ipsam enim temporibus aut omnis."
+    %[1]s chat list-chats --session-token "Rem ullam consectetur ex sed fugit est." --project-slug-input "Quos neque voluptatum rerum veniam commodi."
 `, os.Args[0])
 }
 
@@ -1253,7 +1253,7 @@ Load a chat by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s chat load-chat --id "Perspiciatis amet." --session-token "Nihil ex velit qui." --project-slug-input "Quaerat quo."
+    %[1]s chat load-chat --id "Totam fuga aperiam deleniti nobis dicta." --session-token "Non provident nulla." --project-slug-input "Provident est repellat qui."
 `, os.Args[0])
 }
 
@@ -1286,7 +1286,7 @@ Get a deployment by its ID.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-deployment --id "Molestiae impedit voluptas veritatis minima dicta." --apikey-token "Quaerat voluptas mollitia hic repellendus in enim." --session-token "Ea provident ut id hic quas aperiam." --project-slug-input "Exercitationem eaque harum asperiores qui."
+    %[1]s deployments get-deployment --id "Id hic quas aperiam." --apikey-token "Exercitationem eaque harum asperiores qui." --session-token "Ut doloribus perferendis unde provident sed." --project-slug-input "Sint odio placeat et incidunt rem."
 `, os.Args[0])
 }
 
@@ -1299,7 +1299,7 @@ Get the latest deployment for a project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-latest-deployment --apikey-token "Sapiente sed vero modi et rerum." --session-token "Praesentium at nihil mollitia." --project-slug-input "Fugiat reiciendis dolores cum est nemo."
+    %[1]s deployments get-latest-deployment --apikey-token "Cum est." --session-token "Dolores nulla esse." --project-slug-input "Eaque necessitatibus pariatur quia unde ratione."
 `, os.Args[0])
 }
 
@@ -1316,43 +1316,33 @@ Create a deployment to load tool definitions.
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Possimus qui est voluptates eligendi ut vero.",
+      "external_url": "Rerum dolore deleniti iste.",
       "github_pr": "1234",
       "github_repo": "speakeasyapi/gram",
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "openapiv3_assets": [
          {
-            "asset_id": "Enim non autem ratione animi et.",
-            "name": "Officia ut rerum.",
-            "slug": "qm0"
+            "asset_id": "Non dolores.",
+            "name": "Nisi et officiis.",
+            "slug": "d9g"
          },
          {
-            "asset_id": "Enim non autem ratione animi et.",
-            "name": "Officia ut rerum.",
-            "slug": "qm0"
-         },
-         {
-            "asset_id": "Enim non autem ratione animi et.",
-            "name": "Officia ut rerum.",
-            "slug": "qm0"
-         },
-         {
-            "asset_id": "Enim non autem ratione animi et.",
-            "name": "Officia ut rerum.",
-            "slug": "qm0"
+            "asset_id": "Non dolores.",
+            "name": "Nisi et officiis.",
+            "slug": "d9g"
          }
       ],
       "packages": [
          {
-            "name": "Dolores pariatur nisi et officiis sapiente impedit.",
-            "version": "Adipisci ab odit maxime ut possimus."
+            "name": "Maxime ut possimus quasi quis qui cumque.",
+            "version": "Et molestiae doloremque molestiae."
          },
          {
-            "name": "Dolores pariatur nisi et officiis sapiente impedit.",
-            "version": "Adipisci ab odit maxime ut possimus."
+            "name": "Maxime ut possimus quasi quis qui cumque.",
+            "version": "Et molestiae doloremque molestiae."
          }
       ]
-   }' --apikey-token "Quis qui cumque dolor et molestiae doloremque." --session-token "Omnis hic magni ea ipsum et." --project-slug-input "Qui aut necessitatibus sunt nisi velit." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
+   }' --apikey-token "Hic magni ea." --session-token "Et asperiores qui aut necessitatibus." --project-slug-input "Nisi velit ullam enim facilis aut." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
 `, os.Args[0])
 }
 
@@ -1367,9 +1357,8 @@ Create a new deployment with additional or updated tool sources.
 
 Example:
     %[1]s deployments evolve --body '{
-      "deployment_id": "Voluptatem ab esse explicabo eligendi labore.",
+      "deployment_id": "Eligendi labore odio aut dignissimos voluptatem est.",
       "exclude_openapiv3_assets": [
-         "Est praesentium voluptate voluptas.",
          "Enim rerum iste magni et.",
          "Vel doloribus labore rem velit aspernatur."
       ],
@@ -1381,29 +1370,42 @@ Example:
       ],
       "upsert_openapiv3_assets": [
          {
-            "asset_id": "Enim non autem ratione animi et.",
-            "name": "Officia ut rerum.",
-            "slug": "qm0"
+            "asset_id": "Non dolores.",
+            "name": "Nisi et officiis.",
+            "slug": "d9g"
          },
          {
-            "asset_id": "Enim non autem ratione animi et.",
-            "name": "Officia ut rerum.",
-            "slug": "qm0"
+            "asset_id": "Non dolores.",
+            "name": "Nisi et officiis.",
+            "slug": "d9g"
          },
          {
-            "asset_id": "Enim non autem ratione animi et.",
-            "name": "Officia ut rerum.",
-            "slug": "qm0"
+            "asset_id": "Non dolores.",
+            "name": "Nisi et officiis.",
+            "slug": "d9g"
+         },
+         {
+            "asset_id": "Non dolores.",
+            "name": "Nisi et officiis.",
+            "slug": "d9g"
          }
       ],
       "upsert_packages": [
          {
-            "name": "Voluptatem est quaerat rerum rem quia veniam.",
-            "version": "Eos recusandae."
+            "name": "Quia veniam sint eos recusandae.",
+            "version": "Eum est praesentium voluptate."
          },
          {
-            "name": "Voluptatem est quaerat rerum rem quia veniam.",
-            "version": "Eos recusandae."
+            "name": "Quia veniam sint eos recusandae.",
+            "version": "Eum est praesentium voluptate."
+         },
+         {
+            "name": "Quia veniam sint eos recusandae.",
+            "version": "Eum est praesentium voluptate."
+         },
+         {
+            "name": "Quia veniam sint eos recusandae.",
+            "version": "Eum est praesentium voluptate."
          }
       ]
    }' --apikey-token "Voluptas deleniti doloribus harum." --session-token "Tenetur aperiam odit accusantium." --project-slug-input "Tenetur sed."

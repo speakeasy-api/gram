@@ -19,8 +19,11 @@ export type InfoResponseBody = {
   gramAccountType: string;
   isAdmin: boolean;
   organizations: Array<OrganizationEntry>;
+  userDisplayName?: string | undefined;
   userEmail: string;
   userId: string;
+  userPhotoUrl?: string | undefined;
+  userSignature?: string | undefined;
 };
 
 /** @internal */
@@ -33,15 +36,21 @@ export const InfoResponseBody$inboundSchema: z.ZodType<
   gram_account_type: z.string(),
   is_admin: z.boolean(),
   organizations: z.array(OrganizationEntry$inboundSchema),
+  user_display_name: z.string().optional(),
   user_email: z.string(),
   user_id: z.string(),
+  user_photo_url: z.string().optional(),
+  user_signature: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "active_organization_id": "activeOrganizationId",
     "gram_account_type": "gramAccountType",
     "is_admin": "isAdmin",
+    "user_display_name": "userDisplayName",
     "user_email": "userEmail",
     "user_id": "userId",
+    "user_photo_url": "userPhotoUrl",
+    "user_signature": "userSignature",
   });
 });
 
@@ -51,8 +60,11 @@ export type InfoResponseBody$Outbound = {
   gram_account_type: string;
   is_admin: boolean;
   organizations: Array<OrganizationEntry$Outbound>;
+  user_display_name?: string | undefined;
   user_email: string;
   user_id: string;
+  user_photo_url?: string | undefined;
+  user_signature?: string | undefined;
 };
 
 /** @internal */
@@ -65,15 +77,21 @@ export const InfoResponseBody$outboundSchema: z.ZodType<
   gramAccountType: z.string(),
   isAdmin: z.boolean(),
   organizations: z.array(OrganizationEntry$outboundSchema),
+  userDisplayName: z.string().optional(),
   userEmail: z.string(),
   userId: z.string(),
+  userPhotoUrl: z.string().optional(),
+  userSignature: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     activeOrganizationId: "active_organization_id",
     gramAccountType: "gram_account_type",
     isAdmin: "is_admin",
+    userDisplayName: "user_display_name",
     userEmail: "user_email",
     userId: "user_id",
+    userPhotoUrl: "user_photo_url",
+    userSignature: "user_signature",
   });
 });
 

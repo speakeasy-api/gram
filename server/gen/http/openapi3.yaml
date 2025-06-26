@@ -6858,9 +6858,15 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/OrganizationEntry'
+                user_display_name:
+                    type: string
                 user_email:
                     type: string
                 user_id:
+                    type: string
+                user_photo_url:
+                    type: string
+                user_signature:
                     type: string
             required:
                 - user_id
