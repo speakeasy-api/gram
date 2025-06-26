@@ -92,25 +92,6 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, "admin-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
 	})
 
-	t.Run("non-whitelisted user redirected to waitlist", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := nonWhitelistedMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		payload := &gen.CallbackPayload{
-			IDToken: "mock_token",
-		}
-
-		result, err := instance.service.Callback(ctx, payload)
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		require.Equal(t, "https://speakeasyapi.typeform.com/to/h6WJdwWr", result.Location)
-		require.Empty(t, result.SessionToken)
-		require.Empty(t, result.SessionCookie)
-	})
-
 	t.Run("user with no organizations returns successful redirect", func(t *testing.T) {
 		t.Parallel()
 

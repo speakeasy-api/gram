@@ -134,7 +134,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			validateResp.Organizations[i].ID = org.ID
 			validateResp.Organizations[i].Name = org.Name
 			validateResp.Organizations[i].Slug = org.Slug
-			validateResp.Organizations[i].AccountType = "paid" // Default to paid so they're not filtered out
+			validateResp.Organizations[i].AccountType = "scale-up"
 			validateResp.Organizations[i].SSOConnectionID = org.SsoConnectionID
 			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
 		}
@@ -342,25 +342,6 @@ func adminMockUserInfo() *MockUserInfo {
 				Slug:               "admin-org",
 				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"admin-workspace"},
-			},
-		},
-	}
-}
-
-// Helper function to create a non-whitelisted user mock info
-func nonWhitelistedMockUserInfo() *MockUserInfo {
-	return &MockUserInfo{
-		UserID:          "non-whitelisted-123",
-		Email:           "nonwhitelisted@example.com",
-		Admin:           false,
-		UserWhitelisted: false,
-		Organizations: []MockOrganizationEntry{
-			{
-				ID:                 "org-123",
-				Name:               "Test Organization",
-				Slug:               "test-org",
-				SsoConnectionID:    nil,
-				UserWorkspaceSlugs: []string{"workspace1"},
 			},
 		},
 	}

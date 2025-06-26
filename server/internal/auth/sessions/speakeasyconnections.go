@@ -93,19 +93,23 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 
 		organizations[i] = authOrg
 
-		if org.AccountType != "free" || adminOverride == org.Slug {
+		if (org.AccountType != "" && org.AccountType != "free") || adminOverride == org.Slug {
 			nonFreeOrganizations = append(nonFreeOrganizations, authOrg)
 		}
 	}
 
+	whitelisted := validateResp.User.Whitelisted
+
 	// If applicable we will only utilize non-free organizations, plus an applied admin override
 	if len(nonFreeOrganizations) > 0 {
 		organizations = nonFreeOrganizations
+		// At this point if a user has paid organizations we consider them whitelisted
+		whitelisted = true
 	}
 
 	return &CachedUserInfo{
 		UserID:          validateResp.User.ID,
-		UserWhitelisted: validateResp.User.Whitelisted,
+		UserWhitelisted: whitelisted,
 		Email:           validateResp.User.Email,
 		Admin:           validateResp.User.Admin,
 		Organizations:   organizations,

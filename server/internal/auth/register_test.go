@@ -85,7 +85,7 @@ func TestService_Register(t *testing.T) {
 
 		err = instance.service.Register(ctx, payload)
 		require.Error(t, err)
-		
+
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeInvalid, oopsErr.Code)
@@ -127,7 +127,7 @@ func TestService_Register(t *testing.T) {
 
 		err = instance.service.Register(ctx, payload)
 		require.Error(t, err)
-		
+
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeInvalid, oopsErr.Code)
@@ -175,7 +175,7 @@ func TestService_Register(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
-				
+
 				payload := &gen.RegisterPayload{
 					OrgName:      tc.orgName,
 					SessionToken: nil,
@@ -183,7 +183,7 @@ func TestService_Register(t *testing.T) {
 
 				err := instance.service.Register(ctx, payload)
 				require.Error(t, err)
-				
+
 				var oopsErr *oops.ShareableError
 				require.ErrorAs(t, err, &oopsErr)
 				require.Equal(t, oops.CodeInvalid, oopsErr.Code)
@@ -234,7 +234,7 @@ func TestService_Register(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
-				
+
 				payload := &gen.RegisterPayload{
 					OrgName:      tc.orgName,
 					SessionToken: nil,
@@ -260,7 +260,7 @@ func TestService_Register(t *testing.T) {
 
 		err := instance.service.Register(ctx, payload)
 		require.Error(t, err)
-		
+
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
@@ -291,7 +291,7 @@ func TestService_Register(t *testing.T) {
 
 		err := instance.service.Register(ctx, payload)
 		require.Error(t, err)
-		
+
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
