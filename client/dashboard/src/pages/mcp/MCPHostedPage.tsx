@@ -1,10 +1,10 @@
 import { Heading } from "@/components/ui/heading";
 import { useProject, useSession } from "@/contexts/Auth";
-import { getServerURL } from "@/lib/utils";
 import { useToolset } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
+import { useMcpUrl } from "./MCPDetails";
 
 export function MCPHostedPage() {
   const session = useSession();
@@ -12,6 +12,7 @@ export function MCPHostedPage() {
   const { toolsetSlug } = useParams();
 
   const { data: toolset } = useToolset({ slug: toolsetSlug! });
+  const { url: mcpUrl } = useMcpUrl(toolset);
 
   const [rawHtml, setRawHtml] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +24,7 @@ export function MCPHostedPage() {
     setIsLoading(true);
     setError(null);
 
-    fetch(getServerURL() + "/mcp/" + toolset?.mcpSlug + "/page", {
+    fetch(mcpUrl + "/page", {
       headers: {
         "Gram-Session": session.session,
         "Gram-Project": project.slug,

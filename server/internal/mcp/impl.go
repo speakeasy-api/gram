@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -64,6 +65,12 @@ type mcpInputs struct {
 	mcpEnvVariables map[string]string
 	authenticated   bool
 }
+
+//go:embed json_snippet.json.tmpl
+var jsonSnippetTmplData string
+
+//go:embed hosted_page.html.tmpl
+var hostedPageTmplData string
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL) *Service {
 	return &Service{
@@ -158,7 +165,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		Headers: envHeaders,
 	}
 
-	jsonSnippetTmpl, err := template.ParseFiles("internal/mcp/json_snippet.json.tmpl")
+	jsonSnippetTmpl, err := template.New("json_snippet").Parse(jsonSnippetTmplData)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to parse json snippet template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -179,14 +186,14 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		JSONBlobURI: base64.StdEncoding.EncodeToString(jsonSnippet.Bytes()),
 	}
 
-	tmpl, err := template.ParseFiles("internal/mcp/hosted_page.html.tmpl")
+	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to parse hosted page template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template")
 	}
 
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := hostedPageTmpl.Execute(w, data); err != nil {
 		s.logger.ErrorContext(ctx, "failed to execute hosted page template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return oops.E(oops.CodeUnexpected, err, "failed to execute hosted page template")

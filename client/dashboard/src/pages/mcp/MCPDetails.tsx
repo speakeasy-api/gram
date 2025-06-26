@@ -55,12 +55,14 @@ export function MCPDetailPage() {
   );
 }
 
-export function useMcpUrl(toolset: Toolset) {
+export function useMcpUrl(toolset: Toolset | undefined) {
   const { data: domain } = useGetDomain(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
   });
   const project = useProject();
+
+  if (!toolset) return { url: "", customServerURL: "" };
 
   // Determine which server URL to use
   let customServerURL: string | undefined;
