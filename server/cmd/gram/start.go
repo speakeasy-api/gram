@@ -418,12 +418,14 @@ func newStartCommand() *cli.Command {
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient, baseChatClient))
 			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), db, sessionManager, encryptionClient, baseChatClient, posthogClient))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
-			slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
-				GramServerURL:      c.String("server-url"),
-				SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
-				SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
-				SlackSigningSecret: c.String("slack-signing-secret"),
-			}))
+			if slackClient.Enabled() {
+				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
+					GramServerURL:      c.String("server-url"),
+					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
+					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
+					SlackSigningSecret: c.String("slack-signing-secret"),
+				}))
+			}
 			variations.Attach(mux, variations.NewService(logger.With(slog.String("component", "variations")), db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger.With(slog.String("component", "customdomains")), db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 

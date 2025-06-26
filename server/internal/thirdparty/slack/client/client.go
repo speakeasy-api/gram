@@ -25,15 +25,18 @@ type SlackClient struct {
 	client       *http.Client
 	enc          *encryption.Encryption
 	repo         *repo.Queries
+	enabled      bool
 }
 
 func NewSlackClient(clientID, clientSecret string, db *pgxpool.Pool, enc *encryption.Encryption) *SlackClient {
+	enabled := clientID != "" && clientSecret != ""
 	return &SlackClient{
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		client:       cleanhttp.DefaultPooledClient(),
 		enc:          enc,
 		repo:         repo.New(db),
+		enabled:      enabled,
 	}
 }
 
@@ -56,7 +59,15 @@ type SlackAppAuthInfoResponse struct {
 	DefaultToolsetSlug *string
 }
 
+func (s *SlackClient) Enabled() bool {
+	return s.enabled
+}
+
 func (s *SlackClient) GetAppAuthInfo(ctx context.Context, slackTeamID string) (*SlackAppAuthInfoResponse, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("slack client is not enabled")
+	}
+
 	conn, err := s.repo.GetSlackAppConnectionByTeamID(ctx, slackTeamID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get slack app connection: %w", err)
@@ -107,6 +118,10 @@ type SlackMessageResponse struct {
 }
 
 func (s *SlackClient) GetConversationReplies(ctx context.Context, accessToken string, input SlackConversationInput) (*SlackConversationRepliesResponse, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("slack client is not enabled")
+	}
+
 	urlStr := slackServer + "/conversations.replies"
 
 	// Build form body
@@ -158,6 +173,10 @@ func (s *SlackClient) GetConversationReplies(ctx context.Context, accessToken st
 }
 
 func (s *SlackClient) PostMessage(ctx context.Context, accessToken string, input SlackPostMessageInput) error {
+	if !s.enabled {
+		return fmt.Errorf("slack client is not enabled")
+	}
+
 	urlStr := slackServer + "/chat.postMessage"
 
 	// Build form body
@@ -212,6 +231,10 @@ func (s *SlackClient) PostMessage(ctx context.Context, accessToken string, input
 }
 
 func (s *SlackClient) OAuthV2Access(ctx context.Context, code, initialRedirectUI string) (*slackOAuthResponse, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("slack client is not enabled")
+	}
+
 	tokenURL := slackServer + "/oauth.v2.access"
 	data := url.Values{}
 	data.Set("client_id", s.clientID)
