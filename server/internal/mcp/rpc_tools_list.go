@@ -34,7 +34,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	}
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		if err := productMetrics.CaptureEvent(ctx, "mcp_list_tools", payload.projectID.String(), map[string]interface{}{
+		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.projectID.String(), map[string]interface{}{
 			"project_id":          payload.projectID.String(),
 			"authenticated":       payload.authenticated,
 			"toolset":             toolset.Name,
@@ -42,7 +42,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 			"mcp_url":             requestContext.Host + requestContext.ReqURL,
 			"disable_noification": true,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to capture mcp_list_tools event", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", slog.String("error", err.Error()))
 		}
 	}
 

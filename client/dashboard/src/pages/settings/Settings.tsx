@@ -20,11 +20,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, Trash2, Check, X, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useOrganization, useSession } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 export default function Settings() {
   const organization = useOrganization();
   const session = useSession();
+  const telemetry = useTelemetry();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
@@ -56,7 +58,7 @@ export default function Settings() {
 
   // Domain validation regex (same as used in the backend)
   const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
-  
+
   const validateDomain = (domain: string): string => {
     if (!domain.trim()) {
       return "Domain is required";
@@ -342,13 +344,27 @@ export default function Settings() {
           </Heading>
           {session.gramAccountType === "free" && (
             <Type className="text-muted-foreground mb-2">
-              Contact gram support to get access to custom domains for
-              your account.
+              Contact gram support to get access to custom domains for your
+              account.
             </Type>
           )}
           {!domain.isLoading && !domain.data?.verified && (
             <div className="flex justify-end mb-6">
-              <Button onClick={() => setIsAddDomainDialogOpen(true)} disabled={session.gramAccountType === "free" || domain.data?.isUpdating}>
+              <Button
+                onClick={() => {
+                  if (session.gramAccountType === "free") {
+                    telemetry.capture("feature_requested", {
+                      action: "custom_domain",
+                    });
+                    alert(
+                      "Custom domains for your account require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
+                    );
+                  } else {
+                    setIsAddDomainDialogOpen(true);
+                  }
+                }}
+                disabled={domain.data?.isUpdating}
+              >
                 {domain.data?.domain ? "Verify Domain" : "Add Domain"}
               </Button>
             </div>
@@ -481,7 +497,8 @@ export default function Settings() {
                     onChange={handleDomainInputChange}
                     className={cn(
                       domainError && "border-red-500",
-                      domain.data?.domain && "bg-muted text-muted-foreground cursor-not-allowed"
+                      domain.data?.domain &&
+                        "bg-muted text-muted-foreground cursor-not-allowed"
                     )}
                     readOnly={!!domain.data?.domain}
                   />
@@ -494,9 +511,17 @@ export default function Settings() {
                 <div className="flex justify-end mt-4">
                   <Button
                     onClick={handleRegisterDomain}
-                    disabled={!domainInput.trim() || !!domainError || registerDomainMutation.isPending}
+                    disabled={
+                      !domainInput.trim() ||
+                      !!domainError ||
+                      registerDomainMutation.isPending
+                    }
                   >
-                    {registerDomainMutation.isPending ? "Registering..." : domain.data?.domain ? "Verify" : "Register"}
+                    {registerDomainMutation.isPending
+                      ? "Registering..."
+                      : domain.data?.domain
+                      ? "Verify"
+                      : "Register"}
                   </Button>
                 </div>
               </div>
