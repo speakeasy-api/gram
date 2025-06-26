@@ -1,14 +1,18 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path"
 	"slices"
 	"strings"
 
@@ -21,12 +25,15 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"html/template"
+
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
+	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/internal/projects/repo"
@@ -46,6 +53,7 @@ type Service struct {
 	auth         *auth.Auth
 	enc          *encryption.Encryption
 	chatClient   *openrouter.ChatClient
+	serverURL    *url.URL
 	posthog      *posthog.Posthog
 }
 
@@ -57,7 +65,7 @@ type mcpInputs struct {
 	authenticated   bool
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL) *Service {
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/mcp"),
 		logger:       logger,
@@ -69,6 +77,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		auth:         auth.New(logger, db, sessions),
 		enc:          enc,
 		chatClient:   chatClient,
+		serverURL:    serverURL,
 		posthog:      posthog,
 	}
 }
@@ -77,6 +86,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	mux.Handle("POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
+	mux.Handle("GET", "/mcp/{mcpSlug}/page", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
+	})
 	mux.Handle("POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP(w, r)
 	})
@@ -84,6 +96,103 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+type jsonSnippetData struct {
+	MCPName string
+	Headers []string
+	MCPURL  string
+}
+
+type hostedPageData struct {
+	MCPName     string
+	JSONBlob    string
+	JSONBlobURI string
+	MCPURL      string
+}
+
+func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return r.Body.Close()
+	})
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
+	}
+
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	}
+
+	if !toolset.McpIsPublic {
+		return oops.E(oops.CodeForbidden, nil, "mcp server is not public")
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset")
+	}
+
+	envHeaders := []string{}
+	for _, envVar := range toolsetDetails.RelevantEnvironmentVariables {
+		if !strings.Contains(strings.ToLower(envVar), "server_url") {
+			envHeaders = append(envHeaders, envVar)
+		}
+	}
+
+	baseURL := s.serverURL.String() + "/mcp"
+	if customDomainCtx != nil {
+		baseURL = customDomainCtx.Domain
+	}
+	MCPURL := path.Join(baseURL, mcpSlug)
+
+	jsonSnippetData := jsonSnippetData{
+		MCPName: toolset.Name,
+		MCPURL:  MCPURL,
+		Headers: envHeaders,
+	}
+
+	jsonSnippetTmpl, err := template.ParseFiles("internal/mcp/json_snippet.json.tmpl")
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to parse json snippet template", slog.String("error", err.Error()))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return oops.E(oops.CodeUnexpected, err, "failed to parse json snippet template")
+	}
+
+	var jsonSnippet bytes.Buffer
+	if err := jsonSnippetTmpl.Execute(&jsonSnippet, jsonSnippetData); err != nil {
+		s.logger.ErrorContext(ctx, "failed to execute json snippet template", slog.String("error", err.Error()))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return oops.E(oops.CodeUnexpected, err, "failed to execute json snippet template")
+	}
+
+	data := hostedPageData{
+		MCPName:     toolset.Name,
+		MCPURL:      MCPURL,
+		JSONBlob:    jsonSnippet.String(),
+		JSONBlobURI: base64.StdEncoding.EncodeToString(jsonSnippet.Bytes()),
+	}
+
+	tmpl, err := template.ParseFiles("internal/mcp/hosted_page.html.tmpl")
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to parse hosted page template", slog.String("error", err.Error()))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template")
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		s.logger.ErrorContext(ctx, "failed to execute hosted page template", slog.String("error", err.Error()))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return oops.E(oops.CodeUnexpected, err, "failed to execute hosted page template")
+	}
+
+	return nil
 }
 
 func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
@@ -113,21 +222,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 
-	var toolset toolsets_repo.Toolset
-	var toolsetErr error
-	if customDomainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && customDomainCtx != nil {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
-			McpSlug:        conv.ToPGText(mcpSlug),
-			CustomDomainID: uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true},
-		})
-	} else {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug)) //
+	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	}
 
-	if toolsetErr != nil {
-		s.logger.ErrorContext(ctx, "failed to get toolset for MCP server slug", slog.String("error", toolsetErr.Error()))
-		return oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
-	}
 	var defaultEnvironment string
 	var authenticated bool
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
@@ -162,7 +261,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		defaultEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
 	}
 	var batch batchedRawRequest
-	err := json.NewDecoder(r.Body).Decode(&batch)
+	err = json.NewDecoder(r.Body).Decode(&batch)
 	switch {
 	case errors.Is(err, io.EOF):
 		return nil
@@ -198,6 +297,27 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
 	}
 	return nil
+}
+
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *contextvalues.CustomDomainContext, error) {
+	var toolset toolsets_repo.Toolset
+	var toolsetErr error
+	var customDomainCtx *contextvalues.CustomDomainContext
+	if customDomainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && customDomainCtx != nil {
+		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
+			McpSlug:        conv.ToPGText(mcpSlug),
+			CustomDomainID: uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true},
+		})
+	} else {
+		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug)) //
+	}
+
+	if toolsetErr != nil {
+		s.logger.ErrorContext(ctx, "failed to get toolset for MCP server slug", slog.String("error", toolsetErr.Error()))
+		return nil, nil, oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	return &toolset, customDomainCtx, nil
 }
 
 func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {

@@ -8,7 +8,9 @@ import Environments, {
 } from "./pages/environments/Environments";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
-import { MCPDetailPage } from "./pages/mcp/MCPDetails";
+import Register from "./pages/login/Register";
+import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
+import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import Onboarding from "./pages/onboarding/Onboarding";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
@@ -28,7 +30,6 @@ import {
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
-import Register from "./pages/login/Register";
 
 type AppRouteBasic = {
   title: string;
@@ -189,7 +190,15 @@ const ROUTE_STRUCTURE = {
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",
-        component: MCPDetailPage,
+        component: MCPDetailsRoot,
+        indexComponent: MCPDetailPage,
+        subPages: {
+          hosted_page: {
+            title: "Hosted MCP Page",
+            url: "page",
+            component: MCPHostedPage,
+          },
+        },
       },
     },
   },

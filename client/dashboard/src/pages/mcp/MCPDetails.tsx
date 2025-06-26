@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { Toolset } from "@gram/client/models/components";
@@ -22,11 +23,14 @@ import {
 import { Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
-import { useSdkClient } from "@/contexts/Sdk";
+
+export function MCPDetailsRoot() {
+  return <Outlet />;
+}
 
 export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
@@ -321,6 +325,52 @@ export function MCPJson({
   fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
 }) {
   const telemetry = useTelemetry();
+
+  const { public: mcpJsonPublic, internal: mcpJsonInternal } =
+    useMcpConfigs(toolset);
+
+  const onCopy = () => {
+    telemetry.capture("mcp_event", {
+      action: "mcp_json_copied",
+      slug: toolset.slug,
+    });
+  };
+
+  const publicSettingsJson =
+    toolset.mcpIsPublic &&
+    mcpJsonPublic &&
+    ((
+      <Grid.Item>
+        <Type className="font-medium">Public Server</Type>
+        <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
+      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any);
+
+  return (
+    <Grid
+      gap={4}
+      columns={
+        publicSettingsJson || !fullWidth
+          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
+          : 1
+      }
+    >
+      {publicSettingsJson}
+      <Grid.Item>
+        <Type className="font-medium">
+          Authenticated Server{" "}
+          <span className="text-muted-foreground font-normal">
+            (with Gram key)
+          </span>
+        </Type>
+        <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
+      </Grid.Item>
+    </Grid>
+  );
+}
+
+export const useMcpConfigs = (toolset: Toolset) => {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const envHeaders =
@@ -374,48 +424,13 @@ export function MCPJson({
   }
 }`;
 
-  const onCopy = () => {
-    telemetry.capture("mcp_event", {
-      action: "mcp_json_copied",
-      slug: toolset.slug,
-    });
-  };
+  return { public: mcpJsonPublic, internal: mcpJsonInternal };
+};
 
-  const publicSettingsJson =
-    toolset.mcpIsPublic &&
-    mcpJsonPublic &&
-    ((
-      <Grid.Item>
-        <Type className="font-medium">Public Server</Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
-    ) as // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    any);
-
-  return (
-    <Grid
-      gap={4}
-      columns={
-        publicSettingsJson || !fullWidth
-          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
-          : 1
-      }
-    >
-      {publicSettingsJson}
-      <Grid.Item>
-        <Type className="font-medium">
-          Authenticated Server{" "}
-          <span className="text-muted-foreground font-normal">
-            (with Gram key)
-          </span>
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-      </Grid.Item>
-    </Grid>
-  );
-}
-
-export function useMcpSlugValidation(mcpSlug: string | undefined, currentSlug?: string) {
+export function useMcpSlugValidation(
+  mcpSlug: string | undefined,
+  currentSlug?: string
+) {
   const [slugError, setSlugError] = useState<string | null>(null);
   const client = useSdkClient();
 

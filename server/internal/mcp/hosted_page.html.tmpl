@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .MCPName }}</title>
+    <style>
+        body { 
+            font-family: 'Inter', Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background: #fff; 
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header { display: flex; justify-content: space-between; align-items: center; padding: 24px 40px; border-bottom: 1px solid #e5e5e5; }
+        .company-logo { font-weight: bold; font-size: 2rem; letter-spacing: 2px; }
+        .company-logo span { font-family: monospace; }
+        .company-name { font-size: 1.5rem; font-weight: bold; }
+        main { 
+            max-width: 800px; 
+            margin: 40px auto; 
+            padding: 0 24px; 
+            flex: 1;
+        }
+        h1 { font-size: 2.5rem; margin-bottom: 0.5em; }
+        .desc { font-size: 1.1rem; margin-bottom: 1.5em; }
+        .card { background: #faf9f6; border: 1px solid #e5e5e5; border-radius: 8px; padding: 24px; margin-top: 32px; }
+        .code-container { position: relative; }
+        .code-container:hover .copy-button { opacity: 1; }
+        .copy-button { 
+            position: absolute; 
+            top: 12px; 
+            right: 12px; 
+            background: #333; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            padding: 6px 12px; 
+            font-size: 12px; 
+            cursor: pointer; 
+            opacity: 0; 
+            transition: opacity 0.2s ease, background-color 0.2s ease;
+            z-index: 10;
+        }
+        .copy-button:hover { background: #555; }
+        .copy-button.copied { opacity: 1; }
+        pre { background: #f6f3ef; padding: 16px; border-radius: 6px; font-size: 1rem; overflow-x: auto; margin: 0; }
+        .section-title { font-weight: 600; margin-bottom: 0.5em; }
+        .logo-container { display: flex; align-items: center; gap: 16px; margin-bottom: 0.5em; align-self: flex-end; justify-content: space-between; }
+        .logo-container .section-title { margin-bottom: 0; }
+        .client-logos { display: flex; align-items: center; gap: 12px; }
+        .client-logo { height: 24px; width: auto; }
+        footer { 
+            text-align: right; 
+            padding: 24px; 
+            border-top: 1px solid #e5e5e5; 
+            color: #666; 
+            font-size: 0.9rem; 
+            margin-top: auto;
+        }
+        footer a { 
+            color: #333; 
+            text-decoration: none; 
+            font-weight: 500; 
+        }
+        footer a:hover { 
+            text-decoration: underline; 
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>{{ .MCPName }} MCP</h1>
+        <div class="desc">
+            Welcome! This is the MCP server for interacting with the {{ .MCPName }} API. Use it with Claude, Cursor, or any other tool that supports MCP.
+        </div>
+        <a href="https://cursor.com/install-mcp?name={{ .MCPName }}&config={{ .JSONBlobURI }}">
+            <img
+                src="https://cursor.com/deeplink/mcp-install-dark.svg"
+                alt="Add {{ .MCPName }} MCP server to Cursor"
+                height="32" />
+        </a>
+        <div class="card">
+            <div class="section-title">MCP URL</div>
+            <div class="code-container">
+                <button class="copy-button" onclick="copyToClipboard('mcp-url', this)">Copy</button>
+                <pre id="mcp-url">{{ .MCPURL }}</pre>
+            </div>
+        </div>
+        <div class="card">
+            <div class="logo-container">
+                <div class="section-title">MCP Configuration</div>
+                <div class="client-logos">
+                    <img src="https://claude.ai/favicon.ico" alt="Claude Desktop" class="client-logo" title="Claude Desktop" onclick="window.open('https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server', '_blank')" style="cursor: pointer;">
+                    <img src="https://windsurf.ai/favicon.ico" alt="Windsurf" class="client-logo" title="Windsurf" onclick="window.open('https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json', '_blank')" style="cursor: pointer;">
+                    <img src="https://cursor.com/favicon.ico" alt="Cursor" class="client-logo" title="Cursor" onclick="window.open('https://docs.cursor.com/context/model-context-protocol#manual-configuration', '_blank')" style="cursor: pointer;">
+                </div>
+            </div>
+            <div class="code-container">
+                <button class="copy-button" onclick="copyToClipboard('json-blob', this)">Copy</button>
+                <pre id="json-blob">{{ .JSONBlob }}</pre>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Powered by <a href="https://getgram.ai" target="_blank" rel="noopener noreferrer">Gram</a>
+    </footer>
+
+    <script>
+        function copyToClipboard(elementId, button) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(function() {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(function() {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(function(err) {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+    </script>
+</body>
+</html>

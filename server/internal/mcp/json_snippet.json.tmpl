@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "{{ .MCPName }}": {
+      "command": "npx",
+      "args": [
+          "mcp-remote",
+          "{{ .MCPURL }}"
+{{- range .Headers }}
+          "--header",
+          "{{ . }}:${VALUE}"
+{{- end }}
+        ]
+    }
+  }
+}
