@@ -164,6 +164,25 @@ func (p *ToolExtractor) Do(
 		).Log(ctx, logger, slog.String("event", "openapi:error"))
 	}
 
+	upgradeResult, err := UpgradeOpenAPI30To31(document, v3Model)
+	if err != nil {
+		logger.ErrorContext(ctx, "Unable to upgrade OpenAPI v3.0 document to v3.1. Proceeding with v3.0 document.", slog.String("event", "openapi-upgrade:error"))
+		logger.ErrorContext(ctx, err.Error(), slog.String("event", "openapi-upgrade:error"))
+	} else {
+		v3Model = upgradeResult.Model
+
+		if len(upgradeResult.Issues) > 0 {
+			msg := fmt.Sprintf("Found %d issues upgrading OpenAPI v3.0 document to v3.1", len(upgradeResult.Issues))
+			logger.ErrorContext(ctx, msg, slog.String("event", "openapi-upgrade:error"))
+			for i, issue := range upgradeResult.Issues {
+				if i >= 30 {
+					break
+				}
+				logger.ErrorContext(ctx, issue.Error(), slog.String("event", "openapi-upgrade:error"))
+			}
+		}
+	}
+
 	globalSecurity, err := serializeSecurity(v3Model.Model.Security)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
