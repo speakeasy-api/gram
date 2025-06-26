@@ -9,7 +9,7 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch env {
-			case "local", "minikube":
+			case "local":
 				origin := r.Header.Get("Origin")
 				if _, err := url.Parse(origin); err == nil {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
