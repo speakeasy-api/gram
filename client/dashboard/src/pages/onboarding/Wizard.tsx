@@ -1,6 +1,12 @@
 import { GramLogo } from "@/components/gram-logo";
 import { InputField } from "@/components/moon/input-field";
 import { ToolBadge } from "@/components/tool-badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
@@ -20,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronRight,
+  CircleCheckIcon,
   FileJson2,
   ServerCog,
   Upload,
@@ -206,8 +213,14 @@ const UploadStep = ({
   setCurrentStep: (step: "upload" | "toolset") => void;
   setToolsetName: (toolsetName: string) => void;
 }) => {
-  const { file, handleSpecUpload, createDeployment, apiName } =
-    useOnboardingSteps();
+  const {
+    file,
+    handleSpecUpload,
+    createDeployment,
+    apiName,
+    setApiName,
+    apiNameError,
+  } = useOnboardingSteps();
   const [fileText, setFileText] = useState<string>();
 
   useEffect(() => {
@@ -216,26 +229,48 @@ const UploadStep = ({
   }, [file]);
 
   const content = file ? (
-    <div className="rounded-md border-1 overflow-clip">
-      <Stack
-        direction={"horizontal"}
-        gap={2}
-        align={"center"}
-        className="border-b-1 px-4 py-2 bg-stone-50"
-      >
-        <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
-        <Type small mono>
-          {file.name}
-        </Type>
+    <Stack gap={4}>
+      <Stack gap={1}>
+        <Stack direction={"horizontal"} gap={1} align={"center"}>
+          <CircleCheckIcon className="w-4 h-4 text-green-500" />
+          <Type small className="font-normal">
+            OpenAPI Document
+          </Type>
+        </Stack>
+        <Accordion type="single" collapsible className="max-w-2xl">
+          <AccordionItem value="logs">
+            <AccordionTrigger className="text-base border-1 px-4 py-2 bg-stone-50 w-full [&[data-state=open]]:rounded-b-none ">
+              <Stack direction={"horizontal"} gap={2} align={"center"}>
+                <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
+                <Type small mono>
+                  {file.name}
+                </Type>
+              </Stack>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="text-xs p-4 bg-stone-100 h-48 overflow-y-auto border-1 border-t-0 rounded-b-md">
+                {fileText?.length ? (
+                  <pre className="whitespace-pre-wrap">{fileText}</pre>
+                ) : (
+                  <SkeletonParagraph lines={12} />
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </Stack>
-      <div className="text-xs p-4 bg-stone-100 h-64">
-        {fileText?.length ? (
-          <pre className="whitespace-pre-wrap">{fileText}</pre>
-        ) : (
-          <SkeletonParagraph lines={12} />
-        )}
-      </div>
-    </div>
+      <InputField
+        placeholder="Petstore"
+        value={apiName}
+        onChange={(e) => setApiName(e.target.value)}
+        maxLength={30}
+        label="API Name"
+        error={apiNameError}
+        hint={"Give your API a meaningful name."}
+        required
+        autoFocus
+      />
+    </Stack>
   ) : (
     <FileUpload
       label={<span className="text-body-sm">Drop your OpenAPI spec here</span>}
@@ -400,7 +435,6 @@ const McpStep = ({
     toast.success("MCP server created successfully");
     routes.toolsets.toolset.goTo(createdToolset.slug);
   };
-
 
   return (
     <>

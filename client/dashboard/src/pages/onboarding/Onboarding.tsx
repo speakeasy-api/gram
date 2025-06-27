@@ -66,13 +66,24 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
 
   // If an existing document slug was NOT provided, then we need to make sure the provided slug
   // isn't accidentally overwriting an existing document slug.
-  const apiNameValid =
-    apiName &&
-    apiName.length > 0 &&
-    (existingDocumentSlug ||
-      !latestDeployment?.deployment?.openapiv3Assets
+  let apiNameError: string | undefined;
+
+  if (apiName) {
+    if (apiName.length < 3) {
+      apiNameError = "API name must be at least 3 characters long";
+    }
+
+    if (
+      !existingDocumentSlug &&
+      latestDeployment?.deployment?.openapiv3Assets
         .map((a) => a.slug)
-        .includes(apiName));
+        .includes(apiName)
+    ) {
+      apiNameError = "API name must be unique";
+    }
+  } else {
+    apiNameError = "API name is required";
+  }
 
   const handleSpecUpload = async (file: File) => {
     try {
@@ -161,7 +172,7 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
   };
 
   return {
-    apiNameValid,
+    apiNameError,
     handleSpecUpload,
     undoSpecUpload,
     apiName,
@@ -193,11 +204,10 @@ export function OnboardingContent({
     numTools,
     createdDeployment,
     creatingDeployment,
-    apiNameValid,
+    apiNameError,
     file,
     asset,
   } = useOnboardingSteps(existingDocumentSlug);
-
 
   const steps: StepProps[] = [
     {
@@ -212,10 +222,7 @@ export function OnboardingContent({
       displayComplete: (
         <Stack direction={"horizontal"} gap={2} align={"center"}>
           <Type>✓ Uploaded {file?.name}</Type>
-          <Button
-            variant={"outline"}
-            onClick={undoSpecUpload}
-          >
+          <Button variant={"outline"} onClick={undoSpecUpload}>
             Change
           </Button>
         </Stack>
@@ -234,14 +241,12 @@ export function OnboardingContent({
               placeholder="My API"
               disabled={!!existingDocumentSlug}
             />
-            <Button onClick={createDeployment} disabled={!apiNameValid}>
+            <Button onClick={createDeployment} disabled={!!apiNameError}>
               Continue
             </Button>
           </Stack>
-          {!!apiName && !apiNameValid && (
-            <span className="text-destructive">
-              This slug is already in use.
-            </span>
+          {!!apiNameError && (
+            <span className="text-destructive">{apiNameError}</span>
           )}
         </Stack>
       ),
@@ -268,7 +273,10 @@ export function OnboardingContent({
                   ✓ Created {numTools} tools
                 </AccordionTrigger>
                 <AccordionContent>
-                  <DeploymentLogs deploymentId={createdDeployment?.id} onlyErrors />
+                  <DeploymentLogs
+                    deploymentId={createdDeployment?.id}
+                    onlyErrors
+                  />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
