@@ -149,7 +149,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	envHeaders := []string{}
 	for _, envVar := range toolsetDetails.RelevantEnvironmentVariables {
 		if !strings.Contains(strings.ToLower(envVar), "server_url") {
-			envHeaders = append(envHeaders, envVar)
+			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", envVar))
 		}
 	}
 
