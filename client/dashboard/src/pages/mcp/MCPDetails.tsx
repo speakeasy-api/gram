@@ -280,6 +280,26 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           {saveButton}
         </div>
       </PageSection>
+      {toolset.mcpIsPublic && (
+        <PageSection
+          heading="MCP Installation"
+          description="A simple hosted page for installing your MCP server"
+        >
+          <Stack direction="horizontal" align="center" gap={2}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-8"
+              onClick={() => {
+                window.open(`${mcpUrl}/page`, '_blank');
+              }}
+            >
+              View
+            </Button>
+            <CodeBlock className="max-w-3xl">{`${mcpUrl}/page`}</CodeBlock>
+          </Stack>
+        </PageSection>
+      )}
       <PageSection
         heading="MCP Config"
         description="Use this config to connect to this MCP server from a client like
