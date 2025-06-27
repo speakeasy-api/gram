@@ -27,6 +27,7 @@ import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { useRoutes } from "@/routes";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -90,6 +91,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const session = useSession();
   const { orgSlug, projectSlug } = useParams();
+  const routes = useRoutes();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => invalidateAllToolset(queryClient),
@@ -286,16 +288,11 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           description="A simple hosted page for installing your MCP server"
         >
           <Stack direction="horizontal" align="center" gap={2}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="px-8"
-              onClick={() => {
-                window.open(`${mcpUrl}/page`, '_blank');
-              }}
-            >
-              View
-            </Button>
+            <routes.mcp.details.hosted_page.Link params={[toolset.slug]}>
+              <Button variant="outline" size="sm" className="px-8">
+                View
+              </Button>
+            </routes.mcp.details.hosted_page.Link>
             <CodeBlock className="max-w-3xl">{`${mcpUrl}/page`}</CodeBlock>
           </Stack>
         </PageSection>
@@ -365,9 +362,9 @@ export function MCPJson({
       <Grid.Item>
         <Type className="font-medium">Public Server</Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ) as any);
+      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
+    ) as // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    any);
 
   return (
     <Grid
