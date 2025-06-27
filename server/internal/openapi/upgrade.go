@@ -3,7 +3,6 @@ package openapi
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -130,12 +129,8 @@ func upgradeOperation(op *v3.Operation) error {
 	}
 
 	for _, param := range op.Parameters {
-		if param == nil {
-			continue
-		}
-
-		if err := upgradeSchema(param.Schema); err != nil {
-			return fmt.Errorf("upgrade parameter schema: %w", err)
+		if err := upgradeParameter(param); err != nil {
+			return fmt.Errorf("upgrade operation parameter: %w", err)
 		}
 	}
 
@@ -161,7 +156,7 @@ func upgradeParameter(param *v3.Parameter) error {
 }
 
 func upgradeSchema(schemaProxy *base.SchemaProxy) error {
-	if schemaProxy.IsReference() {
+	if schemaProxy == nil || schemaProxy.IsReference() {
 		return nil
 	}
 
@@ -179,6 +174,7 @@ func upgradeSchema(schemaProxy *base.SchemaProxy) error {
 		return fmt.Errorf("build schema %s: %w", loc, err)
 	}
 
+	updgradeExample(schema)
 	upgradeExclusiveMinMax(schema)
 	if err := upgradeNullableSchema(schema); err != nil {
 		return fmt.Errorf("error upgrading nullable schema %s: %w", loc, err)
@@ -208,7 +204,8 @@ func upgradeSchema(schemaProxy *base.SchemaProxy) error {
 	}
 
 	if schema.Properties != nil {
-		for _, propSchema := range schema.Properties.FromOldest() {
+		for key, propSchema := range schema.Properties.FromOldest() {
+			_ = key
 			if err := upgradeSchema(propSchema); err != nil {
 				return fmt.Errorf("error upgrading subschema (property): %w", err)
 			}
@@ -222,6 +219,19 @@ func upgradeSchema(schemaProxy *base.SchemaProxy) error {
 	}
 
 	return nil
+}
+
+func updgradeExample(schema *base.Schema) {
+	if schema == nil || schema.Example == nil {
+		return
+	}
+
+	if schema.Examples == nil {
+		schema.Examples = []*yaml.Node{}
+	}
+
+	schema.Examples = append(schema.Examples, schema.Example)
+	schema.Example = nil
 }
 
 func upgradeExclusiveMinMax(schema *base.Schema) {
@@ -256,21 +266,16 @@ func upgradeNullableSchema(schema *base.Schema) error {
 	}
 
 	if schema.Nullable == nil || !*schema.Nullable {
-		schema.Nullable = nil
+		schema.Nullable = nil // clear it out if it was set to false
 		return nil
 	}
 
-	detectedType := inferSchemaTypeBestEffort(schema)
+	schema.Nullable = nil
 
 	switch {
-	case len(detectedType) > 0:
-		if !slices.Contains(detectedType, "null") {
-			detectedType = append(detectedType, "null")
-		}
-		schema.Type = detectedType
-
-		if schema.Enum != nil {
-			schema.Enum = addEnumNullMemberIfNeeded(schema.Enum)
+	case len(schema.Type) > 0:
+		if !slices.Contains(schema.Type, "null") {
+			schema.Type = append(schema.Type, "null")
 		}
 	case len(schema.AnyOf) > 0:
 		nullSchema := createNullSchema()
@@ -278,106 +283,15 @@ func upgradeNullableSchema(schema *base.Schema) error {
 	case len(schema.OneOf) > 0:
 		nullSchema := createNullSchema()
 		schema.OneOf = append(schema.OneOf, nullSchema)
-	case len(schema.AllOf) > 0:
-		nullSchema := createNullSchema()
-		wrappedSchema := &base.Schema{}
-		wrappedSchema.OneOf = schema.OneOf
-		schema.OneOf = []*base.SchemaProxy{nullSchema, base.CreateSchemaProxy(wrappedSchema)}
-		schema.AllOf = nil
 	default:
-		return fmt.Errorf("unable to infer type for schema")
+		nullSchema := createNullSchema()
+		clone := *schema
+		newSchema := &base.Schema{}
+		newSchema.OneOf = []*base.SchemaProxy{nullSchema, base.CreateSchemaProxy(&clone)}
+		*schema = *newSchema
 	}
-
-	schema.Nullable = nil
 
 	return nil
-}
-
-func inferSchemaTypeBestEffort(s *base.Schema) []string {
-	if len(s.Type) > 0 {
-		return s.Type
-	}
-
-	if len(s.Enum) > 0 {
-		return inferEnumTypeBestEffort(s.Enum)
-	}
-
-	if (s.Properties != nil && s.Properties.Len() > 0) ||
-		(s.PatternProperties != nil && s.PatternProperties.Len() > 0) ||
-		s.PropertyNames != nil ||
-		s.AdditionalProperties != nil ||
-		s.UnevaluatedProperties != nil ||
-		s.MinProperties != nil ||
-		s.MaxProperties != nil {
-		return []string{"object"}
-	}
-
-	if s.Items != nil ||
-		len(s.PrefixItems) > 0 ||
-		s.Contains != nil ||
-		s.MinItems != nil ||
-		s.MaxItems != nil ||
-		s.UnevaluatedItems != nil {
-		return []string{"array"}
-	}
-
-	if s.Const != nil {
-		return inferTypeFromYAMLNode(s.Const)
-	}
-
-	if s.Default != nil {
-		return inferTypeFromYAMLNode(s.Default)
-	}
-
-	return []string{}
-}
-
-func addEnumNullMemberIfNeeded(members []*yaml.Node) []*yaml.Node {
-	if len(members) == 0 {
-		return []*yaml.Node{{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}}
-	}
-
-	for _, member := range members {
-		if member.Tag == "!!null" {
-			return members // null already exists
-		}
-	}
-
-	// Add a null member if it doesn't exist
-	nullMember := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
-	return append(members, nullMember)
-}
-
-func inferEnumTypeBestEffort(members []*yaml.Node) []string {
-	types := make(map[string]struct{}, 3)
-
-	for _, member := range members {
-		inferred := inferTypeFromYAMLNode(member)
-		for _, t := range inferred {
-			types[t] = struct{}{}
-		}
-	}
-
-	return slices.Sorted(maps.Keys(types))
-}
-
-func inferTypeFromYAMLNode(node *yaml.Node) []string {
-	if node == nil {
-		return []string{}
-	}
-
-	switch node.Tag {
-	case "!!int", "!!float":
-		return []string{"number"}
-	case "!!bool":
-		return []string{"boolean"}
-	case "!!str":
-		return []string{"string"}
-	case "!!null":
-		return []string{"null"}
-	}
-
-	return []string{}
 }
 
 func locForOperation(op *v3.Operation) string {
