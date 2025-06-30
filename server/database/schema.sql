@@ -412,7 +412,8 @@ CREATE TABLE IF NOT EXISTS http_security (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   
   CONSTRAINT http_security_pkey PRIMARY KEY (id),
-  CONSTRAINT http_security_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE
+  CONSTRAINT http_security_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT http_security_key_unique UNIQUE (deployment_id, key)
 );
 
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
