@@ -96,6 +96,32 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 	return i, err
 }
 
+const getCustomDomainByID = `-- name: GetCustomDomainByID :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByID, id)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getCustomDomainsByOrganization = `-- name: GetCustomDomainsByOrganization :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 FROM custom_domains

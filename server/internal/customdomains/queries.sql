@@ -25,6 +25,13 @@ FROM custom_domains
 WHERE domain = @domain
   AND deleted IS FALSE;
 
+-- name: GetCustomDomainByID :one
+SELECT *
+FROM custom_domains
+WHERE id = @id
+  AND deleted IS FALSE;
+
+
 -- name: UpdateCustomDomain :one
 UPDATE custom_domains
 SET

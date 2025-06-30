@@ -71,9 +71,16 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.OrganizationSlug == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	slugSuffix, err := conv.GenerateRandomSlug(5)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").Log(ctx, s.logger)
+	}
+
+	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
 
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -83,6 +90,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		Description:            conv.PtrToPGText(payload.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
 		HttpToolNames:          payload.HTTPToolNames,
+		McpSlug:                conv.ToPGText(mcpSlug),
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
@@ -217,17 +225,12 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		toolsetDomainID = payload.CustomDomainID
 	}
 
-	if payload.McpSlug != nil && *payload.McpSlug != "" {
-		var mcpToolset repo.Toolset
-		var mcpToolsetErr error
-		if toolsetDomainID != nil {
-			mcpToolset, mcpToolsetErr = tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
-				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
-				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
-			})
-		} else {
-			mcpToolset, mcpToolsetErr = tr.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
-		}
+	// We only allow setting a custom slug if the user has a custom domain and is not on a free account type
+	if payload.McpSlug != nil && *payload.McpSlug != "" && toolsetDomainID != nil && authCtx.AccountType != "free" {
+		mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
+			McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
+			CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
+		})
 		if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
 			return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
 		}

@@ -12,6 +12,7 @@ INSERT INTO toolsets (
   , description
   , http_tool_names
   , default_environment_slug
+  , mcp_slug
 ) VALUES (
     @organization_id
   , @project_id
@@ -20,6 +21,7 @@ INSERT INTO toolsets (
   , @description
   , COALESCE(@http_tool_names::text[], '{}'::text[])
   , @default_environment_slug
+  , @mcp_slug
 )
 RETURNING *;
 

@@ -61,6 +61,7 @@ INSERT INTO toolsets (
   , description
   , http_tool_names
   , default_environment_slug
+  , mcp_slug
 ) VALUES (
     $1
   , $2
@@ -69,6 +70,7 @@ INSERT INTO toolsets (
   , $5
   , COALESCE($6::text[], '{}'::text[])
   , $7
+  , $8
 )
 RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, custom_domain_id, created_at, updated_at, deleted_at, deleted
 `
@@ -81,6 +83,7 @@ type CreateToolsetParams struct {
 	Description            pgtype.Text
 	HttpToolNames          []string
 	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
 }
 
 func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (Toolset, error) {
@@ -92,6 +95,7 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		arg.Description,
 		arg.HttpToolNames,
 		arg.DefaultEnvironmentSlug,
+		arg.McpSlug,
 	)
 	var i Toolset
 	err := row.Scan(

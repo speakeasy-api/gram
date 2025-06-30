@@ -1,6 +1,8 @@
 package conv
 
 import (
+	"crypto/rand"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -114,6 +116,22 @@ func ToSlug(s string) string {
 	s = dashCollapseRegex.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-") // trim leading and trailing dashes
 	return s
+}
+
+func GenerateRandomSlug(size int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyz123456789"
+
+	bytes := make([]byte, size)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random slug: %w", err)
+	}
+
+	result := make([]byte, size)
+	for i := range result {
+		result[i] = charset[bytes[i]%byte(len(charset))]
+	}
+
+	return string(result), nil
 }
 
 func ToLower[T ~string](s T) string {

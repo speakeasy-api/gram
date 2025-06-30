@@ -3,13 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
 import {
+  SimpleTooltip,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useOrganization, useProject, useSession } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
@@ -86,8 +87,6 @@ export function useMcpUrl(toolset: Toolset | undefined) {
 
 export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
-  const project = useProject();
-  const organization = useOrganization();
   const queryClient = useQueryClient();
   const session = useSession();
   const { orgSlug, projectSlug } = useParams();
@@ -103,7 +102,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   });
 
   const [mcpSlug, setMcpSlug] = useState(
-    toolset.mcpSlug || `${organization.slug}-${project.slug}-${randSlug()}`
+    toolset.mcpSlug || ""
   );
   const [mcpIsPublic, setMcpIsPublic] = useState(toolset.mcpIsPublic);
 
@@ -250,13 +249,27 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
                   ? `${customServerURL}/mcp/`
                   : `${getServerURL()}/mcp/`}
               </Type>
-              <input
-                className="border rounded px-2 py-1 w-full"
-                placeholder="Enter MCP Slug"
-                value={mcpSlug}
-                onChange={handleMcpSlugChange}
-                maxLength={40}
-              />
+              {!toolset.customDomainId || session.gramAccountType !== "free" ? (
+                <SimpleTooltip tooltip={session.gramAccountType === "free" ? "Please upgrade your account type for access to custom domains and custom slugs" : "A custom MCP slug can be set once a custom domain is linked."}>
+                  <input
+                    className="border rounded px-2 py-1 w-full"
+                    placeholder="Enter MCP Slug"
+                    value={mcpSlug}
+                    onChange={handleMcpSlugChange}
+                    maxLength={40}
+                    disabled={!toolset.customDomainId || session.gramAccountType === "free"}
+                  />
+                </SimpleTooltip>
+              ) : (
+                <input
+                  className="border rounded px-2 py-1 w-full"
+                  placeholder="Enter MCP Slug"
+                  value={mcpSlug}
+                  onChange={handleMcpSlugChange}
+                  maxLength={40}
+                  disabled={!toolset.customDomainId}
+                />
+              )}
             </Stack>
           </BlockInner>
         </Block>
