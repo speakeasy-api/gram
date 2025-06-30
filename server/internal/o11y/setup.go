@@ -3,16 +3,24 @@ package o11y
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/metric"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	"go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"goa.design/clue/clue"
 )
 
@@ -83,18 +91,17 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 
 	appInfo := PullAppInfo(ctx)
 
-	cfg, err := clue.NewConfig(
+	cfg, err := NewClueConfig(
 		ctx,
 		"gram",
 		appInfo.GitSHA,
 		metricExporter,
 		spanExporter,
-		clue.WithPropagators(prop),
-		clue.WithErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		prop,
+		clue.AdaptiveSampler(2, 10),
+		otel.ErrorHandlerFunc(func(err error) {
 			logger.ErrorContext(ctx, "otel error", slog.String("error", err.Error()))
-		})),
-		clue.WithMaxSamplingRate(2),
-		clue.WithSampleSize(10),
+		}),
 	)
 	if err != nil {
 		handleErr(err)
@@ -112,4 +119,56 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	}
 
 	return
+}
+
+func NewClueConfig(
+	ctx context.Context,
+	svcName string,
+	svcVersion string,
+	metricExporter sdkmetric.Exporter,
+	spanExporter sdktrace.SpanExporter,
+	propagators propagation.TextMapPropagator,
+	sampler sdktrace.Sampler,
+	errorHandler otel.ErrorHandler,
+) (*clue.Config, error) {
+	res, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(svcName),
+			semconv.ServiceVersionKey.String(svcVersion),
+		))
+	if err != nil {
+		return nil, fmt.Errorf("create resource: %w", err)
+	}
+	var meterProvider metric.MeterProvider
+	if metricExporter == nil {
+		meterProvider = metricnoop.NewMeterProvider()
+	} else {
+		reader := sdkmetric.NewPeriodicReader(
+			metricExporter,
+			sdkmetric.WithInterval(60*time.Second),
+		)
+		meterProvider = sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+			sdkmetric.WithReader(reader),
+		)
+	}
+	var tracerProvider trace.TracerProvider
+	if spanExporter == nil {
+		tracerProvider = tracenoop.NewTracerProvider()
+	} else {
+		sampler := sdktrace.ParentBased(sampler)
+		tracerProvider = sdktrace.NewTracerProvider(
+			sdktrace.WithResource(res),
+			sdktrace.WithSampler(sampler),
+			sdktrace.WithBatcher(spanExporter),
+		)
+	}
+	return &clue.Config{
+		MeterProvider:  meterProvider,
+		TracerProvider: tracerProvider,
+		Propagators:    propagators,
+		ErrorHandler:   errorHandler,
+	}, nil
 }
