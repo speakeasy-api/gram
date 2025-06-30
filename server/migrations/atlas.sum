@@ -1,4 +1,4 @@
-h1:u0t3SFkiKmzfh7yveTs8os3ywVX0xE8B40W53N5sgaE=
+h1:ybGDNzCDqafDyDCo66OLwvyXzXKofoezSFMYJrkH9/4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -33,3 +33,4 @@ h1:u0t3SFkiKmzfh7yveTs8os3ywVX0xE8B40W53N5sgaE=
 20250618212630_prompt-templates-uniqueness.sql h1:Cao3EXHBYf3le8BIgWxW6QjlGr/F6AD/xT8GJR6B5ik=
 20250619103942_prompt-templates-better-unique.sql h1:Gb8sjrDsAt7LdTs2InVspZD+7NjMLH+ckGxtTotPYl4=
 20250627202008_relax-some-limits-on-toolset-adjacent-models.sql h1:tPZoAJ9x9C7C2/R/gzSYESeEQ4t029WKEg9AEOa2dKU=
+20250630180046_http-security-drop-unnecessary-unique-constraint.sql h1:5VSxUw/rb4HtfCzC3zCTz7LmaxS5w/UINpu8flG8p9k=
