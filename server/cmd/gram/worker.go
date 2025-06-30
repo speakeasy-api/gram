@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
@@ -156,6 +157,11 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			metrics, err := o11y.NewMetrics(otel.GetMeterProvider())
+			if err != nil {
+				return fmt.Errorf("failed to create metrics: %w", err)
+			}
+
 			db, err := newDBClient(ctx, logger, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -216,9 +222,9 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, db, openRouter, baseChatClient, encryptionClient)
+			chatClient := chat.NewChatClient(logger, metrics, db, openRouter, baseChatClient, encryptionClient)
 
-			temporalWorker := background.NewTemporalWorker(temporalClient, logger, &background.WorkerOptions{
+			temporalWorker := background.NewTemporalWorker(temporalClient, logger, metrics, &background.WorkerOptions{
 				DB:                  db,
 				AssetStorage:        assetStorage,
 				SlackClient:         slackClient,

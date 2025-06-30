@@ -41,7 +41,7 @@ const environmentSlugQueryParam = "environment_slug"
 type Service struct {
 	tracer           trace.Tracer
 	logger           *slog.Logger
-	metrics          *o11y.MetricsHandler
+	metrics          *o11y.Metrics
 	db               *pgxpool.Pool
 	auth             *auth.Auth
 	toolset          *toolsets.Toolsets
@@ -52,12 +52,12 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
+func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
 	envRepo := environments_repo.New(db)
 	return &Service{
 		tracer:           otel.Tracer("github.com/speakeasy-api/gram/internal/instances"),
 		logger:           logger,
-		metrics:          o11y.NewMetricsHandler(),
+		metrics:          metrics,
 		db:               db,
 		auth:             auth.New(logger, db, sessions),
 		toolset:          toolsets.NewToolsets(db),

@@ -38,8 +38,9 @@ import (
 )
 
 type Service struct {
-	tracer       trace.Tracer
 	logger       *slog.Logger
+	tracer       trace.Tracer
+	metrics      *o11y.Metrics
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	auth         *auth.Auth
@@ -51,10 +52,11 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, temporal client.Client, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
+func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, temporal client.Client, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/deployments"),
 		logger:       logger,
+		metrics:      metrics,
 		db:           db,
 		repo:         repo.New(db),
 		auth:         auth.New(logger, db, sessions),
@@ -660,7 +662,7 @@ func (s *Service) startDeploymentInProcess(ctx context.Context, logger *slog.Log
 		).Log(ctx, logger)
 	}
 
-	if err := activities.NewProcessDeployment(logger, s.db, s.assetStorage).Do(ctx, projectID, deploymentID); err != nil {
+	if err := activities.NewProcessDeployment(logger, s.metrics, s.db, s.assetStorage).Do(ctx, projectID, deploymentID); err != nil {
 		transition, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
 			DeploymentID: deploymentID,
 			ProjectID:    projectID,

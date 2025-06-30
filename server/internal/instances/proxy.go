@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -88,7 +87,18 @@ type toolcallErrorSchema struct {
 	Error string `json:"error"`
 }
 
-func InstanceToolProxy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, w http.ResponseWriter, requestBody io.Reader, envVars map[string]string, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, toolCallSource ToolCallSource, chatClient *openrouter.ChatClient) error {
+func InstanceToolProxy(
+	ctx context.Context,
+	tracer trace.Tracer,
+	logger *slog.Logger,
+	metrics *o11y.Metrics,
+	w http.ResponseWriter,
+	requestBody io.Reader,
+	envVars map[string]string,
+	toolExecutionInfo *toolsets.HTTPToolExecutionInfo,
+	toolCallSource ToolCallSource,
+	chatClient *openrouter.ChatClient,
+) error {
 	logger = logger.With(
 		slog.String("project_id", toolExecutionInfo.Tool.ProjectID.String()),
 		slog.String("tool", toolExecutionInfo.Tool.Name),
@@ -346,7 +356,16 @@ type autoSummarizeConfig struct {
 	chatClient           *openrouter.ChatClient
 }
 
-func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, tool tools_repo.HttpToolDefinition, w http.ResponseWriter, req *http.Request, toolCallSource ToolCallSource, autoSummarizeConfig autoSummarizeConfig) error {
+func reverseProxyRequest(ctx context.Context,
+	tracer trace.Tracer,
+	logger *slog.Logger,
+	metrics *o11y.Metrics,
+	tool tools_repo.HttpToolDefinition,
+	w http.ResponseWriter,
+	req *http.Request,
+	toolCallSource ToolCallSource,
+	autoSummarizeConfig autoSummarizeConfig,
+) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
 
@@ -443,13 +462,7 @@ func reverseProxyRequest(ctx context.Context, tracer trace.Tracer, logger *slog.
 
 	// project_id and tool_name do add some cardinality but this should be reasonable
 	// tracking metrics for failures and successes on tool calls is high value, nevertheless we will keep an eye on the metric cost
-	if err := metrics.IncCounter(ctx, o11y.MetricNameToolCallCounter,
-		attribute.String("tool", tool.Name),
-		attribute.String("project_id", tool.ProjectID.String()),
-		attribute.String("status_code", fmt.Sprintf("%d", resp.StatusCode)),
-	); err != nil {
-		logger.ErrorContext(ctx, fmt.Sprintf("failed to increment %s metric", string(o11y.MetricNameToolCallCounter)), slog.String("error", err.Error()))
-	}
+	metrics.RecordHTTPToolCall(ctx, tool.ProjectID, tool.Name, resp.StatusCode)
 
 	// Copy status code
 	w.WriteHeader(resp.StatusCode)

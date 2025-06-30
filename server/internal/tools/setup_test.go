@@ -57,6 +57,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
+	metrics := testenv.NewMetrics(t)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -70,7 +71,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, background.ForDeploymentProcessing(conn, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, metrics, background.ForDeploymentProcessing(conn, assetStorage))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -79,7 +80,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	require.NoError(t, worker.Start(), "start temporal worker")
 
 	toolsSvc := tools.NewService(logger, conn, sessionManager)
-	deploymentsSvc := deployments.NewService(logger, conn, temporal, sessionManager, assetStorage)
+	deploymentsSvc := deployments.NewService(logger, metrics, conn, temporal, sessionManager, assetStorage)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 

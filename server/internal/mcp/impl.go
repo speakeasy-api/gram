@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,15 +19,12 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
-
-	"html/template"
 
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
@@ -46,7 +44,7 @@ import (
 type Service struct {
 	tracer       trace.Tracer
 	logger       *slog.Logger
-	metrics      *o11y.MetricsHandler
+	metrics      *o11y.Metrics
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	projectsRepo *projects_repo.Queries
@@ -72,11 +70,11 @@ var jsonSnippetTmplData string
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL) *Service {
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/mcp"),
 		logger:       logger,
-		metrics:      o11y.NewMetricsHandler(),
+		metrics:      metrics,
 		db:           db,
 		repo:         repo.New(db),
 		projectsRepo: projects_repo.New(db),

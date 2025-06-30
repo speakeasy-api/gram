@@ -35,18 +35,18 @@ type ChatClient struct {
 	db         *pgxpool.Pool
 	enc        *encryption.Encryption
 	tracer     trace.Tracer
-	metrics    *o11y.MetricsHandler
+	metrics    *o11y.Metrics
 }
 
-func NewChatClient(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption) *ChatClient {
+func NewChatClient(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption) *ChatClient {
 	return &ChatClient{
 		logger:     logger,
+		metrics:    metrics,
 		openRouter: openRouter,
 		chatClient: chatClient,
 		db:         db,
 		enc:        enc,
 		tracer:     otel.Tracer("github.com/speakeasy-api/gram/internal/chat"),
-		metrics:    o11y.NewMetricsHandler(),
 	}
 }
 

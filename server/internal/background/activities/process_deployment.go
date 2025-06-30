@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,6 +18,7 @@ import (
 	assetsRepo "github.com/speakeasy-api/gram/internal/assets/repo"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
 	"github.com/speakeasy-api/gram/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
@@ -25,6 +27,7 @@ import (
 
 type ProcessDeployment struct {
 	logger       *slog.Logger
+	metrics      *o11y.Metrics
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assets       *assetsRepo.Queries
@@ -33,14 +36,15 @@ type ProcessDeployment struct {
 	projects     *projectsRepo.Queries
 }
 
-func NewProcessDeployment(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) *ProcessDeployment {
+func NewProcessDeployment(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, assetStorage assets.BlobStore) *ProcessDeployment {
 	return &ProcessDeployment{
+		logger:       logger,
+		metrics:      metrics,
 		db:           db,
 		repo:         repo.New(db),
 		assets:       assetsRepo.New(db),
 		assetStorage: assetStorage,
 		tools:        toolsRepo.New(db),
-		logger:       logger,
 		projects:     projectsRepo.New(db),
 	}
 }
@@ -92,7 +96,9 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		}
 
 		workers.Go(func() error {
-			processor := openapi.NewToolExtractor(p.logger, p.db, p.assetStorage)
+			start := time.Now()
+
+			processor := openapi.NewToolExtractor(p.logger, p.metrics, p.db, p.assetStorage)
 
 			processErr := processor.Do(ctx, openapi.ToolExtractorTask{
 				ProjectID:    projectID,
@@ -114,6 +120,8 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 					perm.Store(true)
 				}
 			}
+
+			p.metrics.RecordOpenAPIProcessed(ctx, o11y.OutcomeFromError(processErr), time.Since(start))
 
 			return processErr
 		})

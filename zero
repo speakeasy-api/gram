@@ -53,15 +53,15 @@ fi
 
 # endregion: Onboarding checks
 
-echo -e "\n⏳ Setting up API keys"
-mise run zero:openai
-mise run zero:github
-
 echo -e "\n⏳ Installing tools"
 mise install
 
 echo -e "\n⏳ Installing dependencies"
 mise run install
+
+echo -e "\n⏳ Setting up API keys"
+mise run zero:openai
+mise run zero:github
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk

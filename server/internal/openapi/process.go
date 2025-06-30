@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
@@ -54,15 +55,21 @@ type ToolExtractorTask struct {
 	OrgSlug      string
 }
 
+type ToolExtractorResult struct {
+	DocumentUpgraded bool
+}
+
 type ToolExtractor struct {
 	logger       *slog.Logger
+	metrics      *o11y.Metrics
 	db           *pgxpool.Pool
 	assetStorage assets.BlobStore
 }
 
-func NewToolExtractor(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) *ToolExtractor {
+func NewToolExtractor(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, assetStorage assets.BlobStore) *ToolExtractor {
 	return &ToolExtractor{
 		logger:       logger,
+		metrics:      metrics,
 		db:           db,
 		assetStorage: assetStorage,
 	}
@@ -164,12 +171,19 @@ func (p *ToolExtractor) Do(
 		).Log(ctx, logger, slog.String("event", "openapi:error"))
 	}
 
+	upgradeStart := time.Now()
 	upgradeResult, err := UpgradeOpenAPI30To31(document, v3Model)
+	upgradeDuration := time.Since(upgradeStart)
 	if err != nil {
+		p.metrics.RecordOpenAPIUpgrade(ctx, o11y.OutcomeFailure, upgradeDuration)
 		logger.ErrorContext(ctx, "Unable to upgrade OpenAPI v3.0 document to v3.1. Proceeding with v3.0 document.", slog.String("event", "openapi-upgrade:error"))
 		logger.ErrorContext(ctx, err.Error(), slog.String("event", "openapi-upgrade:error"))
 	} else {
 		v3Model = upgradeResult.Model
+
+		if upgradeResult.Upgraded {
+			p.metrics.RecordOpenAPIUpgrade(ctx, o11y.OutcomeSuccess, upgradeDuration)
+		}
 
 		if len(upgradeResult.Issues) > 0 {
 			msg := fmt.Sprintf("Found %d issues upgrading OpenAPI v3.0 document to v3.1", len(upgradeResult.Issues))

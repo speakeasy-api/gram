@@ -19,6 +19,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
@@ -276,6 +277,11 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			metrics, err := o11y.NewMetrics(otel.GetMeterProvider())
+			if err != nil {
+				return fmt.Errorf("failed to create metrics: %w", err)
+			}
+
 			db, err := newDBClient(ctx, logger, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -391,7 +397,7 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, db, openRouter, baseChatClient, encryptionClient)
+			chatClient := chat.NewChatClient(logger, metrics, db, openRouter, baseChatClient, encryptionClient)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
@@ -410,13 +416,13 @@ func newStartCommand() *cli.Command {
 			integrations.Attach(mux, integrations.NewService(logger.With(slog.String("component", "integrations")), db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger.With(slog.String("component", "templates")), db, sessionManager))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), db, temporalClient, sessionManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), metrics, db, temporalClient, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
 			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
-			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), db, sessionManager, encryptionClient, baseChatClient))
-			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), db, sessionManager, encryptionClient, baseChatClient, posthogClient, serverURL))
+			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), metrics, db, sessionManager, encryptionClient, baseChatClient))
+			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), metrics, db, sessionManager, encryptionClient, baseChatClient, posthogClient, serverURL))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
@@ -450,7 +456,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := background.NewTemporalWorker(temporalClient, logger, &background.WorkerOptions{
+					temporalWorker := background.NewTemporalWorker(temporalClient, logger, metrics, &background.WorkerOptions{
 						DB:                  db,
 						AssetStorage:        assetStorage,
 						SlackClient:         slackClient,

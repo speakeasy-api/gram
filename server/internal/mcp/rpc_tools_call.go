@@ -36,7 +36,7 @@ type toolsCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.MetricsHandler, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest, chatClient *openrouter.ChatClient) (json.RawMessage, error) {
+func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest, chatClient *openrouter.ChatClient) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, logger)

@@ -13,6 +13,7 @@ import (
 )
 
 type UpgradeOpenAPI30To31Result struct {
+	Upgraded bool
 	Document libopenapi.Document
 	Model    *libopenapi.DocumentModel[v3.Document]
 	Issues   []error
@@ -24,6 +25,7 @@ type UpgradeOpenAPI30To31Result struct {
 func UpgradeOpenAPI30To31(doc libopenapi.Document, docModel *libopenapi.DocumentModel[v3.Document]) (*UpgradeOpenAPI30To31Result, error) {
 	if !strings.HasPrefix(docModel.Model.Version, "3.0") {
 		return &UpgradeOpenAPI30To31Result{
+			Upgraded: false,
 			Document: doc,
 			Model:    docModel,
 			Issues:   []error{},
@@ -74,6 +76,7 @@ func UpgradeOpenAPI30To31(doc libopenapi.Document, docModel *libopenapi.Document
 	}
 
 	return &UpgradeOpenAPI30To31Result{
+		Upgraded: true,
 		Document: upgradedDoc,
 		Model:    upgradedModel,
 		Issues:   issues,
