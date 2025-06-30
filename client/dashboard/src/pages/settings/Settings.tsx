@@ -39,9 +39,11 @@ export default function Settings() {
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
-  const SUBDOMAIN = "sub.yourdomain.com";
-  const TXT_NAME = `_gram.${SUBDOMAIN}`;
-  const TXT_VALUE = `gram-domain-verify=${SUBDOMAIN},${organization.id}`;
+  
+  // Dynamic values based on domain input
+  const subdomain = domainInput.trim() || "sub.yourdomain.com";
+  const txtName = `_gram.${subdomain}`;
+  const txtValue = `gram-domain-verify=${subdomain},${organization.id}`;
 
   const { data: keysData } = useListAPIKeysSuspense();
   const domain = useGetDomain(undefined, undefined, {
@@ -75,7 +77,7 @@ export default function Settings() {
     setTimeout(() => setIsCnameCopied(false), 2000);
   };
   const handleCopyTxt = async () => {
-    await navigator.clipboard.writeText(TXT_VALUE);
+    await navigator.clipboard.writeText(txtValue);
     setIsTxtCopied(true);
     setTimeout(() => setIsTxtCopied(false), 2000);
   };
@@ -433,7 +435,7 @@ export default function Settings() {
                 </Type>
                 <Type variant="body" className="text-muted-foreground mb-2">
                   Create a CNAME record for{" "}
-                  <span className="font-mono">{SUBDOMAIN}</span> pointing to the
+                  <span className="font-mono">{subdomain}</span> pointing to the
                   following:
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
@@ -461,11 +463,11 @@ export default function Settings() {
                 </Type>
                 <Type variant="body" className="text-muted-foreground mb-2">
                   Create a TXT record at{" "}
-                  <span className="font-mono">{TXT_NAME}</span> with the
+                  <span className="font-mono">{txtName}</span> with the
                   following value:
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
-                  <code className="flex-1 break-all">{TXT_VALUE}</code>
+                  <code className="flex-1 break-all">{txtValue}</code>
                   <Button
                     variant="ghost"
                     size="icon"
