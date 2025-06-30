@@ -100,7 +100,23 @@
             </div>
             <div class="code-container">
                 <button class="copy-button" onclick="copyToClipboard('json-blob', this)">Copy</button>
-                <pre id="json-blob">{{ .JSONBlob }}</pre>
+                <pre id="json-blob">
+{
+  "mcpServers": {
+    "{{ .MCPName }}": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "{{ .MCPURL }}",
+    {{- range .Headers }}
+        "--header",
+        "{{ . }}:${VALUE}"
+    {{- end }}
+        ]
+    }
+  }
+}
+        </pre>
             </div>
         </div>
     </main>

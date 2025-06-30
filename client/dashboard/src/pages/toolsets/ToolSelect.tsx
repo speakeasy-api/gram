@@ -364,7 +364,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       ) : (
         <SkeletonTable />
       )}
-      {customTools && (
+      {customTools && customTools.length > 0 && (
         <>
           <Heading variant="h3">Custom Tools</Heading>
           <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={4}>
@@ -499,7 +499,7 @@ function CustomToolCard({
   );
 
   return (
-    <Card className="h-52">
+    <Card className="min-h-52">
       <Card.Header>
         <Stack
           direction="horizontal"

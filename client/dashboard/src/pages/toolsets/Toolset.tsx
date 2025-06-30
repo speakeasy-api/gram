@@ -114,11 +114,13 @@ export function ToolsetView({
   className,
   environmentSlug,
   addToolsStyle = "link",
+  showEnvironmentBadge,
 }: {
   toolsetSlug: string;
   className?: string;
   environmentSlug?: string;
   addToolsStyle?: "link" | "modal";
+  showEnvironmentBadge?: boolean;
 }) {
   const queryClient = useQueryClient();
   const routes = useRoutes();
@@ -246,7 +248,11 @@ export function ToolsetView({
   return (
     <Page.Body className={className}>
       <div className="max-w-2xl">
-        <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
+        <ToolsetHeader
+          toolsetSlug={toolsetSlug}
+          actions={actions}
+          showEnvironmentBadge={showEnvironmentBadge}
+        />
         {groupFilterItems.length > 1 && filterButton}
       </div>
       <Tabs

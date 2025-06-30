@@ -245,6 +245,7 @@ export function ToolsetPanel({
       className="p-8 2xl:p-12"
       environmentSlug={selectedEnvironment ?? undefined}
       addToolsStyle={"modal"}
+      showEnvironmentBadge
     />
   );
 

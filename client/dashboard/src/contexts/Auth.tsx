@@ -109,6 +109,13 @@ export const ProjectProvider = ({
     email: user.email,
   });
 
+  // Store the last project the user visited so we can redirect to it
+  useEffect(() => {
+    if (currentProject) {
+      localStorage.setItem(PREFERRED_PROJECT_KEY, currentProject.slug);
+    }
+  }, [currentProject]);
+
   // Not logged in
   if (!currentProject) {
     return (
@@ -123,7 +130,6 @@ export const ProjectProvider = ({
   }
 
   const switchProject = async (slug: string) => {
-    localStorage.setItem(PREFERRED_PROJECT_KEY, slug);
     navigate(`/${organization.slug}/${slug}`);
   };
 

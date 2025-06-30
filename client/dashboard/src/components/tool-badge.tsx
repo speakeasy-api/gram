@@ -21,14 +21,18 @@ export function ToolBadge({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge variant={variant} size="sm">{tool.name}</Badge>
+          <Badge variant={variant} size="sm">
+            {tool.name}
+          </Badge>
         </TooltipTrigger>
         <TooltipContent inverted>
-          <Stack className="max-w-md">
+          <Stack className="max-w-md pt-1" gap={1}>
             {tool.type === "http" && (
               <HttpRoute method={tool.httpMethod} path={tool.path} />
             )}
-            <Type>{tool.description}</Type>
+            <Type small className="line-clamp-3">
+              {tool.description}
+            </Type>
           </Stack>
         </TooltipContent>
       </Tooltip>

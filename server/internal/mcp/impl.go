@@ -25,6 +25,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
@@ -64,8 +66,8 @@ type mcpInputs struct {
 	authenticated   bool
 }
 
-//go:embed json_snippet.json.tmpl
-var jsonSnippetTmplData string
+//go:embed config_snippet.json.tmpl
+var configSnippetTmplData string
 
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
@@ -110,10 +112,8 @@ type jsonSnippetData struct {
 }
 
 type hostedPageData struct {
-	MCPName     string
-	JSONBlob    string
+	jsonSnippetData
 	JSONBlobURI string
-	MCPURL      string
 }
 
 func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
@@ -157,31 +157,29 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 	MCPURL := path.Join(baseURL, mcpSlug)
 
-	jsonSnippetData := jsonSnippetData{
-		MCPName: toolset.Name,
+	configSnippetData := jsonSnippetData{
+		MCPName: cases.Title(language.English).String(toolset.Name),
 		MCPURL:  MCPURL,
 		Headers: envHeaders,
 	}
 
-	jsonSnippetTmpl, err := template.New("json_snippet").Parse(jsonSnippetTmplData)
+	configSnippetTmpl, err := template.New("config_snippet").Parse(configSnippetTmplData)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse json snippet template", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to parse config snippet template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return oops.E(oops.CodeUnexpected, err, "failed to parse json snippet template")
+		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template")
 	}
 
-	var jsonSnippet bytes.Buffer
-	if err := jsonSnippetTmpl.Execute(&jsonSnippet, jsonSnippetData); err != nil {
-		s.logger.ErrorContext(ctx, "failed to execute json snippet template", slog.String("error", err.Error()))
+	var configSnippet bytes.Buffer
+	if err := configSnippetTmpl.Execute(&configSnippet, configSnippetData); err != nil {
+		s.logger.ErrorContext(ctx, "failed to execute config snippet template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return oops.E(oops.CodeUnexpected, err, "failed to execute json snippet template")
+		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template")
 	}
 
 	data := hostedPageData{
-		MCPName:     toolset.Name,
-		MCPURL:      MCPURL,
-		JSONBlob:    jsonSnippet.String(),
-		JSONBlobURI: base64.StdEncoding.EncodeToString(jsonSnippet.Bytes()),
+		jsonSnippetData: configSnippetData,
+		JSONBlobURI:     url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)

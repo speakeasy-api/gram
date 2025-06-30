@@ -402,8 +402,10 @@ export function MCPJson({
   );
 }
 
-export const useMcpConfigs = (toolset: Toolset) => {
-  const { url: mcpUrl } = useMcpUrl(toolset);
+export const useMcpConfigs = (toolset: Toolset | undefined) => {
+   const { url: mcpUrl } = useMcpUrl(toolset);
+
+   if (!toolset) return { public: "", internal: "" };
 
   const envHeaders =
     toolset.relevantEnvironmentVariables?.filter(
