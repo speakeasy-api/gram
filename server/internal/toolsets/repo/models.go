@@ -18,6 +18,8 @@ type HttpSecurity struct {
 	InPlacement  pgtype.Text
 	Scheme       pgtype.Text
 	BearerFormat pgtype.Text
+	OauthTypes   []string
+	OauthFlows   []byte
 	EnvVariables []string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz

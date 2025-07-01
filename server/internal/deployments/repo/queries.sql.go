@@ -212,6 +212,8 @@ INSERT INTO http_security (
   , scheme
   , bearer_format
   , env_variables
+  , oauth_types
+  , oauth_flows
 ) VALUES (
     $1
   , $2
@@ -221,8 +223,10 @@ INSERT INTO http_security (
   , $6
   , $7
   , $8
+  , $9
+  , $10
 )
-RETURNING id, key, deployment_id, type, name, in_placement, scheme, bearer_format, env_variables, created_at, updated_at, deleted_at, deleted
+RETURNING id, key, deployment_id, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateHTTPSecurityParams struct {
@@ -234,6 +238,8 @@ type CreateHTTPSecurityParams struct {
 	Scheme       pgtype.Text
 	BearerFormat pgtype.Text
 	EnvVariables []string
+	OauthTypes   []string
+	OauthFlows   []byte
 }
 
 func (q *Queries) CreateHTTPSecurity(ctx context.Context, arg CreateHTTPSecurityParams) (HttpSecurity, error) {
@@ -246,6 +252,8 @@ func (q *Queries) CreateHTTPSecurity(ctx context.Context, arg CreateHTTPSecurity
 		arg.Scheme,
 		arg.BearerFormat,
 		arg.EnvVariables,
+		arg.OauthTypes,
+		arg.OauthFlows,
 	)
 	var i HttpSecurity
 	err := row.Scan(
@@ -257,6 +265,8 @@ func (q *Queries) CreateHTTPSecurity(ctx context.Context, arg CreateHTTPSecurity
 		&i.InPlacement,
 		&i.Scheme,
 		&i.BearerFormat,
+		&i.OauthTypes,
+		&i.OauthFlows,
 		&i.EnvVariables,
 		&i.CreatedAt,
 		&i.UpdatedAt,

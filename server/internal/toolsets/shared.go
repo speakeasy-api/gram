@@ -29,11 +29,12 @@ func NewToolsets(tx repo.DBTX) *Toolsets {
 }
 
 type HTTPToolExecutionInfo struct {
-	Tool        toolsRepo.HttpToolDefinition
-	Security    []repo.HttpSecurity
-	ProjectSlug string
-	AccountType string
-	OrgSlug     string
+	Tool           toolsRepo.HttpToolDefinition
+	Security       []repo.HttpSecurity
+	SecurityScopes map[string][]string
+	ProjectSlug    string
+	AccountType    string
+	OrgSlug        string
 }
 
 func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
@@ -46,7 +47,7 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 	}
 
 	relevantSecurityKeysMap := make(map[string]bool)
-	securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.Security)
+	securityKeys, securityScopes, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 	if err != nil {
 		return nil, fmt.Errorf("parse http tool security keys: %w", err)
 	}
@@ -68,10 +69,11 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 	}
 
 	return &HTTPToolExecutionInfo{
-		Tool:        tool,
-		Security:    securityEntries,
-		ProjectSlug: orgData.ProjectSlug,
-		OrgSlug:     orgData.Slug,
-		AccountType: orgData.GramAccountType,
+		Tool:           tool,
+		Security:       securityEntries,
+		SecurityScopes: securityScopes,
+		ProjectSlug:    orgData.ProjectSlug,
+		OrgSlug:        orgData.Slug,
+		AccountType:    orgData.GramAccountType,
 	}, nil
 }

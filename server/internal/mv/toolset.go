@@ -251,7 +251,7 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindT
 	relevantSecurityKeysMap := make(map[string]bool)
 	serverEnvVarsMap := make(map[string]bool)
 	for _, tool := range tools {
-		securityKeys, err := security.ParseHTTPToolSecurityKeys(tool.HttpToolDefinition.Security)
+		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.HttpToolDefinition.Security)
 		if err != nil {
 			return nil, fmt.Errorf("http tool security keys: %w", err)
 		}

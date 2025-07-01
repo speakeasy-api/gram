@@ -403,6 +403,8 @@ CREATE TABLE IF NOT EXISTS http_security (
   in_placement TEXT CHECK (in_placement <> '' AND CHAR_LENGTH(in_placement) <= 10), -- header, query, path
   scheme TEXT CHECK (scheme <> '' AND CHAR_LENGTH(scheme) <= 20),
   bearer_format TEXT CHECK (bearer_format <> '' AND CHAR_LENGTH(bearer_format) <= 20),
+  oauth_types TEXT[],
+  oauth_flows JSONB,
 
   env_variables TEXT[] DEFAULT ARRAY[]::TEXT[],
   

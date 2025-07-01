@@ -769,6 +769,7 @@ func serializeSecurity(security []*base.SecurityRequirement) ([]byte, error) {
 
 func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string]*repo.CreateHTTPSecurityParams, []error) {
 	slug := string(task.DocInfo.Slug)
+
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil || doc.Components.SecuritySchemes.Len() == 0 {
 		return nil, nil
 	}
@@ -780,6 +781,8 @@ func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string
 		low := sec.GoLow()
 		line, col := low.KeyNode.Line, low.KeyNode.Column
 		var envvars []string
+		var oauthTypes []string
+		var oauthFlows []byte
 
 		switch sec.Type {
 		case "apiKey":
@@ -793,6 +796,29 @@ func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string
 				envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_PASSWORD"))
 			default:
 				errs = append(errs, fmt.Errorf("%s (%d:%d) unsupported http security scheme: %s", key, line, col, sec.Scheme))
+				continue
+			}
+		case "oauth2":
+			if sec.Flows != nil {
+				if sec.Flows.ClientCredentials != nil {
+					oauthTypes = append(oauthTypes, "client_credentials")
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_SECRET"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_ID"))
+				}
+
+				if sec.Flows.AuthorizationCode != nil {
+					oauthTypes = append(oauthTypes, "authorization_code")
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+				}
+				if flow, err := json.Marshal(sec.Flows); err != nil {
+					errs = append(errs, fmt.Errorf("%s (%d:%d) error serializing oauth2 flows: %w", key, line, col, err))
+					continue
+				} else {
+					oauthFlows = flow
+				}
+			}
+			if len(oauthTypes) == 0 {
+				errs = append(errs, fmt.Errorf("%s (%d:%d) unsupported oauth2 security scheme: no supported flows found", key, line, col))
 				continue
 			}
 		default:
@@ -809,6 +835,8 @@ func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string
 			Scheme:       conv.ToPGTextEmpty(sec.Scheme),
 			BearerFormat: conv.ToPGTextEmpty(sec.BearerFormat),
 			EnvVariables: envvars,
+			OauthTypes:   oauthTypes,
+			OauthFlows:   oauthFlows,
 		}
 	}
 

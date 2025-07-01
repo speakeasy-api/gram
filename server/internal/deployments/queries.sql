@@ -349,6 +349,8 @@ INSERT INTO http_security (
   , scheme
   , bearer_format
   , env_variables
+  , oauth_types
+  , oauth_flows
 ) VALUES (
     @key
   , @deployment_id
@@ -358,6 +360,8 @@ INSERT INTO http_security (
   , @scheme
   , @bearer_format
   , @env_variables
+  , @oauth_types
+  , @oauth_flows
 )
 RETURNING *;
 

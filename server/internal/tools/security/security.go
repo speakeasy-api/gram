@@ -7,22 +7,24 @@ import (
 
 type SecurityData []map[string][]string
 
-func ParseHTTPToolSecurityKeys(securityPayload []byte) ([]string, error) {
+func ParseHTTPToolSecurityKeys(securityPayload []byte) ([]string, map[string][]string, error) {
+	securityScopes := make(map[string][]string)
 	if len(securityPayload) == 0 {
-		return []string{}, nil
+		return []string{}, securityScopes, nil
 	}
 
 	var securityData SecurityData
 	if err := json.Unmarshal(securityPayload, &securityData); err != nil {
-		return nil, fmt.Errorf("parse security data: %w", err)
+		return nil, nil, fmt.Errorf("parse security data: %w", err)
 	}
 
 	keys := make([]string, 0)
 	for _, securityMap := range securityData {
 		for key := range securityMap {
 			keys = append(keys, key)
+			securityScopes[key] = securityMap[key]
 		}
 	}
 
-	return keys, nil
+	return keys, securityScopes, nil
 }

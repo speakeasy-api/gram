@@ -136,7 +136,7 @@ func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) er
 }
 
 const getHTTPSecurityDefinitions = `-- name: GetHTTPSecurityDefinitions :many
-SELECT id, key, deployment_id, type, name, in_placement, scheme, bearer_format, env_variables, created_at, updated_at, deleted_at, deleted
+SELECT id, key, deployment_id, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
 FROM http_security
 WHERE key = ANY($1::TEXT[]) AND deployment_id = ANY($2::UUID[])
 `
@@ -164,6 +164,8 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 			&i.InPlacement,
 			&i.Scheme,
 			&i.BearerFormat,
+			&i.OauthTypes,
+			&i.OauthFlows,
 			&i.EnvVariables,
 			&i.CreatedAt,
 			&i.UpdatedAt,
