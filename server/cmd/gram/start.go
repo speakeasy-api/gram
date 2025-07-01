@@ -277,11 +277,6 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			metrics, err := o11y.NewMetrics(otel.GetMeterProvider())
-			if err != nil {
-				return fmt.Errorf("failed to create metrics: %w", err)
-			}
-
 			db, err := newDBClient(ctx, logger, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -294,6 +289,16 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
+
+			metrics, err := o11y.NewMetrics(otel.GetMeterProvider())
+			if err != nil {
+				return fmt.Errorf("failed to create metrics: %w", err)
+			}
+
+			err = o11y.StartObservers(otel.GetMeterProvider(), db)
+			if err != nil {
+				return fmt.Errorf("failed to create observers: %w", err)
+			}
 
 			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
 				assetsBackend: c.String("assets-backend"),
@@ -484,9 +489,8 @@ func newStartCommand() *cli.Command {
 				}
 			})
 
-			logger.InfoContext(ctx, "server started", slog.String("address", c.String("address")))
-
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
+			logger.InfoContext(ctx, "server started", slog.String("address", c.String("address")), slog.Bool("tls", tlsEnabled))
 			if tlsEnabled {
 				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))

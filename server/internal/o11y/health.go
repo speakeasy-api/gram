@@ -64,7 +64,11 @@ func NewHealthCheckHandler(
 		n := fmt.Sprintf("temporal:%s", tc.Name)
 		pingers = append(pingers, ping{name: n, timeout: 10 * time.Second, checkFunc: func(ctx context.Context) error {
 			_, err := tc.Resource.CheckHealth(ctx, &client.CheckHealthRequest{})
-			return fmt.Errorf("temporal health check failed: %w", err)
+			if err != nil {
+				return fmt.Errorf("temporal health check failed: %w", err)
+			}
+
+			return nil
 		}})
 	}
 

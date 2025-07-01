@@ -209,3 +209,15 @@ sql:
         out: "../internal/templates/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/o11y/queries.sql
+    engine: postgresql
+    database:
+      managed: true
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/o11y/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
