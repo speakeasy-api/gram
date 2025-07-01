@@ -415,6 +415,12 @@ CREATE TABLE IF NOT EXISTS http_security (
   CONSTRAINT http_security_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS http_security_deleted_idx 
+ON http_security (deleted);
+
+CREATE INDEX IF NOT EXISTS http_security_type_scheme_idx 
+ON http_security (type, scheme);
+
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   organization_id TEXT NOT NULL,
   
