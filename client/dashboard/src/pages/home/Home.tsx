@@ -18,6 +18,7 @@ import { Heading } from "@/components/ui/heading";
 import { Link } from "@/components/ui/link";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useGroupedToolDefinitions } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ import { ToolDefinition } from "../toolsets/types";
 
 export default function Home() {
   const routes = useRoutes();
+  const telemetry = useTelemetry();
   const { data: toolsets } = useListToolsets();
   const [selectedToolset, setSelectedToolset] = useState<Toolset | null>(null);
 
@@ -119,7 +121,15 @@ export default function Home() {
                       size="large"
                       className="text-muted-foreground"
                     />
-                    <Link to={card.link}>
+                    <Link
+                      to={card.link}
+                      onClick={() =>
+                        telemetry.capture("home_action", {
+                          action: "card_clicked",
+                          card: card.title,
+                        })
+                      }
+                    >
                       <Stack
                         direction="horizontal"
                         gap={1}
@@ -154,7 +164,6 @@ function HeroCard({
   className?: string;
 }) {
   const routes = useRoutes();
-
   const { url: mcpUrl, pageUrl } = useMcpUrl(toolset);
 
   const hero = (
@@ -200,7 +209,7 @@ function HeroCard({
                 </Stack>
               </Stack>
               <Stack>
-                <Type muted>MCP Page</Type>
+                <Type muted>Install Page</Type>
                 {toolset?.mcpIsPublic ? (
                   <Link to={pageUrl!} external>
                     <Type className="font-medium" skeleton="phrase">
