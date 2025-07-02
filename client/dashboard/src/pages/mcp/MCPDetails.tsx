@@ -64,7 +64,7 @@ export function useMcpUrl(toolset: Toolset | undefined) {
   });
   const project = useProject();
 
-  if (!toolset) return { url: "", customServerURL: "" };
+  if (!toolset) return { url: undefined, customServerURL: undefined };
 
   // Determine which server URL to use
   let customServerURL: string | undefined;
@@ -241,7 +241,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         description="The URL you or your users will use to access this MCP server."
         className="max-w-2xl mb-2"
       >
-        <CodeBlock className="mb-2">{mcpUrl}</CodeBlock>
+        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
         <Block label="Custom Slug" className="max-w-2xl" error={mcpSlugError}>
           <BlockInner>
             <Stack direction="horizontal" align="center">

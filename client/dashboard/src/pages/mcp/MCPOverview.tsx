@@ -160,7 +160,7 @@ export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
               </Button>
             </routes.mcp.details.Link>
             <CopyButton
-              text={mcpUrl}
+              text={mcpUrl ?? ""}
               size="icon-sm"
               className="group-hover:opacity-100 opacity-0 transition-opacity"
             />

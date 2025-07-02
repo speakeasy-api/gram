@@ -69,11 +69,7 @@ export default function Home() {
   ];
 
   const heroSection = useMemo(() => {
-    if (!toolsets || toolsets.toolsets.length === 0) {
-      return null;
-    }
-
-    return toolsets.toolsets.length > 1 ? (
+    return toolsets?.toolsets && toolsets.toolsets.length > 1 ? (
       <Carousel
         className="w-[calc(100%-60px)] self-center"
         onItemChange={(index) => {
@@ -92,7 +88,7 @@ export default function Home() {
         <CarouselDots />
       </Carousel>
     ) : (
-      <HeroCard toolset={toolsets.toolsets[0]!} />
+      <HeroCard toolset={toolsets?.toolsets[0]} />
     );
   }, [toolsets]);
 
@@ -154,7 +150,7 @@ function HeroCard({
   toolset,
   className,
 }: {
-  toolset: Toolset;
+  toolset: Toolset | undefined;
   className?: string;
 }) {
   const routes = useRoutes();
@@ -193,9 +189,11 @@ function HeroCard({
               <Stack>
                 <Type muted>MCP URL</Type>
                 <Stack direction="horizontal" align="center">
-                  <Type className="font-medium">{mcpUrl}</Type>
+                  <Type className="font-medium" skeleton="phrase">
+                    {mcpUrl}
+                  </Type>
                   <CopyButton
-                    text={mcpUrl}
+                    text={mcpUrl ?? ""}
                     size="inline"
                     className="text-muted-foreground hover:text-foreground"
                   />
@@ -205,11 +203,13 @@ function HeroCard({
                 <Type muted>MCP Page</Type>
                 {toolset?.mcpIsPublic ? (
                   <Link to={pageUrl!} external>
-                    <Type className="font-medium">{pageUrl}</Type>
+                    <Type className="font-medium" skeleton="phrase">
+                      {pageUrl}
+                    </Type>
                   </Link>
                 ) : (
                   <SimpleTooltip tooltip="Make this MCP public in order to access the shareable page.">
-                    <Type className="font-medium" muted>
+                    <Type className="font-medium" skeleton="phrase">
                       {pageUrl}
                     </Type>
                   </SimpleTooltip>
@@ -258,7 +258,7 @@ function HeroCard({
   );
 }
 
-function HeroGraphic({ toolset }: { toolset: Toolset }) {
+function HeroGraphic({ toolset }: { toolset: Toolset | undefined }) {
   const groupedTools = useGroupedToolDefinitions(toolset);
 
   const groupedToolDefinitions =
