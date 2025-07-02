@@ -87,23 +87,29 @@ type toolcallErrorSchema struct {
 	Error string `json:"error"`
 }
 
+type InstanceToolProxyConfig struct {
+	Source  ToolCallSource
+	Logger  *slog.Logger
+	Metrics *o11y.Metrics
+	Tracer  trace.Tracer
+	// The auto-summarization feature uses a chat client as a dependency, that is the only current reason for this
+	// For now this is nullable, but we should consider refactoring into a non openrouter specific chat client eventually
+	ChatClient *openrouter.ChatClient
+}
+
 func InstanceToolProxy(
 	ctx context.Context,
-	tracer trace.Tracer,
-	logger *slog.Logger,
-	metrics *o11y.Metrics,
 	w http.ResponseWriter,
 	requestBody io.Reader,
 	envVars map[string]string,
 	toolExecutionInfo *toolsets.HTTPToolExecutionInfo,
-	toolCallSource ToolCallSource,
-	chatClient *openrouter.ChatClient,
+	config InstanceToolProxyConfig,
 ) error {
-	logger = logger.With(
+	logger := config.Logger.With(
 		slog.String("project_id", toolExecutionInfo.Tool.ProjectID.String()),
 		slog.String("tool", toolExecutionInfo.Tool.Name),
 		slog.String("path", toolExecutionInfo.Tool.Path),
-		slog.String("source", string(toolCallSource)),
+		slog.String("source", string(config.Source)),
 		slog.String("account_type", toolExecutionInfo.AccountType),
 		slog.String("org_slug", toolExecutionInfo.OrgSlug),
 		slog.String("project_slug", toolExecutionInfo.ProjectSlug),
@@ -288,10 +294,10 @@ func InstanceToolProxy(
 	if isAuthenticated && authCtx != nil && authCtx.ActiveOrganizationID != "" {
 		authenticatedOrg = &authCtx.ActiveOrganizationID
 	}
-	return reverseProxyRequest(ctx, tracer, logger, metrics, toolExecutionInfo.Tool, w, req, toolCallSource, autoSummarizeConfig{
+	return reverseProxyRequest(ctx, config.Tracer, logger, config.Metrics, toolExecutionInfo.Tool, w, req, config.Source, autoSummarizeConfig{
 		authenticatedOrg:     authenticatedOrg,
 		autoSummarizeMessage: toolCallBody.GramRequestSummary,
-		chatClient:           chatClient,
+		chatClient:           config.ChatClient,
 	})
 }
 
@@ -506,7 +512,8 @@ func reverseProxyRequest(ctx context.Context,
 			}
 
 			responseBody := string(bodyBytes)
-			shouldSummarize := responseBody != "" && len(responseBody) > SUMMARIZE_LIMIT_BYTES
+			// We cannot perform auto-summarization with no chat client
+			shouldSummarize := responseBody != "" && len(responseBody) > SUMMARIZE_LIMIT_BYTES && autoSummarizeConfig.chatClient != nil
 			if shouldSummarize {
 				summarizedResponse, err := summarizeResponse(ctx, logger, *autoSummarizeConfig.authenticatedOrg, autoSummarizeConfig.autoSummarizeMessage, responseBody, autoSummarizeConfig.chatClient)
 				if err != nil {

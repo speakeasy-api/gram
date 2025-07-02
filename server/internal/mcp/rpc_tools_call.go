@@ -134,7 +134,13 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		statusCode: http.StatusOK,
 	}
 
-	err = instances.InstanceToolProxy(ctx, tracer, logger, metrics, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan, instances.ToolCallSourceMCP, chatClient)
+	err = instances.InstanceToolProxy(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan, instances.InstanceToolProxyConfig{
+		Source:     instances.ToolCallSourceMCP,
+		Logger:     logger,
+		Metrics:    metrics,
+		Tracer:     tracer,
+		ChatClient: chatClient,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

@@ -249,7 +249,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// in the event summarization is needed
 	interceptor := newResponseInterceptor(w)
 
-	err = InstanceToolProxy(ctx, s.tracer, s.logger, s.metrics, interceptor, requestBody, envVars, executionInfo, ToolCallSourceDirect, s.chatClient)
+	err = InstanceToolProxy(ctx, interceptor, requestBody, envVars, executionInfo, InstanceToolProxyConfig{
+		Source:     ToolCallSourceDirect,
+		Logger:     s.logger,
+		Metrics:    s.metrics,
+		Tracer:     s.tracer,
+		ChatClient: s.chatClient,
+	})
 	if err != nil {
 		return err
 	}
