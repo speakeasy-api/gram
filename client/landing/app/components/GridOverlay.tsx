@@ -11,7 +11,6 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           style={{
             background:
               "linear-gradient(to right, var(--color-neutral-300) 0%, transparent 100%)",
-            opacity: 0.5,
           }}
         />
       </div>
@@ -24,7 +23,6 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           style={{
             background:
               "linear-gradient(to left, var(--color-neutral-300) 0%, transparent 100%)",
-            opacity: 0.5,
           }}
         />
       </div>
@@ -39,7 +37,6 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           style={{
             background:
               "linear-gradient(to bottom, var(--color-neutral-300) 0%, transparent 100%)",
-            opacity: 0.5,
           }}
         />
       </div>
@@ -52,7 +49,6 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           style={{
             background:
               "linear-gradient(to top, var(--color-neutral-300) 0%, transparent 100%)",
-            opacity: 0.5,
           }}
         />
       </div>
@@ -66,7 +62,7 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           left: inset,
           top: inset,
           background: "var(--color-background)",
-          border: "2px solid var(--color-neutral-200)",
+          border: "2px solid var(--color-neutral-300)",
           borderRadius: 2,
           transform: "translate(-50%, -50%)",
         }}
@@ -79,7 +75,7 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           right: inset,
           top: inset,
           background: "var(--color-background)",
-          border: "2px solid var(--color-neutral-200)",
+          border: "2px solid var(--color-neutral-300)",
           borderRadius: 2,
           transform: "translate(50%, -50%)",
         }}
@@ -92,7 +88,7 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           left: inset,
           bottom: inset,
           background: "var(--color-background)",
-          border: "2px solid var(--color-neutral-200)",
+          border: "2px solid var(--color-neutral-300)",
           borderRadius: 2,
           transform: "translate(-50%, 50%)",
         }}
@@ -105,7 +101,7 @@ export function GridOverlay({ inset = "2rem" }: { inset?: string }) {
           right: inset,
           bottom: inset,
           background: "var(--color-background)",
-          border: "2px solid var(--color-neutral-200)",
+          border: "2px solid var(--color-neutral-300)",
           borderRadius: 2,
           transform: "translate(50%, 50%)",
         }}
