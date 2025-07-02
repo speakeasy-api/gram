@@ -52,7 +52,6 @@ export default function App() {
       applyTheme(e.matches ? "dark" : "light");
     };
 
-
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);

@@ -1,4 +1,5 @@
 import { GramLogo } from "@/components/gram-logo";
+import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ToolBadge } from "@/components/tool-badge";
 import {
@@ -9,8 +10,10 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { ThemeContext } from "@/components/ui/theme-toggle";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
 import { useOrganization } from "@/contexts/Auth";
@@ -33,23 +36,27 @@ import {
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { useParams } from "react-router";
 import { toast } from "sonner";
-import { randSlug, useMcpSlugValidation } from "../mcp/MCPDetails";
+import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { useOnboardingSteps } from "./Onboarding";
 
 export function OnboardingWizard() {
+  const { orgSlug } = useParams();
+  const theme = useContext(ThemeContext);
+  theme.setTheme("light"); // Wizard only supports light theme right now
+
   const [currentStep, setCurrentStep] = useState<"upload" | "toolset" | "mcp">(
     "upload"
   );
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
-  const organization = useOrganization();
 
   // Initialize mcpSlug when toolsetName changes
   useEffect(() => {
     if (toolsetName && !mcpSlug) {
-      setMcpSlug(`${organization.slug}-${toolsetName}-${randSlug()}`);
+      setMcpSlug(`${orgSlug}-${toolsetName}`);
     }
   }, [toolsetName, mcpSlug]);
 
@@ -237,7 +244,7 @@ const UploadStep = ({
             OpenAPI Document
           </Type>
         </Stack>
-        <Accordion type="single" collapsible className="max-w-2xl">
+        <Accordion type="single" collapsible>
           <AccordionItem value="logs">
             <AccordionTrigger className="text-base border-1 px-4 py-2 bg-stone-50 w-full [&[data-state=open]]:rounded-b-none ">
               <Stack direction={"horizontal"} gap={2} align={"center"}>
@@ -259,17 +266,21 @@ const UploadStep = ({
           </AccordionItem>
         </Accordion>
       </Stack>
-      <InputField
-        placeholder="Petstore"
-        value={apiName}
-        onChange={(e) => setApiName(e.target.value)}
-        maxLength={30}
-        label="API Name"
-        error={apiNameError}
-        hint={"Give your API a meaningful name."}
-        required
-        autoFocus
-      />
+      {apiName ? (
+        <InputField
+          placeholder="Petstore"
+          value={apiName}
+          onChange={(e) => setApiName(e.target.value)}
+          maxLength={30}
+          label="API Name"
+          error={apiNameError}
+          hint={"Give your API a meaningful name."}
+          required
+          autoFocus
+        />
+      ) : (
+        <SkeletonParagraph lines={3} />
+      )}
     </Stack>
   ) : (
     <FileUpload
@@ -415,6 +426,7 @@ const McpStep = ({
   const queryClient = useQueryClient();
   const client = useSdkClient();
   const routes = useRoutes();
+  const org = useOrganization();
 
   const slugError = useMcpSlugValidation(mcpSlug);
 
@@ -423,10 +435,14 @@ const McpStep = ({
       throw new Error("No toolset found");
     }
 
+    if (!mcpSlug) {
+      throw new Error("No MCP slug set");
+    }
+
     await client.toolsets.updateBySlug({
       slug: createdToolset.slug,
       updateToolsetRequestBody: {
-        mcpSlug: mcpSlug || undefined,
+        mcpSlug,
       },
     });
 
@@ -445,16 +461,31 @@ const McpStep = ({
           configured later on.
         </span>
       </Stack>
-      <InputField
-        placeholder="my-mcp"
-        value={mcpSlug || createdToolset?.slug || "my-mcp"}
+      <AnyField
+        id="mcp-slug"
+        label="MCP Server Slug"
+        hint={"☑︎ This slug is available!"}
+        error={slugError}
+        render={(extraProps) => (
+          <Input
+            {...extraProps}
+            placeholder="my-mcp"
+            value={mcpSlug || createdToolset?.slug || "my-mcp"}
+            onChange={setMcpSlug}
+            maxLength={40}
+            requiredPrefix={org?.slug ? `${org.slug}-` : ""}
+          />
+        )}
+      />
+      {/* value={mcpSlug || createdToolset?.slug || "my-mcp"}
         onChange={(e) => setMcpSlug(e.target.value)}
         maxLength={40}
         label="MCP Server Slug"
         error={slugError}
         hint={"☑︎ This slug is available!"}
         required
-      />
+        requiredPrefix={org?.slug ? `${org.slug}-` : ""} */}
+      {/* /> */}
       <ContinueButton disabled={!!slugError} onClick={onContinue} />
     </>
   );
@@ -637,7 +668,7 @@ const ToolsetAnimation = ({
 const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
   const slug = mcpSlug
     ? `https://app.getgram.ai/mcp/${mcpSlug}`
-    : "https://app.getgram.ai/mcp/my-toolset";
+    : `https://app.getgram.ai/mcp/my-toolset`;
 
   return (
     <div className="flex flex-col items-center gap-4">

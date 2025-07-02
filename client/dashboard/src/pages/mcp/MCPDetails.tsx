@@ -2,8 +2,8 @@ import { CodeBlock } from "@/components/code";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
+import { Input } from "@/components/ui/input";
 import {
-  SimpleTooltip,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -14,6 +14,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
 import {
   invalidateAllToolset,
@@ -28,7 +29,6 @@ import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
-import { useRoutes } from "@/routes";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -102,17 +102,14 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     retry: false,
   });
 
-  const [mcpSlug, setMcpSlug] = useState(
-    toolset.mcpSlug || ""
-  );
+  const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
   const [mcpIsPublic, setMcpIsPublic] = useState(toolset.mcpIsPublic);
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
   const { url: mcpUrl, customServerURL } = useMcpUrl(toolset);
 
-  const handleMcpSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value;
+  const handleMcpSlugChange = (value: string) => {
     value = value.slice(0, 40);
     setMcpSlug(value);
   };
@@ -200,7 +197,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           request: {
             slug: toolset.slug,
             updateToolsetRequestBody: {
-              mcpSlug: mcpSlug || undefined,
+              mcpSlug: mcpSlug,
               mcpIsPublic,
             },
           },
@@ -209,7 +206,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
 
         telemetry.capture("mcp_event", {
           action: "mcp_settings_saved",
-          slug: mcpSlug,
+          slug: toolset.slug,
           isPublic: mcpIsPublic,
         });
       }}
@@ -250,19 +247,17 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
                   ? `${customServerURL}/mcp/`
                   : `${getServerURL()}/mcp/`}
               </Type>
-              {!toolset.customDomainId || session.gramAccountType !== "free" ? (
-                <SimpleTooltip tooltip={session.gramAccountType === "free" ? "Please upgrade your account type for access to custom domains and custom slugs" : "A custom MCP slug can be set once a custom domain is linked."}>
-                  <input
-                    className="border rounded px-2 py-1 w-full"
-                    placeholder="Enter MCP Slug"
-                    value={mcpSlug}
-                    onChange={handleMcpSlugChange}
-                    maxLength={40}
-                    disabled={!toolset.customDomainId || session.gramAccountType === "free"}
-                  />
-                </SimpleTooltip>
+              {!toolset.customDomainId ? (
+                <Input
+                  className="border rounded px-2 py-1 w-full"
+                  placeholder="Enter MCP Slug"
+                  value={mcpSlug}
+                  onChange={handleMcpSlugChange}
+                  maxLength={40}
+                  requiredPrefix={`${orgSlug}-`}
+                />
               ) : (
-                <input
+                <Input
                   className="border rounded px-2 py-1 w-full"
                   placeholder="Enter MCP Slug"
                   value={mcpSlug}
@@ -376,9 +371,9 @@ export function MCPJson({
       <Grid.Item>
         <Type className="font-medium">Public Server</Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
-    ) as // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    any);
+      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ) as any);
 
   return (
     <Grid
@@ -404,9 +399,9 @@ export function MCPJson({
 }
 
 export const useMcpConfigs = (toolset: Toolset | undefined) => {
-   const { url: mcpUrl } = useMcpUrl(toolset);
+  const { url: mcpUrl } = useMcpUrl(toolset);
 
-   if (!toolset) return { public: "", internal: "" };
+  if (!toolset) return { public: "", internal: "" };
 
   const envHeaders =
     toolset.relevantEnvironmentVariables?.filter(

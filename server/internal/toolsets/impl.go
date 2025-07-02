@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -225,16 +226,28 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		toolsetDomainID = payload.CustomDomainID
 	}
 
-	// We only allow setting a custom slug if the user has a custom domain and is not on a free account type
-	if payload.McpSlug != nil && *payload.McpSlug != "" && toolsetDomainID != nil && authCtx.AccountType != "free" {
-		mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
-			McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
-			CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
-		})
-		if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-			return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
+	if payload.McpSlug != nil && *payload.McpSlug != "" {
+		// For free accounts, enforce that the MCP slug is prefixed with the org slug
+		if toolsetDomainID == nil || authCtx.AccountType == "free" {
+			if !strings.HasPrefix(conv.ToLower(*payload.McpSlug), authCtx.OrganizationSlug+"-") {
+				return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts")
+			}
+
+			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
+			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
+				return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
+			}
+			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
+		} else {
+			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
+				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
+				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
+			})
+			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
+				return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
+			}
+			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		}
-		updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 	}
 
 	if payload.McpIsPublic != nil {

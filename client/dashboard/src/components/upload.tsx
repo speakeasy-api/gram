@@ -129,7 +129,7 @@ export default function FileUpload({
           className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${
             isInvalidFile
               ? "border-destructive bg-destructive/10"
-              : "border-muted-foreground/50 hover:bg-card"
+              : "border-muted-foreground/50 hover:bg-input/20"
           }`}
         >
           <Stack align={"center"} justify={"center"} gap={3}>

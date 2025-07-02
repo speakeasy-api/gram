@@ -2,8 +2,7 @@ import * as React from "react";
 
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Stack } from "@speakeasy-api/moonshine";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { TextArea } from "./textarea";
 
 interface InputProps
@@ -16,6 +15,7 @@ interface InputProps
   validate?: (value: string) => boolean | string;
   lines?: number;
   onChange?: (value: string) => void;
+  requiredPrefix?: string;
 }
 
 const DEFAULT_ERROR = "Invalid value";
@@ -26,6 +26,7 @@ function Input({
   onEnter,
   validate,
   lines,
+  requiredPrefix,
   ...props
 }: InputProps) {
   const v = (val: string) => {
@@ -55,13 +56,27 @@ function Input({
     props.onKeyDown?.(e);
   };
 
+  const onChange = (value: string) => {
+    const finalValue = requiredPrefix && !value.startsWith(requiredPrefix)
+      ? `${requiredPrefix}${value}`
+      : value;
+    setError(v(finalValue));
+    props.onChange?.(finalValue);
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.value);
   };
-  const onChange = (value: string) => {
-    setError(v(value));
-    props.onChange?.(value);
-  };
+
+  // --- Prefix width measurement logic ---
+  const prefixRef = useRef<HTMLSpanElement>(null);
+  const [prefixWidth, setPrefixWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    if (prefixRef.current) {
+      setPrefixWidth(prefixRef.current.offsetWidth);
+    }
+  }, [requiredPrefix]);
 
   const input =
     lines && lines > 1 ? (
@@ -89,23 +104,40 @@ function Input({
           error && "ring-destructive/50! border-destructive!",
           className
         )}
+        style={{
+          ...(requiredPrefix ? { paddingLeft: prefixWidth + 12 } : {}),
+          ...props.style,
+        }}
         onKeyDown={handleKeyDown}
         {...props}
         onChange={handleChange}
+        value={props.value?.startsWith(requiredPrefix ?? "")
+            ? props.value.replace(requiredPrefix ?? "", "")
+            : props.value
+        }
       />
     );
 
   return (
-    <Stack gap={1} className="mb-[-8px]">
+    <div className="mb-[-8px] relative">
+      {requiredPrefix && (
+        <span
+          ref={prefixRef}
+          className="absolute left-3 top-[8px] text-muted-foreground text-sm pointer-events-none select-none"
+          aria-hidden="true"
+        >
+          {requiredPrefix}
+        </span>
+      )}
       {input}
       {error && error !== DEFAULT_ERROR ? (
         <Type variant="small" className="text-destructive! h-4">
           {error}
         </Type>
       ) : (
-        <div className="h-4" />
+        <div className="h-[8px]" />
       )}
-    </Stack>
+    </div>
   );
 }
 

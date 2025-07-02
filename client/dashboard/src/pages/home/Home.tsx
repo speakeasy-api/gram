@@ -282,7 +282,7 @@ function HeroGraphic({ toolset }: { toolset: Toolset | undefined }) {
 
   // Calculate how many badges we need to fill the space
   const badgesPerRow = 4;
-  const estimatedRows = 12; // Adjust based on container height
+  const estimatedRows = 13; // Adjust based on container height
   const totalBadgesNeeded = badgesPerRow * estimatedRows;
 
   // Fill remaining slots with empty badges, distributing them at beginning and end
