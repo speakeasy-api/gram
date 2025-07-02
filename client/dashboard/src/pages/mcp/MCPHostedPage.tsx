@@ -53,6 +53,7 @@ export function MCPPagePreview({
       headers: {
         "Gram-Session": session.session,
         "Gram-Project": project.slug,
+        "Accept": "text/html,application/xhtml+xml",
       },
     })
       .then((res) => {

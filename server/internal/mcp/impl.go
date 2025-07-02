@@ -12,6 +12,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -97,6 +98,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	mux.Handle("POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
+	mux.Handle("GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+		// This is page is being laoded in the browser equest
+		for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
+			if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
+				oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
+				return
+			}
+		}
+
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	})
 	mux.Handle("GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
 	})
@@ -140,7 +152,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if !toolset.McpIsPublic {
-		return oops.E(oops.CodeForbidden, nil, "mcp server is not public")
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))

@@ -294,7 +294,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       {toolset.mcpIsPublic && (
         <PageSection
           heading="MCP Installation"
-          description="A simple hosted page for installing your MCP server"
+          description="A simple hosted page for installing your MCP server. Try it in the browser!"
         >
           <Stack direction="horizontal" align="center" gap={2}>
             <routes.mcp.details.hosted_page.Link params={[toolset.slug]}>
@@ -302,7 +302,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
                 View
               </Button>
             </routes.mcp.details.hosted_page.Link>
-            <CodeBlock className="max-w-3xl">{`${mcpUrl}/page`}</CodeBlock>
+            <CodeBlock className="max-w-3xl">{`${mcpUrl}/install`}</CodeBlock>
           </Stack>
         </PageSection>
       )}
