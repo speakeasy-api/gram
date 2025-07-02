@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/gen/types"
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
@@ -36,7 +37,7 @@ type toolsCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest, chatClient *openrouter.ChatClient) (json.RawMessage, error) {
+func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest, chatClient *openrouter.ChatClient, cache cache.Cache) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, logger)
@@ -139,6 +140,7 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		Logger:     logger,
 		Metrics:    metrics,
 		Tracer:     tracer,
+		Cache:      cache,
 		ChatClient: chatClient,
 	})
 	if err != nil {

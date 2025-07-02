@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/internal/background"
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/control"
 	"github.com/speakeasy-api/gram/internal/customdomains"
@@ -126,6 +127,16 @@ func newWorkerCommand() *cli.Command {
 				Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 				EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 			},
+			&cli.StringFlag{
+				Name:    "redis-cache-addr",
+				Usage:   "Address of the redis cache server",
+				EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
+			},
+			&cli.StringFlag{
+				Name:    "redis-cache-password",
+				Usage:   "Password for the redis cache server",
+				EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
+			},
 		},
 		Action: func(c *cli.Context) error {
 			o11y.PullAppInfo(c.Context).Command = "worker"
@@ -175,6 +186,14 @@ func newWorkerCommand() *cli.Command {
 			}
 			defer db.Close()
 
+			redisClient, err := newRedisClient(ctx, redisClientOptions{
+				redisAddr:     c.String("redis-cache-addr"),
+				redisPassword: c.String("redis-cache-password"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to connect to redis: %w", err)
+			}
+
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
 				return fmt.Errorf("failed to create encryption client: %w", err)
@@ -222,7 +241,7 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, metrics, db, openRouter, baseChatClient, encryptionClient)
+			chatClient := chat.NewChatClient(logger, metrics, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, metrics, &background.WorkerOptions{
 				DB:                  db,

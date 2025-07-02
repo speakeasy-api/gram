@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/gen/types"
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
@@ -48,11 +49,12 @@ type Service struct {
 	environmentsRepo *environments_repo.Queries
 	entries          *environments.EnvironmentEntries
 	chatClient       *openrouter.ChatClient
+	cache            cache.Cache
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient) *Service {
+func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, cacheImpl cache.Cache) *Service {
 	envRepo := environments_repo.New(db)
 	return &Service{
 		tracer:           otel.Tracer("github.com/speakeasy-api/gram/internal/instances"),
@@ -64,6 +66,7 @@ func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, se
 		environmentsRepo: envRepo,
 		entries:          environments.NewEnvironmentEntries(logger, envRepo, enc),
 		chatClient:       chatClient,
+		cache:            cacheImpl,
 	}
 }
 
@@ -254,6 +257,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		Logger:     s.logger,
 		Metrics:    s.metrics,
 		Tracer:     s.tracer,
+		Cache:      s.cache,
 		ChatClient: s.chatClient,
 	})
 	if err != nil {

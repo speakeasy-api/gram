@@ -4,12 +4,15 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/gen/auth"
+	"github.com/speakeasy-api/gram/internal/cache"
 )
 
 const (
 	sessionCacheExpiry  = 15 * 24 * time.Hour
 	userInfoCacheExpiry = 15 * time.Minute
 )
+
+var _ cache.CacheableObject[Session] = (*Session)(nil)
 
 type Session struct {
 	SessionID            string
@@ -28,6 +31,12 @@ func (s Session) CacheKey() string {
 func (s Session) AdditionalCacheKeys() []string {
 	return []string{}
 }
+
+func (s Session) TTL() time.Duration {
+	return sessionCacheExpiry
+}
+
+var _ cache.CacheableObject[CachedUserInfo] = (*CachedUserInfo)(nil)
 
 type CachedUserInfo struct {
 	UserID             string
@@ -50,4 +59,8 @@ func (c CachedUserInfo) CacheKey() string {
 
 func (c CachedUserInfo) AdditionalCacheKeys() []string {
 	return []string{}
+}
+
+func (c CachedUserInfo) TTL() time.Duration {
+	return userInfoCacheExpiry
 }

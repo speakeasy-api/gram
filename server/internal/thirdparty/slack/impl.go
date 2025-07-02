@@ -66,7 +66,7 @@ type Service struct {
 	cfg                 *Configurations
 	client              *slack_client.SlackClient
 	temporal            client.Client
-	watchedThreadsCache cache.Cache[types.AppMentionedThreads]
+	watchedThreadsCache cache.TypedCacheObject[types.AppMentionedThreads]
 }
 
 func SlackInstallURL(env string) string {
@@ -102,7 +102,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		cfg:                 &cfg,
 		client:              client,
 		temporal:            temporal,
-		watchedThreadsCache: cache.New[types.AppMentionedThreads](logger.With(slog.String("cache", "watched_threads")), redisClient, types.AppMentionedThreadCacheExpiry, cache.SuffixNone),
+		watchedThreadsCache: cache.NewTypedObjectCache[types.AppMentionedThreads](logger.With(slog.String("cache", "watched_threads")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 

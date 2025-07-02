@@ -1,6 +1,10 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	"github.com/speakeasy-api/gram/internal/cache"
+)
 
 // SlackEvent represents the top-level Slack event callback payload
 // See: https://api.slack.com/events-api#receiving_events
@@ -40,6 +44,8 @@ const (
 	AppMentionedThreadCacheExpiry = 24 * time.Hour
 )
 
+var _ cache.CacheableObject[AppMentionedThreads] = (*AppMentionedThreads)(nil)
+
 type AppMentionedThreads struct {
 	TeamID   string
 	Channel  string
@@ -56,4 +62,8 @@ func (c AppMentionedThreads) CacheKey() string {
 
 func (c AppMentionedThreads) AdditionalCacheKeys() []string {
 	return []string{}
+}
+
+func (c AppMentionedThreads) TTL() time.Duration {
+	return AppMentionedThreadCacheExpiry
 }

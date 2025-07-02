@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/o11y"
@@ -92,6 +93,7 @@ type InstanceToolProxyConfig struct {
 	Logger  *slog.Logger
 	Metrics *o11y.Metrics
 	Tracer  trace.Tracer
+	Cache   cache.Cache
 	// The auto-summarization feature uses a chat client as a dependency, that is the only current reason for this
 	// For now this is nullable, but we should consider refactoring into a non openrouter specific chat client eventually
 	ChatClient *openrouter.ChatClient

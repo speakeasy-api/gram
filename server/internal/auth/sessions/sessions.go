@@ -27,8 +27,8 @@ type localEnvFile map[string]struct {
 
 type Manager struct {
 	logger                 *slog.Logger
-	sessionCache           cache.Cache[Session]
-	userInfoCache          cache.Cache[CachedUserInfo]
+	sessionCache           cache.TypedCacheObject[Session]
+	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
 	localEnvFile           localEnvFile
 	unsafeLocal            bool
 	speakeasyServerAddress string
@@ -40,8 +40,8 @@ type Manager struct {
 func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon) *Manager {
 	return &Manager{
 		logger:                 logger.With(slog.String("component", "sessions")),
-		sessionCache:           cache.New[Session](logger.With(slog.String("cache", "session")), redisClient, sessionCacheExpiry, cache.SuffixNone),
-		userInfoCache:          cache.New[CachedUserInfo](logger.With(slog.String("cache", "user_info")), redisClient, userInfoCacheExpiry, cache.SuffixNone),
+		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(slog.String("cache", "session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(slog.String("cache", "user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		localEnvFile:           localEnvFile{},
 		unsafeLocal:            false,
 		speakeasyServerAddress: speakeasyServerAddress,

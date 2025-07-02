@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/repo"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
@@ -55,7 +56,9 @@ type Service struct {
 	enc          *encryption.Encryption
 	chatClient   *openrouter.ChatClient
 	serverURL    *url.URL
-	posthog      *posthog.Posthog
+	// posthog metrics will no-op if the dependency is not provided
+	posthog *posthog.Posthog
+	cache   cache.Cache
 }
 
 type mcpInputs struct {
@@ -72,7 +75,7 @@ var configSnippetTmplData string
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
-func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL, cacheImpl cache.Cache) *Service {
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/mcp"),
 		logger:       logger,
@@ -86,6 +89,7 @@ func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, se
 		chatClient:   chatClient,
 		serverURL:    serverURL,
 		posthog:      posthog,
+		cache:        cacheImpl,
 	}
 }
 
@@ -475,7 +479,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
 	case "tools/call":
-		return handleToolsCall(ctx, s.tracer, s.logger, s.metrics, s.db, s.enc, payload, req, s.chatClient)
+		return handleToolsCall(ctx, s.tracer, s.logger, s.metrics, s.db, s.enc, payload, req, s.chatClient, s.cache)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":

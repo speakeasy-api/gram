@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	redisCache "github.com/go-redis/cache/v9"
-	"github.com/redis/go-redis/v9"
 )
 
 type Suffix string
@@ -17,36 +14,36 @@ const (
 	SuffixNone Suffix = ""
 )
 
-// Cacheable - when implementing this, make sure all data fields you want stored in the cache are exported (capitalized).
-type Cacheable[T any] interface {
+// Cache defines a generic interface for cache operations.
+// Implementations can use any underlying storage (Redis, in-memory, etc.)
+type Cache interface {
+	Get(ctx context.Context, key string, value any) error
+	Set(ctx context.Context, key string, value any, ttl time.Duration) error
+	Update(ctx context.Context, key string, value any) error
+	Delete(ctx context.Context, key string) error
+}
+
+type TypedCacheObject[T CacheableObject[T]] struct {
+	logger    *slog.Logger
+	cache     Cache
+	keySuffix string
+}
+
+func NewTypedObjectCache[T CacheableObject[T]](logger *slog.Logger, cache Cache, suffix Suffix) TypedCacheObject[T] {
+	return TypedCacheObject[T]{logger: logger, cache: cache, keySuffix: string(suffix)}
+}
+
+type CacheableObject[T any] interface {
 	CacheKey() string
 	AdditionalCacheKeys() []string
-}
-type CustomTTL interface {
 	TTL() time.Duration
 }
 
-type Cache[T Cacheable[T]] struct {
-	logger     *slog.Logger
-	rdb        *redis.Client
-	cache      *redisCache.Cache
-	keySuffix  string
-	defaultTTL time.Duration
-}
-
-func New[T Cacheable[T]](logger *slog.Logger, redisClient *redis.Client, ttl time.Duration, suffix Suffix) Cache[T] {
-	cache := redisCache.New(&redisCache.Options{
-		Redis: redisClient,
-	})
-
-	return Cache[T]{logger: logger, rdb: redisClient, cache: cache, defaultTTL: ttl, keySuffix: string(suffix)}
-}
-
-func (d *Cache[T]) fullKey(key string) string {
+func (d *TypedCacheObject[T]) fullKey(key string) string {
 	return key + ":" + d.keySuffix
 }
 
-func (d *Cache[T]) Delete(ctx context.Context, obj T) error {
+func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
 	if d.cache == nil {
 		return nil
 	}
@@ -68,98 +65,54 @@ func (d *Cache[T]) Delete(ctx context.Context, obj T) error {
 	return nil
 }
 
-func (d *Cache[T]) Get(context context.Context, key string) (T, error) { //nolint:nolintlint,ireturn
+func (d *TypedCacheObject[T]) Get(ctx context.Context, key string) (T, error) {
 	if d.cache == nil {
-		return *new(T), redisCache.ErrCacheMiss
+		return *new(T), errors.New("cache is not configured")
 	}
-
-	var returnObj T
-
-	err := d.cache.Get(context, d.fullKey(key), &returnObj)
+	var value T
+	err := d.cache.Get(ctx, d.fullKey(key), &value)
 	if err != nil {
-		return returnObj, fmt.Errorf("%s: get: %w", d.fullKey(key), err)
+		return *new(T), fmt.Errorf("%s: get: %w", d.fullKey(key), err)
 	}
-
-	return returnObj, nil
+	return value, nil
 }
 
-func (d *Cache[T]) Store(context context.Context, obj T) error {
+func (d *TypedCacheObject[T]) Store(ctx context.Context, obj T) error {
 	if d.cache == nil {
 		return errors.New("cache is not configured")
 	}
 
-	// Check if the object implements a custom TTL function
-	ttl := d.defaultTTL
-	if objectSpecificTTL, ok := any(obj).(CustomTTL); ok {
-		if customTTL := objectSpecificTTL.TTL(); customTTL > 0 {
-			ttl = customTTL
-		}
-	}
-
-	err := d.cache.Set(&redisCache.Item{
-		Ctx:   context,
-		Key:   d.fullKey(obj.CacheKey()),
-		Value: obj,
-		TTL:   ttl,
-	})
-	if err != nil {
+	ttl := obj.TTL()
+	if err := d.cache.Set(ctx, d.fullKey(obj.CacheKey()), obj, ttl); err != nil {
 		return fmt.Errorf("store: %s: %w", d.fullKey(obj.CacheKey()), err)
 	}
 	for _, key := range obj.AdditionalCacheKeys() {
-		err := d.cache.Set(&redisCache.Item{
-			Ctx:   context,
-			Key:   d.fullKey(key),
-			Value: obj,
-			TTL:   ttl,
-		})
-		if err != nil {
+		if err := d.cache.Set(ctx, d.fullKey(key), obj, ttl); err != nil {
 			return fmt.Errorf("store additional: %s: %w", d.fullKey(key), err)
 		}
 	}
 	return nil
 }
 
-// Update Updates an object in cache preserving the existing TTL
-func (d *Cache[T]) Update(ctx context.Context, obj T) error {
+func (d *TypedCacheObject[T]) Update(ctx context.Context, obj T) error {
 	if d.cache == nil {
 		return errors.New("cache is not configured")
 	}
 
 	updateKey := func(key string) error {
 		fullKey := d.fullKey(key)
-
-		ttl, err := d.rdb.TTL(ctx, fullKey).Result()
-		if err != nil {
-			return fmt.Errorf("failed to fetch TTL for key %s: %w", fullKey, err)
-		}
-
-		if ttl <= 0 {
-			return fmt.Errorf("failed to fetch TTL for key %s", fullKey)
-		}
-
-		err = d.cache.Set(&redisCache.Item{
-			Ctx:   ctx,
-			Key:   fullKey,
-			Value: obj,
-			TTL:   ttl,
-		})
-		if err != nil {
+		if err := d.cache.Update(ctx, fullKey, obj); err != nil {
 			return fmt.Errorf("failed to update key %s: %w", fullKey, err)
 		}
 		return nil
 	}
-
-	// Update primary key
 	if err := updateKey(obj.CacheKey()); err != nil {
 		return err
 	}
-
-	// Update additional keys
 	for _, key := range obj.AdditionalCacheKeys() {
 		if err := updateKey(key); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }

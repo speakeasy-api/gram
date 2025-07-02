@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/internal/environments/repo"
@@ -36,9 +37,10 @@ type ChatClient struct {
 	enc        *encryption.Encryption
 	tracer     trace.Tracer
 	metrics    *o11y.Metrics
+	cache      cache.Cache
 }
 
-func NewChatClient(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption) *ChatClient {
+func NewChatClient(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption, cacheImpl cache.Cache) *ChatClient {
 	return &ChatClient{
 		logger:     logger,
 		metrics:    metrics,
@@ -47,6 +49,7 @@ func NewChatClient(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool,
 		db:         db,
 		enc:        enc,
 		tracer:     otel.Tracer("github.com/speakeasy-api/gram/internal/chat"),
+		cache:      cacheImpl,
 	}
 }
 
@@ -248,6 +251,7 @@ func (c *ChatClient) LoadToolsetTools(
 				Logger:     c.logger,
 				Metrics:    c.metrics,
 				Tracer:     c.tracer,
+				Cache:      c.cache,
 				ChatClient: c.chatClient,
 			})
 			if err != nil {
