@@ -56,20 +56,20 @@ type ToolExtractorTask struct {
 }
 
 type ToolExtractorResult struct {
-	DocumentUpgraded bool
+	DocumentVersion         string
+	DocumentUpgrade         *o11y.Outcome
+	DocumentUpgradeDuration time.Duration
 }
 
 type ToolExtractor struct {
 	logger       *slog.Logger
-	metrics      *o11y.Metrics
 	db           *pgxpool.Pool
 	assetStorage assets.BlobStore
 }
 
-func NewToolExtractor(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, assetStorage assets.BlobStore) *ToolExtractor {
+func NewToolExtractor(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) *ToolExtractor {
 	return &ToolExtractor{
 		logger:       logger,
-		metrics:      metrics,
 		db:           db,
 		assetStorage: assetStorage,
 	}
@@ -78,7 +78,7 @@ func NewToolExtractor(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Po
 func (p *ToolExtractor) Do(
 	ctx context.Context,
 	task ToolExtractorTask,
-) error {
+) (*ToolExtractorResult, error) {
 	docURL := task.DocURL
 	projectID := task.ProjectID
 	deploymentID := task.DeploymentID
@@ -91,12 +91,12 @@ func (p *ToolExtractor) Do(
 		"openapi doc id set", openapiDocID != uuid.Nil,
 		"doc info set", docInfo != nil && docInfo.Name != "" && docInfo.Slug != "",
 	); err != nil {
-		return oops.E(oops.CodeInvariantViolation, oops.Perm(err), "unable to process openapi document").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeInvariantViolation, oops.Perm(err), "unable to process openapi document").Log(ctx, p.logger)
 	}
 
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error opening database transaction").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error opening database transaction").Log(ctx, p.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -135,7 +135,7 @@ func (p *ToolExtractor) Do(
 
 	rc, err := p.assetStorage.Read(ctx, docURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return rc.Close()
@@ -143,7 +143,7 @@ func (p *ToolExtractor) Do(
 
 	doc, err := io.ReadAll(rc)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
 	}
 
 	document, err := libopenapi.NewDocumentWithConfiguration(doc, &datamodel.DocumentConfiguration{
@@ -155,7 +155,7 @@ func (p *ToolExtractor) Do(
 		IgnoreArrayCircularReferences:       true,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
 	}
 
 	v3Model, errs := document.BuildV3Model()
@@ -164,7 +164,7 @@ func (p *ToolExtractor) Do(
 			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s", docInfo.Name, err.Error()), slog.String("event", "openapi:error"))
 		}
 
-		return oops.E(
+		return nil, oops.E(
 			oops.CodeBadRequest,
 			oops.Perm(errors.Join(errs...)),
 			"openapi v3 document '%s' had %d errors", docInfo.Name, len(errs),
@@ -174,15 +174,16 @@ func (p *ToolExtractor) Do(
 	upgradeStart := time.Now()
 	upgradeResult, err := UpgradeOpenAPI30To31(document, v3Model)
 	upgradeDuration := time.Since(upgradeStart)
+	var upgradeOutcome *o11y.Outcome
 	if err != nil {
-		p.metrics.RecordOpenAPIUpgrade(ctx, o11y.OutcomeFailure, upgradeDuration)
+		upgradeOutcome = conv.Ptr(o11y.OutcomeFailure)
 		logger.ErrorContext(ctx, "Unable to upgrade OpenAPI v3.0 document to v3.1. Proceeding with v3.0 document.", slog.String("event", "openapi-upgrade:error"))
 		logger.ErrorContext(ctx, err.Error(), slog.String("event", "openapi-upgrade:error"))
 	} else {
 		v3Model = upgradeResult.Model
 
 		if upgradeResult.Upgraded {
-			p.metrics.RecordOpenAPIUpgrade(ctx, o11y.OutcomeSuccess, upgradeDuration)
+			upgradeOutcome = conv.Ptr(o11y.OutcomeSuccess)
 		}
 
 		if len(upgradeResult.Issues) > 0 {
@@ -199,7 +200,7 @@ func (p *ToolExtractor) Do(
 
 	globalSecurity, err := serializeSecurity(v3Model.Model.Security)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
 	}
 
 	securitySchemesParams, errs := extractSecuritySchemes(v3Model.Model, task)
@@ -215,7 +216,7 @@ func (p *ToolExtractor) Do(
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
@@ -268,14 +269,18 @@ func (p *ToolExtractor) Do(
 
 	if writeErrCount > 0 {
 		err := oops.Perm(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
-		return oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, oops.Perm(err), "error saving processed deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error saving processed deployment").Log(ctx, logger)
 	}
 
-	return nil
+	return &ToolExtractorResult{
+		DocumentVersion:         document.GetVersion(),
+		DocumentUpgrade:         upgradeOutcome,
+		DocumentUpgradeDuration: upgradeDuration,
+	}, nil
 }
 
 func (s *ToolExtractor) extractDefaultServer(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, servers []*v3.Server) *string {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -108,9 +109,12 @@ func (m *Metrics) RecordHTTPToolCall(ctx context.Context, projectID uuid.UUID, t
 	}
 }
 
-func (m *Metrics) RecordOpenAPIProcessed(ctx context.Context, outcome Outcome, duration time.Duration) {
+func (m *Metrics) RecordOpenAPIProcessed(ctx context.Context, outcome Outcome, duration time.Duration, version string) {
 	if counter, ok := m.counters[meterOpenAPIProcessedCounter]; ok {
-		counter.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", string(outcome))))
+		counter.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("outcome", string(outcome)),
+			attribute.String("openapi.version", sanitizeOpenAPIVersion(version)),
+		))
 	}
 
 	if histogram, ok := m.histograms[meterOpenAPIProcessedDuration]; ok {
@@ -118,12 +122,25 @@ func (m *Metrics) RecordOpenAPIProcessed(ctx context.Context, outcome Outcome, d
 	}
 }
 
-func (m *Metrics) RecordOpenAPIUpgrade(ctx context.Context, outcome Outcome, duration time.Duration) {
+func (m *Metrics) RecordOpenAPIUpgrade(ctx context.Context, outcome Outcome, duration time.Duration, version string) {
 	if counter, ok := m.counters[meterOpenAPIUpgradeCounter]; ok {
-		counter.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", string(outcome))))
+		counter.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("outcome", string(outcome)),
+			attribute.String("openapi.version", sanitizeOpenAPIVersion(version)),
+		))
 	}
 
 	if histogram, ok := m.histograms[meterOpenAPIUpgradeDuration]; ok {
 		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attribute.String("outcome", string(outcome))))
 	}
+}
+
+func sanitizeOpenAPIVersion(version string) string {
+	v := ""
+	sv, err := semver.NewVersion(version)
+	if err == nil && sv.Major() == 3 && sv.Prerelease() == "" && sv.Metadata() == "" {
+		v = sv.String()
+	}
+
+	return v
 }

@@ -98,9 +98,9 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		workers.Go(func() error {
 			start := time.Now()
 
-			processor := openapi.NewToolExtractor(p.logger, p.metrics, p.db, p.assetStorage)
+			processor := openapi.NewToolExtractor(p.logger, p.db, p.assetStorage)
 
-			processErr := processor.Do(ctx, openapi.ToolExtractorTask{
+			res, processErr := processor.Do(ctx, openapi.ToolExtractorTask{
 				ProjectID:    projectID,
 				DeploymentID: deploymentID,
 				DocumentID:   openapiDocID,
@@ -121,7 +121,10 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 				}
 			}
 
-			p.metrics.RecordOpenAPIProcessed(ctx, o11y.OutcomeFromError(processErr), time.Since(start))
+			p.metrics.RecordOpenAPIProcessed(ctx, o11y.OutcomeFromError(processErr), time.Since(start), res.DocumentVersion)
+			if res.DocumentUpgrade != nil {
+				p.metrics.RecordOpenAPIUpgrade(ctx, *res.DocumentUpgrade, res.DocumentUpgradeDuration, res.DocumentVersion)
+			}
 
 			return processErr
 		})
