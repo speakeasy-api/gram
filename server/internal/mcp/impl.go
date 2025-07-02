@@ -97,7 +97,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	mux.Handle("POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
-	mux.Handle("GET", "/mcp/{mcpSlug}/page", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
 	})
 	mux.Handle("POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {

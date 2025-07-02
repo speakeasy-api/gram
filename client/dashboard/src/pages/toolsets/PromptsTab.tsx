@@ -5,7 +5,7 @@ import { Toolset, PromptTemplate } from "@gram/client/models/components";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import { getToolsetPrompts, PromptTemplateCard } from "../prompts/Prompts";
+import { getToolsetPrompts, PromptTemplateCard, usePrompts } from "../prompts/Prompts";
 import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
 import { useRoutes } from "@/routes";
 import { Type } from "@/components/ui/type";
@@ -17,7 +17,8 @@ export function PromptsTabContent({
     toolset: Toolset;
     updateToolsetMutation: ReturnType<typeof useUpdateToolsetMutation>;
   }) {
-    const prompts = getToolsetPrompts(toolset);
+    const allPrompts = usePrompts();
+    const toolsetPrompts = getToolsetPrompts(toolset);
     const [promptSelectPopoverOpen, setPromptSelectPopoverOpen] = useState(false);
     const routes = useRoutes();
   
@@ -56,7 +57,7 @@ export function PromptsTabContent({
     return (
       <>
         <Cards loading={!toolset}>
-          {getToolsetPrompts(toolset)?.map((prompt) => (
+          {toolsetPrompts?.map((prompt) => (
             <PromptTemplateCard
               key={prompt.name}
               template={prompt}
@@ -74,9 +75,9 @@ export function PromptsTabContent({
           gap={3}
           direction={"horizontal"}
           align={"center"}
-          className="w-full"
+          className="w-full max-w-4xl"
         >
-          {prompts && prompts?.length > 0 && (
+          {allPrompts && allPrompts?.length > 0 && (
             <>
               <PromptSelectPopover
                 open={promptSelectPopoverOpen}

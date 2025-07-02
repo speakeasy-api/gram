@@ -433,7 +433,7 @@ const McpStep = ({
     invalidateAllToolset(queryClient);
 
     toast.success("MCP server created successfully");
-    routes.toolsets.toolset.goTo(createdToolset.slug);
+    routes.home.goTo();
   };
 
   return (

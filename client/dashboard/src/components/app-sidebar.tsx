@@ -56,19 +56,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem className="group/logo">
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
-            >
-              <Stack direction={"horizontal"} gap={2}>
-                <routes.openapi.Link>
+            <routes.home.Link className="hover:no-underline!">
+              <SidebarMenuButton
+                asChild
+                className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
+              >
+                <Stack direction={"horizontal"} gap={2}>
                   <GramLogo className="text-3xl" />
-                </routes.openapi.Link>
-                <Type variant="small" muted className="self-end">
-                  v0.6.5 (beta)
-                </Type>
-              </Stack>
-            </SidebarMenuButton>
+                  <Type variant="small" muted className="self-end">
+                    v0.7.0 (beta)
+                  </Type>
+                </Stack>
+              </SidebarMenuButton>
+            </routes.home.Link>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

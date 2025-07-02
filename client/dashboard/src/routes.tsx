@@ -30,6 +30,8 @@ import {
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
+import Home from "./pages/home/Home";
+import { cn } from "./lib/utils";
 
 type AppRouteBasic = {
   title: string;
@@ -57,6 +59,7 @@ export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
   Link: React.ComponentType<{
     params?: string[];
     queryParams?: Record<string, string>;
+    className?: string;
     children: React.ReactNode;
   }>;
 };
@@ -102,9 +105,15 @@ const ROUTE_STRUCTURE = {
     url: ":orgSlug/:projectSlug/onboarding", // Route is like this to break us out of the normal page structure
     component: OnboardingWizard,
   },
+  home: {
+    title: "Home",
+    url: "",
+    icon: "house",
+    component: Home,
+  },
   openapi: {
     title: "Your APIs",
-    url: "",
+    url: "apis",
     icon: "file-json-2",
     component: OpenAPIDocuments,
   },
@@ -340,17 +349,19 @@ export const useRoutes = (): RoutesWithGoTo => {
     const linkComponent = ({
       params = [],
       queryParams = {},
+      className,
       children,
     }: {
       params?: string[];
       queryParams?: Record<string, string>;
+      className?: string;
       children: React.ReactNode;
     }) => {
       const queryString = new URLSearchParams(queryParams).toString();
       return (
         <Link
           to={`${resolveUrl(...params)}?${queryString}`}
-          className="hover:underline"
+          className={cn("hover:underline", className)}
         >
           {children}
         </Link>

@@ -23,6 +23,37 @@ export const HttpRoute = ({
   );
 };
 
+export const HttpMethodColors: Record<
+  string,
+  { bg: string; text: string; border: string }
+> = {
+  GET: {
+    bg: "bg-blue-300! dark:bg-blue-800!",
+    text: "text-blue-600! dark:text-blue-400!",
+    border: "border-blue-300! dark:border-blue-800!",
+  },
+  POST: {
+    bg: "bg-emerald-300! dark:bg-emerald-800!",
+    text: "text-emerald-600! dark:text-emerald-400!",
+    border: "border-emerald-300! dark:border-emerald-800!",
+  },
+  PATCH: {
+    bg: "bg-amber-300! dark:bg-amber-800!",
+    text: "text-amber-600! dark:text-amber-300!",
+    border: "border-amber-300! dark:border-amber-800!",
+  },
+  PUT: {
+    bg: "bg-amber-300! dark:bg-amber-800!",
+    text: "text-amber-600! dark:text-amber-300!",
+    border: "border-amber-300! dark:border-amber-800!",
+  },
+  DELETE: {
+    bg: "bg-rose-300! dark:bg-rose-800!",
+    text: "text-rose-600! dark:text-rose-400!",
+    border: "border-rose-300! dark:border-rose-800!",
+  },
+};
+
 export const HttpMethod = ({
   method,
   path,
@@ -33,13 +64,7 @@ export const HttpMethod = ({
   variant?: "badge" | "type";
 }) => {
   if (variant === "type") {
-    const typeStyle = {
-      GET: "text-blue-600! dark:text-blue-400!",
-      POST: "text-emerald-600! dark:text-emerald-400!",
-      PATCH: "text-amber-600! dark:text-amber-300!",
-      PUT: "text-amber-600! dark:text-amber-300!",
-      DELETE: "text-rose-600! dark:text-rose-400!",
-    }[method];
+    const typeStyle = HttpMethodColors[method]?.text;
 
     return (
       <Type className={cn("text-xs font-semibold text-nowrap", typeStyle)}>
@@ -49,13 +74,7 @@ export const HttpMethod = ({
   }
 
   if (variant === "badge") {
-    const badgeStyle = {
-      GET: "bg-blue-300! dark:bg-blue-800!",
-      POST: "bg-emerald-300! dark:bg-emerald-800!",
-      PATCH: "bg-amber-300! dark:bg-amber-800!",
-      PUT: "bg-amber-300! dark:bg-amber-800!",
-      DELETE: "bg-rose-300! dark:bg-rose-800!",
-    }[method];
+    const badgeStyle = HttpMethodColors[method]?.bg;
 
     const badge = (
       <Badge

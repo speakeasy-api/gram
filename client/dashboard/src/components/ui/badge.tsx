@@ -1,15 +1,15 @@
-import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import {
-  TooltipProvider,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "./tooltip";
 import { Skeleton } from "./skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./tooltip";
 
 const badgeVariants = cva(
   "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
@@ -34,6 +34,14 @@ const badgeVariants = cva(
   }
 );
 
+type BadgeProps = React.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & {
+    asChild?: boolean;
+    tooltip?: React.ReactNode;
+    size?: "sm" | "md";
+    isLoading?: boolean;
+  };
+
 export function Badge({
   className,
   variant,
@@ -42,13 +50,7 @@ export function Badge({
   tooltip,
   isLoading = false,
   ...props
-}: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & {
-    asChild?: boolean;
-    tooltip?: React.ReactNode;
-    size?: "sm" | "md";
-    isLoading?: boolean;
-  }) {
+}: BadgeProps) {
   const Comp = asChild ? Slot : "span";
 
   const sizeClass = {
@@ -80,4 +82,22 @@ export function Badge({
   }
 
   return base;
+}
+
+// Combines two badges into one. Requires two children, the first is the left part and the second is the right part
+export function TwoPartBadge({
+  children,
+}: BadgeProps & {
+  children: [React.ReactNode, React.ReactNode];
+}) {
+  return (
+    <div className="flex items-center">
+      <span className="mr-0! [&_[data-slot=badge]]:rounded-r-none">
+        {children[0]}
+      </span>
+      <span className="ml-0! [&_[data-slot=badge]]:rounded-l-none">
+        {children[1]}
+      </span>
+    </div>
+  );
 }

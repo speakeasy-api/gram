@@ -12,7 +12,7 @@ export const CopyButton = ({
   onCopy,
 }: {
   text: string;
-  size?: "icon" | "icon-sm";
+  size?: "icon" | "icon-sm" | "inline";
   absolute?: boolean;
   className?: string;
   tooltip?: string;
@@ -36,8 +36,8 @@ export const CopyButton = ({
       onClick={handleCopy}
       tooltip={tooltip}
       className={cn(
-        // "bg-background shadow-md border border-border hover:bg-accent",
         absolute && "absolute top-3 right-3 z-10 shadow-md",
+        size === "inline" && "h-6 w-6",
         className
       )}
       style={absolute ? { boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : undefined}

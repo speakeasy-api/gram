@@ -82,6 +82,7 @@ export function useMcpUrl(toolset: Toolset | undefined) {
   return {
     url: mcpUrl,
     customServerURL,
+    pageUrl: `${mcpUrl}/install`,
   };
 }
 

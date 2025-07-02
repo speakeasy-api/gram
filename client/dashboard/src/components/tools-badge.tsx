@@ -1,8 +1,32 @@
 import { useGroupedToolDefinitions } from "@/lib/toolNames";
 import { getToolsetPrompts } from "@/pages/prompts/Prompts";
+import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Badge } from "./ui/badge";
+import { Badge, TwoPartBadge } from "./ui/badge";
+
+export const ToolsetBadge = ({
+  toolset,
+  size = "md",
+}: {
+  toolset: Toolset | undefined;
+  size?: "sm" | "md";
+}) => {
+  const routes = useRoutes();
+
+  if (!toolset) {
+    return <Badge size={size} variant="outline" isLoading />;
+  }
+
+  return (
+    <TwoPartBadge>
+      <routes.toolsets.toolset.Link params={[toolset.slug]}>
+        <Badge className="capitalize">{toolset.name}</Badge>
+      </routes.toolsets.toolset.Link>
+      <ToolsetToolsBadge toolset={toolset} variant="outline" className="lowercase" />
+    </TwoPartBadge>
+  );
+};
 
 export const ToolsetPromptsBadge = ({
   toolset,

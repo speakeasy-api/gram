@@ -13,20 +13,22 @@ import { Type } from "./ui/type";
 export function ToolBadge({
   tool,
   variant = "secondary",
+  className,
 }: {
   tool: ToolDefinition;
-  variant?: "default" | "secondary";
+  variant?: "default" | "secondary" | "outline";
+  className?: string;
 }) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge variant={variant} size="sm">
+          <Badge variant={variant} size="sm" className={className}>
             {tool.name}
           </Badge>
         </TooltipTrigger>
         <TooltipContent inverted>
-          <Stack className="max-w-md pt-1" gap={1}>
+          <Stack className="max-w-md pt-2" gap={1}>
             {tool.type === "http" && (
               <HttpRoute method={tool.httpMethod} path={tool.path} />
             )}
