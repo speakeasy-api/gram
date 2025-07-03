@@ -139,8 +139,9 @@ export function ToolCard({
               </Type>
             )}
           </Card.Description>
+          {/* Temoprarily for launch we have discussed not allowing new auto-summarization to be enabled while we discuss. The code will stay around for now. */}
           <Card.Actions>
-            {tool.type === "http" && autoSummarizeButton}
+            {tool.type === "http" && autoSummarizeEnabled && autoSummarizeButton}
             <DeleteButton
               size="sm"
               tooltip="Remove tool from this toolset"
