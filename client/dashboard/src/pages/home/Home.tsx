@@ -50,22 +50,20 @@ export default function Home() {
     {
       icon: "message-circle",
       title: "Try it in the playground",
-      description:
-        "Incididunt laborum irure quis laborum mollit ex anim aliquip occaecat ea deserunt excepteur non eu sit.",
+      description: "Try out the MCP server in the playground.",
       link: routes.playground.href(),
     },
     {
       icon: "blocks",
       title: "Curate your tools",
-      description:
-        "Incididunt laborum irure quis laborum mollit ex anim aliquip occaecat ea deserunt excepteur non eu sit.",
+      description: "Create toolsets for different purposes.",
       link: routes.toolsets.toolset.href(selectedToolset?.slug ?? "_"),
     },
     {
       icon: "cog",
       title: "Configure your MCP server",
       description:
-        "Incididunt laborum irure quis laborum mollit ex anim aliquip occaecat ea deserunt excepteur non eu sit.",
+        "Choose your server settings. Like visibility, name, and more.",
       link: routes.mcp.details.href(selectedToolset?.slug ?? "_"),
     },
   ];
