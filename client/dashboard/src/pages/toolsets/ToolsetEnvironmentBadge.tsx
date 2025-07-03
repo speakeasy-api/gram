@@ -125,7 +125,7 @@ export const ToolsetEnvironmentBadge = ({
           onChange: (value) => {
             setEnvVars({ ...envVars, [envVar]: value });
           },
-          optional: envVar.includes("SERVER_URL") && !requiresServerURL, // Generally not required unless tools have no server url
+          optional: (envVar.includes("SERVER_URL") && !requiresServerURL) || envVar.includes("TOKEN_URL"), // Generally not required unless tools have no server url
         }))}
       />
     );

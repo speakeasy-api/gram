@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -99,11 +98,12 @@ func NewMetrics(provider metric.MeterProvider) (*Metrics, error) {
 	}, nil
 }
 
-func (m *Metrics) RecordHTTPToolCall(ctx context.Context, projectID uuid.UUID, toolName string, statusCode int) {
+func (m *Metrics) RecordHTTPToolCall(ctx context.Context, orgID string, orgSlug string, toolName string, statusCode int) {
 	if counter, ok := m.counters[meterToolCallCounter]; ok {
 		counter.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("tool", toolName),
-			attribute.String("project_id", projectID.String()),
+			attribute.String("organization_id", orgID),
+			attribute.String("organization_slug", orgSlug),
 			attribute.String("status_code", fmt.Sprintf("%d", statusCode)),
 		))
 	}

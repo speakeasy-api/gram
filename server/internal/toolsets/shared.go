@@ -35,6 +35,7 @@ type HTTPToolExecutionInfo struct {
 	ProjectSlug    string
 	AccountType    string
 	OrgSlug        string
+	OrganizationID string
 }
 
 func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
@@ -75,5 +76,6 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		ProjectSlug:    orgData.ProjectSlug,
 		OrgSlug:        orgData.Slug,
 		AccountType:    orgData.GramAccountType,
+		OrganizationID: orgData.ID,
 	}, nil
 }

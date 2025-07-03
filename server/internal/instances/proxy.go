@@ -117,6 +117,13 @@ func InstanceToolProxy(
 		slog.String("project_slug", toolExecutionInfo.ProjectSlug),
 	)
 
+	// Variable to capture status code for metrics
+	var responseStatusCode int
+	defer func() {
+		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
+		config.Metrics.RecordHTTPToolCall(ctx, toolExecutionInfo.OrganizationID, toolExecutionInfo.OrgSlug, toolExecutionInfo.Tool.Name, responseStatusCode)
+	}()
+
 	// Keep in mind tool calls are not required to be gram authenticated, we have public MCP servers. Develop accordingly
 	authCtx, isAuthenticated := contextvalues.GetAuthContext(ctx)
 	ciEnv := newCaseInsensitiveEnv(envVars)
@@ -135,6 +142,7 @@ func InstanceToolProxy(
 	if len(toolExecutionInfo.Tool.Schema) > 0 {
 		if validateErr := ValidateToolCallBody(ctx, logger, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
+			responseStatusCode = http.StatusBadRequest
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
@@ -286,7 +294,7 @@ func InstanceToolProxy(
 		}
 	}
 
-	processSecurity(ctx, logger, req, w, toolExecutionInfo, config.Cache, ciEnv, serverURL)
+	processSecurity(ctx, logger, req, w, &responseStatusCode, toolExecutionInfo, config.Cache, ciEnv, serverURL)
 
 	if err := protectSSRF(ctx, logger, req.URL); err != nil {
 		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
@@ -296,7 +304,7 @@ func InstanceToolProxy(
 	if isAuthenticated && authCtx != nil && authCtx.ActiveOrganizationID != "" {
 		authenticatedOrg = &authCtx.ActiveOrganizationID
 	}
-	return reverseProxyRequest(ctx, config.Tracer, logger, config.Metrics, toolExecutionInfo.Tool, w, req, config.Source, autoSummarizeConfig{
+	return reverseProxyRequest(ctx, config.Tracer, logger, toolExecutionInfo.Tool, w, req, &responseStatusCode, autoSummarizeConfig{
 		authenticatedOrg:     authenticatedOrg,
 		autoSummarizeMessage: toolCallBody.GramRequestSummary,
 		chatClient:           config.ChatClient,
@@ -367,11 +375,10 @@ type autoSummarizeConfig struct {
 func reverseProxyRequest(ctx context.Context,
 	tracer trace.Tracer,
 	logger *slog.Logger,
-	metrics *o11y.Metrics,
 	tool tools_repo.HttpToolDefinition,
 	w http.ResponseWriter,
 	req *http.Request,
-	toolCallSource ToolCallSource,
+	responseStatusCodeCapture *int,
 	autoSummarizeConfig autoSummarizeConfig,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
@@ -468,11 +475,10 @@ func reverseProxyRequest(ctx context.Context,
 		http.SetCookie(w, cookie)
 	}
 
-	// project_id and tool_name do add some cardinality but this should be reasonable
-	// tracking metrics for failures and successes on tool calls is high value, nevertheless we will keep an eye on the metric cost
-	metrics.RecordHTTPToolCall(ctx, tool.ProjectID, tool.Name, resp.StatusCode)
-
 	// Copy status code
+	if responseStatusCodeCapture != nil {
+		*responseStatusCodeCapture = resp.StatusCode
+	}
 	w.WriteHeader(resp.StatusCode)
 
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
