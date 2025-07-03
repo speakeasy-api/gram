@@ -286,7 +286,7 @@ func InstanceToolProxy(
 		}
 	}
 
-	processSecurity(ctx, logger, req, toolExecutionInfo, ciEnv)
+	processSecurity(ctx, logger, req, w, toolExecutionInfo, config.Cache, ciEnv, serverURL)
 
 	if err := protectSSRF(ctx, logger, req.URL); err != nil {
 		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
@@ -584,81 +584,6 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutio
 		}
 	}
 	return ""
-}
-
-func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars *caseInsensitiveEnv) {
-	for _, security := range toolExecutionInfo.Security {
-		if !security.Type.Valid {
-			logger.ErrorContext(ctx, "invalid security type in tool definition", slog.String("tool", toolExecutionInfo.Tool.Name))
-			continue
-		}
-
-		switch security.Type.String {
-		case "apiKey":
-			if len(security.EnvVariables) == 0 {
-				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.String))
-			} else if envVars.Get(security.EnvVariables[0]) == "" {
-				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
-			} else if !security.Name.Valid || security.Name.String == "" {
-				logger.ErrorContext(ctx, "no name provided for api key auth", slog.String("scheme", security.Scheme.String))
-			} else {
-				key := security.EnvVariables[0]
-				switch security.InPlacement.String {
-				case "header":
-					req.Header.Set(security.Name.String, envVars.Get(key))
-				case "query":
-					values := req.URL.Query()
-					values.Set(security.Name.String, envVars.Get(key))
-					req.URL.RawQuery = values.Encode()
-				default:
-					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.InPlacement.String))
-				}
-			}
-		case "http":
-			switch security.Scheme.String {
-			case "bearer":
-				if len(security.EnvVariables) == 0 {
-					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", slog.String("scheme", security.Scheme.String))
-				} else if envVars.Get(security.EnvVariables[0]) == "" {
-					logger.ErrorContext(ctx, "token value is empty for bearer auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
-				} else {
-					token := envVars.Get(security.EnvVariables[0])
-					if !strings.HasPrefix(strings.ToLower(token), "bearer ") {
-						token = "Bearer " + token
-					}
-					req.Header.Set("Authorization", token)
-				}
-			case "basic":
-				if len(security.EnvVariables) < 2 {
-					logger.ErrorContext(ctx, "not enough environment variables provided for basic auth", slog.String("scheme", security.Scheme.String))
-				} else {
-					var username, password string
-					for _, envVar := range security.EnvVariables {
-						if strings.Contains(envVar, "USERNAME") {
-							username = envVars.Get(envVar)
-						} else if strings.Contains(envVar, "PASSWORD") {
-							password = envVars.Get(envVar)
-						}
-					}
-
-					if username == "" || password == "" {
-						logger.ErrorContext(ctx, "missing username or password value for basic auth",
-							slog.Bool("env_username", security.EnvVariables[0] == ""),
-							slog.Bool("env_password", security.EnvVariables[1] == ""),
-							slog.String("scheme", security.Scheme.String))
-					} else {
-						req.SetBasicAuth(username, password)
-					}
-				}
-			default:
-				logger.ErrorContext(ctx, "unsupported http security scheme", slog.String("scheme", security.Scheme.String))
-				continue
-			}
-		default:
-			logger.ErrorContext(ctx, "unsupported security scheme type", slog.String("type", security.Type.String))
-			continue
-		}
-	}
 }
 
 var paramRegex = regexp.MustCompile(`{([^}]+)}`)
