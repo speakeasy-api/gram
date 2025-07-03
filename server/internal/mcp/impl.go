@@ -246,7 +246,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	}
 
-	var defaultEnvironment string
+	var selectedEnvironment string
 	var authenticated bool
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
 		projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -276,8 +276,12 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	// IMPORTANT: We should not use gram environments if we are not in an authenticated context
 	if authenticated {
-		defaultEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
+		selectedEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
+		if passedEnv := r.Header.Get("Gram-Environment"); passedEnv != "" {
+			selectedEnvironment = passedEnv
+		}
 	}
 	var batch batchedRawRequest
 	err = json.NewDecoder(r.Body).Decode(&batch)
@@ -295,7 +299,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	mcpInputs := &mcpInputs{
 		projectID:       toolset.ProjectID,
 		toolset:         toolset.Slug,
-		environment:     defaultEnvironment,
+		environment:     selectedEnvironment,
 		mcpEnvVariables: parseMcpEnvVariables(r),
 		authenticated:   authenticated,
 	}

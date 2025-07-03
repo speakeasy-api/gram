@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  SimpleTooltip,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
@@ -172,19 +173,27 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     );
 
   const publicToggle = (
-    <div className="flex items-center gap-2 border-1 rounded-sm px-2 py-1">
-      <Checkbox
-        checked={mcpIsPublic}
-        onCheckedChange={(checked) => setMcpIsPublic(!!checked)}
-        id={`mcp-public-checkbox-${toolset.slug}`}
-      />
-      <label
-        htmlFor={`mcp-public-checkbox-${toolset.slug}`}
-        className="font-medium select-none cursor-pointer"
-      >
-        <Type small>Public</Type>
-      </label>
-    </div>
+    <SimpleTooltip
+      tooltip={
+        mcpIsPublic
+          ? "This MCP server can be used without a Gram API Key."
+          : "This MCP server is only visible to users with a Gram API Key."
+      }
+    >
+      <div className="flex items-center gap-2 border-1 rounded-sm px-2 py-1">
+        <Checkbox
+          checked={mcpIsPublic}
+          onCheckedChange={(checked) => setMcpIsPublic(!!checked)}
+          id={`mcp-public-checkbox-${toolset.slug}`}
+        />
+        <label
+          htmlFor={`mcp-public-checkbox-${toolset.slug}`}
+          className="font-medium select-none cursor-pointer"
+        >
+          <Type small>Public</Type>
+        </label>
+      </div>
+    </SimpleTooltip>
   );
 
   const anyChanges =
@@ -370,6 +379,9 @@ export function MCPJson({
     ((
       <Grid.Item>
         <Type className="font-medium">Public Server</Type>
+        <Type muted small className="max-w-2xl">
+          Pass necesarry API credentials directly to the MCP server.
+        </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
       </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -391,6 +403,16 @@ export function MCPJson({
           <span className="text-muted-foreground font-normal">
             (with Gram key)
           </span>
+        </Type>
+        <Type muted small className="max-w-2xl">
+          {toolset.mcpIsPublic ? (
+            "Use preset gram environments with an MCP server."
+          ) : (
+            <>
+              This server can only be accessed using a Gram API Key.<br />
+              Either use a preset Gram environment or pass API credentials directly to the MCP server.
+            </>
+          )}
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
       </Grid.Item>
@@ -449,6 +471,8 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
       "args": [
         "mcp-remote",
         "${mcpUrl}",
+        "--header",
+        "Gram-Environment: ${toolset.defaultEnvironmentSlug}",
         "--header",
         "Authorization: \${GRAM_KEY}"
       ],
