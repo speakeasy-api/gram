@@ -183,7 +183,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
 	tokenCache := cache.NewTypedObjectCache[clientCredentialsTokenCache](logger.With(slog.String("cache", "client_credentials_token_cache")), cacheImpl, cache.SuffixNone)
-	var clientSecret, clientID, tokenURLOverride string
+	var clientSecret, clientID, tokenURLOverride, accessToken string
 	for _, v := range security.EnvVariables {
 		if strings.Contains(v, "CLIENT_SECRET") {
 			clientSecret = envVars.Get(v)
@@ -191,7 +191,14 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 			clientID = envVars.Get(v)
 		} else if strings.Contains(v, "TOKEN_URL") {
 			tokenURLOverride = envVars.Get(v)
+		} else if strings.Contains(v, "ACCESS_TOKEN") {
+			accessToken = envVars.Get(v)
 		}
+	}
+
+	if accessToken != "" {
+		req.Header.Set("Authorization", formatForBearer(accessToken))
+		return nil
 	}
 
 	if clientSecret == "" {
