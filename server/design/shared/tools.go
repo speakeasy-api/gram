@@ -23,6 +23,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("openapiv3_operation", String, "OpenAPI v3 operation")
 	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
 	Attribute("security", String, "Security requirements for the underlying HTTP endpoint")
+	Attribute("default_server_url", String, "The default server URL for the tool")
 	Attribute("http_method", String, "HTTP method for the request")
 	Attribute("path", String, "Path for the request")
 	Attribute("schema_version", String, "Version of the schema")

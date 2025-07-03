@@ -52,6 +52,7 @@ SELECT
   http_tool_definitions.schema_version,
   http_tool_definitions.schema,
   http_tool_definitions.security,
+  http_tool_definitions.default_server_url,
   http_tool_definitions.created_at,
   http_tool_definitions.updated_at,
   http_tool_definitions.tags,

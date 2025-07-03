@@ -25,7 +25,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 	{
 		err = json.Unmarshal([]byte(templatesCreateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Commodi perferendis enim cum perferendis voluptatem earum.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"09n\",\n      \"prompt\": \"Animi ut consectetur ut.\",\n      \"tools_hint\": [\n         \"Excepturi esse architecto asperiores.\",\n         \"Molestiae maxime.\",\n         \"Omnis autem.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Asperiores veritatis molestiae maxime placeat.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"2rc\",\n      \"prompt\": \"Enim nemo enim sit minus excepturi esse.\",\n      \"tools_hint\": [\n         \"Porro consequuntur.\",\n         \"Voluptatem porro.\",\n         \"Nisi est aut mollitia.\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 40 {
@@ -94,7 +94,7 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 	{
 		err = json.Unmarshal([]byte(templatesUpdateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Nihil vel.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Sed eligendi assumenda sit cumque.\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"Molestiae in harum.\",\n      \"tools_hint\": [\n         \"Vero voluptate porro quis repellendus.\",\n         \"Rerum sint possimus dolore recusandae amet.\",\n         \"Illum ea.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Recusandae amet qui illum ea in.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Consequuntur nam sunt a eius vero.\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"Porro quis repellendus libero rerum sint possimus.\",\n      \"tools_hint\": [\n         \"Voluptas amet qui odit.\",\n         \"Aut dolores enim asperiores.\",\n         \"Blanditiis amet quia.\"\n      ]\n   }'")
 		}
 		if body.Arguments != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
@@ -278,7 +278,7 @@ func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRen
 	{
 		err = json.Unmarshal([]byte(templatesRenderTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Illum aliquid quasi rem id quia expedita.\": \"Neque esse praesentium est accusantium impedit autem.\",\n         \"Nesciunt tempora officia.\": \"Magnam facilis commodi eum voluptatem.\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"In expedita autem non ut.\": \"Molestiae veniam esse soluta beatae qui esse.\",\n         \"Officiis quis aut minus sapiente.\": \"Et nihil enim molestiae consequuntur officiis sed.\",\n         \"Sit quis.\": \"Et sapiente temporibus possimus.\"\n      }\n   }'")
 		}
 		if body.Arguments == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))

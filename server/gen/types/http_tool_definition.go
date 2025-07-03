@@ -37,6 +37,8 @@ type HTTPToolDefinition struct {
 	Tags []string
 	// Security requirements for the underlying HTTP endpoint
 	Security *string
+	// The default server URL for the tool
+	DefaultServerURL *string
 	// HTTP method for the request
 	HTTPMethod string
 	// Path for the request

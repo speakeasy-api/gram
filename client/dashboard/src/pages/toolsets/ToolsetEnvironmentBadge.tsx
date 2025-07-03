@@ -43,10 +43,14 @@ export const ToolsetEnvironmentBadge = ({
     (env) => env.slug === toolset.defaultEnvironmentSlug
   );
 
+  const requiresServerURL = toolset.httpTools?.some(
+    (tool) => !tool.defaultServerUrl
+  );
+
   // For now to reduce user confusion we omit server url env variables
   // If a spec already has a security env variable set we will not surface variables as missing for that spec
   const relevantEnvVars = toolset?.relevantEnvironmentVariables?.filter(
-    (varName) => !varName.includes("SERVER_URL")
+    (varName) => !varName.includes("SERVER_URL") || requiresServerURL
   );
 
   const missingEnvVars =
@@ -121,7 +125,7 @@ export const ToolsetEnvironmentBadge = ({
           onChange: (value) => {
             setEnvVars({ ...envVars, [envVar]: value });
           },
-          optional: envVar.includes("SERVER_URL"), // Generally not required
+          optional: envVar.includes("SERVER_URL") && !requiresServerURL, // Generally not required unless tools have no server url
         }))}
       />
     );

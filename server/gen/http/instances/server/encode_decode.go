@@ -281,6 +281,7 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Openapiv3Operation:  v.Openapiv3Operation,
 		Security:            v.Security,
+		DefaultServerURL:    v.DefaultServerURL,
 		HTTPMethod:          v.HTTPMethod,
 		Path:                v.Path,
 		SchemaVersion:       v.SchemaVersion,

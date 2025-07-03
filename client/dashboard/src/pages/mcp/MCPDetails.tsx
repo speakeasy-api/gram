@@ -403,9 +403,14 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
 
   if (!toolset) return { public: "", internal: "" };
 
+  const requiresServerURL = toolset.httpTools?.some(
+    (tool) => !tool.defaultServerUrl
+  );
+
+
   const envHeaders =
     toolset.relevantEnvironmentVariables?.filter(
-      (v) => !v.toLowerCase().includes("server_url")
+      (v) => (!v.toLowerCase().includes("server_url") || requiresServerURL) && !v.toLowerCase().includes("token_url") // direct token url is always a hidden option right now
     ) ?? [];
 
   // Build the args array for public MCP config

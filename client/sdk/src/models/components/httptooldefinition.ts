@@ -42,6 +42,10 @@ export type HTTPToolDefinition = {
    */
   createdAt: Date;
   /**
+   * The default server URL for the tool
+   */
+  defaultServerUrl?: string | undefined;
+  /**
    * The ID of the deployment
    */
   deploymentId: string;
@@ -123,6 +127,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   confirm: z.string(),
   confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  default_server_url: z.string().optional(),
   deployment_id: z.string(),
   description: z.string(),
   http_method: z.string(),
@@ -146,6 +151,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "canonical_name": "canonicalName",
     "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
+    "default_server_url": "defaultServerUrl",
     "deployment_id": "deploymentId",
     "http_method": "httpMethod",
     "openapiv3_document_id": "openapiv3DocumentId",
@@ -164,6 +170,7 @@ export type HTTPToolDefinition$Outbound = {
   confirm: string;
   confirm_prompt?: string | undefined;
   created_at: string;
+  default_server_url?: string | undefined;
   deployment_id: string;
   description: string;
   http_method: string;
@@ -195,6 +202,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   confirm: z.string(),
   confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
+  defaultServerUrl: z.string().optional(),
   deploymentId: z.string(),
   description: z.string(),
   httpMethod: z.string(),
@@ -218,6 +226,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     canonicalName: "canonical_name",
     confirmPrompt: "confirm_prompt",
     createdAt: "created_at",
+    defaultServerUrl: "default_server_url",
     deploymentId: "deployment_id",
     httpMethod: "http_method",
     openapiv3DocumentId: "openapiv3_document_id",

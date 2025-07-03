@@ -332,6 +332,7 @@ SELECT
   http_tool_definitions.schema_version,
   http_tool_definitions.schema,
   http_tool_definitions.security,
+  http_tool_definitions.default_server_url,
   http_tool_definitions.created_at,
   http_tool_definitions.updated_at,
   http_tool_definitions.tags,
@@ -373,6 +374,7 @@ type ListToolsRow struct {
 	SchemaVersion       string
 	Schema              []byte
 	Security            []byte
+	DefaultServerUrl    pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	Tags                []string
@@ -409,6 +411,7 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 			&i.SchemaVersion,
 			&i.Schema,
 			&i.Security,
+			&i.DefaultServerUrl,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Tags,

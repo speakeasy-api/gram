@@ -246,6 +246,8 @@ type HTTPToolDefinitionResponseBody struct {
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Security requirements for the underlying HTTP endpoint
 	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
+	// The default server URL for the tool
+	DefaultServerURL *string `form:"default_server_url,omitempty" json:"default_server_url,omitempty" xml:"default_server_url,omitempty"`
 	// HTTP method for the request
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Path for the request

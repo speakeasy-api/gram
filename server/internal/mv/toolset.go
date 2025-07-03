@@ -162,6 +162,7 @@ func DescribeToolset(
 				Tags:                tags,
 				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
 				Security:            conv.FromBytes(def.HttpToolDefinition.Security),
+				DefaultServerURL:    conv.FromPGText[string](def.HttpToolDefinition.DefaultServerUrl),
 				HTTPMethod:          def.HttpToolDefinition.HttpMethod,
 				Path:                def.HttpToolDefinition.Path,
 				SchemaVersion:       &def.HttpToolDefinition.SchemaVersion,

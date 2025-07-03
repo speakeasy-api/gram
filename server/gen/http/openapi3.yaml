@@ -6774,6 +6774,9 @@ components:
                     type: string
                     description: The creation date of the tool.
                     format: date-time
+                default_server_url:
+                    type: string
+                    description: The default server URL for the tool
                 deployment_id:
                     type: string
                     description: The ID of the deployment

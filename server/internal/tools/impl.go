@@ -201,6 +201,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			SchemaVersion:       conv.Ptr(tool.SchemaVersion),
 			Schema:              string(tool.Schema),
 			Security:            conv.Ptr(string(tool.Security)),
+			DefaultServerURL:    conv.FromPGText[string](tool.DefaultServerUrl),
 			PackageName:         pkg,
 			CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
