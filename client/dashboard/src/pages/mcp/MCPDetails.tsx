@@ -380,7 +380,7 @@ export function MCPJson({
       <Grid.Item>
         <Type className="font-medium">Public Server</Type>
         <Type muted small className="max-w-2xl">
-          Pass necesarry API credentials directly to the MCP server.
+          Pass API credentials directly to the MCP server.
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
       </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements 
