@@ -76,3 +76,33 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, organizationID string
 	)
 	return i, err
 }
+
+const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
+UPDATE openrouter_api_keys
+SET monthly_credits = $1
+WHERE organization_id = $2
+  AND deleted IS FALSE
+RETURNING organization_id, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateOpenRouterKeyParams struct {
+	MonthlyCredits int64
+	OrganizationID string
+}
+
+func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterKeyParams) (OpenrouterApiKey, error) {
+	row := q.db.QueryRow(ctx, updateOpenRouterKey, arg.MonthlyCredits, arg.OrganizationID)
+	var i OpenrouterApiKey
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Key,
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.Disabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}

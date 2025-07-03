@@ -16,13 +16,18 @@ import (
 	"github.com/speakeasy-api/gram/internal/inv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
-// We may eventually set this by account type
-const DefaultMonthlyCredits = 50
+var creditsAccountTypeMap = map[string]int{
+	"free":       10,
+	"pro":        50,
+	"enterprise": 50,
+	"":           10, // safety default
+}
 
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
@@ -38,6 +43,7 @@ type OpenRouter struct {
 	env             string
 	logger          *slog.Logger
 	repo            *repo.Queries
+	orgRepo         *orgRepo.Queries
 	orClient        *http.Client
 	refresher       KeyRefresher
 }
@@ -48,6 +54,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey stri
 		env:             env,
 		logger:          logger,
 		repo:            repo.New(db),
+		orgRepo:         orgRepo.New(db),
 		orClient:        cleanhttp.DefaultPooledClient(),
 		refresher:       refresher,
 	}
@@ -59,7 +66,14 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows), key.Key == "":
-		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, DefaultMonthlyCredits)
+		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+		}
+
+		creditAmount := creditsAccountTypeMap[org.GramAccountType]
+
+		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, creditAmount)
 		if err != nil {
 			return "", err
 		}
@@ -68,7 +82,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			OrganizationID: orgID,
 			Key:            *keyResponse.Key,
 			KeyHash:        keyResponse.Data.Hash,
-			MonthlyCredits: DefaultMonthlyCredits,
+			MonthlyCredits: int64(creditAmount),
 		})
 		if err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").Log(ctx, o.logger)
@@ -103,19 +117,33 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int,
 	}
 
 	if key.MonthlyCredits == 0 && !key.Disabled {
-		return 0, errors.New("cannot make an update to monthly credirs of 0")
+		return 0, errors.New("cannot make an update to monthly credits of 0")
 	}
 
-	limit := float64(key.MonthlyCredits)
+	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+	}
+
+	limit := creditsAccountTypeMap[org.GramAccountType]
+	floatLimit := float64(limit)
 	err = o.updateOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
-		Limit:    &limit,
+		Limit:    &floatLimit,
 		Disabled: nil,
 	})
 	if err != nil {
 		return 0, err
 	}
 
-	return int(key.MonthlyCredits), nil
+	_, err = o.repo.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
+		OrganizationID: orgID,
+		MonthlyCredits: int64(limit),
+	})
+	if err != nil {
+		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").Log(ctx, o.logger)
+	}
+
+	return limit, nil
 }
 
 type updateKeyRequest struct {
@@ -137,9 +165,9 @@ type keyResponse struct {
 	Key *string `json:"key,omitempty"` // will be empty outside of createKey
 }
 
-func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, keyLimit int) (*keyResponse, error) {
+func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyLimit int) (*keyResponse, error) {
 	creditLimit := float64(keyLimit)
-	requestBody := createKeyRequest{Name: fmt.Sprintf("gram-%s-%s", o.env, orgID), Label: fmt.Sprintf("%s (%s environment)", orgID, o.env), Limit: &creditLimit}
+	requestBody := createKeyRequest{Name: fmt.Sprintf("gram-%s-%s", o.env, orgID), Label: fmt.Sprintf("%s (%s environment)", orgSlug, o.env), Limit: &creditLimit}
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
