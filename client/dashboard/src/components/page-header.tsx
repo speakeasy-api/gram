@@ -71,8 +71,8 @@ function PageHeaderBreadcrumbs() {
       const url = "/" + segments.slice(0, index + 1).join("/");
       const isCurrentPage = location.pathname.endsWith(url);
       let title = segment.replace("-", " ");
-      if (title.toLowerCase() === "sdk") {
-        title = "SDK";
+      if (title.toLowerCase() === "sdks") {
+        title = "SDKs";
       }
       if (title.toLowerCase() === "mcp") {
         title = "MCP";

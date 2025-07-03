@@ -32,7 +32,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       routes.prompts,
       routes.environments,
     ],
-    consume: [routes.playground, routes.mcp, routes.agents, routes.slackApp],
+    consume: [routes.playground, routes.mcp, routes.sdks],
   };
 
   const bottomNav = [routes.settings, routes.docs];

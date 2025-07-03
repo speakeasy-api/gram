@@ -186,6 +186,11 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	if authCtx.AccountType != "enterprise" {
+		return nil, oops.E(oops.CodeUnauthorized, fmt.Errorf("only available for enterprise accounts"), "only available for enterprise accounts").Log(ctx, s.logger)
+	}
+
 	state := url.Values{}
 	state.Set("project_id", authCtx.ProjectID.String())
 	state.Set("organization_id", authCtx.ActiveOrganizationID)

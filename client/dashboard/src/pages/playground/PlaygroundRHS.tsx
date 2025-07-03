@@ -46,7 +46,7 @@ export function PlaygroundRHS({
           <Type className="font-medium">Use with: </Type>
           <TabsList>
             <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="agents">Agents</TabsTrigger>
+            <TabsTrigger value="agents">SDKs</TabsTrigger>
           </TabsList>
         </Stack>
       </PanelHeader>

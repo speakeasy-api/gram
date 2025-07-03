@@ -21,7 +21,6 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
-import SlackApp from "./pages/slackapp/SlackApp";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -225,17 +224,11 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  agents: {
-    title: "Agents",
-    url: "agents",
+  sdks: {
+    title: "SDKs",
+    url: "sdks",
     icon: "code",
     component: SDK,
-  },
-  slackApp: {
-    title: "Slack App",
-    url: "slack-app",
-    icon: "slack",
-    component: SlackApp,
   },
   uploadOpenAPI: {
     title: "Upload OpenAPI",
