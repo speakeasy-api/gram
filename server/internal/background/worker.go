@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
@@ -13,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/k8s"
-	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 )
@@ -43,7 +43,7 @@ func ForDeploymentProcessing(db *pgxpool.Pool, assetStorage assets.BlobStore) *W
 func NewTemporalWorker(
 	client client.Client,
 	logger *slog.Logger,
-	metrics *o11y.Metrics,
+	meterProvider metric.MeterProvider,
 	options ...*WorkerOptions,
 ) worker.Worker {
 	opts := &WorkerOptions{
@@ -78,7 +78,7 @@ func NewTemporalWorker(
 
 	activities := NewActivities(
 		logger,
-		metrics,
+		meterProvider,
 		opts.DB,
 		opts.AssetStorage,
 		opts.SlackClient,

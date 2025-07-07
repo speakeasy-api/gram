@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -23,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/internal/auth"
 	"github.com/speakeasy-api/gram/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/internal/background"
-	"github.com/speakeasy-api/gram/internal/background/activities"
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/deployments/repo"
@@ -40,7 +38,6 @@ import (
 type Service struct {
 	logger       *slog.Logger
 	tracer       trace.Tracer
-	metrics      *o11y.Metrics
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	auth         *auth.Auth
@@ -52,11 +49,12 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, temporal client.Client, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, temporal client.Client, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
+	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/internal/deployments")
+
 	return &Service{
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/deployments"),
 		logger:       logger,
-		metrics:      metrics,
+		tracer:       tracer,
 		db:           db,
 		repo:         repo.New(db),
 		auth:         auth.New(logger, db, sessions),
@@ -629,90 +627,6 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 }
 
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
-	if s.temporal == nil {
-		logger.WarnContext(ctx, "starting deployment in-process")
-		return s.startDeploymentInProcess(ctx, logger, projectID, deploymentID, dep)
-	}
-
-	return s.startDeploymentTemporal(ctx, logger, projectID, deploymentID, dep)
-}
-
-func (s *Service) startDeploymentInProcess(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
-	span := trace.SpanFromContext(ctx)
-
-	status := ""
-	var err error
-
-	pendingTransition, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
-		DeploymentID: deploymentID,
-		ProjectID:    projectID,
-		Status:       "pending",
-		Event:        "deployment:pending",
-		Message:      "Deployment pending",
-	})
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to pending").Log(ctx, logger)
-	}
-	if !pendingTransition.Moved {
-		return "", oops.E(
-			oops.CodeInvariantViolation,
-			nil,
-			"deployment did not move to pending status because of unexpected current state (want: pending, current: %s)",
-			pendingTransition.Status,
-		).Log(ctx, logger)
-	}
-
-	if err := activities.NewProcessDeployment(logger, s.metrics, s.db, s.assetStorage).Do(ctx, projectID, deploymentID); err != nil {
-		transition, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
-			DeploymentID: deploymentID,
-			ProjectID:    projectID,
-			Status:       "failed",
-			Event:        "deployment:failed",
-			Message:      err.Error(),
-		})
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to error").Log(ctx, logger)
-		}
-		if !transition.Moved {
-			return "", oops.E(
-				oops.CodeInvariantViolation,
-				nil,
-				"deployment did not move to failed status because of unexpected current state (want: failed, current: %s)",
-				transition.Status,
-			).Log(ctx, logger)
-		}
-
-		span.AddEvent("deployment_failed")
-		status = "failed"
-	} else {
-		transition, err := s.repo.TransitionDeployment(ctx, repo.TransitionDeploymentParams{
-			DeploymentID: deploymentID,
-			ProjectID:    projectID,
-			Status:       "completed",
-			Event:        "deployment:completed",
-			Message:      "Deployment completed",
-		})
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error transitioning deployment to completed").Log(ctx, logger)
-		}
-		if !transition.Moved {
-			return "", oops.E(
-				oops.CodeInvariantViolation,
-				nil,
-				"deployment did not move to completed status because of unexpected current state (want: completed, current: %s)",
-				transition.Status,
-			).Log(ctx, logger)
-		}
-
-		span.AddEvent("deployment_completed")
-		status = "completed"
-	}
-
-	return status, nil
-
-}
-
-func (s *Service) startDeploymentTemporal(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
 	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporal, background.ProcessDeploymentWorkflowParams{
 		ProjectID:      projectID,
 		DeploymentID:   deploymentID,

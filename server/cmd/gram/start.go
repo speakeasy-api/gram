@@ -264,6 +264,8 @@ func newStartCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			o11y.PullAppInfo(c.Context).Command = "server"
 			logger := PullLogger(c.Context).With(slog.String("cmd", "server"))
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -290,12 +292,7 @@ func newStartCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			metrics, err := o11y.NewMetrics(otel.GetMeterProvider())
-			if err != nil {
-				return fmt.Errorf("failed to create metrics: %w", err)
-			}
-
-			err = o11y.StartObservers(otel.GetMeterProvider(), db)
+			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
 				return fmt.Errorf("failed to create observers: %w", err)
 			}
@@ -402,7 +399,7 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, metrics, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
@@ -421,13 +418,13 @@ func newStartCommand() *cli.Command {
 			integrations.Attach(mux, integrations.NewService(logger.With(slog.String("component", "integrations")), db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger.With(slog.String("component", "templates")), db, sessionManager))
 			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), metrics, db, temporalClient, sessionManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), tracerProvider, db, temporalClient, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
 			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
-			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), metrics, db, sessionManager, encryptionClient, baseChatClient, cache.NewRedisCacheAdapter(redisClient)))
-			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), metrics, db, sessionManager, encryptionClient, baseChatClient, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient)))
+			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, baseChatClient, cache.NewRedisCacheAdapter(redisClient)))
+			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, baseChatClient, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient)))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
@@ -461,7 +458,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := background.NewTemporalWorker(temporalClient, logger, metrics, &background.WorkerOptions{
+					temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
 						DB:                  db,
 						AssetStorage:        assetStorage,
 						SlackClient:         slackClient,

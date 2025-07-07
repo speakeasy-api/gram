@@ -6,12 +6,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/internal/assets"
 	"github.com/speakeasy-api/gram/internal/background/activities"
 	"github.com/speakeasy-api/gram/internal/chat"
 	"github.com/speakeasy-api/gram/internal/k8s"
-	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
@@ -28,9 +28,9 @@ type Activities struct {
 	customDomainIngress    *activities.CustomDomainIngress
 }
 
-func NewActivities(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients, expectedTargetCNAME string) *Activities {
+func NewActivities(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients, expectedTargetCNAME string) *Activities {
 	return &Activities{
-		processDeployment:      activities.NewProcessDeployment(logger, metrics, db, assetStorage),
+		processDeployment:      activities.NewProcessDeployment(logger, meterProvider, db, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
 		getSlackProjectContext: activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:       activities.NewPostSlackMessageActivity(logger, slackClient),

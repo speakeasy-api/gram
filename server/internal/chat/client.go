@@ -21,11 +21,10 @@ import (
 	env_repo "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	tools_repo "github.com/speakeasy-api/gram/internal/tools/repo"
 	"github.com/speakeasy-api/gram/internal/toolsets"
-	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -35,21 +34,29 @@ type ChatClient struct {
 	chatClient *openrouter.ChatClient
 	db         *pgxpool.Pool
 	enc        *encryption.Encryption
-	tracer     trace.Tracer
-	metrics    *o11y.Metrics
 	cache      cache.Cache
+	toolProxy  *instances.InstanceToolProxy
 }
 
-func NewChatClient(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption, cacheImpl cache.Cache) *ChatClient {
+func NewChatClient(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption, cacheImpl cache.Cache) *ChatClient {
+	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/internal/chat")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/internal/chat")
+
 	return &ChatClient{
 		logger:     logger,
-		metrics:    metrics,
 		openRouter: openRouter,
 		chatClient: chatClient,
 		db:         db,
 		enc:        enc,
-		tracer:     otel.Tracer("github.com/speakeasy-api/gram/internal/chat"),
 		cache:      cacheImpl,
+		toolProxy: instances.NewInstanceToolProxy(
+			logger,
+			tracer,
+			meter,
+			instances.ToolCallSourceDirect,
+			cacheImpl,
+			chatClient,
+		),
 	}
 }
 
@@ -246,14 +253,7 @@ func (c *ChatClient) LoadToolsetTools(
 				envVars[key] = value
 			}
 
-			err = instances.InstanceToolProxy(ctx, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan, instances.InstanceToolProxyConfig{
-				Source:     instances.ToolCallSourceDirect,
-				Logger:     c.logger,
-				Metrics:    c.metrics,
-				Tracer:     c.tracer,
-				Cache:      c.cache,
-				ChatClient: c.chatClient,
-			})
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

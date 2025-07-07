@@ -22,7 +22,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/internal/contextvalues"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
+	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/mv"
 	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
@@ -46,20 +47,18 @@ import (
 )
 
 type Service struct {
-	tracer       trace.Tracer
 	logger       *slog.Logger
-	metrics      *o11y.Metrics
+	tracer       trace.Tracer
+	meter        metric.Meter
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	projectsRepo *projects_repo.Queries
 	toolsetsRepo *toolsets_repo.Queries
 	auth         *auth.Auth
 	enc          *encryption.Encryption
-	chatClient   *openrouter.ChatClient
 	serverURL    *url.URL
-	// posthog metrics will no-op if the dependency is not provided
-	posthog *posthog.Posthog
-	cache   cache.Cache
+	posthog      *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy    *instances.InstanceToolProxy
 }
 
 type mcpInputs struct {
@@ -76,21 +75,30 @@ var configSnippetTmplData string
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
-func NewService(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL, cacheImpl cache.Cache) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL, cacheImpl cache.Cache) *Service {
+	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/internal/mcp")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/internal/mcp")
+
 	return &Service{
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/internal/mcp"),
 		logger:       logger,
-		metrics:      metrics,
+		tracer:       tracer,
+		meter:        meter,
 		db:           db,
 		repo:         repo.New(db),
 		projectsRepo: projects_repo.New(db),
 		toolsetsRepo: toolsets_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
 		enc:          enc,
-		chatClient:   chatClient,
 		serverURL:    serverURL,
 		posthog:      posthog,
-		cache:        cacheImpl,
+		toolProxy: instances.NewInstanceToolProxy(
+			logger,
+			tracer,
+			meter,
+			instances.ToolCallSourceMCP,
+			cacheImpl,
+			chatClient,
+		),
 	}
 }
 
@@ -495,7 +503,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
 	case "tools/call":
-		return handleToolsCall(ctx, s.tracer, s.logger, s.metrics, s.db, s.enc, payload, req, s.chatClient, s.cache)
+		return handleToolsCall(ctx, s.logger, s.db, s.enc, payload, req, s.toolProxy)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":

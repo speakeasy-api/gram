@@ -141,6 +141,8 @@ func newWorkerCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			o11y.PullAppInfo(c.Context).Command = "worker"
 			logger := PullLogger(c.Context).With(slog.String("cmd", "worker"))
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -167,11 +169,6 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
-
-			metrics, err := o11y.NewMetrics(otel.GetMeterProvider())
-			if err != nil {
-				return fmt.Errorf("failed to create metrics: %w", err)
-			}
 
 			db, err := newDBClient(ctx, logger, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -241,9 +238,9 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, metrics, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
 
-			temporalWorker := background.NewTemporalWorker(temporalClient, logger, metrics, &background.WorkerOptions{
+			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
 				DB:                  db,
 				AssetStorage:        assetStorage,
 				SlackClient:         slackClient,

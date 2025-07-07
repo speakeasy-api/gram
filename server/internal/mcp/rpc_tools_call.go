@@ -18,18 +18,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/cache"
 	"github.com/speakeasy-api/gram/internal/conv"
 	"github.com/speakeasy-api/gram/internal/encryption"
 	"github.com/speakeasy-api/gram/internal/environments"
 	er "github.com/speakeasy-api/gram/internal/environments/repo"
 	"github.com/speakeasy-api/gram/internal/instances"
 	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/o11y"
 	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/internal/toolsets"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type toolsCallParams struct {
@@ -37,7 +33,15 @@ type toolsCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, enc *encryption.Encryption, payload *mcpInputs, req *rawRequest, chatClient *openrouter.ChatClient, cache cache.Cache) (json.RawMessage, error) {
+func handleToolsCall(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	enc *encryption.Encryption,
+	payload *mcpInputs,
+	req *rawRequest,
+	toolProxy *instances.InstanceToolProxy,
+) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, logger)
@@ -135,14 +139,7 @@ func handleToolsCall(ctx context.Context, tracer trace.Tracer, logger *slog.Logg
 		statusCode: http.StatusOK,
 	}
 
-	err = instances.InstanceToolProxy(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan, instances.InstanceToolProxyConfig{
-		Source:     instances.ToolCallSourceMCP,
-		Logger:     logger,
-		Metrics:    metrics,
-		Tracer:     tracer,
-		Cache:      cache,
-		ChatClient: chatClient,
-	})
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

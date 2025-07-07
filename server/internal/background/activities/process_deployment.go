@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/temporal"
 
@@ -27,7 +28,7 @@ import (
 
 type ProcessDeployment struct {
 	logger       *slog.Logger
-	metrics      *o11y.Metrics
+	metrics      *metrics
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assets       *assetsRepo.Queries
@@ -36,10 +37,10 @@ type ProcessDeployment struct {
 	projects     *projectsRepo.Queries
 }
 
-func NewProcessDeployment(logger *slog.Logger, metrics *o11y.Metrics, db *pgxpool.Pool, assetStorage assets.BlobStore) *ProcessDeployment {
+func NewProcessDeployment(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, assetStorage assets.BlobStore) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:       logger,
-		metrics:      metrics,
+		metrics:      newMetrics(newMeter(meterProvider), logger),
 		db:           db,
 		repo:         repo.New(db),
 		assets:       assetsRepo.New(db),

@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/metric"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
+	tracernoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 func NewLogger(*testing.T) *slog.Logger {
@@ -18,10 +20,14 @@ func NewLogger(*testing.T) *slog.Logger {
 	}
 }
 
-func NewMetrics(t *testing.T) *o11y.Metrics {
+func NewTracerProvider(t *testing.T) trace.TracerProvider {
 	t.Helper()
 
-	metrics, err := o11y.NewMetrics(noop.NewMeterProvider())
-	require.NoError(t, err, "failed to create metrics provider")
-	return metrics
+	return tracernoop.NewTracerProvider()
+}
+
+func NewMeterProvider(t *testing.T) metric.MeterProvider {
+	t.Helper()
+
+	return metricnoop.NewMeterProvider()
 }

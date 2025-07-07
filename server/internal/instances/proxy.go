@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/internal/cache"
@@ -89,29 +90,57 @@ type toolcallErrorSchema struct {
 }
 
 type InstanceToolProxyConfig struct {
-	Source  ToolCallSource
-	Logger  *slog.Logger
-	Metrics *o11y.Metrics
-	Tracer  trace.Tracer
-	Cache   cache.Cache
+	Source ToolCallSource
+	Logger *slog.Logger
+	Tracer trace.Tracer
+	Meter  metric.Meter
+	Cache  cache.Cache
 	// The auto-summarization feature uses a chat client as a dependency, that is the only current reason for this
 	// For now this is nullable, but we should consider refactoring into a non openrouter specific chat client eventually
 	ChatClient *openrouter.ChatClient
 }
 
-func InstanceToolProxy(
+type InstanceToolProxy struct {
+	source  ToolCallSource
+	logger  *slog.Logger
+	tracer  trace.Tracer
+	metrics *metrics
+	cache   cache.Cache
+	// The auto-summarization feature uses a chat client as a dependency, that is the only current reason for this
+	// For now this is nullable, but we should consider refactoring into a non openrouter specific chat client eventually
+	chatClient *openrouter.ChatClient
+}
+
+func NewInstanceToolProxy(
+	logger *slog.Logger,
+	tracer trace.Tracer,
+	meter metric.Meter,
+	source ToolCallSource,
+	cache cache.Cache,
+	chatClient *openrouter.ChatClient,
+) *InstanceToolProxy {
+	return &InstanceToolProxy{
+		source:     source,
+		logger:     logger,
+		tracer:     tracer,
+		metrics:    newMetrics(meter, logger),
+		cache:      cache,
+		chatClient: chatClient,
+	}
+}
+
+func (itp *InstanceToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
 	envVars map[string]string,
 	toolExecutionInfo *toolsets.HTTPToolExecutionInfo,
-	config InstanceToolProxyConfig,
 ) error {
-	logger := config.Logger.With(
+	logger := itp.logger.With(
 		slog.String("project_id", toolExecutionInfo.Tool.ProjectID.String()),
 		slog.String("tool", toolExecutionInfo.Tool.Name),
 		slog.String("path", toolExecutionInfo.Tool.Path),
-		slog.String("source", string(config.Source)),
+		slog.String("source", string(itp.source)),
 		slog.String("account_type", toolExecutionInfo.AccountType),
 		slog.String("org_slug", toolExecutionInfo.OrgSlug),
 		slog.String("project_slug", toolExecutionInfo.ProjectSlug),
@@ -121,7 +150,7 @@ func InstanceToolProxy(
 	var responseStatusCode int
 	defer func() {
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
-		config.Metrics.RecordHTTPToolCall(ctx, toolExecutionInfo.OrganizationID, toolExecutionInfo.OrgSlug, toolExecutionInfo.Tool.Name, responseStatusCode)
+		itp.metrics.RecordHTTPToolCall(ctx, toolExecutionInfo.OrganizationID, toolExecutionInfo.OrgSlug, toolExecutionInfo.Tool.Name, responseStatusCode)
 	}()
 
 	// Keep in mind tool calls are not required to be gram authenticated, we have public MCP servers. Develop accordingly
@@ -294,7 +323,7 @@ func InstanceToolProxy(
 		}
 	}
 
-	processSecurity(ctx, logger, req, w, &responseStatusCode, toolExecutionInfo, config.Cache, ciEnv, serverURL)
+	processSecurity(ctx, logger, req, w, &responseStatusCode, toolExecutionInfo, itp.cache, ciEnv, serverURL)
 
 	if err := protectSSRF(ctx, logger, req.URL); err != nil {
 		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
@@ -304,10 +333,10 @@ func InstanceToolProxy(
 	if isAuthenticated && authCtx != nil && authCtx.ActiveOrganizationID != "" {
 		authenticatedOrg = &authCtx.ActiveOrganizationID
 	}
-	return reverseProxyRequest(ctx, config.Tracer, logger, toolExecutionInfo.Tool, w, req, &responseStatusCode, autoSummarizeConfig{
+	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, w, req, &responseStatusCode, autoSummarizeConfig{
 		authenticatedOrg:     authenticatedOrg,
 		autoSummarizeMessage: toolCallBody.GramRequestSummary,
-		chatClient:           config.ChatClient,
+		chatClient:           itp.chatClient,
 	})
 }
 
@@ -373,8 +402,8 @@ type autoSummarizeConfig struct {
 }
 
 func reverseProxyRequest(ctx context.Context,
-	tracer trace.Tracer,
 	logger *slog.Logger,
+	tracer trace.Tracer,
 	tool tools_repo.HttpToolDefinition,
 	w http.ResponseWriter,
 	req *http.Request,
