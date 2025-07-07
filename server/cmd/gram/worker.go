@@ -20,7 +20,6 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
@@ -141,11 +140,13 @@ func newWorkerCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-worker"
+			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "worker"
 			logger := PullLogger(c.Context).With(
-				slog.String(string(semconv.ServiceNameKey), serviceName),
-				slog.String(string(semconv.ServiceVersionKey), shortGitSHA()),
+				slog.String("service", serviceName),
+				slog.String("version", shortGitSHA()),
+				slog.String("env", serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()

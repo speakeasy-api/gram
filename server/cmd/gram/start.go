@@ -20,7 +20,6 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
@@ -264,11 +263,13 @@ func newStartCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-server"
+			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "server"
 			logger := PullLogger(c.Context).With(
-				slog.String(string(semconv.ServiceNameKey), serviceName),
-				slog.String(string(semconv.ServiceVersionKey), shortGitSHA()),
+				slog.String("service", serviceName),
+				slog.String("version", shortGitSHA()),
+				slog.String("env", serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
