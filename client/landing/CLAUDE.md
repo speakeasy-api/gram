@@ -5,7 +5,7 @@ This is the Gram landing page built with Next.js, TypeScript, and Tailwind CSS. 
 ## Quick Commands
 
 - `npm run dev` - Start development server
-- `npm run build` - Build for production  
+- `npm run build` - Build for production
 - `npm run lint` - Run ESLint
 - `pnpm add <package>` - Add new dependencies (use pnpm, not npm)
 
@@ -63,7 +63,7 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 <Badge variant="gradient">New Feature</Badge>
 
 // Button groups with consistent styling
-<ButtonGroup 
+<ButtonGroup
   buttons={[
     { text: "Primary Action", href: "/signup", variant: "rainbow-light" },
     { text: "Secondary Action", href: "/docs", variant: "outline" }
@@ -77,31 +77,36 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 ## Component Variants Reference
 
 ### Section Sizes
+
 - `xs` - Minimal padding (8-16px)
-- `sm` - Small padding (16-24px) 
+- `sm` - Small padding (16-24px)
 - `md` - Default padding (24-40px) - **Use this for most sections**
 - `lg` - Large padding (28-44px) - **Use for CTA sections**
 - `xl` - Extra large (32-48px)
 - `hero` - Full height hero sections
 
 ### Section Backgrounds
+
 - `white` - Default white background
 - `black` - Dark background (use `color="white"` for text)
 - `neutral` - Light gray background
 - `transparent` - No background
 
 ### Heading Sizes
+
 - `hero` - Largest text for hero sections (4xl-7xl responsive)
 - `display` - Section headers (display-sm to display-lg)
 - `h1`, `h2`, `h3`, `h4` - Standard heading sizes
 
 ### Text Sizes
+
 - `hero` - Large descriptive text for heroes (lg-2xl)
 - `description` - Section descriptions (base-lg)
 - `base` - Standard body text
 - `sm` - Small text for labels/captions
 
 ### Grid Patterns
+
 - `hero` - Two-column hero layout (1 col mobile, 2 col desktop)
 - `responsive` - Auto-responsive grid (1-2-3 cols based on screen)
 - `auto` - Auto-fit with min 300px width
@@ -110,6 +115,7 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 ## Common Page Patterns
 
 ### Hero Section
+
 ```tsx
 <Section size="hero">
   <Container>
@@ -129,6 +135,7 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 ```
 
 ### Feature Section
+
 ```tsx
 <Section>
   <Container>
@@ -144,6 +151,7 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 ```
 
 ### CTA Section
+
 ```tsx
 <Section background="black" size="lg">
   <Container>
@@ -158,6 +166,7 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 ```
 
 ### Community Footer
+
 ```tsx
 <Section asChild>
   <footer className="relative bg-neutral-100 border-t border-neutral-200 min-h-[600px] flex flex-col justify-center items-center">
@@ -177,19 +186,23 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 ## Design System Guidelines
 
 ### Colors
+
 - Use semantic color props: `default`, `muted`, `white` instead of specific Tailwind classes
 - For custom colors, use the neutral palette: `text-neutral-900`, `text-neutral-600`, etc.
 
 ### Spacing
+
 - Use component gap props: `gap={4}`, `gap={8}`, `gap={12}` for consistent spacing
 - For custom spacing, use Tailwind's 4px scale: `mb-4`, `py-8`, `gap-12`
 
 ### Responsive Design
+
 - Components are mobile-first by default
 - Use responsive props when available: `cols="hero"` automatically adapts
 - For custom responsive: `className="text-base lg:text-xl"`
 
 ### Using `asChild` Prop
+
 The `asChild` prop lets you change the underlying HTML element while keeping component styles:
 
 ```tsx
@@ -209,7 +222,7 @@ The `asChild` prop lets you change the underlying HTML element while keeping com
 app/components/sections/
 ├── Section.tsx          # Main section wrapper
 ├── Container.tsx        # Content containers
-├── Typography.tsx       # Heading & Text components  
+├── Typography.tsx       # Heading & Text components
 ├── Layout.tsx          # Grid & Flex components
 ├── Primitives.tsx      # Badge, ButtonGroup, etc.
 └── index.ts           # Exports all components
@@ -218,21 +231,22 @@ app/components/sections/
 ## Best Practices
 
 ### DO ✅
+
 - Use the composable components for consistency
 - Wrap content in `<Container>` for proper max-width and padding
 - Use semantic color and size props instead of Tailwind classes
 - Center text sections with `mx-auto` on text elements
 - Use `Section` for all page sections to maintain consistent spacing
 
-### DON'T ❌  
+### DON'T ❌
+
 - Create custom layout components - use the existing Grid/Flex system
 - Use arbitrary Tailwind spacing - stick to the component gap props
 - Mix component props with conflicting Tailwind classes
 - Forget to wrap sections in `<Container>` - content will stretch full width
 
 ### Performance
+
 - All components use CVA (Class Variance Authority) for optimized CSS output
 - Radix Slot enables composition without wrapper div overhead
 - Components are tree-shakeable - only import what you use
-
-This system is designed for your CEO to quickly compose new pages by mixing and matching these proven patterns. Each component handles responsive design, accessibility, and design system consistency automatically.
