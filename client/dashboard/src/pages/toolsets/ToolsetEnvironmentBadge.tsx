@@ -13,10 +13,12 @@ import { useState } from "react";
 
 export const ToolsetEnvironmentBadge = ({
   toolset,
+  environmentSlug,
   size = "md",
   variant = "default",
 }: {
   toolset: Toolset | undefined;
+  environmentSlug?: string;
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {
@@ -39,8 +41,10 @@ export const ToolsetEnvironmentBadge = ({
     return <Badge size={size} isLoading />;
   }
 
+  const envSlug = environmentSlug ? environmentSlug : toolset.defaultEnvironmentSlug;
+
   const environment = environments.find(
-    (env) => env.slug === toolset.defaultEnvironmentSlug
+    (env) => env.slug === envSlug
   );
 
   const requiresServerURL = toolset.httpTools?.some(
@@ -153,11 +157,11 @@ export const ToolsetEnvironmentBadge = ({
   }
 
   return (
-    toolset.defaultEnvironmentSlug && (
+    envSlug && (
       <routes.environments.environment.Link
-        params={[toolset.defaultEnvironmentSlug]}
+        params={[envSlug]}
       >
-        <SimpleTooltip tooltip="The default environment for this toolset is fully configured.">
+        <SimpleTooltip tooltip="The environment for this toolset is fully configured.">
           <Badge size={size} variant={variant}>
             <Check className={cn("w-4 h-4 stroke-3", colors.success)} />
             Environment

@@ -16,10 +16,12 @@ export const ToolsetHeader = ({
   toolsetSlug,
   actions,
   showEnvironmentBadge,
+  environmentSlug,
 }: {
   toolsetSlug: string;
   actions?: React.ReactNode;
   showEnvironmentBadge?: boolean;
+  environmentSlug?: string;
 }) => {
   const client = useSdkClient();
   const { data: toolset, refetch } = useToolset({
@@ -79,6 +81,7 @@ export const ToolsetHeader = ({
           {showEnvironmentBadge && (
             <ToolsetEnvironmentBadge
               toolset={toolset}
+              environmentSlug={environmentSlug}
               size="md"
               variant="outline"
             />

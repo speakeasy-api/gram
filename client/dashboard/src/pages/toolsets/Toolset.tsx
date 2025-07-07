@@ -252,6 +252,7 @@ export function ToolsetView({
           toolsetSlug={toolsetSlug}
           actions={actions}
           showEnvironmentBadge={showEnvironmentBadge}
+          environmentSlug={environmentSlug}
         />
         {groupFilterItems.length > 1 && filterButton}
       </div>
