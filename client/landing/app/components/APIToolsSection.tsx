@@ -1,389 +1,217 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { motion, useInView } from "framer-motion";
-import { Code2, Workflow, BookOpen, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { Code2, BookOpen, CheckCircle, Workflow } from "lucide-react";
+import { useBentoItemState } from "./BentoGrid";
 
-function AnimatedAPITransform({ activeFeature }: { activeFeature: number }) {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, amount: 0.5 });
-  const [hasTransformed, setHasTransformed] = useState(false);
-  const [hoveredCard, setHoveredCard] = useState<
-    "spec" | "tools" | "higher" | null
-  >(null);
+type APIAnimationState = 'default' | 'story-spec' | 'story-transforming' | 'story-complete';
 
+function AnimatedAPITransform() {
+  const { isHovered } = useBentoItemState();
+  const [animationState, setAnimationState] = useState<APIAnimationState>('default');
+  
+  // State machine for animation
   useEffect(() => {
-    if (isInView && !hasTransformed) {
-      setTimeout(() => {
-        setHasTransformed(true);
-      }, 600);
+    if (isHovered) {
+      setAnimationState('story-spec');
+      
+      const transformTimer = setTimeout(() => {
+        setAnimationState('story-transforming');
+        
+        const completeTimer = setTimeout(() => {
+          setAnimationState('story-complete');
+        }, 800);
+        
+        return () => clearTimeout(completeTimer);
+      }, 1000);
+      
+      return () => clearTimeout(transformTimer);
     }
-  }, [isInView, hasTransformed]);
+  }, [isHovered]);
 
-  const showHigherOrder = hasTransformed && activeFeature === 1;
+  // Show story mode when hovering OR when animation is complete
+  const showStoryMode = isHovered || animationState === 'story-complete';
 
   return (
-    <div ref={ref} className="w-full max-w-lg">
-      <div className="relative h-[280px] sm:h-[320px] md:h-[340px]">
-        {/* Background: OpenAPI Spec */}
-        <motion.div
-          className={`absolute left-[12.5%] top-[10%] w-[75%] bg-gradient-to-br from-neutral-100 to-neutral-50 rounded-xl overflow-hidden border border-neutral-200 ${
-            hasTransformed ? "cursor-pointer" : ""
-          }`}
-          onMouseEnter={() => hasTransformed && setHoveredCard("spec")}
-          onMouseLeave={() => setHoveredCard(null)}
-          style={{
-            zIndex: hoveredCard === "spec" ? 20 : 1,
-            boxShadow:
-              hoveredCard === "spec"
-                ? "0px 20px 40px rgba(0,0,0,0.15), 0px 8px 16px rgba(0,0,0,0.1)"
-                : "0px 2px 4px rgba(0,0,0,0.05)",
-          }}
-          animate={{
-            scale: !hasTransformed
-              ? 1
-              : hoveredCard === "spec"
-              ? 1.02
-              : showHigherOrder
-              ? 0.96
-              : 0.98,
-            filter: !hasTransformed
-              ? "blur(0px)"
-              : hoveredCard === "spec"
-              ? "blur(0px)"
-              : hoveredCard === "tools" ||
-                hoveredCard === "higher" ||
-                showHigherOrder
-              ? "blur(2.5px)"
-              : "blur(1.5px)",
-            opacity: !hasTransformed
-              ? 1
-              : hoveredCard === "spec"
-              ? 1
-              : hoveredCard === "tools" ||
-                hoveredCard === "higher" ||
-                showHigherOrder
-              ? 0.7
-              : 0.85,
-            x: !hasTransformed
-              ? 0
-              : hoveredCard === "spec"
-              ? "-10%"
-              : showHigherOrder
-              ? "-15%"
-              : "-12.5%",
-            y: !hasTransformed
-              ? 0
-              : hoveredCard === "spec"
-              ? 20
-              : showHigherOrder
-              ? 40
-              : 30,
-            rotate: !hasTransformed
-              ? 0
-              : hoveredCard === "spec"
-              ? 0
-              : showHigherOrder
-              ? -1.5
-              : -1,
-          }}
-          transition={{
-            duration: hoveredCard !== null ? 0.3 : showHigherOrder ? 0.5 : 0.6,
-            ease: [0.23, 1, 0.32, 1],
-          }}
-        >
-          <div className="flex items-center gap-2 p-2 sm:p-3 bg-white border-b border-neutral-200">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect
-                x="2"
-                y="3"
-                width="12"
-                height="10"
-                rx="1"
-                className="stroke-neutral-400"
-                strokeWidth="1.5"
-              />
-              <path
-                d="M5 6.5H11M5 9.5H9"
-                className="stroke-neutral-400"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="text-[10px] sm:text-xs font-medium text-neutral-700">
-              PETSTORE.YAML
-            </span>
-          </div>
-
-          <div className="p-3 sm:p-4 font-mono text-[10px] sm:text-[11px] leading-[1.25] space-y-0.5">
-            <div className="flex">
-              <span className="text-neutral-400 mr-2 select-none">1</span>
-              <span className="text-brand-green-600">openapi</span>
-              <span className="text-neutral-600">: </span>
-              <span className="text-brand-blue-600">3.0.0</span>
-            </div>
-            <div className="flex">
-              <span className="text-neutral-400 mr-2 select-none">2</span>
-              <span className="text-brand-green-600">paths</span>
-              <span className="text-neutral-600">:</span>
-            </div>
-            <div className="flex">
-              <span className="text-neutral-400 mr-2 select-none">3</span>
-              <span className="ml-2"></span>
-              <span className="text-brand-green-600">/pet/:id</span>
-              <span className="text-neutral-600">:</span>
-            </div>
-            <div className="flex">
-              <span className="text-neutral-400 mr-2 select-none">4</span>
-              <span className="ml-4"></span>
-              <span className="text-brand-green-600">get</span>
-              <span className="text-neutral-600">: </span>
-              <span className="text-brand-blue-600">findPetById</span>
-            </div>
-            <div className="flex">
-              <span className="text-neutral-400 mr-2 select-none">5</span>
-              <span className="ml-4"></span>
-              <span className="text-brand-green-600">delete</span>
-              <span className="text-neutral-600">: </span>
-              <span className="text-brand-blue-600">deletePet</span>
-            </div>
-            <div className="flex">
-              <span className="text-neutral-400 mr-2 select-none">6</span>
-              <span className="ml-2"></span>
-              <span className="text-brand-green-600">/pet</span>
-              <span className="text-neutral-600">:</span>
-            </div>
-            <div className="flex">
-              <span className="text-neutral-400 mr-2 select-none">7</span>
-              <span className="ml-4"></span>
-              <span className="text-brand-green-600">post</span>
-              <span className="text-neutral-600">: </span>
-              <span className="text-brand-blue-600">addPet</span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Foreground: AI Tools */}
-        <motion.div
-          className={`absolute right-0 top-8 sm:top-12 w-[78%] ${
-            hasTransformed ? "cursor-pointer" : ""
-          }`}
-          onMouseEnter={() => hasTransformed && setHoveredCard("tools")}
-          onMouseLeave={() => setHoveredCard(null)}
-          style={{
-            zIndex: hoveredCard === "spec" ? 5 : 10,
-          }}
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{
-            opacity: hasTransformed
-              ? hoveredCard === "spec"
-                ? 0.7
-                : hoveredCard === "higher" || showHigherOrder
-                ? 0.85
-                : 1
-              : 0,
-            y: hasTransformed ? (showHigherOrder ? 10 : 0) : 20,
-            x: showHigherOrder ? -8 : 0,
-            scale: hasTransformed
-              ? hoveredCard === "tools"
-                ? 1.01
-                : showHigherOrder
-                ? 0.98
-                : 1
-              : 0.95,
-            filter:
-              hoveredCard === "spec"
-                ? "blur(1px)"
-                : hoveredCard === "higher" || showHigherOrder
-                ? "blur(1.5px)"
-                : "blur(0px)",
-          }}
-          transition={{
-            duration: hoveredCard !== null ? 0.3 : showHigherOrder ? 0.5 : 0.6,
-            ease: [0.23, 1, 0.32, 1],
-            delay:
-              hasTransformed && hoveredCard === null && !showHigherOrder
-                ? 0.1
-                : 0,
-          }}
-        >
-          <motion.div
-            className="w-full bg-white rounded-xl overflow-hidden border border-neutral-200"
-            animate={{
-              boxShadow:
-                hoveredCard === "tools"
-                  ? "0px 20px 40px rgba(0,0,0,0.12), 0px 8px 16px rgba(0,0,0,0.08)"
-                  : "0px 16px 32px rgba(0,0,0,0.1), 0px 4px 8px rgba(0,0,0,0.05)",
-            }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-          >
-            <div className="flex items-center justify-between p-2 sm:p-3 border-b border-neutral-200">
-              <h4 className="text-[10px] sm:text-xs font-medium text-neutral-900">
-                Auto-generated Tools
-              </h4>
-              <motion.div
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: hasTransformed ? 1 : 0, rotate: 0 }}
-                transition={{ type: "spring", delay: 0.7 }}
-              >
-                <CheckCircle className="w-4 h-4 text-success-600" />
-              </motion.div>
+    <div className="w-full max-w-sm">
+      <div className="relative h-[160px]">
+        
+        {!showStoryMode ? (
+          // Default: Show tools with blurred spec in background
+          <>
+            {/* Background: Blurred OpenAPI Spec - more visible */}
+            <div
+              className="absolute left-[10%] top-1/2 -translate-y-1/2 w-[55%] bg-gradient-to-br from-neutral-100 to-neutral-50 rounded-lg overflow-hidden border border-neutral-200"
+              style={{
+                zIndex: 1,
+                filter: "blur(1px)",
+                opacity: 0.5,
+              }}
+            >
+              <div className="flex items-center gap-1.5 p-1.5 bg-white border-b border-neutral-200">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="3" width="12" height="10" rx="1" className="stroke-neutral-400" strokeWidth="1.5" />
+                  <path d="M5 6.5H11M5 9.5H9" className="stroke-neutral-400" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span className="text-[8px] font-medium text-neutral-700">PETSTORE.YAML</span>
+              </div>
+              <div className="p-2 font-mono text-[7px] leading-[1.2] space-y-0.5">
+                <div className="flex">
+                  <span className="text-neutral-400 mr-1 select-none">1</span>
+                  <span className="text-brand-green-600">openapi</span>
+                  <span className="text-neutral-600">: </span>
+                  <span className="text-brand-blue-600">3.0.0</span>
+                </div>
+                <div className="flex">
+                  <span className="text-neutral-400 mr-1 select-none">2</span>
+                  <span className="text-brand-green-600">paths</span>
+                </div>
+                <div className="flex">
+                  <span className="text-neutral-400 mr-1 select-none">3</span>
+                  <span className="ml-1 text-brand-green-600">/pet</span>
+                </div>
+              </div>
             </div>
 
-            <div className="p-3 sm:p-4 overflow-hidden">
-              <div className="space-y-1.5 overflow-hidden">
-                {hasTransformed &&
-                  [
-                    {
-                      name: "findPetById",
-                      desc: "GET /pet/{id}",
-                      color: "blue",
-                    },
-                    {
-                      name: "deletePet",
-                      desc: "DELETE /pet/{id}",
-                      color: "red",
-                    },
-                    { name: "addPet", desc: "POST /pet", color: "green" },
-                  ].map((tool, index) => (
-                    <motion.div
-                      key={tool.name}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.5 + index * 0.08, duration: 0.3 }}
-                      className="flex items-center gap-3 p-2 rounded-md"
-                    >
-                      <div
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          tool.color === "blue"
-                            ? "bg-brand-blue-500"
-                            : tool.color === "green"
-                            ? "bg-brand-green-500"
-                            : tool.color === "yellow"
-                            ? "bg-warning-500"
-                            : tool.color === "red"
-                            ? "bg-brand-red-500"
-                            : ""
-                        }`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-mono text-[10px] sm:text-[11px] text-neutral-900">
-                          {tool.name}
-                        </div>
-                        <div className="text-[8px] sm:text-[9px] text-neutral-500">
-                          {tool.desc}
+            {/* Foreground: Tools card */}
+            <div className="absolute right-[10%] top-1/2 -translate-y-1/2 w-[55%] z-10">
+              <div className="w-full bg-white rounded-lg overflow-hidden border border-neutral-200">
+                <div className="flex items-center justify-between p-1.5 border-b border-neutral-200">
+                  <h4 className="text-[8px] font-medium text-neutral-900">Auto-generated Tools</h4>
+                  <CheckCircle className="w-3 h-3 text-success-600" />
+                </div>
+                <div className="p-2 overflow-hidden">
+                  <div className="space-y-1 overflow-hidden">
+                    {[
+                      { name: "findPetById", desc: "GET /pet/{id}", color: "blue" },
+                      { name: "deletePet", desc: "DELETE /pet/{id}", color: "red" },
+                      { name: "addPet", desc: "POST /pet", color: "green" },
+                    ].map((tool) => (
+                      <div key={tool.name} className="flex items-center gap-2 p-1 rounded-md">
+                        <div className={`w-1 h-1 rounded-full ${
+                          tool.color === "blue" ? "bg-brand-blue-500" :
+                          tool.color === "green" ? "bg-brand-green-500" :
+                          tool.color === "red" ? "bg-brand-red-500" : ""
+                        }`} />
+                        <div className="flex-1">
+                          <div className="font-mono text-[8px] text-neutral-900">{tool.name}</div>
+                          <div className="text-[7px] text-neutral-500">{tool.desc}</div>
                         </div>
                       </div>
-                    </motion.div>
-                  ))}
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-
-        {/* Third Layer: Higher Order Tools */}
-        <motion.div
-          className={`absolute right-0 top-8 sm:top-12 w-[72%] ${
-            showHigherOrder ? "cursor-pointer" : ""
-          }`}
-          onMouseEnter={() => showHigherOrder && setHoveredCard("higher")}
-          onMouseLeave={() => setHoveredCard(null)}
-          style={{
-            zIndex: showHigherOrder ? 30 : 0,
-          }}
-          initial={{ opacity: 0, y: 40, scale: 0.9 }}
-          animate={{
-            opacity: showHigherOrder ? 1 : 0,
-            y: showHigherOrder ? 0 : 40,
-            scale: showHigherOrder
-              ? hoveredCard === "higher"
-                ? 1.02
-                : 1
-              : 0.9,
-          }}
-          transition={{
-            duration: 0.5,
-            ease: [0.23, 1, 0.32, 1],
-          }}
-        >
-          <motion.div
-            className="w-full bg-white rounded-xl overflow-hidden border border-neutral-200"
-            animate={{
-              boxShadow:
-                hoveredCard === "higher"
-                  ? "0px 32px 64px rgba(0,0,0,0.2), 0px 16px 32px rgba(0,0,0,0.15)"
-                  : "0px 24px 48px rgba(0,0,0,0.15), 0px 12px 24px rgba(0,0,0,0.1)",
-            }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-          >
-            <div className="flex items-center justify-between p-2 sm:p-3 border-b border-neutral-200">
-              <h4 className="text-[10px] sm:text-xs font-medium text-neutral-900">
-                Higher Order Tool
-              </h4>
-              <motion.div
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", delay: 0.3 }}
-              >
-                <Workflow className="w-4 h-4 text-brand-blue-600" />
-              </motion.div>
-            </div>
-
-            <div className="p-3 sm:p-4 overflow-hidden">
-              <div className="space-y-3">
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4, duration: 0.3 }}
-                  className="flex items-center gap-3"
-                >
-                  <div className="w-2 h-2 rounded-full bg-brand-blue-500" />
-                  <div className="flex-1">
-                    <div className="font-mono text-[10px] sm:text-[11px] text-neutral-900">
-                      registerNewPet
-                    </div>
-                    <div className="text-[8px] sm:text-[9px] text-neutral-500">
-                      Validates and registers a new pet in one workflow
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5, duration: 0.3 }}
-                  className="ml-5 space-y-1 text-[8px] sm:text-[9px] text-neutral-500 font-mono"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-400">1.</span>
-                    <span>Check if exists</span>
-                    <span className="text-neutral-400">→</span>
-                    <span className="text-brand-blue-600">findPetById</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-400">2.</span>
-                    <span>Create record</span>
-                    <span className="text-neutral-400">→</span>
-                    <span className="text-brand-green-600">addPet</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-400">3.</span>
-                    <span>Set status</span>
-                    <span className="text-neutral-400">→</span>
-                    <span className="text-warning-600">updatePet</span>
-                  </div>
-                </motion.div>
+          </>
+        ) : (
+          // Story mode: Show transformation animation
+          <>
+            {/* OpenAPI Spec */}
+            <motion.div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[55%] bg-gradient-to-br from-neutral-100 to-neutral-50 rounded-lg overflow-hidden border border-neutral-200"
+              animate={{
+                x: animationState === 'story-spec' ? 0 : animationState === 'story-transforming' ? -30 : animationState === 'story-complete' ? -80 : 0,
+                scale: animationState === 'story-transforming' ? 0.9 : 1,
+                opacity: animationState === 'story-complete' ? 0.5 : 1,
+                filter: animationState === 'story-complete' ? "blur(1px)" : "blur(0px)",
+              }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
+              style={{ zIndex: animationState === 'story-spec' ? 10 : 1 }}
+            >
+              <div className="flex items-center gap-1.5 p-1.5 bg-white border-b border-neutral-200">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="3" width="12" height="10" rx="1" className="stroke-neutral-400" strokeWidth="1.5" />
+                  <path d="M5 6.5H11M5 9.5H9" className="stroke-neutral-400" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span className="text-[8px] font-medium text-neutral-700">PETSTORE.YAML</span>
               </div>
-            </div>
-          </motion.div>
-        </motion.div>
+              <div className="p-2 font-mono text-[7px] leading-[1.2] space-y-0.5">
+                <div className="flex">
+                  <span className="text-neutral-400 mr-1 select-none">1</span>
+                  <span className="text-brand-green-600">openapi</span>
+                  <span className="text-neutral-600">: </span>
+                  <span className="text-brand-blue-600">3.0.0</span>
+                </div>
+                <div className="flex">
+                  <span className="text-neutral-400 mr-1 select-none">2</span>
+                  <span className="text-brand-green-600">paths</span>
+                </div>
+                <div className="flex">
+                  <span className="text-neutral-400 mr-1 select-none">3</span>
+                  <span className="ml-1 text-brand-green-600">/pet</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* AI Tools */}
+            <motion.div
+              className="absolute right-[10%] top-1/2 -translate-y-1/2 w-[55%]"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{
+                opacity: animationState === 'story-transforming' || animationState === 'story-complete' ? 1 : 0,
+                x: animationState === 'story-transforming' || animationState === 'story-complete' ? 0 : 20,
+                scale: animationState === 'story-complete' ? 1 : 0.95,
+              }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              style={{ zIndex: 10 }}
+            >
+              <div className="w-full bg-white rounded-lg overflow-hidden border border-neutral-200">
+                <div className="flex items-center justify-between p-1.5 border-b border-neutral-200">
+                  <h4 className="text-[8px] font-medium text-neutral-900">Auto-generated Tools</h4>
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ 
+                      scale: animationState === 'story-complete' ? 1 : 0,
+                      rotate: animationState === 'story-complete' ? 360 : 0,
+                    }}
+                    transition={{ duration: 0.3, delay: 0.2 }}
+                  >
+                    <CheckCircle className="w-3 h-3 text-success-600" />
+                  </motion.div>
+                </div>
+                <div className="p-2 overflow-hidden">
+                  <div className="space-y-1 overflow-hidden">
+                    {[
+                      { name: "findPetById", desc: "GET /pet/{id}", color: "blue" },
+                      { name: "deletePet", desc: "DELETE /pet/{id}", color: "red" },
+                      { name: "addPet", desc: "POST /pet", color: "green" },
+                    ].map((tool, index) => (
+                      <motion.div
+                        key={tool.name}
+                        className="flex items-center gap-2 p-1 rounded-md"
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ 
+                          opacity: animationState === 'story-complete' ? 1 : 0,
+                          x: animationState === 'story-complete' ? 0 : 10,
+                        }}
+                        transition={{ duration: 0.3, delay: 0.4 + index * 0.1 }}
+                      >
+                        <div className={`w-1 h-1 rounded-full ${
+                          tool.color === "blue" ? "bg-brand-blue-500" :
+                          tool.color === "green" ? "bg-brand-green-500" :
+                          tool.color === "red" ? "bg-brand-red-500" : ""
+                        }`} />
+                        <div className="flex-1">
+                          <div className="font-mono text-[8px] text-neutral-900">{tool.name}</div>
+                          <div className="text-[7px] text-neutral-500">{tool.desc}</div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 export default function APIToolsSection() {
-  const [hoveredFeature, setHoveredFeature] = useState<number>(-1);
+  const [, setHoveredFeature] = useState<number>(-1);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
@@ -438,8 +266,10 @@ export default function APIToolsSection() {
         </ul>
       </div>
       <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-        <AnimatedAPITransform activeFeature={hoveredFeature} />
+        <AnimatedAPITransform />
       </div>
     </div>
   );
 }
+
+export { AnimatedAPITransform };

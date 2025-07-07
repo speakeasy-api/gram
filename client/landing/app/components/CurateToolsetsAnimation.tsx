@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef } from "react";
-import { motion, useInView } from "framer-motion";
+import { motion } from "framer-motion";
+import { useBentoItemState } from "./BentoGrid";
 
 export default function CurateToolsetsAnimation() {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, amount: 0.5 });
+  const { isHovered } = useBentoItemState();
 
   const toolsets = [
     {
@@ -47,29 +46,40 @@ export default function CurateToolsetsAnimation() {
   ];
 
   return (
-    <div ref={ref} className="w-full max-w-sm">
+    <div className="w-full max-w-sm">
       <div className="space-y-2">
         {toolsets.map((toolset, index) => (
           <motion.div
             key={toolset.id}
             className="bg-white rounded-xl p-4 border border-neutral-200"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 1, y: 0 }}
             animate={{
-              opacity: isInView ? 1 : 0,
-              y: isInView ? 0 : 20,
+              opacity: 1,
+              y: 0,
+              scale: isHovered ? 1.02 : 1,
             }}
             transition={{
               duration: 0.5,
-              delay: index * 0.1,
+              delay: isHovered ? index * 0.1 : 0,
               ease: [0.21, 0.47, 0.32, 0.98],
+            }}
+            whileHover={{
+              scale: 1.02,
+              boxShadow: "0px 8px 16px rgba(0,0,0,0.08)",
             }}
           >
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center">
+              <motion.div
+                className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center"
+                animate={{
+                  backgroundColor: isHovered ? "#f3f4f6" : "#f5f5f5",
+                }}
+                transition={{ duration: 0.3 }}
+              >
                 <span className="text-xs font-bold text-neutral-700">
                   {toolset.icon}
                 </span>
-              </div>
+              </motion.div>
               <div>
                 <div className="text-sm font-medium text-neutral-900">
                   {toolset.name}
@@ -92,11 +102,19 @@ export default function CurateToolsetsAnimation() {
                       ? "bg-neutral-100 text-neutral-900 ring-1 ring-inset ring-neutral-900/10"
                       : "bg-neutral-50 text-neutral-600"
                   }`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: isInView ? 1 : 0 }}
+                  initial={{ opacity: 1, scale: 1 }}
+                  animate={{
+                    opacity: 1,
+                    scale: isHovered ? 1.05 : 1,
+                  }}
                   transition={{
-                    delay: index * 0.1 + 0.2 + toolIndex * 0.05,
+                    delay: isHovered ? index * 0.1 + 0.2 + toolIndex * 0.05 : 0,
                     duration: 0.3,
+                  }}
+                  whileHover={{
+                    scale: 1.05,
+                    backgroundColor:
+                      tool.type === "internal" ? "#e5e5e5" : "#f9f9f9",
                   }}
                 >
                   {tool.label}

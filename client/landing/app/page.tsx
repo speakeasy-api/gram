@@ -1,47 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  motion,
-  useMotionValue,
-  useInView,
-  AnimatePresence,
-} from "framer-motion";
+import { motion, useInView, AnimatePresence } from "framer-motion";
 import SpeakeasyLogo from "./components/SpeakeasyLogo";
 import PlugAndPlayLogos from "./components/PlugAndPlayLogos";
 import GramEcosystemAnimation from "./components/GramEcosystemAnimation";
-import StackedMetricCards from "./components/StackedMetricCards";
 import AnimatedToolCard from "./components/AnimatedToolCard";
 import CurateToolsetsAnimation from "./components/CurateToolsetsAnimation";
-import APIToolsSection from "./components/APIToolsSection";
+import StackedMetricCards from "./components/StackedMetricCards";
+import { AnimatedAPITransform } from "./components/APIToolsSection";
 import { Button, buttonVariants } from "./components/Button";
-import { GridOverlay } from "./components/GridOverlay";
-import FooterDotsHeroLike from "./components/FooterDotsHeroLike";
-import HeroDotGrid from "./components/HeroDotGrid";
+import MCPGraphic from "./components/MCPGraphic";
 import HowItWorksSection from "./components/HowItWorksSection";
-import {
-  Zap,
-  Key,
-  Activity,
-  Layers,
-  Shuffle,
-  Users,
-  CheckCircle,
-} from "lucide-react";
+import { BentoGrid, BentoGridRow, BentoGridItem } from "./components/BentoGrid";
 
 export default function Home() {
-  const [isResizing, setIsResizing] = useState(false);
-  const [active, setActive] = useState({ row: 0, col: 0 });
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showNavbarCTA, setShowNavbarCTA] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const dragX = useMotionValue(0);
-  const dragY = useMotionValue(0);
-
   const introducingRef = useRef<HTMLHeadingElement>(null);
-  const gramRef = useRef<HTMLHeadingElement>(null);
-  const mcpTextRef = useRef<HTMLDivElement>(null);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
 
@@ -53,20 +30,6 @@ export default function Home() {
   const isFooterInView = useInView(footerRef, { amount: 0.1 });
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsResizing(true);
-
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-
-      resizeTimeoutRef.current = setTimeout(() => {
-        setIsResizing(false);
-      }, 250);
-    };
-
-    window.addEventListener("resize", handleResize);
-
     const heroObserver = new window.IntersectionObserver(
       ([entry]) => {
         setShowNavbarCTA(!entry.isIntersecting);
@@ -87,10 +50,7 @@ export default function Home() {
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => {
-      window.removeEventListener("resize", handleResize);
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
+      window.removeEventListener("resize", checkMobile);
       if (buttonsRef.current) {
         heroObserver.unobserve(buttonsRef.current);
       }
@@ -235,76 +195,72 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="relative min-h-screen">
-        <HeroDotGrid
-          isResizing={isResizing}
-          active={active}
-          setActive={setActive}
-          dragX={dragX}
-          dragY={dragY}
-          introducingRef={introducingRef}
-          gramRef={gramRef}
-          mcpTextRef={mcpTextRef}
-          descriptionRef={descriptionRef}
-          buttonsRef={buttonsRef}
-        />
+      <div className="relative min-h-[80vh] flex items-center py-16 lg:py-20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+            {/* Left column - Text content */}
+            <div className="flex flex-col gap-6 lg:gap-8 py-8 lg:py-0">
+              {/* MCP Badge */}
+              <div className="inline-flex items-center">
+                <span
+                  className="relative inline-flex items-center px-2 py-1 text-xs font-mono text-neutral-700 uppercase tracking-wider rounded-xs"
+                  style={{
+                    background:
+                      "linear-gradient(white, white) padding-box, linear-gradient(90deg, var(--gradient-brand-primary-colors)) border-box",
+                    border: "1px solid transparent",
+                  }}
+                >
+                  Introducing gram
+                </span>
+              </div>
 
-        <div className="relative z-20 pointer-events-none">
-          <h1
-            ref={introducingRef}
-            className="absolute top-[20vh] md:top-[140px] left-6 md:left-10 lg:left-40 font-display font-light text-display-sm md:text-display-md lg:text-display-lg leading-[0.8] tracking-tight"
-          >
-            Introducing
-          </h1>
+              <div className="space-y-2">
+                <h1
+                  ref={introducingRef}
+                  className="font-display font-light text-4xl sm:text-5xl md:text-6xl lg:text-6xl xl:text-7xl leading-[1.1] tracking-tight text-neutral-900"
+                >
+                  <span className="block">Your API.</span>
+                  <span className="block">A hosted MCP Server.</span>
+                  <span className="block">One click.</span>
+                </h1>
+              </div>
 
-          <h2
-            ref={gramRef}
-            className="absolute top-[45vh] left-1/2 md:left-1/2 lg:left-auto lg:right-60 -translate-x-[20%] md:-translate-x-[10%] lg:translate-x-0 font-display font-light text-[5rem] md:text-[8rem] lg:text-[11.25rem] leading-[0.7] tracking-tighter"
-          >
-            gram.
-          </h2>
+              {/* MCP Graphic for mobile - shown between title and description */}
+              <div className="block lg:hidden relative h-[400px] md:h-[500px] flex items-center justify-center">
+                <MCPGraphic />
+              </div>
 
-          {/* <div
-            ref={mcpTextRef}
-            className="absolute top-[65vh] left-6 md:left-10 lg:left-40 text-foreground/80 text-sm md:text-base lg:text-[1.0625rem] leading-relaxed"
-          >
-            <p>Your API → Hosted MCP, Instantly.</p>
-            <p>Make your product LLM-ready.</p>
-            <p>Connect your OpenAPI spec to launch</p>
-            <p>a hosted MCP with zero maintenance.</p>
-          </div> */}
-        </div>
+              <div ref={descriptionRef} className="space-y-10 lg:space-y-12">
+                <p className="text-neutral-600 text-lg md:text-xl lg:text-2xl leading-[1.6] max-w-xl">
+                  Create, curate and distribute tools for AI. Everything you
+                  need to power integrations for Agents and LLMs.
+                </p>
 
-        <div className="absolute bottom-8 left-6 right-6 md:bottom-10 md:right-10 lg:bottom-24 lg:right-24 md:left-auto z-30">
-          <div className="flex flex-col gap-6 lg:gap-8 items-center md:items-start">
-            <div ref={descriptionRef} className="max-w-md">
-              <p className="text-foreground/80 text-sm md:text-base lg:text-[1.0625rem] leading-relaxed text-center md:text-left">
-                Create, curate and distribute tools for AI
-                <br />
-                Everything you need to power
-                <br />
-                integrations for Agents and LLMs
-              </p>
+                <div
+                  ref={buttonsRef}
+                  className="flex flex-col sm:flex-row gap-4"
+                >
+                  <Button
+                    size="chunky"
+                    variant="rainbow-light"
+                    href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
+                  >
+                    Join the waitlist
+                  </Button>
+                  <Button
+                    size="chunky"
+                    variant="primary-dark"
+                    href="https://calendly.com/sagar-speakeasy/30min"
+                  >
+                    Book a demo
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <div
-              ref={buttonsRef}
-              className="flex flex-col md:flex-row gap-3 w-full md:w-auto"
-            >
-              <Button
-                size="chunky"
-                variant="rainbow-light"
-                href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
-              >
-                Join the waitlist
-              </Button>
-              <Button
-                size="chunky"
-                variant="primary-dark"
-                href="https://calendly.com/sagar-speakeasy/30min"
-              >
-                Book a demo
-              </Button>
+            {/* Right column - MCP Graphic for desktop */}
+            <div className="hidden lg:flex relative h-[600px] md:h-[700px] lg:h-[800px] xl:h-[900px] items-center justify-center">
+              <MCPGraphic />
             </div>
           </div>
         </div>
@@ -313,423 +269,57 @@ export default function Home() {
       <HowItWorksSection />
 
       <section className="w-full py-24 sm:py-32 lg:py-40 relative">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative">
-          {/* Center divider line - moved outside to span full section */}
-          <div className="absolute left-1/2 top-0 bottom-0 w-px bg-neutral-300 -translate-x-1/2 hidden md:block" />
-
-          {/* Decoration squares where center line meets container top/bottom */}
-          <div
-            className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-20"
-            style={{
-              width: 10,
-              height: 10,
-              background: "var(--color-background)",
-              border: "2px solid var(--color-neutral-300)",
-              borderRadius: 2,
-            }}
-          />
-          <div
-            className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 hidden md:block z-20"
-            style={{
-              width: 10,
-              height: 10,
-              background: "var(--color-background)",
-              border: "2px solid var(--color-neutral-300)",
-              borderRadius: 2,
-            }}
-          />
-
-          <div className="relative space-y-24 sm:space-y-32 lg:space-y-40">
-            <GridOverlay inset="0" />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
-              <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6">
-                  Easiest way to host MCP at scale
-                </h2>
-                <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
-                  High quality Agentic Tools. Enterprise Experience.
-                </p>
-                <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Zap className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>1-click hosting of MCP servers.</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Key className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Redeploy new versions of tools with zero downtime
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Activity className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>Test and refine tools for optimal performance</span>
-                  </li>
-                </ul>
-              </div>
-              <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <AnimatedToolCard />
-              </div>
-            </div>
-
-            {/* Section divider */}
-            <div className="relative h-0">
-              {/* Left horizontal line - extends to center + 15px */}
-              <div
-                className="absolute left-0 top-0 h-px hidden md:block"
-                style={{
-                  right: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Right horizontal line - extends from center + 15px */}
-              <div
-                className="absolute right-0 top-0 h-px hidden md:block"
-                style={{
-                  left: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Mobile version - single line */}
-              <div className="absolute inset-x-0 top-0 h-px bg-neutral-200 md:hidden" />
-
-              {/* Decoration squares - left edge, center, right edge */}
-              <div
-                className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-            </div>
-
-            <APIToolsSection />
-
-            {/* Section divider */}
-            <div className="relative h-0">
-              {/* Left horizontal line - extends to center + 15px */}
-              <div
-                className="absolute left-0 top-0 h-px hidden md:block"
-                style={{
-                  right: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Right horizontal line - extends from center + 15px */}
-              <div
-                className="absolute right-0 top-0 h-px hidden md:block"
-                style={{
-                  left: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Mobile version - single line */}
-              <div className="absolute inset-x-0 top-0 h-px bg-neutral-200 md:hidden" />
-
-              {/* Decoration squares - left edge, center, right edge */}
-              <div
-                className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
-              <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6 max-w-3xl">
-                  Curate Toolsets for every usecase
-                </h2>
-                <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
-                  Organize and optimize your tools for different teams and
-                  workflows.
-                </p>
-                <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Layers className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>Easily group tools into Toolsets</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Shuffle className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>Remix tools across your APIs and 3P services</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Users className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>Scope tool use for teams</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <CheckCircle className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>Instantly test and refine tools for quality</span>
-                  </li>
-                </ul>
-              </div>
-              <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <CurateToolsetsAnimation />
-              </div>
-            </div>
-
-            {/* Section divider */}
-            <div className="relative h-0">
-              {/* Left horizontal line - extends to center + 15px */}
-              <div
-                className="absolute left-0 top-0 h-px hidden md:block"
-                style={{
-                  right: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Right horizontal line - extends from center + 15px */}
-              <div
-                className="absolute right-0 top-0 h-px hidden md:block"
-                style={{
-                  left: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Mobile version - single line */}
-              <div className="absolute inset-x-0 top-0 h-px bg-neutral-200 md:hidden" />
-
-              {/* Decoration squares - left edge, center, right edge */}
-              <div
-                className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
-              <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6 max-w-3xl">
-                  Enterprise-grade tool distribution
-                </h2>
-                <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
-                  Secure and scalable Tools Gateway.
-                </p>
-                <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Zap className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Model and Framework Agnostic. Works with your stack.
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Key className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Support for managed and passthrough MCP authentication
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Activity className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Built in telemetry, audit logs, and rate limiting
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Activity className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Deploy and run on your own infrastructure for full control
-                      over data and compliance requirements.
-                    </span>
-                  </li>
-                </ul>
-              </div>
-              <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <StackedMetricCards />
-              </div>
-            </div>
-
-            {/* Section divider */}
-            <div className="relative h-0">
-              {/* Left horizontal line - extends to center + 15px */}
-              <div
-                className="absolute left-0 top-0 h-px hidden md:block"
-                style={{
-                  right: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Right horizontal line - extends from center + 15px */}
-              <div
-                className="absolute right-0 top-0 h-px hidden md:block"
-                style={{
-                  left: "calc(50% - 15px)",
-                  background: "var(--color-neutral-300)",
-                }}
-              />
-              {/* Mobile version - single line */}
-              <div className="absolute inset-x-0 top-0 h-px bg-neutral-200 md:hidden" />
-
-              {/* Decoration squares - left edge, center, right edge */}
-              <div
-                className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-              <div
-                className="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 hidden md:block z-10"
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: "var(--color-background)",
-                  border: "2px solid var(--color-neutral-300)",
-                  borderRadius: 2,
-                }}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-0 min-h-[400px] md:min-h-[500px]">
-              <div className="flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4 sm:mb-6 max-w-3xl">
-                  Plug & Play AI Integration
-                </h2>
-                <p className="text-base sm:text-lg text-neutral-600 mb-6 sm:mb-8">
-                  Users can interact with your product directly through any
-                  popular AI client with zero integration.
-                </p>
-                <ul className="space-y-3 sm:space-y-4 text-base sm:text-lg text-neutral-900">
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Activity className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Test and develop your MCP integrations with our
-                      interactive playground interface.
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Key className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Seamlessly integrates with your existing OAuth providers
-                      and authentication systems.
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-[6px] border border-neutral-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Zap className="w-4 h-4 text-neutral-900" />
-                    </div>
-                    <span>
-                      Out of the box landing page for your official MCP
-                      endpoint.
-                    </span>
-                  </li>
-                </ul>
-              </div>
-              <div className="flex items-center justify-center px-4 sm:px-8 lg:px-12 py-12 sm:py-16 lg:py-20">
-                <PlugAndPlayLogos />
-              </div>
-            </div>
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 sm:mb-16">
+            <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4">
+              Everything you need to build with MCP
+            </h2>
+            <p className="text-base sm:text-lg text-neutral-600 max-w-2xl mx-auto">
+              A complete platform for creating, hosting, and distributing AI
+              tools at scale
+            </p>
           </div>
+
+          <BentoGrid className="max-w-7xl mx-auto">
+            {/* First row - 2 columns */}
+            <BentoGridRow columns={2}>
+              <BentoGridItem
+                title="Easiest way to host MCP at scale"
+                description="Deploy MCP servers with one click, redeploy new versions with zero downtime, and continuously test and refine tools for optimal performance. High quality Agentic Tools with Enterprise Experience."
+                visual={<AnimatedToolCard />}
+              />
+
+              <BentoGridItem
+                title="Curate Toolsets for every usecase"
+                description="Group tools into focused toolsets, remix them across your APIs and third-party services, scope access by team, and instantly test for quality. Organize and optimize your tools for different workflows."
+                visual={<CurateToolsetsAnimation />}
+              />
+            </BentoGridRow>
+
+            {/* Second row - 3 columns */}
+            <BentoGridRow columns={3} isLastRow={true}>
+              <BentoGridItem
+                title="Transform any API into AI Tools"
+                description="Autogenerate tool definitions from OpenAPI specs, create higher order tools for complex workflows, and catalog your tools for easy distribution."
+                visual={<AnimatedAPITransform />}
+                visualSize="compact"
+              />
+
+              <BentoGridItem
+                title="Enterprise-grade tool distribution"
+                description="Model and framework agnostic gateway with managed authentication, built-in telemetry, audit logs, and rate limiting for secure tool distribution."
+                visual={<StackedMetricCards />}
+                visualSize="compact"
+              />
+
+              <BentoGridItem
+                title="Plug & Play AI Integration"
+                description="Interactive playground interface with seamless OAuth integration and ready-to-use landing pages. Zero integration required with popular AI clients."
+                visual={<PlugAndPlayLogos />}
+                visualSize="compact"
+              />
+            </BentoGridRow>
+          </BentoGrid>
         </div>
       </section>
 
@@ -750,11 +340,6 @@ export default function Home() {
         ref={footerRef}
         className="relative bg-neutral-100 w-full border-t border-neutral-200 overflow-hidden min-h-[600px] flex flex-col justify-center items-center"
       >
-        <FooterDotsHeroLike
-          footerHeadingRef={footerHeadingRef}
-          footerDescRef={footerDescRef}
-          footerButtonsRef={footerButtonsRef}
-        />
         <div className="relative z-20 w-full pointer-events-none">
           <div className="flex flex-col items-center justify-center py-32 sm:py-40 lg:py-48 max-w-2xl mx-auto px-4">
             <h3
