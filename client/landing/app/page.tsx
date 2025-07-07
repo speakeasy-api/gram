@@ -23,7 +23,6 @@ export default function Home() {
   const buttonsRef = useRef<HTMLDivElement>(null);
 
   const footerHeadingRef = useRef<HTMLHeadingElement>(null);
-  const footerDescRef = useRef<HTMLParagraphElement>(null);
   const footerButtonsRef = useRef<HTMLDivElement>(null);
 
   const footerRef = useRef<HTMLDivElement>(null);
@@ -40,8 +39,9 @@ export default function Home() {
       }
     );
 
-    if (buttonsRef.current) {
-      heroObserver.observe(buttonsRef.current);
+    const currentButtonsRef = buttonsRef.current;
+    if (currentButtonsRef) {
+      heroObserver.observe(currentButtonsRef);
     }
 
     const checkMobile = () => {
@@ -51,8 +51,8 @@ export default function Home() {
     window.addEventListener("resize", checkMobile);
     return () => {
       window.removeEventListener("resize", checkMobile);
-      if (buttonsRef.current) {
-        heroObserver.unobserve(buttonsRef.current);
+      if (currentButtonsRef) {
+        heroObserver.unobserve(currentButtonsRef);
       }
       heroObserver.disconnect();
     };
@@ -225,11 +225,6 @@ export default function Home() {
                 </h1>
               </div>
 
-              {/* MCP Graphic for mobile - shown between title and description */}
-              <div className="block lg:hidden relative h-[400px] md:h-[500px] flex items-center justify-center">
-                <MCPGraphic />
-              </div>
-
               <div ref={descriptionRef} className="space-y-10 lg:space-y-12">
                 <p className="text-neutral-600 text-lg md:text-xl lg:text-2xl leading-[1.6] max-w-xl">
                   Create, curate and distribute tools for AI. Everything you
@@ -258,8 +253,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right column - MCP Graphic for desktop */}
-            <div className="hidden lg:flex relative h-[600px] md:h-[700px] lg:h-[800px] xl:h-[900px] items-center justify-center">
+            {/* Single MCP Graphic - responsive positioning */}
+            <div className="lg:col-start-2 lg:row-start-1 lg:row-span-1 relative h-[400px] md:h-[500px] lg:h-[600px] xl:h-[700px] flex items-center justify-center">
               <MCPGraphic />
             </div>
           </div>
@@ -280,7 +275,7 @@ export default function Home() {
             </p>
           </div>
 
-          <BentoGrid className="max-w-7xl mx-auto">
+          <BentoGrid className="w-full">
             {/* First row - 2 columns */}
             <BentoGridRow columns={2}>
               <BentoGridItem
@@ -342,37 +337,36 @@ export default function Home() {
       >
         <div className="relative z-20 w-full pointer-events-none">
           <div className="flex flex-col items-center justify-center py-32 sm:py-40 lg:py-48 max-w-2xl mx-auto px-4">
+            {/* Community Badge */}
+            <div className="inline-flex items-center gap-3 mb-8 sm:mb-12 pointer-events-auto">
+              <div className="flex -space-x-2">
+                <div className="w-8 h-8 rounded border-2 border-white bg-neutral-300"></div>
+                <div className="w-8 h-8 rounded border-2 border-white bg-neutral-400"></div>
+                <div className="w-8 h-8 rounded border-2 border-white bg-neutral-500"></div>
+              </div>
+              <span className="text-sm text-neutral-600">
+                Join the community
+              </span>
+            </div>
+
             <h3
               ref={footerHeadingRef}
-              className="text-4xl md:text-5xl lg:text-6xl font-display font-light text-neutral-900 mb-8 sm:mb-10 text-center max-w-3xl pointer-events-auto"
+              className="text-display-sm sm:text-display-md lg:text-display-lg font-display font-light text-neutral-900 mb-10 sm:mb-12 text-center max-w-3xl pointer-events-auto"
             >
-              Ready to create, curate, and distribute tools for AI?
+              Can&apos;t get enough MCP?
             </h3>
-            <p
-              ref={footerDescRef}
-              className="text-lg sm:text-xl text-neutral-700 mb-10 sm:mb-12 text-center max-w-xl pointer-events-auto leading-relaxed"
-            >
-              Power your integrations for Agents and LLMs. Join the waitlist or
-              book a demo to get started.
-            </p>
+
             <div
               ref={footerButtonsRef}
               className="flex flex-col md:flex-row gap-4 w-full md:w-auto justify-center pointer-events-auto"
             >
               <Button
-                size="chunky"
                 variant="rainbow-light"
-                href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
+                href="https://go.speakeasy.com/slack"
               >
-                Join the waitlist
+                Join our Slack
               </Button>
-              <Button
-                size="chunky"
-                variant="primary-dark"
-                href="https://calendly.com/sagar-speakeasy/30min"
-              >
-                Book a demo
-              </Button>
+              <Button href="https://docs.getgram.ai/">Read MCP docs</Button>
             </div>
           </div>
         </div>
