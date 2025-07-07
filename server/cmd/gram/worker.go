@@ -20,6 +20,7 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
@@ -139,8 +140,13 @@ func newWorkerCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			o11y.PullAppInfo(c.Context).Command = "worker"
-			logger := PullLogger(c.Context).With(slog.String("cmd", "worker"))
+			serviceName := "gram:worker"
+			appinfo := o11y.PullAppInfo(c.Context)
+			appinfo.Command = "worker"
+			logger := PullLogger(c.Context).With(
+				slog.String(string(semconv.ServiceNameKey), serviceName),
+				slog.String(string(semconv.ServiceVersionKey), shortGitSHA()),
+			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
 
@@ -162,8 +168,10 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			shutdown, err = o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				EnableTracing: c.Bool("with-otel-tracing"),
-				EnableMetrics: c.Bool("with-otel-metrics"),
+				ServiceName:    serviceName,
+				ServiceVersion: shortGitSHA(),
+				EnableTracing:  c.Bool("with-otel-tracing"),
+				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)

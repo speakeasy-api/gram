@@ -20,6 +20,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
@@ -262,8 +263,13 @@ func newStartCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			o11y.PullAppInfo(c.Context).Command = "server"
-			logger := PullLogger(c.Context).With(slog.String("cmd", "server"))
+			serviceName := "gram:server"
+			appinfo := o11y.PullAppInfo(c.Context)
+			appinfo.Command = "server"
+			logger := PullLogger(c.Context).With(
+				slog.String(string(semconv.ServiceNameKey), serviceName),
+				slog.String(string(semconv.ServiceVersionKey), shortGitSHA()),
+			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
 
@@ -271,8 +277,10 @@ func newStartCommand() *cli.Command {
 			defer cancel()
 
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				EnableTracing: c.Bool("with-otel-tracing"),
-				EnableMetrics: c.Bool("with-otel-metrics"),
+				ServiceName:    serviceName,
+				ServiceVersion: shortGitSHA(),
+				EnableTracing:  c.Bool("with-otel-tracing"),
+				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)

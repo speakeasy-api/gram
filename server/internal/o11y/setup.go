@@ -25,8 +25,10 @@ import (
 )
 
 type SetupOTelSDKOptions struct {
-	EnableTracing bool
-	EnableMetrics bool
+	ServiceName    string
+	ServiceVersion string
+	EnableTracing  bool
+	EnableMetrics  bool
 }
 
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -89,12 +91,10 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		// nil trace exporter tells clue.NewConfig to use a no-op tracer provider
 	}
 
-	appInfo := PullAppInfo(ctx)
-
 	cfg, err := NewClueConfig(
 		ctx,
-		"gram",
-		appInfo.GitSHA,
+		options.ServiceName,
+		options.ServiceVersion,
 		metricExporter,
 		spanExporter,
 		prop,

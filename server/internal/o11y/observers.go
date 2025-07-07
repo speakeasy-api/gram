@@ -39,7 +39,7 @@ type observers struct {
 func StartObservers(provider metric.MeterProvider, db *pgxpool.Pool) error {
 	var err error
 	var gauges = make(map[string]metric.Int64ObservableGauge)
-	meter := provider.Meter("gram")
+	meter := provider.Meter("github.com/speakeasy-api/gram/internal/o11y")
 
 	o := &observers{
 		meter:  meter,
@@ -50,7 +50,7 @@ func StartObservers(provider metric.MeterProvider, db *pgxpool.Pool) error {
 	if gauges[observableDeploymentsHttpSecuritySchemes], err = meter.Int64ObservableGauge(
 		observableDeploymentsHttpSecuritySchemes,
 		metric.WithDescription("Count of HTTP security schemes across latest deployments"),
-		metric.WithUnit("By"),
+		metric.WithUnit("{#}"),
 		metric.WithInt64Callback(o.observeDeploymentsHttpSecuritySchemes),
 	); err != nil {
 		return fmt.Errorf("create observable gauge %q: %w", observableDeploymentsHttpSecuritySchemes, err)
