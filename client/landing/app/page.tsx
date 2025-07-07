@@ -13,17 +13,23 @@ import { Button, buttonVariants } from "./components/Button";
 import MCPGraphic from "./components/MCPGraphic";
 import HowItWorksSection from "./components/HowItWorksSection";
 import { BentoGrid, BentoGridRow, BentoGridItem } from "./components/BentoGrid";
+import {
+  Section,
+  Container,
+  Heading,
+  Text,
+  Flex,
+  Grid,
+  CommunityBadge,
+  ButtonGroup,
+  Badge,
+} from "./components/sections";
 
 export default function Home() {
   const [showNavbarCTA, setShowNavbarCTA] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const introducingRef = useRef<HTMLHeadingElement>(null);
-  const descriptionRef = useRef<HTMLDivElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
-
-  const footerHeadingRef = useRef<HTMLHeadingElement>(null);
-  const footerButtonsRef = useRef<HTMLDivElement>(null);
 
   const footerRef = useRef<HTMLDivElement>(null);
   const isFooterInView = useInView(footerRef, { amount: 0.1 });
@@ -195,85 +201,85 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="relative min-h-[80vh] flex items-center py-16 lg:py-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            {/* Left column - Text content */}
-            <div className="flex flex-col gap-6 lg:gap-8 py-8 lg:py-0">
-              {/* MCP Badge */}
-              <div className="inline-flex items-center">
-                <span
-                  className="relative inline-flex items-center px-2 py-1 text-xs font-mono text-neutral-700 uppercase tracking-wider rounded-xs"
-                  style={{
-                    background:
-                      "linear-gradient(white, white) padding-box, linear-gradient(90deg, var(--gradient-brand-primary-colors)) border-box",
-                    border: "1px solid transparent",
-                  }}
-                >
-                  Introducing gram
-                </span>
+      <Section size="hero" background="neutral">
+        <Container>
+          <Grid cols="hero" gap={12} align="center" className="lg:gap-16">
+            <Flex direction="col" gap={6} className="lg:gap-8 py-8 lg:py-0">
+              <Badge variant="gradient">Introducing gram</Badge>
+
+              <Heading size="hero" weight="light">
+                <span className="block">Your API.</span>
+                <span className="block">A hosted MCP Server.</span>
+                <span className="block">One click.</span>
+              </Heading>
+
+              {/* MCP Graphic on mobile - between title and description */}
+              <div className="lg:hidden relative h-[280px] sm:h-[320px] flex items-center justify-center -mx-4">
+                <MCPGraphic />
               </div>
 
-              <div className="space-y-2">
-                <h1
-                  ref={introducingRef}
-                  className="font-display font-light text-4xl sm:text-5xl md:text-6xl lg:text-6xl xl:text-7xl leading-[1.1] tracking-tight text-neutral-900"
+              <Flex direction="col" gap={8} className="lg:gap-12">
+                <Text
+                  size="hero"
+                  color="muted"
+                  leading="relaxed"
+                  className="max-w-xl"
                 >
-                  <span className="block">Your API.</span>
-                  <span className="block">A hosted MCP Server.</span>
-                  <span className="block">One click.</span>
-                </h1>
-              </div>
-
-              <div ref={descriptionRef} className="space-y-10 lg:space-y-12">
-                <p className="text-neutral-600 text-lg md:text-xl lg:text-2xl leading-[1.6] max-w-xl">
                   Create, curate and distribute tools for AI. Everything you
                   need to power integrations for Agents and LLMs.
-                </p>
+                </Text>
 
-                <div
-                  ref={buttonsRef}
-                  className="flex flex-col sm:flex-row gap-4"
-                >
-                  <Button
-                    size="chunky"
-                    variant="rainbow-light"
-                    href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
-                  >
-                    Join the waitlist
-                  </Button>
-                  <Button
-                    size="chunky"
-                    variant="primary-dark"
-                    href="https://calendly.com/sagar-speakeasy/30min"
-                  >
-                    Book a demo
-                  </Button>
+                <div ref={buttonsRef}>
+                  <ButtonGroup
+                    buttons={[
+                      {
+                        text: "Join the waitlist",
+                        href: "https://speakeasyapi.typeform.com/to/h6WJdwWr",
+                        variant: "rainbow-light",
+                        size: "chunky",
+                      },
+                      {
+                        text: "Book a demo",
+                        href: "https://calendly.com/sagar-speakeasy/30min",
+                        variant: "primary-dark",
+                        size: "chunky",
+                      },
+                    ]}
+                  />
                 </div>
-              </div>
-            </div>
+              </Flex>
+            </Flex>
 
-            {/* Single MCP Graphic - responsive positioning */}
-            <div className="lg:col-start-2 lg:row-start-1 lg:row-span-1 relative h-[400px] md:h-[500px] lg:h-[600px] xl:h-[700px] flex items-center justify-center">
+            {/* MCP Graphic on desktop - right column */}
+            <div className="hidden lg:flex lg:col-start-2 lg:row-start-1 lg:row-span-1 relative h-[600px] xl:h-[700px] items-center justify-center">
               <MCPGraphic />
             </div>
-          </div>
-        </div>
-      </div>
+          </Grid>
+        </Container>
+      </Section>
 
       <HowItWorksSection />
 
-      <section className="w-full py-24 sm:py-32 lg:py-40 relative">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16">
-            <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-4">
+      <Section>
+        <Container>
+          <Flex
+            direction="col"
+            align="center"
+            className="text-center mb-12 sm:mb-16"
+          >
+            <Heading size="display" align="center" className="mb-4 sm:mb-6">
               Everything you need to build with MCP
-            </h2>
-            <p className="text-base sm:text-lg text-neutral-600 max-w-2xl mx-auto">
+            </Heading>
+            <Text
+              size="description"
+              color="muted"
+              align="center"
+              className="max-w-2xl mx-auto"
+            >
               A complete platform for creating, hosting, and distributing AI
               tools at scale
-            </p>
-          </div>
+            </Text>
+          </Flex>
 
           <BentoGrid className="w-full">
             {/* First row - 2 columns */}
@@ -315,64 +321,65 @@ export default function Home() {
               />
             </BentoGridRow>
           </BentoGrid>
-        </div>
-      </section>
+        </Container>
+      </Section>
 
-      {/* Pre-footer CTA section */}
-      <section className="w-full py-28 sm:py-36 lg:py-44 bg-black relative overflow-hidden">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center text-center">
-            <h2 className="text-display-sm sm:text-display-md lg:text-display-lg mb-8 sm:mb-12 max-w-4xl mx-auto text-white">
+      <Section background="black" size="lg" className="overflow-hidden">
+        <Container>
+          <Flex direction="col" align="center" className="text-center">
+            <Heading
+              size="display"
+              color="white"
+              className="mb-8 sm:mb-12 max-w-4xl mx-auto text-center"
+            >
               Build AI that works. Unlock API and Data for Agents. Secure and
               Composable.
-            </h2>
+            </Heading>
             <GramEcosystemAnimation />
-          </div>
-        </div>
-      </section>
+          </Flex>
+        </Container>
+      </Section>
 
-      <footer
-        ref={footerRef}
-        className="relative bg-neutral-100 w-full border-t border-neutral-200 overflow-hidden min-h-[600px] flex flex-col justify-center items-center"
-      >
-        <div className="relative z-20 w-full pointer-events-none">
-          <div className="flex flex-col items-center justify-center py-32 sm:py-40 lg:py-48 max-w-2xl mx-auto px-4">
-            {/* Community Badge */}
-            <div className="inline-flex items-center gap-3 mb-8 sm:mb-12 pointer-events-auto">
-              <div className="flex -space-x-2">
-                <div className="w-8 h-8 rounded border-2 border-white bg-neutral-300"></div>
-                <div className="w-8 h-8 rounded border-2 border-white bg-neutral-400"></div>
-                <div className="w-8 h-8 rounded border-2 border-white bg-neutral-500"></div>
-              </div>
-              <span className="text-sm text-neutral-600">
-                Join the community
-              </span>
-            </div>
-
-            <h3
-              ref={footerHeadingRef}
-              className="text-display-sm sm:text-display-md lg:text-display-lg font-display font-light text-neutral-900 mb-10 sm:mb-12 text-center max-w-3xl pointer-events-auto"
+      <Section asChild>
+        <footer ref={footerRef} className="relative bg-neutral-100 border-t border-neutral-200 overflow-hidden min-h-[600px] flex flex-col justify-center items-center">
+          <Container size="2xl" className="relative z-20 pointer-events-none">
+            <Flex
+              direction="col"
+              align="center"
+              className="py-32 sm:py-40 lg:py-48"
             >
-              Can&apos;t get enough MCP?
-            </h3>
+              <CommunityBadge className="mb-8 sm:mb-12 pointer-events-auto" />
 
-            <div
-              ref={footerButtonsRef}
-              className="flex flex-col md:flex-row gap-4 w-full md:w-auto justify-center pointer-events-auto"
-            >
-              <Button
-                variant="rainbow-light"
-                href="https://go.speakeasy.com/slack"
+              <Heading
+                size="display"
+                weight="light"
+                align="center"
+                className="mb-10 sm:mb-12 max-w-3xl pointer-events-auto"
               >
-                Join our Slack
-              </Button>
-              <Button href="https://docs.getgram.ai/">Read MCP docs</Button>
-            </div>
-          </div>
-        </div>
+                Can&apos;t get enough MCP?
+              </Heading>
 
-        <div className="absolute left-0 right-0 bottom-0 h-1 w-full bg-gradient-primary z-20" />
-      </footer>
+              <div className="pointer-events-auto">
+                <ButtonGroup
+                  buttons={[
+                    {
+                      text: "Join our Slack",
+                      href: "https://go.speakeasy.com/slack",
+                      variant: "rainbow-light",
+                    },
+                    {
+                      text: "Read MCP docs",
+                      href: "https://docs.getgram.ai/",
+                    },
+                  ]}
+                />
+              </div>
+            </Flex>
+          </Container>
+
+          <div className="absolute left-0 right-0 bottom-0 h-1 w-full bg-gradient-primary z-20" />
+        </footer>
+      </Section>
 
       {/* Traditional Footer */}
       <footer className="bg-neutral-100 border-t border-neutral-200">
