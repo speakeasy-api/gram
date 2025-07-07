@@ -8,8 +8,8 @@ import (
 
 	"github.com/cbroglie/mustache"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/oops"
-	templates "github.com/speakeasy-api/gram/internal/templates/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	templates "github.com/speakeasy-api/gram/server/internal/templates/repo"
 )
 
 type prompGetParams struct {

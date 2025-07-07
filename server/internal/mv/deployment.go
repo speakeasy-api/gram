@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/internal/inv"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/packages"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/packages"
 )
 
 func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.Queries, projectID ProjectID, depID DeploymentID) (*types.Deployment, error) {

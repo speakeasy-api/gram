@@ -15,15 +15,15 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	srv "github.com/speakeasy-api/gram/gen/http/keys/server"
-	gen "github.com/speakeasy-api/gram/gen/keys"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/keys/repo"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/oops"
+	srv "github.com/speakeasy-api/gram/server/gen/http/keys/server"
+	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 const keyPrefix = "gram"
@@ -53,7 +53,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	}
 	fullKeyPrefix := fmt.Sprintf("%s_%s_", keyPrefix, keyEnv)
 	return &Service{
-		tracer:    otel.Tracer("github.com/speakeasy-api/gram/internal/keys"),
+		tracer:    otel.Tracer("github.com/speakeasy-api/gram/server/internal/keys"),
 		logger:    logger,
 		db:        db,
 		repo:      repo.New(db),

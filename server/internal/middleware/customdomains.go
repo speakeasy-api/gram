@@ -6,8 +6,8 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	domainsRepo "github.com/speakeasy-api/gram/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 )
 
 func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {

@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/auth"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
+	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 func TestService_Callback(t *testing.T) {

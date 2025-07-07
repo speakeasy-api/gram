@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/toolsets"
-	"github.com/speakeasy-api/gram/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request, w http.ResponseWriter, responseStatusCodeCapture *int, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, cacheImpl cache.Cache, envVars *caseInsensitiveEnv, serverURL string) {

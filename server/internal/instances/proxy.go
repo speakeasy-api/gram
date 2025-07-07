@@ -25,15 +25,15 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/serialization"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	tools_repo "github.com/speakeasy-api/gram/internal/tools/repo"
-	"github.com/speakeasy-api/gram/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/serialization"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 const SUMMARIZE_BREAKPOINT_BYTES = 4 * 5_000 // 4 bytes per token, 5k token limit

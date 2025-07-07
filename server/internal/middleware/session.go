@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 func SessionMiddleware(next http.Handler) http.Handler {

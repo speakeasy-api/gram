@@ -3,12 +3,12 @@
 // variations HTTP server types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
 import (
-	variations "github.com/speakeasy-api/gram/gen/variations"
+	variations "github.com/speakeasy-api/gram/server/gen/variations"
 	goa "goa.design/goa/v3/pkg"
 )
 

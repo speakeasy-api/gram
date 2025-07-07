@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/keys"
-	"github.com/speakeasy-api/gram/internal/oops"
+	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestKeysService_RevokeKey(t *testing.T) {

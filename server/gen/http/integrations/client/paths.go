@@ -3,7 +3,7 @@
 // HTTP request path constructors for the integrations service.
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 

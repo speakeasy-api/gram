@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/speakeasy-api/gram/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"

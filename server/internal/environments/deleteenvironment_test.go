@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/environments"
+	gen "github.com/speakeasy-api/gram/server/gen/environments"
 )
 
 func TestEnvironmentsService_DeleteEnvironment(t *testing.T) {

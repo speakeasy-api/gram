@@ -8,12 +8,12 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
-	"github.com/speakeasy-api/gram/internal/chat"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
+	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
 
 const slackSystemPrompt = `

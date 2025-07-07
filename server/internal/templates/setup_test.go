@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/templates"
-	"github.com/speakeasy-api/gram/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/templates"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 var (

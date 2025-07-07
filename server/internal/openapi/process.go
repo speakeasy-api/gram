@@ -24,16 +24,16 @@ import (
 	slogmulti "github.com/samber/slog-multi"
 	"gopkg.in/yaml.v3"
 
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/assets"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/internal/inv"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/orderedmap"
-	"github.com/speakeasy-api/gram/internal/tools"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orderedmap"
+	"github.com/speakeasy-api/gram/server/internal/tools"
 )
 
 var (

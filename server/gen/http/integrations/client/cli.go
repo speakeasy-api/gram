@@ -3,7 +3,7 @@
 // integrations HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	integrations "github.com/speakeasy-api/gram/gen/integrations"
+	integrations "github.com/speakeasy-api/gram/server/gen/integrations"
 	goa "goa.design/goa/v3/pkg"
 )
 

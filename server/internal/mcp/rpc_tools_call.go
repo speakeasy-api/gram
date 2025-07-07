@@ -17,15 +17,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/environments"
-	er "github.com/speakeasy-api/gram/internal/environments/repo"
-	"github.com/speakeasy-api/gram/internal/instances"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
+	er "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/instances"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 type toolsCallParams struct {

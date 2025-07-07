@@ -3,12 +3,12 @@
 // domains HTTP client types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
 import (
-	domains "github.com/speakeasy-api/gram/gen/domains"
+	domains "github.com/speakeasy-api/gram/server/gen/domains"
 	goa "goa.design/goa/v3/pkg"
 )
 

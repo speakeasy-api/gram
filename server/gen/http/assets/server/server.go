@@ -3,7 +3,7 @@
 // assets HTTP server
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
@@ -13,7 +13,7 @@ import (
 	"io"
 	"net/http"
 
-	assets "github.com/speakeasy-api/gram/gen/assets"
+	assets "github.com/speakeasy-api/gram/server/gen/assets"
 	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"

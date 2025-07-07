@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/environments"
-	"github.com/speakeasy-api/gram/internal/conv"
+	gen "github.com/speakeasy-api/gram/server/gen/environments"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestEnvironmentsService_UpdateEnvironment(t *testing.T) {

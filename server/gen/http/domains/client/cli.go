@@ -3,7 +3,7 @@
 // domains HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	domains "github.com/speakeasy-api/gram/gen/domains"
+	domains "github.com/speakeasy-api/gram/server/gen/domains"
 )
 
 // BuildGetDomainPayload builds the payload for the domains getDomain endpoint

@@ -3,14 +3,14 @@
 // auth HTTP client types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
 import (
 	"unicode/utf8"
 
-	auth "github.com/speakeasy-api/gram/gen/auth"
+	auth "github.com/speakeasy-api/gram/server/gen/auth"
 	goa "goa.design/goa/v3/pkg"
 )
 

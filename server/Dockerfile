@@ -14,7 +14,7 @@ COPY . ./
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build \
     -mod=readonly \
-    -ldflags="-X github.com/speakeasy-api/gram/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}" \
+    -ldflags="-X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}" \
     -o /app/bin/gram \
     ./main.go
 

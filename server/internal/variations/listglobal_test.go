@@ -6,10 +6,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/gen/types"
-	gen "github.com/speakeasy-api/gram/gen/variations"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	gen "github.com/speakeasy-api/gram/server/gen/variations"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestVariationsService_ListGlobal_Success(t *testing.T) {

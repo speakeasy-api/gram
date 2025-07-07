@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/gen/types"
+	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
 type ProjectID uuid.UUID

@@ -3,8 +3,8 @@ package deployments
 import (
 	. "goa.design/goa/v3/dsl"
 
-	"github.com/speakeasy-api/gram/design/security"
-	"github.com/speakeasy-api/gram/design/shared"
+	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
 var _ = Service("deployments", func() {

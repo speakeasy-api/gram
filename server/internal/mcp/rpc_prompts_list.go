@@ -8,9 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type promptsListResult struct {

@@ -3,7 +3,7 @@
 // toolsets HTTP server
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
@@ -11,7 +11,7 @@ import (
 	"context"
 	"net/http"
 
-	toolsets "github.com/speakeasy-api/gram/gen/toolsets"
+	toolsets "github.com/speakeasy-api/gram/server/gen/toolsets"
 	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"

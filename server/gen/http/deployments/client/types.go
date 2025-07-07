@@ -3,15 +3,15 @@
 // deployments HTTP client types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
 import (
 	"unicode/utf8"
 
-	deployments "github.com/speakeasy-api/gram/gen/deployments"
-	types "github.com/speakeasy-api/gram/gen/types"
+	deployments "github.com/speakeasy-api/gram/server/gen/deployments"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 

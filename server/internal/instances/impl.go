@@ -17,22 +17,22 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	srv "github.com/speakeasy-api/gram/gen/http/instances/server"
-	gen "github.com/speakeasy-api/gram/gen/instances"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/environments"
-	environments_repo "github.com/speakeasy-api/gram/internal/environments/repo"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/internal/toolsets"
+	srv "github.com/speakeasy-api/gram/server/gen/http/instances/server"
+	gen "github.com/speakeasy-api/gram/server/gen/instances"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
+	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 const tooldIdQueryParam = "tool_id"
@@ -63,8 +63,8 @@ func NewService(
 	cacheImpl cache.Cache,
 ) *Service {
 	envRepo := environments_repo.New(db)
-	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/internal/instances")
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/internal/instances")
+	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/instances")
 
 	return &Service{
 		logger:           logger,

@@ -3,7 +3,7 @@
 // slack HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	slack "github.com/speakeasy-api/gram/gen/slack"
+	slack "github.com/speakeasy-api/gram/server/gen/slack"
 )
 
 // BuildCallbackPayload builds the payload for the slack callback endpoint from

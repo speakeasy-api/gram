@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/cmd/gram"
 	"os"
+
+	"github.com/speakeasy-api/gram/server/cmd/gram"
 )
 
 func main() {

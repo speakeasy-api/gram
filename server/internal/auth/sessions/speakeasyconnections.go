@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/speakeasy-api/gram/gen/auth"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 type speakeasyProviderUser struct {

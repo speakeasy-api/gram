@@ -3,7 +3,7 @@
 // toolsets client HTTP transport
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 

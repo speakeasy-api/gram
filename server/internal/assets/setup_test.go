@@ -9,12 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/internal/assets"
-	"github.com/speakeasy-api/gram/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/internal/assets/repo"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 var (

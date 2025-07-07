@@ -1,4 +1,4 @@
-module github.com/speakeasy-api/gram
+module github.com/speakeasy-api/gram/server
 
 go 1.24.4
 

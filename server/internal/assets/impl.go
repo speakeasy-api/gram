@@ -25,17 +25,17 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	gen "github.com/speakeasy-api/gram/gen/assets"
-	srv "github.com/speakeasy-api/gram/gen/http/assets/server"
-	"github.com/speakeasy-api/gram/internal/assets/repo"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/inv"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
+	gen "github.com/speakeasy-api/gram/server/gen/assets"
+	srv "github.com/speakeasy-api/gram/server/gen/http/assets/server"
+	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 type Service struct {
@@ -54,7 +54,7 @@ var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore) *Service {
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/assets"),
+		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
 		logger:   logger,
 		db:       db,
 		auth:     auth.New(logger, db, sessions),

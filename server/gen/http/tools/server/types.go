@@ -3,12 +3,12 @@
 // tools HTTP server types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
 import (
-	tools "github.com/speakeasy-api/gram/gen/tools"
+	tools "github.com/speakeasy-api/gram/server/gen/tools"
 	goa "goa.design/goa/v3/pkg"
 )
 

@@ -3,7 +3,7 @@ package tools_test
 import (
 	"testing"
 
-	"github.com/speakeasy-api/gram/internal/tools"
+	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/stretchr/testify/assert"
 )
 

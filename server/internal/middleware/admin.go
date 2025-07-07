@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 func AdminOverrideMiddleware(next http.Handler) http.Handler {

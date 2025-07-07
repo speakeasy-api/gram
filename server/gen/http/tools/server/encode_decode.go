@@ -3,7 +3,7 @@
 // tools HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	tools "github.com/speakeasy-api/gram/gen/tools"
-	types "github.com/speakeasy-api/gram/gen/types"
+	tools "github.com/speakeasy-api/gram/server/gen/tools"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

@@ -8,7 +8,7 @@ import (
 
 	"github.com/testcontainers/testcontainers-go/log"
 
-	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 type testcontainersLogger struct {

@@ -13,11 +13,11 @@ import (
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/internal/inv"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter/repo"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"

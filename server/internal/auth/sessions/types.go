@@ -3,8 +3,8 @@ package sessions
 import (
 	"time"
 
-	"github.com/speakeasy-api/gram/gen/auth"
-	"github.com/speakeasy-api/gram/internal/cache"
+	"github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
 const (

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/internal/background/activities"
-	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"

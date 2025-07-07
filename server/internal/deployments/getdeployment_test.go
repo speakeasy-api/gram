@@ -8,11 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	agen "github.com/speakeasy-api/gram/gen/assets"
-	gen "github.com/speakeasy-api/gram/gen/deployments"
-	pkggen "github.com/speakeasy-api/gram/gen/packages"
-	"github.com/speakeasy-api/gram/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/internal/testenv"
+	agen "github.com/speakeasy-api/gram/server/gen/assets"
+	gen "github.com/speakeasy-api/gram/server/gen/deployments"
+	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestDeploymentsService_GetDeployment_Success(t *testing.T) {

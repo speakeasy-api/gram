@@ -3,14 +3,14 @@
 // toolsets client
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package toolsets
 
 import (
 	"context"
 
-	types "github.com/speakeasy-api/gram/gen/types"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 

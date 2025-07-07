@@ -3,14 +3,14 @@
 // deployments HTTP server types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
 import (
 	"unicode/utf8"
 
-	deployments "github.com/speakeasy-api/gram/gen/deployments"
+	deployments "github.com/speakeasy-api/gram/server/gen/deployments"
 	goa "goa.design/goa/v3/pkg"
 )
 

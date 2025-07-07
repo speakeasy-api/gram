@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/templates"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/conv"
+	gen "github.com/speakeasy-api/gram/server/gen/templates"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestTemplatesService_ListTemplates_Success(t *testing.T) {

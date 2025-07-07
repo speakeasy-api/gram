@@ -3,12 +3,12 @@
 // chat HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
 import (
-	chat "github.com/speakeasy-api/gram/gen/chat"
+	chat "github.com/speakeasy-api/gram/server/gen/chat"
 )
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint

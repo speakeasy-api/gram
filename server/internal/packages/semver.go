@@ -6,8 +6,8 @@ import (
 	"math"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/packages/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/packages/repo"
 )
 
 type Semver struct {

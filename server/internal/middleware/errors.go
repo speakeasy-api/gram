@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	goa "goa.design/goa/v3/pkg"
 )
 

@@ -3,7 +3,7 @@
 // templates HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"strings"
 
-	templates "github.com/speakeasy-api/gram/gen/templates"
-	types "github.com/speakeasy-api/gram/gen/types"
+	templates "github.com/speakeasy-api/gram/server/gen/templates"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

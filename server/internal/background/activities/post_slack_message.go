@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
 
 type PostSlackMessage struct {

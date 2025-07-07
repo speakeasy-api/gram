@@ -3,7 +3,7 @@ package shared
 import (
 	. "goa.design/goa/v3/dsl"
 
-	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // DeclareErrorResponses declares the error responses at the service and method

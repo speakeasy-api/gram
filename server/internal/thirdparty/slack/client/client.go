@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/repo"
 )
 
 const slackServer = "https://slack.com/api"

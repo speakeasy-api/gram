@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/toolsets"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
+	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestToolsetsService_DeleteToolset_Success(t *testing.T) {

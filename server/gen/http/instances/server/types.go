@@ -3,13 +3,13 @@
 // instances HTTP server types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
 import (
-	instances "github.com/speakeasy-api/gram/gen/instances"
-	types "github.com/speakeasy-api/gram/gen/types"
+	instances "github.com/speakeasy-api/gram/server/gen/instances"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 

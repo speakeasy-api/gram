@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/speakeasy-api/gram/internal/background/activities"
-	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"

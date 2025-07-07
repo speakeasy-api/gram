@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func handlePing(ctx context.Context, logger *slog.Logger, id msgID) (json.RawMessage, error) {

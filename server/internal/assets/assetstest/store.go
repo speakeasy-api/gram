@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/speakeasy-api/gram/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 )
 
 func NewTestBlobStore(t *testing.T) assets.BlobStore {

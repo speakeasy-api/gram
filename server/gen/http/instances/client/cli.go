@@ -3,15 +3,15 @@
 // instances HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
 import (
 	"unicode/utf8"
 
-	instances "github.com/speakeasy-api/gram/gen/instances"
-	types "github.com/speakeasy-api/gram/gen/types"
+	instances "github.com/speakeasy-api/gram/server/gen/instances"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 

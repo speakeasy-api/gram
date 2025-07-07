@@ -6,11 +6,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/toolsets"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	environmentsRepo "github.com/speakeasy-api/gram/internal/environments/repo"
+	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 )
 
 func TestToolsetsService_UpdateToolset_Success(t *testing.T) {

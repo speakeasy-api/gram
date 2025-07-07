@@ -13,17 +13,17 @@ import (
 	"bytes"
 	"io"
 
-	agen "github.com/speakeasy-api/gram/gen/assets"
-	dgen "github.com/speakeasy-api/gram/gen/deployments"
-	"github.com/speakeasy-api/gram/internal/assets"
-	"github.com/speakeasy-api/gram/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/background"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/deployments"
-	packages "github.com/speakeasy-api/gram/internal/packages"
-	"github.com/speakeasy-api/gram/internal/testenv"
-	"github.com/speakeasy-api/gram/internal/toolsets"
+	agen "github.com/speakeasy-api/gram/server/gen/assets"
+	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/deployments"
+	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 var (

@@ -3,13 +3,13 @@
 // tools HTTP client types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
 import (
-	tools "github.com/speakeasy-api/gram/gen/tools"
-	types "github.com/speakeasy-api/gram/gen/types"
+	tools "github.com/speakeasy-api/gram/server/gen/tools"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 

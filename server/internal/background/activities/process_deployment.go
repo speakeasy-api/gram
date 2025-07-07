@@ -15,15 +15,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/temporal"
 
-	"github.com/speakeasy-api/gram/internal/assets"
-	assetsRepo "github.com/speakeasy-api/gram/internal/assets/repo"
-	"github.com/speakeasy-api/gram/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/openapi"
-	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
-	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/openapi"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 )
 
 type ProcessDeployment struct {

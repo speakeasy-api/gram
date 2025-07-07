@@ -3,7 +3,7 @@
 // integrations HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
@@ -14,7 +14,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	integrations "github.com/speakeasy-api/gram/gen/integrations"
+	integrations "github.com/speakeasy-api/gram/server/gen/integrations"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

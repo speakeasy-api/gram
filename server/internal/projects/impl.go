@@ -16,18 +16,18 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	genAuth "github.com/speakeasy-api/gram/gen/auth"
-	srv "github.com/speakeasy-api/gram/gen/http/projects/server"
-	gen "github.com/speakeasy-api/gram/gen/projects"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	envrepo "github.com/speakeasy-api/gram/internal/environments/repo"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/projects/repo"
+	genAuth "github.com/speakeasy-api/gram/server/gen/auth"
+	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
+	gen "github.com/speakeasy-api/gram/server/gen/projects"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 type Service struct {
@@ -44,7 +44,7 @@ var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/internal/projects"),
+		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
 		logger:   logger,
 		db:       db,
 		repo:     repo.New(db),

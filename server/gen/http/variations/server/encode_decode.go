@@ -3,7 +3,7 @@
 // variations HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"strings"
 
-	types "github.com/speakeasy-api/gram/gen/types"
-	variations "github.com/speakeasy-api/gram/gen/variations"
+	types "github.com/speakeasy-api/gram/server/gen/types"
+	variations "github.com/speakeasy-api/gram/server/gen/variations"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

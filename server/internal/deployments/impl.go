@@ -14,24 +14,24 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	gen "github.com/speakeasy-api/gram/gen/deployments"
-	srv "github.com/speakeasy-api/gram/gen/http/deployments/server"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/assets"
-	assetsRepo "github.com/speakeasy-api/gram/internal/assets/repo"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/background"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/internal/inv"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	packages "github.com/speakeasy-api/gram/internal/packages"
-	packagesRepo "github.com/speakeasy-api/gram/internal/packages/repo"
+	gen "github.com/speakeasy-api/gram/server/gen/deployments"
+	srv "github.com/speakeasy-api/gram/server/gen/http/deployments/server"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	packagesRepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	"go.temporal.io/sdk/client"
 )
 
@@ -50,7 +50,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, temporal client.Client, sessions *sessions.Manager, assetStorage assets.BlobStore) *Service {
-	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/internal/deployments")
+	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
 
 	return &Service{
 		logger:       logger,

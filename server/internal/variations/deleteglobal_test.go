@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/variations"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
+	gen "github.com/speakeasy-api/gram/server/gen/variations"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 func TestVariationsService_DeleteGlobal_Success(t *testing.T) {

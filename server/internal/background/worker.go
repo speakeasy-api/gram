@@ -9,13 +9,13 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/speakeasy-api/gram/internal/assets"
-	"github.com/speakeasy-api/gram/internal/background/interceptors"
-	"github.com/speakeasy-api/gram/internal/chat"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/k8s"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
+	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
 
 type WorkerOptions struct {

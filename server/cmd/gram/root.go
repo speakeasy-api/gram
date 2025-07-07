@@ -10,7 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.uber.org/automaxprocs/maxprocs"
 
-	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 func newApp() *cli.App {

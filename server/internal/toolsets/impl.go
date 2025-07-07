@@ -17,21 +17,21 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	srv "github.com/speakeasy-api/gram/gen/http/toolsets/server"
-	gen "github.com/speakeasy-api/gram/gen/toolsets"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	domainsRepo "github.com/speakeasy-api/gram/internal/customdomains/repo"
-	environmentsRepo "github.com/speakeasy-api/gram/internal/environments/repo"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	tplRepo "github.com/speakeasy-api/gram/internal/templates/repo"
-	"github.com/speakeasy-api/gram/internal/toolsets/repo"
+	srv "github.com/speakeasy-api/gram/server/gen/http/toolsets/server"
+	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 type Service struct {
@@ -49,7 +49,7 @@ var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	return &Service{
-		tracer:          otel.Tracer("github.com/speakeasy-api/gram/internal/toolsets"),
+		tracer:          otel.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
 		logger:          logger,
 		db:              db,
 		repo:            repo.New(db),

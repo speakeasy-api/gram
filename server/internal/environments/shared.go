@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments/repo"
 )
 
 // EnvironmentEntries should be directly accessed through this interface to handle encryption and redaction.

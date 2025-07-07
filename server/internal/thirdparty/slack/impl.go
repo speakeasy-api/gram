@@ -21,27 +21,27 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	srv "github.com/speakeasy-api/gram/gen/http/slack/server"
-	gen "github.com/speakeasy-api/gram/gen/slack"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/background"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/repo"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
-	toolset_repo "github.com/speakeasy-api/gram/internal/toolsets/repo"
+	srv "github.com/speakeasy-api/gram/server/gen/http/slack/server"
+	gen "github.com/speakeasy-api/gram/server/gen/slack"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
+	toolset_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"go.temporal.io/sdk/client"
 )
 
@@ -91,7 +91,7 @@ var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, redisClient *redis.Client, client *slack_client.SlackClient, temporal client.Client, cfg Configurations) *Service {
 	return &Service{
-		tracer:              otel.Tracer("github.com/speakeasy-api/gram/internal/auth"),
+		tracer:              otel.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:              logger,
 		db:                  db,
 		sessions:            sessions,

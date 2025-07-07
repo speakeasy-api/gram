@@ -24,9 +24,9 @@ import (
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 
-	"github.com/speakeasy-api/gram/internal/assets"
-	"github.com/speakeasy-api/gram/internal/must"
-	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 type dbClientOptions struct {

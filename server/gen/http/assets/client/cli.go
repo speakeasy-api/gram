@@ -3,7 +3,7 @@
 // assets HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strconv"
 
-	assets "github.com/speakeasy-api/gram/gen/assets"
+	assets "github.com/speakeasy-api/gram/server/gen/assets"
 )
 
 // BuildServeImagePayload builds the payload for the assets serveImage endpoint

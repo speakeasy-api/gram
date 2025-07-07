@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/speakeasy-api/gram/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/stretchr/testify/require"
 )
 

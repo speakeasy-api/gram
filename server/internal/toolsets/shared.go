@@ -7,10 +7,10 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	projectsRepo "github.com/speakeasy-api/gram/internal/projects/repo"
-	toolsRepo "github.com/speakeasy-api/gram/internal/tools/repo"
-	"github.com/speakeasy-api/gram/internal/tools/security"
-	"github.com/speakeasy-api/gram/internal/toolsets/repo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
+	"github.com/speakeasy-api/gram/server/internal/tools/security"
+	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // Shared service for aggregating toolset details

@@ -11,10 +11,10 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/keys/repo"
-	"github.com/speakeasy-api/gram/internal/oops"
-	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 func GetAPIKeyHash(key string) (string, error) {

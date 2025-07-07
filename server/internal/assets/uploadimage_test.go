@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/gen/assets"
-	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/server/gen/assets"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestService_UploadImage_Success(t *testing.T) {

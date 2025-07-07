@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"reflect"
 
-	"github.com/speakeasy-api/gram/internal/openapi"
+	"github.com/speakeasy-api/gram/server/internal/openapi"
 )
 
 func ParseParameterSettings(settings []byte) (map[string]*openapi.OpenapiV3ParameterProxy, error) {

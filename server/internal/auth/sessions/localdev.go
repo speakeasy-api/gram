@@ -14,11 +14,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/speakeasy-api/gram/gen/auth"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	orgRepo "github.com/speakeasy-api/gram/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 )
 
 var unsafeSessionData = []byte(`

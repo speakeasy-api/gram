@@ -3,7 +3,7 @@
 // deployments HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	deployments "github.com/speakeasy-api/gram/gen/deployments"
+	deployments "github.com/speakeasy-api/gram/server/gen/deployments"
 	goa "goa.design/goa/v3/pkg"
 )
 

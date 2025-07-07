@@ -3,7 +3,7 @@
 // integrations HTTP client encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"net/url"
 
-	integrations "github.com/speakeasy-api/gram/gen/integrations"
+	integrations "github.com/speakeasy-api/gram/server/gen/integrations"
 	goahttp "goa.design/goa/v3/http"
 )
 

@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"

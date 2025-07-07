@@ -3,12 +3,12 @@
 // slack HTTP client types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
 import (
-	slack "github.com/speakeasy-api/gram/gen/slack"
+	slack "github.com/speakeasy-api/gram/server/gen/slack"
 	goa "goa.design/goa/v3/pkg"
 )
 

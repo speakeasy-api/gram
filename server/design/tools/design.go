@@ -1,8 +1,8 @@
 package tools
 
 import (
-	"github.com/speakeasy-api/gram/design/security"
-	"github.com/speakeasy-api/gram/design/shared"
+	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
 	. "goa.design/goa/v3/dsl"
 )
 

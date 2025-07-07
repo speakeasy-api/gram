@@ -9,14 +9,14 @@ import (
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
-	agen "github.com/speakeasy-api/gram/gen/assets"
-	gen "github.com/speakeasy-api/gram/gen/deployments"
-	pkggen "github.com/speakeasy-api/gram/gen/packages"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/testenv"
-	"github.com/speakeasy-api/gram/internal/testenv/testrepo"
+	agen "github.com/speakeasy-api/gram/server/gen/assets"
+	gen "github.com/speakeasy-api/gram/server/gen/deployments"
+	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestDeploymentsService_Evolve_InitialDeployment(t *testing.T) {

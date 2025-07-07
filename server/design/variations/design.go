@@ -1,10 +1,10 @@
 package toolsets
 
 import (
-	"github.com/speakeasy-api/gram/design/security"
-	"github.com/speakeasy-api/gram/design/shared"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/mv"
+	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	. "goa.design/goa/v3/dsl"
 )
 

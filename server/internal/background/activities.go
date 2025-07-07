@@ -8,13 +8,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/speakeasy-api/gram/internal/assets"
-	"github.com/speakeasy-api/gram/internal/background/activities"
-	"github.com/speakeasy-api/gram/internal/chat"
-	"github.com/speakeasy-api/gram/internal/k8s"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	slack_client "github.com/speakeasy-api/gram/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/internal/thirdparty/slack/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
 
 type Activities struct {

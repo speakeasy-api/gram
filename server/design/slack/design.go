@@ -3,9 +3,9 @@ package slack
 import (
 	. "goa.design/goa/v3/dsl"
 
-	"github.com/speakeasy-api/gram/design/security"
-	"github.com/speakeasy-api/gram/design/shared"
-	"github.com/speakeasy-api/gram/internal/auth"
+	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 )
 
 var _ = Service("slack", func() {

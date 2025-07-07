@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/conv"
-	customdomainsRepo "github.com/speakeasy-api/gram/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/internal/k8s"
-	"github.com/speakeasy-api/gram/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type CustomDomainIngressAction string

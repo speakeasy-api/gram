@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/speakeasy-api/gram/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"

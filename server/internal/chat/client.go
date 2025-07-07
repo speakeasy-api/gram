@@ -15,15 +15,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/environments"
-	env_repo "github.com/speakeasy-api/gram/internal/environments/repo"
-	"github.com/speakeasy-api/gram/internal/instances"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	tools_repo "github.com/speakeasy-api/gram/internal/tools/repo"
-	"github.com/speakeasy-api/gram/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
+	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/instances"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -39,8 +39,8 @@ type ChatClient struct {
 }
 
 func NewChatClient(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient, enc *encryption.Encryption, cacheImpl cache.Cache) *ChatClient {
-	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/internal/chat")
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/internal/chat")
+	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/chat")
 
 	return &ChatClient{
 		logger:     logger,

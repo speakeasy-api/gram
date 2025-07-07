@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"go.opentelemetry.io/otel/trace"
 )
 

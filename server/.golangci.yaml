@@ -104,8 +104,8 @@ linters:
       default-signifies-exhaustive: true
     errcheck:
       exclude-functions:
-        - "github.com/speakeasy-api/gram/internal/o11y.LogDefer"
-        - "github.com/speakeasy-api/gram/internal/o11y.NoLogDefer"
+        - "github.com/speakeasy-api/gram/server/internal/o11y.LogDefer"
+        - "github.com/speakeasy-api/gram/server/internal/o11y.NoLogDefer"
     depguard:
       rules:
         main:
@@ -145,10 +145,10 @@ linters:
         - "(go.temporal.io/sdk/internal.ActivityInboundInterceptor).ExecuteActivity("
         - "(go.temporal.io/sdk/internal.Future).Get("
         
-        - "(*github.com/speakeasy-api/gram/internal/auth.Auth).Authorize("
-        - "(*github.com/speakeasy-api/gram/internal/auth/sessions.Manager).Authenticate("
-        - "(*github.com/speakeasy-api/gram/internal/openapi.ToolExtractor).Do("
+        - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
+        - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("
+        - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
 
       ignore-sig-regexps:
-        - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/internal\\/background\\/activities\\..+\\)\\.Do\\("
-        - "github\\.com\\/speakeasy-api\\/gram\\/internal\\/mv\\.Describe.+\\("
+        - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/background\\/activities\\..+\\)\\.Do\\("
+        - "github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/mv\\.Describe.+\\("

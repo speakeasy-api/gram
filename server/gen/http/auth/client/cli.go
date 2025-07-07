@@ -3,7 +3,7 @@
 // auth HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	auth "github.com/speakeasy-api/gram/gen/auth"
+	auth "github.com/speakeasy-api/gram/server/gen/auth"
 )
 
 // BuildCallbackPayload builds the payload for the auth callback endpoint from

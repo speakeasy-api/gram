@@ -3,7 +3,7 @@
 // templates HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	templates "github.com/speakeasy-api/gram/gen/templates"
-	types "github.com/speakeasy-api/gram/gen/types"
+	templates "github.com/speakeasy-api/gram/server/gen/templates"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 

@@ -3,12 +3,12 @@
 // chat HTTP server types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
 import (
-	chat "github.com/speakeasy-api/gram/gen/chat"
+	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
 )
 

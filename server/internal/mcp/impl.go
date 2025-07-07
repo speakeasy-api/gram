@@ -29,21 +29,21 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/repo"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/cache"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/encryption"
-	"github.com/speakeasy-api/gram/internal/instances"
-	"github.com/speakeasy-api/gram/internal/mv"
-	"github.com/speakeasy-api/gram/internal/o11y"
-	"github.com/speakeasy-api/gram/internal/oops"
-	projects_repo "github.com/speakeasy-api/gram/internal/projects/repo"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/internal/thirdparty/posthog"
-	toolsets_repo "github.com/speakeasy-api/gram/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/instances"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 type Service struct {
@@ -76,8 +76,8 @@ var configSnippetTmplData string
 var hostedPageTmplData string
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL, cacheImpl cache.Cache) *Service {
-	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/internal/mcp")
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/internal/mcp")
+	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 
 	return &Service{
 		logger:       logger,

@@ -9,13 +9,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	agen "github.com/speakeasy-api/gram/gen/assets"
-	dgen "github.com/speakeasy-api/gram/gen/deployments"
-	gen "github.com/speakeasy-api/gram/gen/tools"
-	"github.com/speakeasy-api/gram/gen/types"
-	"github.com/speakeasy-api/gram/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/testenv"
+	agen "github.com/speakeasy-api/gram/server/gen/assets"
+	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
+	gen "github.com/speakeasy-api/gram/server/gen/tools"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestToolsService_ListTools_Success(t *testing.T) {

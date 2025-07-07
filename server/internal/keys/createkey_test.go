@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/gen/keys"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/oops"
+	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestKeysService_CreateKey(t *testing.T) {

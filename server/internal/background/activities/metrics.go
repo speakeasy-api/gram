@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/speakeasy-api/gram/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
 func newMeter(meterProvider metric.MeterProvider) metric.Meter {
-	return meterProvider.Meter("github.com/speakeasy-api/gram/internal/background/activities")
+	return meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities")
 }
 
 const (

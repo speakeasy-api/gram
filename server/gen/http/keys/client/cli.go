@@ -3,7 +3,7 @@
 // keys HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
 
@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	keys "github.com/speakeasy-api/gram/gen/keys"
+	keys "github.com/speakeasy-api/gram/server/gen/keys"
 )
 
 // BuildCreateKeyPayload builds the payload for the keys createKey endpoint

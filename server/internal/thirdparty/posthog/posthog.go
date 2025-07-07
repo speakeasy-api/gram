@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/posthog/posthog-go"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 type Posthog struct {

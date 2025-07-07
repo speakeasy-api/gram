@@ -3,7 +3,7 @@
 // gram HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package cli
 
@@ -13,22 +13,22 @@ import (
 	"net/http"
 	"os"
 
-	assetsc "github.com/speakeasy-api/gram/gen/http/assets/client"
-	authc "github.com/speakeasy-api/gram/gen/http/auth/client"
-	chatc "github.com/speakeasy-api/gram/gen/http/chat/client"
-	deploymentsc "github.com/speakeasy-api/gram/gen/http/deployments/client"
-	domainsc "github.com/speakeasy-api/gram/gen/http/domains/client"
-	environmentsc "github.com/speakeasy-api/gram/gen/http/environments/client"
-	instancesc "github.com/speakeasy-api/gram/gen/http/instances/client"
-	integrationsc "github.com/speakeasy-api/gram/gen/http/integrations/client"
-	keysc "github.com/speakeasy-api/gram/gen/http/keys/client"
-	packagesc "github.com/speakeasy-api/gram/gen/http/packages/client"
-	projectsc "github.com/speakeasy-api/gram/gen/http/projects/client"
-	slackc "github.com/speakeasy-api/gram/gen/http/slack/client"
-	templatesc "github.com/speakeasy-api/gram/gen/http/templates/client"
-	toolsc "github.com/speakeasy-api/gram/gen/http/tools/client"
-	toolsetsc "github.com/speakeasy-api/gram/gen/http/toolsets/client"
-	variationsc "github.com/speakeasy-api/gram/gen/http/variations/client"
+	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
+	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
+	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
+	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
+	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
+	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
+	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
+	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
+	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
+	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
+	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
+	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
+	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
+	toolsc "github.com/speakeasy-api/gram/server/gen/http/tools/client"
+	toolsetsc "github.com/speakeasy-api/gram/server/gen/http/toolsets/client"
+	variationsc "github.com/speakeasy-api/gram/server/gen/http/variations/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

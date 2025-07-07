@@ -3,7 +3,7 @@ package types
 import (
 	"time"
 
-	"github.com/speakeasy-api/gram/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
 // SlackEvent represents the top-level Slack event callback payload

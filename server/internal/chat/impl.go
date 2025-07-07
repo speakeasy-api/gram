@@ -25,16 +25,16 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	gen "github.com/speakeasy-api/gram/gen/chat"
-	srv "github.com/speakeasy-api/gram/gen/http/chat/server"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/chat/repo"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/conv"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/oops"
-	"github.com/speakeasy-api/gram/internal/thirdparty/openrouter"
+	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -57,7 +57,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		sessions:       sessions,
 		logger:         logger,
 		repo:           repo.New(db),
-		tracer:         otel.Tracer("github.com/speakeasy-api/gram/internal/chat"),
+		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:     openRouter,
 		proxyTransport: cleanhttp.DefaultPooledTransport(),
 	}

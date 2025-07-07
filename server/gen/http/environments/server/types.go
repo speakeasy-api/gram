@@ -3,13 +3,13 @@
 // environments HTTP server types
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
 import (
-	environments "github.com/speakeasy-api/gram/gen/environments"
-	types "github.com/speakeasy-api/gram/gen/types"
+	environments "github.com/speakeasy-api/gram/server/gen/environments"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 

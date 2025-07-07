@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/speakeasy-api/gram/internal/o11y/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y/repo"
 )
 
 const (

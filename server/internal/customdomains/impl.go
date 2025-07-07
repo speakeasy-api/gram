@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	gen "github.com/speakeasy-api/gram/gen/domains"
-	srv "github.com/speakeasy-api/gram/gen/http/domains/server"
-	"github.com/speakeasy-api/gram/internal/auth"
-	"github.com/speakeasy-api/gram/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/internal/contextvalues"
-	"github.com/speakeasy-api/gram/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/internal/middleware"
-	"github.com/speakeasy-api/gram/internal/oops"
+	gen "github.com/speakeasy-api/gram/server/gen/domains"
+	srv "github.com/speakeasy-api/gram/server/gen/http/domains/server"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/enums/v1"
@@ -41,7 +41,7 @@ var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient) *Service {
 	return &Service{
-		tracer:         otel.Tracer("github.com/speakeasy-api/gram/internal/customdomains"),
+		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/customdomains"),
 		logger:         logger,
 		repo:           repo.New(db),
 		auth:           auth.New(logger, db, sessions),

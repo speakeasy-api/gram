@@ -3,7 +3,7 @@
 // auth HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/design
+// $ goa gen github.com/speakeasy-api/gram/server/design
 
 package server
 
@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"strings"
 
-	auth "github.com/speakeasy-api/gram/gen/auth"
+	auth "github.com/speakeasy-api/gram/server/gen/auth"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
