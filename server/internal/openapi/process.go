@@ -475,7 +475,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		OriginalName:        conv.PtrToPGTextEmpty(descriptor.originalName),
 		OriginalSummary:     conv.PtrToPGTextEmpty(descriptor.originalSummary),
 		OriginalDescription: conv.PtrToPGTextEmpty(descriptor.originalDescription),
-		XGram:               pgtype.Bool{Bool: descriptor.extensionFound, Valid: true},
+		XGram:               pgtype.Bool{Bool: descriptor.xGramFound, Valid: true},
 		SchemaVersion:       "1.0.0",
 		Schema:              schemaBytes,
 		ServerEnvVar:        serverEnvVar,
@@ -495,8 +495,14 @@ type gramExtension struct {
 	Description   *string `yaml:"description"`
 }
 
+type speakeasyExtension struct {
+	Name        *string `yaml:"name"`
+	Description *string `yaml:"description"`
+}
+
 type toolDescriptor struct {
-	extensionFound      bool
+	xGramFound          bool
+	xSpeakeasyMCPFound  bool
 	name                string
 	summary             string
 	description         string
@@ -509,12 +515,14 @@ type toolDescriptor struct {
 
 func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, op *v3.Operation) toolDescriptor {
 	gramExtNode, _ := op.Extensions.Get("x-gram")
+	speakeasyExtNode, _ := op.Extensions.Get("x-speakeasy-mcp")
 	name := strcase.ToSnake(tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, op.OperationId)))
 	description := op.Description
 	summary := op.Summary
 
 	toolDesc := toolDescriptor{
-		extensionFound:      false,
+		xGramFound:          false,
+		xSpeakeasyMCPFound:  false,
 		confirm:             conv.Ptr(mv.ConfirmAlways),
 		confirmPrompt:       nil,
 		name:                name,
@@ -525,37 +533,75 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		originalDescription: nil,
 	}
 
-	if gramExtNode == nil {
+	var xgram, xspeakeasy bool
+
+	var speakeasyExt speakeasyExtension
+	if speakeasyExtNode != nil {
+		if err := speakeasyExtNode.Decode(&speakeasyExt); err != nil {
+			msg := fmt.Sprintf("error parsing x-speakeasy-mcp extension: [%d:%d]: %s", speakeasyExtNode.Line, speakeasyExtNode.Column, err.Error())
+			logger.WarnContext(ctx, msg)
+		} else {
+			xspeakeasy = true
+		}
+	}
+
+	var gramExt gramExtension
+	if gramExtNode != nil {
+		if err := gramExtNode.Decode(&gramExt); err != nil {
+			msg := fmt.Sprintf("error parsing x-gram extension: [%d:%d]: %s", gramExtNode.Line, gramExtNode.Column, err.Error())
+			logger.WarnContext(ctx, msg)
+		} else {
+			xgram = true
+		}
+	}
+
+	var extLine, extColumn int
+	var customName, customSummary, customDescription, customConfirm, customConfirmPrompt *string
+	switch {
+	case xgram:
+		extLine, extColumn = gramExtNode.Line, gramExtNode.Column
+		customName = gramExt.Name
+		customSummary = gramExt.Summary
+		customDescription = gramExt.Description
+		customConfirm = gramExt.Confirm
+		customConfirmPrompt = gramExt.ConfirmPrompt
+	case xspeakeasy:
+		extLine, extColumn = speakeasyExtNode.Line, speakeasyExtNode.Column
+		customName = speakeasyExt.Name
+		customSummary = nil
+		customDescription = speakeasyExt.Description
+		customConfirm = nil
+		customConfirmPrompt = nil
+		// These are the only extension properties we care about. If they
+		// are not set then we should assume that the tool descriptor should
+		// remain unchanged.
+		if customName == nil && customDescription == nil {
+			return toolDesc
+		}
+	default:
 		return toolDesc
 	}
 
-	var ext gramExtension
-	if err := gramExtNode.Decode(&ext); err != nil {
-		msg := fmt.Sprintf("error parsing gram extension: [%d:%d]: %s", gramExtNode.Line, gramExtNode.Column, err.Error())
-		logger.WarnContext(ctx, msg)
+	sanitizedName := strcase.ToSnake(tools.SanitizeName(conv.PtrValOr(customName, "")))
 
-		return toolDesc
-	}
-
-	sanitizedName := strcase.ToSnake(tools.SanitizeName(conv.PtrValOr(ext.Name, "")))
-
-	confirm, valid := mv.SanitizeConfirmPtr(ext.Confirm)
+	confirm, valid := mv.SanitizeConfirmPtr(customConfirm)
 	if !valid {
-		msg := fmt.Sprintf("invalid tool confirmation mode: [%d:%d]: %v", gramExtNode.Line, gramExtNode.Column, ext.Confirm)
+		msg := fmt.Sprintf("invalid tool confirmation mode: [%d:%d]: %v", extLine, extColumn, customConfirm)
 		logger.WarnContext(ctx, msg)
 		confirm = mv.ConfirmAlways
 	}
 
 	return toolDescriptor{
-		extensionFound:      true,
+		xGramFound:          xgram,
+		xSpeakeasyMCPFound:  xspeakeasy,
 		name:                conv.Default(sanitizedName, name),
-		summary:             conv.PtrValOr(ext.Summary, summary),
-		description:         conv.PtrValOr(ext.Description, description),
+		summary:             conv.PtrValOr(customSummary, summary),
+		description:         conv.PtrValOr(customDescription, description),
 		originalName:        conv.PtrEmpty(name),
 		originalSummary:     conv.PtrEmpty(summary),
 		originalDescription: conv.PtrEmpty(description),
 		confirm:             conv.Ptr(confirm),
-		confirmPrompt:       ext.ConfirmPrompt,
+		confirmPrompt:       customConfirmPrompt,
 	}
 }
 
