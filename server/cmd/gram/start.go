@@ -263,7 +263,7 @@ func newStartCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			serviceName := "gram:server"
+			serviceName := "gram-server"
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "server"
 			logger := PullLogger(c.Context).With(

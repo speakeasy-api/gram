@@ -140,7 +140,7 @@ func newWorkerCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			serviceName := "gram:worker"
+			serviceName := "gram-worker"
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "worker"
 			logger := PullLogger(c.Context).With(
