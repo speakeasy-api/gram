@@ -132,7 +132,7 @@ export default function Home() {
                   href={
                     showNavbarCTA
                       ? "https://speakeasyapi.typeform.com/to/h6WJdwWr"
-                      : "https://app.getgram.ai/auth/login"
+                      : "https://app.getgram.ai/login"
                   }
                   className={
                     showNavbarCTA
