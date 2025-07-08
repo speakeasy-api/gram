@@ -130,8 +130,8 @@ importers:
         specifier: ^1.2.4
         version: 1.2.4(@types/react-dom@19.1.2(@types/react@19.1.2))(@types/react@19.1.2)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@speakeasy-api/moonshine':
-        specifier: 1.9.0-alpha.20
-        version: 1.9.0-alpha.20(@types/react-dom@19.1.2(@types/react@19.1.2))(@types/react@19.1.2)(lucide-react@0.503.0(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(zod@3.24.3)
+        specifier: 1.9.0-alpha.21
+        version: 1.9.0-alpha.21(@types/react-dom@19.1.2(@types/react@19.1.2))(@types/react@19.1.2)(lucide-react@0.503.0(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(zod@3.24.3)
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.16(tailwindcss@4.1.5)
@@ -1699,8 +1699,8 @@ packages:
   '@rushstack/eslint-patch@1.11.0':
     resolution: {integrity: sha512-zxnHvoMQVqewTJr/W4pKjF0bMGiKJv1WX7bSrkl46Hg0QjESbzBROWK0Wg4RphzSOS5Jiy7eFimmM3UgMrMZbQ==}
 
-  '@speakeasy-api/moonshine@1.9.0-alpha.20':
-    resolution: {integrity: sha512-aYJ95r3E/iFuSUCbTjLDkAPKCJzNfAz0rcTJxDwejJC7QGpB4GBi5N9cv86ABKB3D788tFoX5YfavCiIj/U8Cw==}
+  '@speakeasy-api/moonshine@1.9.0-alpha.21':
+    resolution: {integrity: sha512-CU+T7AmFh6IEc/Fy6k5Rs4XnNmGc8ns4QsZHKiF7jz1XrrSvcYDG/IXPNn3lSmn8JA1xMInYRdeno+OJ8/pFcg==}
     peerDependencies:
       '@types/react': ^18.3.11 || ^19.0.0
       lucide-react: ^0.453.0
@@ -5579,7 +5579,7 @@ snapshots:
 
   '@rushstack/eslint-patch@1.11.0': {}
 
-  '@speakeasy-api/moonshine@1.9.0-alpha.20(@types/react-dom@19.1.2(@types/react@19.1.2))(@types/react@19.1.2)(lucide-react@0.503.0(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(zod@3.24.3)':
+  '@speakeasy-api/moonshine@1.9.0-alpha.21(@types/react-dom@19.1.2(@types/react@19.1.2))(@types/react@19.1.2)(lucide-react@0.503.0(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(zod@3.24.3)':
     dependencies:
       '@dnd-kit/core': 6.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@dnd-kit/modifiers': 9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)

@@ -9,7 +9,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -491,6 +490,7 @@ const McpStep = ({
   );
 };
 
+// TODO: replace with moonshine button
 const ContinueButton = ({
   disabled,
   inProgressText,
@@ -502,18 +502,39 @@ const ContinueButton = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
 
-  // TODO: rainbowify
+  const buttonClasses = cn(
+    "relative inline-flex items-center justify-center gap-2 px-4 py-2",
+    "font-mono text-sm uppercase text-foreground",
+    "rounded-md cursor-pointer",
+    "transition-all outline-none"
+  );
+
   return (
-    <Button
-      disabled={disabled || isLoading}
-      onClick={() => {
-        setIsLoading(true);
-        onClick();
-      }}
+    <div
+      className={cn(
+        "inline-block rounded-md p-[1px]",
+        "bg-gradient-primary",
+        (disabled || isLoading) && "opacity-50"
+      )}
     >
-      {isLoading && <Spinner />}
-      {isLoading && inProgressText ? inProgressText : "Continue"}
-    </Button>
+      <button
+        disabled={disabled || isLoading}
+        onClick={() => {
+          setIsLoading(true);
+          onClick();
+        }}
+        className={cn(
+          buttonClasses,
+          "w-full rounded-[7px] bg-background border-0",
+          "hover:bg-accent",
+          "disabled:cursor-not-allowed",
+          "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500"
+        )}
+      >
+        {isLoading && <Spinner />}
+        {isLoading && inProgressText ? inProgressText : "Continue"}
+      </button>
+    </div>
   );
 };
 
