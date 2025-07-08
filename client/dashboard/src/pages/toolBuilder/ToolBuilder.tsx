@@ -41,6 +41,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
+import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
@@ -316,10 +317,26 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     );
   };
 
+  const [selectedEnvironment, setSelectedEnvironment] = useState(
+    chatConfigRef.current.environmentSlug
+  );
+  const environmentSwitcher = (
+    <EnvironmentDropdown
+      selectedEnvironment={selectedEnvironment}
+      setSelectedEnvironment={(slug) => {
+        setSelectedEnvironment(slug);
+        chatConfigRef.current.environmentSlug = slug;
+      }}
+      className="h-7"
+      visibilityThreshold={2}
+    />
+  );
+
   const tryNowButton = (
     <Button
       icon="play"
       size="sm"
+      className="h-7"
       onClick={() => {
         telemetry.capture("tool_builder_event", {
           event: "try_now",
@@ -327,12 +344,24 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
         chat.appendMessage({
           id: uuidv7(),
           role: "user",
-          content: `\`\`\`xml\n${buildPrompt(name, purpose, inputs, steps)}\n\`\`\``,
+          content: `\`\`\`xml\n${buildPrompt(
+            name,
+            purpose,
+            inputs,
+            steps
+          )}\n\`\`\``,
         });
       }}
     >
       Try Now
     </Button>
+  );
+
+  const additionalActions = (
+    <>
+      {tryNowButton}
+      {environmentSwitcher}
+    </>
   );
 
   const anyChanges =
@@ -377,6 +406,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     <Button
       icon="save"
       disabled={!!initial.id && !anyChanges}
+      className="mb-8"
       onClick={async () => {
         const argsJsonSchema = {
           type: "object",
@@ -621,7 +651,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       <ResizablePanel.Pane minSize={35}>
         <ChatWindow
           configRef={chatConfigRef}
-          additionalActions={tryNowButton}
+          additionalActions={additionalActions}
           initialMessages={initialMessages}
         />
       </ResizablePanel.Pane>
@@ -711,7 +741,10 @@ const StepCard = ({
           className="px-4 py-3 border-b border-stone-300 dark:border-stone-700 group/heading"
         >
           <Type variant="subheading">Use the {toolBadge} tool to...</Type>
-          <Stack direction="horizontal" className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans">
+          <Stack
+            direction="horizontal"
+            className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans"
+          >
             {moveUp && (
               <Button
                 variant="ghost"
@@ -819,7 +852,12 @@ const StepSeparator = () => {
   );
 };
 
-const buildPrompt = (toolName: string, purpose: string, inputs: Input[], steps: Step[]) => {
+const buildPrompt = (
+  toolName: string,
+  purpose: string,
+  inputs: Input[],
+  steps: Step[]
+) => {
   const inputsPortion = inputs
     .map(
       (input) =>

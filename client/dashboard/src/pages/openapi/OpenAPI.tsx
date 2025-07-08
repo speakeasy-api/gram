@@ -20,12 +20,13 @@ import { GetDeploymentResult } from "@gram/client/models/components/getdeploymen
 import {
   useDeploymentSuspense,
   useLatestDeployment,
-  useListToolsets,
+  useLatestDeploymentSuspense,
+  useListToolsetsSuspense,
   useListToolsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { OnboardingContent } from "../onboarding/Onboarding";
 
@@ -34,21 +35,26 @@ export function useEmptyProjectRedirect() {
   const project = useProject();
   const navigate = useNavigate();
 
-  const { data: deployment } = useLatestDeployment();
-  const { data: toolsets } = useListToolsets();
+  const { data: deployment } = useLatestDeploymentSuspense({
+    gramProject: project.slug, // Set this forcibly to avoid a race condition when switching projects
+  });
+  const { data: toolsets } = useListToolsetsSuspense({
+    gramProject: project.slug, // Set this forcibly to avoid a race condition when switching projects
+  });
 
-  const deploymentEmpty = isDeploymentEmpty(deployment?.deployment);
+  useEffect(() => {
+    const deploymentEmpty = isDeploymentEmpty(deployment.deployment);
 
-  if (deploymentEmpty && toolsets?.toolsets.length === 0) {
-    navigate(`/${session.organization.slug}/${project.slug}/onboarding`);
-  }
+    if (deploymentEmpty && toolsets.toolsets.length === 0) {
+      navigate(`/${session.organization.slug}/${project.slug}/onboarding`);
+    }
+  }, [deployment, toolsets]);
 }
 
 function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
   return (
-    !deployment ||
-    (deployment.openapiv3Assets.length === 0 &&
-      deployment.packages.length === 0)
+    deployment?.openapiv3Assets.length === 0 &&
+    deployment?.packages.length === 0
   );
 }
 

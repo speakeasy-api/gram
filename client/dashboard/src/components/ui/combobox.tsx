@@ -35,6 +35,7 @@ export function Combobox<T extends DropdownItem>({
   className,
   label,
   disabledMessage,
+  tooltip,
 }: {
   items: T[];
   selected: T | string | undefined;
@@ -45,6 +46,7 @@ export function Combobox<T extends DropdownItem>({
   variant?: Parameters<typeof Button>[0]["variant"];
   label?: string;
   disabledMessage?: string;
+  tooltip?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -61,7 +63,7 @@ export function Combobox<T extends DropdownItem>({
         aria-expanded={open}
         className={cn("px-2", className)}
         disabled={!!disabledMessage}
-        tooltip={disabledMessage}
+        tooltip={disabledMessage || tooltip}
       >
         <div className="flex items-center justify-between w-full gap-2">
           <div className="truncate font-medium">{children}</div>

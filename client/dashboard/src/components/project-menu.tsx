@@ -220,7 +220,7 @@ export function ProjectMenu() {
   );
 }
 
-function ProjectSelector() {
+export function ProjectSelector() {
   const organization = useOrganization();
   const project = useProject();
   const client = useSdkClient();

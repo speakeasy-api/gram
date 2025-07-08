@@ -54,6 +54,9 @@
 
   --header-height: 3rem;
   --sidebar-width: 16rem;
+
+  --muted-foreground: oklch(0.553 0.013 58.071);
+  --color-muted-foreground: var(--muted-foreground);
 }
 
 @layer base {

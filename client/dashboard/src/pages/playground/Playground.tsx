@@ -28,6 +28,7 @@ import { AgentifyProvider } from "./Agentify";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { PlaygroundRHS } from "./PlaygroundRHS";
+import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 
 export default function Playground() {
   return (
@@ -214,26 +215,6 @@ export function ToolsetPanel({
     setDynamicToolset(!!isDynamic);
   }, [toolset, isAdmin, setDynamicToolset]);
 
-  const environmentDropdownItems =
-    environments?.map((environment) => ({
-      ...environment,
-      label: environment.name,
-      value: environment.slug,
-    })) ?? [];
-
-  const environmentDropdown = (
-    <Combobox
-      items={environmentDropdownItems}
-      selected={environmentDropdownItems.find(
-        (item) => item.value === selectedEnvironment
-      )}
-      onSelectionChange={(value) => setSelectedEnvironment(value.value)}
-      className="max-w-fit"
-    >
-      <Type variant="small">{selectedEnvironment}</Type>
-    </Combobox>
-  );
-
   // This is prefetched in PrefetchedQueries, so this state shouldn't be hit
   if (toolsets === undefined) {
     return <div>Loading...</div>;
@@ -291,10 +272,13 @@ export function ToolsetPanel({
               </Stack>
             )}
           </Stack>
-          {environmentDropdownItems.length > 1 && (
+          {environments && environments.length > 1 && (
             <Stack direction="horizontal" gap={2} align="center">
               <Heading variant="h5">Active environment: </Heading>
-              {environmentDropdown}
+              <EnvironmentDropdown
+                selectedEnvironment={selectedEnvironment}
+                setSelectedEnvironment={setSelectedEnvironment}
+              />
             </Stack>
           )}
         </Stack>

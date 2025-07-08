@@ -15,7 +15,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ThemeContext } from "@/components/ui/theme-toggle";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import { useGroupedHttpTools } from "@/lib/toolNames";
@@ -40,6 +40,7 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { useOnboardingSteps } from "./Onboarding";
+import { ProjectSelector } from "@/components/project-menu";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -126,6 +127,15 @@ const LHS = ({
   setMcpSlug: (slug: string) => void;
 }) => {
   const [createdToolset, setCreatedToolset] = useState<Toolset>();
+  const { organization } = useSession();
+
+  const lowerLeft = organization?.projects.length > 1 ? (
+    <div className="max-w-sm">
+      <ProjectSelector />
+    </div>
+  ) : (
+    <span className="text-body-sm text-muted-foreground">© 2025 speakeasy</span>
+  );
 
   return (
     <div className="h-full flex flex-col relative bg-white">
@@ -201,9 +211,7 @@ const LHS = ({
         align={"center"}
         className="px-6 h-16 mt-auto"
       >
-        <span className="text-body-sm text-muted-foreground">
-          © 2025 speakeasy
-        </span>
+        {lowerLeft}
         <a href="https://x.com/speakeasydev" target="_blank">
           <TwitterIcon className="w-4 h-4 fill-muted-foreground" />
         </a>
