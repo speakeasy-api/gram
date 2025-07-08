@@ -78,12 +78,13 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 
 ### Section Sizes
 
-- `xs` - Minimal padding (8-16px)
-- `sm` - Small padding (16-24px)
-- `md` - Default padding (24-40px) - **Use this for most sections**
-- `lg` - Large padding (28-44px) - **Use for CTA sections**
-- `xl` - Extra large (32-48px)
-- `hero` - Full height hero sections
+- `none` - No padding (0px) - **Use for custom layouts**
+- `xs` - Minimal padding (4-8px)
+- `sm` - Small padding (6-10px) - **Use this for most sections**
+- `md` - Medium padding (8-12px) - **Use for sections needing more breathing room**
+- `lg` - Large padding (10-16px)
+- `xl` - Extra large (12-20px)
+- `hero` - Full height hero sections (no vertical padding)
 
 ### Section Backgrounds
 
@@ -113,6 +114,30 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 - `1`, `2`, `3`, `4` - Fixed column counts
 
 ## Common Page Patterns
+
+### Page Structure with Proper Spacing
+
+```tsx
+export default function Page() {
+  return (
+    <Flex direction="col" gap={0} className="min-h-screen">
+      {/* Header */}
+      <header className="header-base">...</header>
+      
+      {/* Main content with consistent section spacing */}
+      <Flex direction="col" gap={0} className="flex-1 space-y-16 sm:space-y-20 lg:space-y-24">
+        <Section size="hero">...</Section>
+        <Section size="sm">...</Section>
+        <Section size="sm">...</Section>
+        <Section size="md" background="black">...</Section>
+        <Section size="none" asChild>
+          <footer>...</footer>
+        </Section>
+      </Flex>
+    </Flex>
+  );
+}
+```
 
 ### Hero Section
 
@@ -192,7 +217,9 @@ import { Badge, ButtonGroup, CommunityBadge } from "./components/sections";
 
 ### Spacing
 
-- Use component gap props: `gap={4}`, `gap={8}`, `gap={12}` for consistent spacing
+- **Page-level spacing**: Wrap sections in a Flex container with `space-y-16 sm:space-y-20 lg:space-y-24` for consistent gaps between sections
+- **Component spacing**: Use gap props: `gap={4}`, `gap={8}`, `gap={12}` for internal spacing
+- **Section padding**: Use minimal padding (`size="sm"` or `size="md"`) for internal content spacing
 - For custom spacing, use Tailwind's 4px scale: `mb-4`, `py-8`, `gap-12`
 
 ### Responsive Design

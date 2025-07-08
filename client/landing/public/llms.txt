@@ -1,0 +1,109 @@
+# Gram - AI Tool Platform
+
+Gram is a platform for creating, hosting, and distributing AI tools through the Model Context Protocol (MCP). It enables developers to transform APIs into AI-native tools that work seamlessly with AI agents and LLMs.
+
+## What is Gram?
+
+Gram solves the challenge of connecting APIs and data sources to AI systems. Instead of building custom integrations for each AI client, developers can create MCP servers once and make them available across all compatible AI platforms.
+
+## Key Features
+
+### MCP Server Hosting at Scale
+- Deploy MCP servers with one click
+- Zero downtime deployments for new versions
+- Continuous testing and refinement of tool performance
+- Enterprise-grade reliability and performance
+
+### Tool Curation and Management
+- Group tools into focused toolsets for specific use cases
+- Remix tools across APIs and third-party services
+- Scope access by team and user permissions
+- Instant quality testing and validation
+
+### API-to-Tool Transformation
+- Auto-generate tool definitions from OpenAPI specifications
+- Create higher-order tools for complex workflows
+- Catalog and organize tools for easy distribution
+- Support for any REST API or data source
+
+### Enterprise Distribution
+- Model and framework agnostic gateway
+- Managed authentication and authorization
+- Built-in telemetry, audit logs, and rate limiting
+- Secure tool distribution across organizations
+
+### Plug & Play Integration
+- Interactive playground interface for testing
+- Seamless OAuth integration
+- Ready-to-use landing pages
+- Zero integration required with popular AI clients
+
+## How It Works
+
+1. **Connect Your API**: Bring your OpenAPI spec to create a tool for each operation
+2. **Configure & Test**: Set up authentication, test tools, and configure access
+3. **Distribute**: Share your toolset with teams or make it publicly available
+
+## Target Users
+
+- **API Developers**: Transform existing APIs into AI-native tools
+- **AI/ML Engineers**: Build robust tool ecosystems for AI applications
+- **Enterprise Teams**: Securely distribute internal tools to AI systems
+- **DevOps Teams**: Manage and monitor AI tool usage at scale
+
+## Technical Details
+
+### Supported Protocols
+- Model Context Protocol (MCP)
+- OpenAPI/Swagger specifications
+- REST APIs with standard authentication
+
+### Integration Support
+- All major AI clients and platforms
+- Custom authentication flows
+- Team-based access controls
+- Usage monitoring and analytics
+
+### Deployment Options
+- Hosted solution (primary offering)
+- Enterprise deployments available
+- Global CDN for low-latency access
+
+## Getting Started
+
+- Join the waitlist: https://speakeasyapi.typeform.com/to/h6WJdwWr
+- Book a demo: https://calendly.com/sagar-speakeasy/30min
+- Read documentation: https://docs.getgram.ai/
+- Join community: https://go.speakeasy.com/slack
+
+## Company Information
+
+Gram is developed by Speakeasy, a company focused on API developer experience and tooling. Speakeasy builds tools that help developers work more effectively with APIs and integrate them into modern AI workflows.
+
+Contact: Built by the team at Speakeasy (https://www.speakeasy.com/)
+Documentation: https://docs.getgram.ai/
+Community: https://go.speakeasy.com/slack
+
+## Use Cases
+
+### Developer Productivity
+- Integrate internal APIs with AI coding assistants
+- Create custom development workflows
+- Automate code review and deployment processes
+
+### Customer Support
+- Connect support tools to AI chat systems
+- Automate ticket routing and responses
+- Provide AI agents access to customer data
+
+### Sales and Marketing
+- Integrate CRM systems with AI assistants
+- Automate lead qualification and follow-up
+- Generate personalized content at scale
+
+### Data Analysis
+- Connect databases and analytics tools to AI
+- Automate report generation and insights
+- Enable natural language queries on business data
+
+This platform enables the next generation of AI-native applications by making it simple to connect any API or data source to AI systems through standardized protocols.

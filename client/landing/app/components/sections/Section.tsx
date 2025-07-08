@@ -16,12 +16,13 @@ const sectionVariants = cva(
         transparent: "bg-transparent",
       },
       size: {
-        xs: "py-8 sm:py-12 lg:py-16",
-        sm: "py-16 sm:py-20 lg:py-24",
-        md: "py-24 sm:py-32 lg:py-40",
-        lg: "py-28 sm:py-36 lg:py-44",
-        xl: "py-32 sm:py-40 lg:py-48",
-        hero: "min-h-[80vh] flex items-center py-16 lg:py-20",
+        none: "py-0",
+        xs: "py-6 sm:py-8 lg:py-12",
+        sm: "py-8 sm:py-12 lg:py-16", 
+        md: "py-12 sm:py-16 lg:py-20",
+        lg: "py-16 sm:py-20 lg:py-24",
+        xl: "py-20 sm:py-24 lg:py-28",
+        hero: "pt-16 sm:pt-20 lg:pt-24 pb-4 sm:pb-6 lg:pb-8",
       },
       container: {
         true: "",
@@ -30,7 +31,7 @@ const sectionVariants = cva(
     },
     defaultVariants: {
       background: "white",
-      size: "md",
+      size: "none",
       container: true,
     },
   }
