@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/pb33f/libopenapi v0.22.3
+	github.com/pb33f/libopenapi v0.23.0
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/posthog/posthog-go v1.5.12
 	github.com/redis/go-redis/extra/redisotel/v9 v9.11.0
