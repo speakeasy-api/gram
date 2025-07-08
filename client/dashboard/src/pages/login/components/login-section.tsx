@@ -84,9 +84,10 @@ export function LoginSection() {
     <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
       <div className="w-full flex flex-col items-center gap-8 max-w-xs">
         <div className="flex flex-col items-center gap-4">
-          <h1 className="bsmnt-text-display-xl">gram</h1>
-          <p className="bsmnt-text-body-lg text-center">
-            Create, Curate and Host high quality MCP servers for every use case. Enable AI to connect with your APIs.
+          <h1 className="text-display-xl">gram</h1>
+          <p className="text-body-lg text-center">
+            Create, Curate and Host high quality MCP servers for every use case.
+            Enable AI to connect with your APIs.
           </p>
         </div>
 
@@ -112,7 +113,7 @@ export function RegisterSection() {
   const telemetry = useTelemetry();
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
-  
+
   const registerMutation = useRegisterMutation({
     onSuccess: () => {
       // Redirect to app home after successful registration
@@ -126,22 +127,24 @@ export function RegisterSection() {
   const handleCompanyNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setCompanyName(value);
-    
+
     // Clear previous errors
     setValidationError("");
-    
+
     // Validate using the regex on type
     if (value.trim()) {
       const validOrgNameRegex = /^[a-zA-Z0-9\s-_]+$/;
       if (!validOrgNameRegex.test(value)) {
-        setValidationError("Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.");
+        setValidationError(
+          "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed."
+        );
       }
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!companyName.trim()) {
       setValidationError("Company name is required");
       return;
@@ -167,9 +170,10 @@ export function RegisterSection() {
     <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
       <div className="w-full flex flex-col items-center gap-8 max-w-xs">
         <div className="flex flex-col items-center gap-4">
-          <h1 className="bsmnt-text-display-xl">gram</h1>
-          <p className="bsmnt-text-body-lg text-center">
-            Create, Curate and Host high quality MCP servers for every use case. Enable AI to connect with your APIs.
+          <h1 className="text-display-xl">gram</h1>
+          <p className="text-body-lg text-center">
+            Create, Curate and Host high quality MCP servers for every use case.
+            Enable AI to connect with your APIs.
           </p>
         </div>
 
@@ -181,7 +185,10 @@ export function RegisterSection() {
 
         <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <label htmlFor="companyName" className="text-sm font-medium text-gray-700">
+            <label
+              htmlFor="companyName"
+              className="text-sm font-medium text-gray-700"
+            >
               Company Name
             </label>
             <input
@@ -194,15 +201,15 @@ export function RegisterSection() {
               disabled={registerMutation.isPending}
             />
           </div>
-          
+
           {(validationError || registerMutation.error) && (
             <p className="text-red-600 text-sm text-center">
               {validationError || registerMutation.error?.message}
             </p>
           )}
-          
-          <Button 
-            type="submit" 
+
+          <Button
+            type="submit"
             disabled={registerMutation.isPending || !companyName.trim()}
             className="w-full"
           >

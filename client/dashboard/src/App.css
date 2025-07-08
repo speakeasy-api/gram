@@ -1,6 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Mona+Sans:ital,wght@0,200..900;1,200..900&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
+@reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -40,23 +40,10 @@
   font-display: block;
 }
 
-/* TODO factor me somewhere else */
-@utility text-heading-md {
-  font-size: 1.625rem;
-  font-weight: 300;
-  line-height: 1.6;
-  letter-spacing: 0.0015em;
-  font-family: var(--font-diatype);
-  color: #111;
-}
+:root {
+  --optional-label: "optional";
 
-@utility text-body-sm {
-  font-size: 0.875rem;
-  font-weight: 400;
-  line-height: 1.6;
-  letter-spacing: 0.0015em;
-  font-family: var(--font-diatype);
-  color: #383838;
+  --radius: 0.625rem;
 }
 
 @theme inline {
@@ -64,152 +51,17 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+
   --header-height: 3rem;
   --sidebar-width: 16rem;
-
-  /* TO BE MOVED TO MOONSHINE IF YOU WANT TO USE THESE BE PREPARED TO REFACTOR */
-
-  /* Tech colors */
-  --color-bsmnt-brand-typescript: hsl(0, 0%, 0%);
-  --color-bsmnt-brand-go: hsl(220, 100%, 12%);
-  --color-bsmnt-brand-java: hsl(214, 69%, 50%);
-  --color-bsmnt-brand-python: hsl(216, 100%, 80%);
-  --color-bsmnt-brand-c: hsl(154, 100%, 7%);
-  --color-bsmnt-brand-terraform: hsl(108, 24%, 41%);
-  --color-bsmnt-brand-unity: hsl(68, 52%, 72%);
-  --color-bsmnt-brand-php: hsl(334, 54%, 13%);
-  --color-bsmnt-brand-swift: hsl(4, 67%, 47%);
-  --color-bsmnt-brand-ruby: hsl(23, 96%, 62%);
-  --color-bsmnt-brand-postman: hsl(0, 0%, 83%);
-
-  --gradient-bsmnt-brand-primary: linear-gradient(
-    90deg,
-    var(--color-bsmnt-brand-php) 0%,
-    var(--color-bsmnt-brand-swift) 12.56%,
-    var(--color-bsmnt-brand-ruby) 25.06%,
-    var(--color-bsmnt-brand-unity) 37.56%,
-    var(--color-bsmnt-brand-terraform) 50.06%,
-    var(--color-bsmnt-brand-c) 62.06%,
-    var(--color-bsmnt-brand-go) 74.06%,
-    var(--color-bsmnt-brand-java) 86.06%,
-    var(--color-bsmnt-brand-python) 97.06%
-  );
-}
-
-:root {
-  --optional-label: "optional";
-
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.147 0.004 49.25);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.147 0.004 49.25);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.147 0.004 49.25);
-  --primary: oklch(0.216 0.006 56.043);
-  --primary-foreground: oklch(0.985 0.001 106.423);
-  --secondary: oklch(0.97 0.001 106.424);
-  --secondary-foreground: oklch(0.216 0.006 56.043);
-  --muted: oklch(0.97 0.001 106.424);
-  --muted-foreground: oklch(0.553 0.013 58.071);
-  --accent: oklch(0.97 0.001 106.424);
-  --accent-foreground: oklch(0.216 0.006 56.043);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.923 0.003 48.717);
-  --input: oklch(0.923 0.003 48.717);
-  --ring: oklch(0.709 0.01 56.259);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0.001 106.423);
-  --sidebar-foreground: oklch(0.147 0.004 49.25);
-  --sidebar-primary: oklch(0.216 0.006 56.043);
-  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-accent: var(--color-stone-200);
-  --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
-  --sidebar-border: oklch(0.923 0.003 48.717);
-  --sidebar-ring: oklch(0.709 0.01 56.259);
-  --font-diatype: "Diatype", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
-  --font-diatype-mono: "Diatype Mono", SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
-  --font-tobias: "Tobias", "Cormorant", Georgia, Cambria, "Times New Roman",
-    Times, serif;
-}
-
-.dark {
-  --background: oklch(0.147 0.004 49.25);
-  --foreground: oklch(0.985 0.001 106.423);
-  --card: oklch(0.216 0.006 56.043);
-  --card-foreground: oklch(0.985 0.001 106.423);
-  --popover: oklch(0.216 0.006 56.043);
-  --popover-foreground: oklch(0.985 0.001 106.423);
-  --primary: oklch(0.923 0.003 48.717);
-  --primary-foreground: oklch(0.216 0.006 56.043);
-  --secondary: oklch(0.268 0.007 34.298);
-  --secondary-foreground: oklch(0.985 0.001 106.423);
-  --muted: oklch(0.268 0.007 34.298);
-  --muted-foreground: oklch(0.709 0.01 56.259);
-  --accent: oklch(0.268 0.007 34.298);
-  --accent-foreground: oklch(0.985 0.001 106.423);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.553 0.013 58.071);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.216 0.006 56.043);
-  --sidebar-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-accent: var(--color-stone-800);
-  --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.553 0.013 58.071);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
-    @apply bg-sidebar text-foreground;
+    @apply bg-background text-foreground;
     font-family: var(--font-diatype);
   }
   button {
@@ -221,34 +73,4 @@
   transition-property: all;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@theme {
-  --font-sans: var(--font-diatype);
-  --font-mono: var(--font-diatype-mono);
-  --font-display: var(--font-tobias);
-}
-
-/* TO BE MOVED TO MOONSHINE IF YOU WANT TO USE THESE BE PREPARED TO REFACTOR */
-
-@utility bsmnt-text-display-xl {
-  font-size: 5.625rem;
-  font-weight: 100;
-  line-height: 1.1;
-  letter-spacing: -4%;
-  color: #09090b;
-  font-family: var(--font-tobias);
-}
-
-@utility bsmnt-text-body-lg {
-  font-size: 1.125rem;
-  font-weight: 400;
-  line-height: 1.75;
-  letter-spacing: 0.25%;
-  color: #09090b;
-  font-family: var(--font-diatype);
-}
-
-@utility border-gradient-primary {
-  border-image: var(--gradient-bsmnt-brand-primary) 1;
 }

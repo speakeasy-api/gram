@@ -14,7 +14,6 @@ import { InputDialog } from "./input-dialog.tsx";
 import { NavButton } from "./nav-menu.tsx";
 import { Button } from "./ui/button.tsx";
 import { Combobox } from "./ui/combobox.tsx";
-import { Heading } from "./ui/heading.tsx";
 import { Input } from "./ui/input.tsx";
 import { Label } from "./ui/label.tsx";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
@@ -153,9 +152,9 @@ export function ProjectMenu() {
           <Stack direction={"horizontal"} gap={3} align="center">
             <ProjectAvatar project={project} className="h-8 w-8 rounded-md" />
             <Stack align="start">
-              <Heading variant="h5" className="mb-[-2px] normal-case">
+              <Type className="mb-[-2px] normal-case">
                 {project?.slug ?? "Select Project"}
-              </Heading>
+              </Type>
               <Type variant="small" muted className="truncate max-w-[120px]">
                 {organization?.slug}
               </Type>

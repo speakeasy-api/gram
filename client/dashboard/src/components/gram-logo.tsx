@@ -2,8 +2,6 @@
 
 export function GramLogo({ className }: { className?: string }) {
   return (
-    <span className={`bsmnt-text-display-xl text-foreground ${className}`}>
-      gram
-    </span>
+    <span className={`text-display-xl text-foreground ${className}`}>gram</span>
   );
 }

@@ -39,10 +39,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const primaryCTA = (
     <SidebarMenuButton
-      className={cn(
-        "bg-primary! text-primary-foreground! hover:bg-primary/90 hover:text-primary-foreground min-w-8 trans",
-        routes.toolsets.active && "border-violet-300 border-2 scale-105" // TODO rainbow
-      )}
+      className={cn("min-w-8 trans font-light")}
       href={routes.toolsets.href()}
       isActive={routes.toolsets.active}
     >

@@ -57,14 +57,7 @@ export function NavButton({
       isActive={active}
       onClick={onClick}
     >
-      {Icon && (
-        <Icon
-          className={cn(
-            "trans text-muted-foreground group-hover/nav-button:text-primary",
-            active && "text-primary"
-          )}
-        />
-      )}
+      {Icon && <Icon className={cn("trans text-muted-foreground")} />}
       <Type variant="small">{title}</Type>
     </SidebarMenuButton>
   );

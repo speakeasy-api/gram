@@ -456,6 +456,7 @@ function ChatInner({
       components={{
         composer: {
           additionalActions,
+          modelSelector: "text-foreground",
         },
         message: {
           avatar: {
