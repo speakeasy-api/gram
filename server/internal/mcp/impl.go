@@ -177,7 +177,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	baseURL := s.serverURL.String() + "/mcp"
 	if customDomainCtx != nil {
-		baseURL = customDomainCtx.Domain
+		baseURL = customDomainCtx.Domain + "/mcp"
 	}
 	MCPURL := path.Join(baseURL, mcpSlug)
 
@@ -334,11 +334,12 @@ func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
 	var customDomainCtx *contextvalues.CustomDomainContext
-	if customDomainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && customDomainCtx != nil {
+	if domainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && domainCtx != nil {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
-			CustomDomainID: uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true},
+			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
 		})
+		customDomainCtx = domainCtx
 	} else {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug)) //
 	}
