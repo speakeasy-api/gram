@@ -189,7 +189,7 @@ const PrefetchedQueries = () => {
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
 
   const {
     data: sessionData,
@@ -270,6 +270,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     }
 
     navigate(`/${session.organization.slug}/${preferredProject}`);
+  }
+
+  if (session.organization.slug !== orgSlug) {
+    navigate(`/${session.organization.slug}/${projectSlug}`);
   }
 
   return (
