@@ -170,31 +170,6 @@ export function ToolsetView({
     },
   });
 
-  const removeToolFromToolset = (toolName: string) => {
-    if (!toolset) {
-      return;
-    }
-
-    telemetry.capture("toolset_event", {
-      action: "tool_removed",
-      tool_name: toolName,
-    });
-
-    updateToolsetMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          httpToolNames: toolset.httpTools
-            .filter((tool) => tool.name !== toolName)
-            .map((tool) => tool.name),
-          promptTemplateNames: toolset.promptTemplates
-            .filter((template) => template.name !== toolName)
-            .map((template) => template.name),
-        },
-      },
-    });
-  };
-
   // For now to reduce user confusion we omit server url env variables
   // If a spec already has a security env variable set we will not surface variables as missing for that spec
 
@@ -234,9 +209,7 @@ export function ToolsetView({
   );
 
   let toolsToDisplay: ToolDefinition[] = grouped
-    .filter(
-      (group) => !selectedGroups.length || selectedGroups.includes(group.key)
-    )
+    .filter((group) => selectedGroups.includes(group.key))
     .flatMap((group) => group.tools);
 
   // If no tools are selected, show all tools
@@ -268,11 +241,10 @@ export function ToolsetView({
         </TabsList>
         <TabsContent value="tools">
           <Cards loading={!toolset}>
-            {toolDefinitions.map((tool) => (
+            {toolsToDisplay.map((tool) => (
               <ToolCard
                 key={tool.canonicalName}
                 tool={tool}
-                onRemove={() => removeToolFromToolset(tool.name)}
                 onUpdate={onUpdate}
               />
             ))}

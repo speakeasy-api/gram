@@ -68,7 +68,7 @@ function CardInfo({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-info"
       className={cn(
         "absolute top-[-4px] right-6 bg-card trans gap-2 flex",
-        ".group/card:has([data-slot=card-action]) group-hover/card:opacity-0", // If the card has an action, hide the info when hovering over the card
+        "group-hover/card:has([data-slot=card-action]):opacity-0", // Only hide info when card has an action and is hovered
         className
       )}
       {...props}
