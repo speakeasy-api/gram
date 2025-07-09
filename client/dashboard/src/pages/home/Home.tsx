@@ -342,7 +342,7 @@ function HeroGraphic({ toolset }: { toolset: Toolset | undefined }) {
               <Badge
                 key={`${rowIndex}-${toolIndex}`}
                 variant={"secondary"}
-                className={"opacity-40 w-30"}
+                className={"opacity-40 w-30 bg-muted"}
                 size="sm"
                 isLoading={false}
               >
