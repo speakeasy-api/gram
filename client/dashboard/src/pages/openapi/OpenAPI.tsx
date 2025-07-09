@@ -53,8 +53,9 @@ export function useEmptyProjectRedirect() {
 
 function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
   return (
-    deployment?.openapiv3Assets.length === 0 &&
-    deployment?.packages.length === 0
+    !deployment ||
+    (deployment?.openapiv3Assets.length === 0 &&
+      deployment?.packages.length === 0)
   );
 }
 

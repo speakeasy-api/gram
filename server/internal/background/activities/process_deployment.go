@@ -122,9 +122,14 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 				}
 			}
 
-			p.metrics.RecordOpenAPIProcessed(ctx, o11y.OutcomeFromError(processErr), time.Since(start), res.DocumentVersion)
-			if res.DocumentUpgrade != nil {
-				p.metrics.RecordOpenAPIUpgrade(ctx, *res.DocumentUpgrade, res.DocumentUpgradeDuration, res.DocumentVersion)
+			docVersion := "-"
+			if res != nil {
+				docVersion = res.DocumentVersion
+			}
+
+			p.metrics.RecordOpenAPIProcessed(ctx, o11y.OutcomeFromError(processErr), time.Since(start), docVersion)
+			if res != nil && res.DocumentUpgrade != nil {
+				p.metrics.RecordOpenAPIUpgrade(ctx, *res.DocumentUpgrade, res.DocumentUpgradeDuration, docVersion)
 			}
 
 			return processErr
