@@ -270,9 +270,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     }
 
     navigate(`/${session.organization.slug}/${preferredProject}`);
-  }
-
-  if (session.organization.slug !== orgSlug) {
+  } else if (session.organization.slug !== orgSlug) {
+    // make sure we don't direct to an org we aren't authenticated with
     navigate(`/${session.organization.slug}/${projectSlug}`);
   }
 
