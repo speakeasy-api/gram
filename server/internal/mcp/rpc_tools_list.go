@@ -13,8 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
-const defaultEmptySchema = `{"type":"object","properties":{}}`
-
 type toolsListResult struct {
 	Tools []*toolListEntry `json:"tools"`
 }
@@ -49,19 +47,15 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	tools := make([]*toolListEntry, 0)
 
 	for _, tool := range toolset.HTTPTools {
-		toolSchema := tool.Schema
-		if toolSchema == "" {
-			toolSchema = defaultEmptySchema
-		}
 		tools = append(tools, &toolListEntry{
 			Name:        tool.Name,
 			Description: tool.Description,
-			InputSchema: json.RawMessage(toolSchema),
+			InputSchema: json.RawMessage(tool.Schema),
 		})
 	}
 
 	for _, prompt := range toolset.PromptTemplates {
-		promptArgs := defaultEmptySchema
+		promptArgs := mv.DefaultEmptyToolSchema
 		if prompt.Arguments != nil {
 			promptArgs = *prompt.Arguments
 		}

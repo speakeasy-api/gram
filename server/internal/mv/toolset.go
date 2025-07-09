@@ -22,6 +22,8 @@ import (
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
+const DefaultEmptyToolSchema = `{"type":"object","properties":{}}`
+
 func DescribeToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -176,6 +178,11 @@ func DescribeToolset(
 
 			if newSchema, err := variedToolSchema(ctx, logger, tool); err == nil {
 				tool.Schema = newSchema
+			}
+
+			// models like claude expect schema to never be empty but be a valid json schema
+			if tool.Schema == "" {
+				tool.Schema = DefaultEmptyToolSchema
 			}
 
 			httpTools = append(httpTools, tool)
