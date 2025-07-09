@@ -76,6 +76,12 @@
         <div class="desc">
             Welcome! This is the MCP server for interacting with the {{ .MCPName }} API. Use it with Claude, Cursor, or any other tool that supports MCP.
         </div>
+        <a href="https://cursor.com/install-mcp?name={{ .MCPName }}&config={{ .JSONBlobURI }}">
+            <img
+                src="https://cursor.com/deeplink/mcp-install-dark.svg"
+                alt="Add {{ .MCPName }} MCP server to Cursor"
+                height="32" />
+        </a>
         <div class="card">
             <div class="section-title">MCP URL</div>
             <div class="code-container">
