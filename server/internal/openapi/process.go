@@ -888,7 +888,10 @@ func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string
 			Name:         conv.ToPGTextEmpty(sec.Name),
 			InPlacement:  conv.ToPGTextEmpty(sec.In),
 			Scheme:       conv.ToPGTextEmpty(sec.Scheme),
-			BearerFormat: conv.ToPGTextEmpty(sec.BearerFormat),
+			// No real reason to store this since it's purely for documentation
+			// purposes and we should eventually drop the DB column. Setting it
+			// to NULL.
+			BearerFormat: pgtype.Text{String: "", Valid: false},
 			EnvVariables: envvars,
 			OauthTypes:   oauthTypes,
 			OauthFlows:   oauthFlows,
