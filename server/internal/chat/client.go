@@ -55,7 +55,6 @@ func NewChatClient(logger *slog.Logger, tracerProvider trace.TracerProvider, met
 			meter,
 			instances.ToolCallSourceDirect,
 			cacheImpl,
-			chatClient,
 		),
 	}
 }

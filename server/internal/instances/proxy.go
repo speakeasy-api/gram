@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,7 +17,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/codes"
@@ -26,18 +24,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/serialization"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
-
-const SUMMARIZE_BREAKPOINT_BYTES = 4 * 5_000 // 4 bytes per token, 5k token limit
-const SUMMARIZE_LIMIT_BYTES = 4 * 25_000     // 4 bytes per token, 5k token limit
 
 type ToolCallSource string
 
@@ -95,9 +87,6 @@ type InstanceToolProxyConfig struct {
 	Tracer trace.Tracer
 	Meter  metric.Meter
 	Cache  cache.Cache
-	// The auto-summarization feature uses a chat client as a dependency, that is the only current reason for this
-	// For now this is nullable, but we should consider refactoring into a non openrouter specific chat client eventually
-	ChatClient *openrouter.ChatClient
 }
 
 type InstanceToolProxy struct {
@@ -106,9 +95,6 @@ type InstanceToolProxy struct {
 	tracer  trace.Tracer
 	metrics *metrics
 	cache   cache.Cache
-	// The auto-summarization feature uses a chat client as a dependency, that is the only current reason for this
-	// For now this is nullable, but we should consider refactoring into a non openrouter specific chat client eventually
-	chatClient *openrouter.ChatClient
 }
 
 func NewInstanceToolProxy(
@@ -117,15 +103,13 @@ func NewInstanceToolProxy(
 	meter metric.Meter,
 	source ToolCallSource,
 	cache cache.Cache,
-	chatClient *openrouter.ChatClient,
 ) *InstanceToolProxy {
 	return &InstanceToolProxy{
-		source:     source,
-		logger:     logger,
-		tracer:     tracer,
-		metrics:    newMetrics(meter, logger),
-		cache:      cache,
-		chatClient: chatClient,
+		source:  source,
+		logger:  logger,
+		tracer:  tracer,
+		metrics: newMetrics(meter, logger),
+		cache:   cache,
 	}
 }
 
@@ -153,8 +137,6 @@ func (itp *InstanceToolProxy) Do(
 		itp.metrics.RecordHTTPToolCall(ctx, toolExecutionInfo.OrganizationID, toolExecutionInfo.OrgSlug, toolExecutionInfo.Tool.Name, responseStatusCode)
 	}()
 
-	// Keep in mind tool calls are not required to be gram authenticated, we have public MCP servers. Develop accordingly
-	authCtx, isAuthenticated := contextvalues.GetAuthContext(ctx)
 	ciEnv := newCaseInsensitiveEnv(envVars)
 
 	bodyBytes, err := io.ReadAll(requestBody)
@@ -329,15 +311,7 @@ func (itp *InstanceToolProxy) Do(
 		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
 	}
 
-	var authenticatedOrg *string
-	if isAuthenticated && authCtx != nil && authCtx.ActiveOrganizationID != "" {
-		authenticatedOrg = &authCtx.ActiveOrganizationID
-	}
-	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, w, req, &responseStatusCode, autoSummarizeConfig{
-		authenticatedOrg:     authenticatedOrg,
-		autoSummarizeMessage: toolCallBody.GramRequestSummary,
-		chatClient:           itp.chatClient,
-	})
+	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, w, req, &responseStatusCode)
 }
 
 type retryConfig struct {
@@ -395,12 +369,6 @@ func retryWithBackoff(
 	return resp, err
 }
 
-type autoSummarizeConfig struct {
-	authenticatedOrg     *string
-	autoSummarizeMessage string
-	chatClient           *openrouter.ChatClient
-}
-
 func reverseProxyRequest(ctx context.Context,
 	logger *slog.Logger,
 	tracer trace.Tracer,
@@ -408,7 +376,6 @@ func reverseProxyRequest(ctx context.Context,
 	w http.ResponseWriter,
 	req *http.Request,
 	responseStatusCodeCapture *int,
-	autoSummarizeConfig autoSummarizeConfig,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -537,39 +504,9 @@ func reverseProxyRequest(ctx context.Context,
 			}
 		}
 	} else {
-		logger.DebugContext(ctx, "autoSummarizeConfig.autoSummarizeMessage", slog.String("value", autoSummarizeConfig.autoSummarizeMessage))
-		logger.DebugContext(ctx, "autoSummarizeConfig.authenticatedOrg", slog.String("value", conv.PtrValOr(autoSummarizeConfig.authenticatedOrg, "<!nil>")))
-		if autoSummarizeConfig.autoSummarizeMessage != "" && autoSummarizeConfig.authenticatedOrg != nil {
-			// Only read entire body if we might need to summarize
-			bodyBytes, err := io.ReadAll(resp.Body)
-			if err != nil {
-				span.SetStatus(codes.Error, err.Error())
-				logger.ErrorContext(ctx, "failed to read response body", slog.String("error", err.Error()))
-				return oops.E(oops.CodeUnexpected, err, "failed to read response body").Log(ctx, logger)
-			}
-
-			responseBody := string(bodyBytes)
-			// We cannot perform auto-summarization with no chat client
-			shouldSummarize := responseBody != "" && len(responseBody) > SUMMARIZE_LIMIT_BYTES && autoSummarizeConfig.chatClient != nil
-			if shouldSummarize {
-				summarizedResponse, err := summarizeResponse(ctx, logger, *autoSummarizeConfig.authenticatedOrg, autoSummarizeConfig.autoSummarizeMessage, responseBody, autoSummarizeConfig.chatClient)
-				if err != nil {
-					return oops.E(oops.CodeUnexpected, err, "failed to summarize response").Log(ctx, logger)
-				}
-				logger.DebugContext(ctx, "summarizedResponse", slog.String("value", summarizedResponse))
-				responseBody = summarizedResponse
-			}
-
-			if _, err := io.Copy(w, strings.NewReader(responseBody)); err != nil {
-				span.SetStatus(codes.Error, err.Error())
-				logger.ErrorContext(ctx, "failed to write response body", slog.String("error", err.Error()))
-			}
-		} else {
-			// Just stream the response directly if we don't need summarization
-			if _, err := io.Copy(w, resp.Body); err != nil {
-				span.SetStatus(codes.Error, err.Error())
-				logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
-			}
+		if _, err := io.Copy(w, resp.Body); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
 		}
 	}
 
@@ -635,68 +572,4 @@ func insertPathParams(urlStr string, params map[string]string) string {
 		}
 		return match
 	})
-}
-
-func summarizeResponse(ctx context.Context, logger *slog.Logger, orgID string, requestSummary, responseBody string, chatClient *openrouter.ChatClient) (string, error) {
-	var chunks []string
-	for i := 0; i < len(responseBody); i += SUMMARIZE_BREAKPOINT_BYTES {
-		end := int(math.Min(float64(i+SUMMARIZE_BREAKPOINT_BYTES), float64(len(responseBody))))
-		chunks = append(chunks, responseBody[i:end])
-	}
-
-	var wg sync.WaitGroup
-	workerSlots := make(chan bool, 5) // max 5 parallel workers
-	responsesCh := make(chan string, len(chunks))
-
-	for _, chunk := range chunks {
-		wg.Add(1)
-		workerSlots <- true // acquire slot
-
-		go func(chunk string) {
-			defer wg.Done()
-			defer func() { <-workerSlots }() // release slot
-
-			systemPrompt := `
-			You are a helper tasked with reducing the size of the response of a tool based on a given request summary.
-			For example, if the request is to "List all usernames", the response may include a list of users with many additional fields not relevant to the request.
-			Your goal is to extract the information that is most relevant to the request summary and return it as a new response.
-			There's no need to over-summarize responses that are already concise. Prioritize reducing enormous responses to manageable sizes.
-			`
-			prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere is a chunk of the response body:\n\n%s", requestSummary, chunk)
-
-			chatResponse, err := chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
-			if err != nil {
-				logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
-				return
-			}
-
-			responsesCh <- chatResponse.Content
-		}(chunk)
-	}
-
-	// Wait and close channel when all goroutines are done
-	go func() {
-		wg.Wait()
-		close(responsesCh)
-	}()
-
-	var chatResponses []string
-	for res := range responsesCh {
-		chatResponses = append(chatResponses, res)
-	}
-
-	systemPrompt := `
-	You are a helper tasked with reducing the size of the response of a tool based on a given request summary.
-	For example, if the request is to "List all usernames", the response may include a list of users with many additional fields not relevant to the request.
-	You previously extracted the information into condensed response chunks of the most relevant information.
-	Now please combine these chunks into one cohesive response.
-	`
-	prompt := fmt.Sprintf("Here is the request summary:\n\n%s\n\nHere are all the response chunks with each separated by a new line :\n\n%s", requestSummary, strings.Join(chatResponses, "\n"))
-	chatResponse, err := chatClient.GetCompletion(ctx, orgID, systemPrompt, prompt, nil)
-	if err != nil {
-		logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
-		return "", fmt.Errorf("summarize: completion error: %w", err)
-	}
-
-	return chatResponse.Content, nil
 }

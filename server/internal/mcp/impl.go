@@ -97,7 +97,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 			meter,
 			instances.ToolCallSourceMCP,
 			cacheImpl,
-			chatClient,
 		),
 	}
 }

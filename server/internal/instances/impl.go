@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -59,7 +58,6 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	enc *encryption.Encryption,
-	chatClient *openrouter.ChatClient,
 	cacheImpl cache.Cache,
 ) *Service {
 	envRepo := environments_repo.New(db)
@@ -81,7 +79,6 @@ func NewService(
 			meter,
 			ToolCallSourceDirect,
 			cacheImpl,
-			chatClient,
 		),
 	}
 }
@@ -264,8 +261,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 
 	// Use a response interceptor that completely captures the response
-	// This is so we can modify the response body before writing it to the original writer
-	// in the event summarization is needed
 	interceptor := newResponseInterceptor(w)
 
 	err = s.toolProxy.Do(ctx, interceptor, requestBody, envVars, executionInfo)
