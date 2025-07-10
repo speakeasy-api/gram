@@ -273,7 +273,7 @@ const UploadStep = ({
           </AccordionItem>
         </Accordion>
       </Stack>
-      {apiName ? (
+      {apiName != null ? (
         <InputField
           placeholder="Petstore"
           value={apiName}
