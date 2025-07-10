@@ -21,6 +21,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	libopenapiJSON "github.com/pb33f/libopenapi/json"
 	slogmulti "github.com/samber/slog-multi"
 	"gopkg.in/yaml.v3"
 
@@ -36,14 +37,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools"
 )
 
-var (
-	preferredRequestTypes = []*regexp.Regexp{
-		regexp.MustCompile(`\bjson\b`),
-		regexp.MustCompile(`^application/x-www-form-urlencoded\b`),
-		regexp.MustCompile(`^multipart/form-data\b`),
-		regexp.MustCompile(`^text/`),
-	}
-)
+var preferredRequestTypes = []*regexp.Regexp{
+	regexp.MustCompile(`\bjson\b`),
+	regexp.MustCompile(`^application/x-www-form-urlencoded\b`),
+	regexp.MustCompile(`^multipart/form-data\b`),
+	regexp.MustCompile(`^text/`),
+}
 
 type ToolExtractorTask struct {
 	ProjectID    uuid.UUID
@@ -909,19 +908,20 @@ func extractJSONSchemaFromYaml(name string, schemaProxy *base.SchemaProxy) ([]by
 		return nil, fmt.Errorf("%s (%d:%d): error inlining schema: %w", name, line, col, err)
 	}
 
-	yamlBytes, err := yaml.Marshal(schema)
-	if err != nil {
-		return nil, fmt.Errorf("%s (%d:%d): error yaml marshalling schema: %w", name, line, col, err)
+	schemaNode, ok := schema.(*yaml.Node)
+	if !ok {
+		return nil, fmt.Errorf("%s (%d:%d): error inlining schema: expected *yaml.Node, got %T", name, line, col, schema)
 	}
 
-	var raw interface{}
-	if err := yaml.Unmarshal(yamlBytes, &raw); err != nil {
-		return nil, fmt.Errorf("%s (%d:%d): error yaml unmarshalling schema: %w", name, line, col, err)
-	}
-
-	schemaBytes, err := json.Marshal(raw)
+	schemaBytes, err := libopenapiJSON.YAMLNodeToJSON(schemaNode, "")
 	if err != nil {
 		return nil, fmt.Errorf("%s (%d:%d): error json marshalling schema: %w", name, line, col, err)
+	}
+
+	// Check if any $ref values are present in the schema
+	// NB: this could result in false positives if any values in json schema contain `"$ref":`
+	if strings.Contains(string(schemaBytes), `"$ref":`) {
+		return nil, fmt.Errorf("%s (%d:%d): error inlining schema: circular reference detected", name, line, col)
 	}
 
 	return schemaBytes, nil
