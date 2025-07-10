@@ -5,7 +5,30 @@
 ```typescript
 import { SessionInfoResponse } from "@gram/client/models/operations";
 
-let value: SessionInfoResponse = {};
+let value: SessionInfoResponse = {
+  headers: {
+    "key": [],
+    "key1": [
+      "<value 1>",
+      "<value 2>",
+    ],
+  },
+  result: {
+    activeOrganizationId: "<id>",
+    gramAccountType: "<value>",
+    isAdmin: true,
+    organizations: [
+      {
+        id: "<id>",
+        name: "<value>",
+        projects: [],
+        slug: "<value>",
+      },
+    ],
+    userEmail: "<value>",
+    userId: "<id>",
+  },
+};
 ```
 
 ## Fields

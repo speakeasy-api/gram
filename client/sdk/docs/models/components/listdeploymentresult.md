@@ -11,6 +11,8 @@ let value: ListDeploymentResult = {
       assetCount: 983141,
       createdAt: new Date("2024-11-20T01:30:08.731Z"),
       id: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
+      status: "<value>",
+      toolCount: 665973,
       userId: "<id>",
     },
   ],

@@ -12,20 +12,32 @@ LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: ListDeployments :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  WHERE deployment_id IN (
+    SELECT id FROM deployments WHERE project_id = @project_id
+  )
+  ORDER BY deployment_id, seq DESC
+)
 SELECT 
   d.id,
   d.user_id,
   d.created_at,
-  COUNT(doa.id) as asset_count
+  COALESCE(ls.status, 'unknown') as status,
+  COUNT(DISTINCT doa.id) as asset_count,
+  COUNT(DISTINCT htd.id) as tool_count
 FROM deployments d
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
+LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
 WHERE
   d.project_id = @project_id
   AND d.id <= CASE 
     WHEN sqlc.narg(cursor)::uuid IS NOT NULL THEN sqlc.narg(cursor)::uuid
     ELSE (SELECT id FROM deployments WHERE project_id = @project_id ORDER BY id DESC LIMIT 1)
   END
-GROUP BY d.id
+GROUP BY d.id, ls.status
 ORDER BY d.id DESC
 LIMIT 51;
 

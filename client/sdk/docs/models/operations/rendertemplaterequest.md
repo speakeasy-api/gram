@@ -7,6 +7,9 @@ import { RenderTemplateRequest } from "@gram/client/models/operations";
 
 let value: RenderTemplateRequest = {
   id: "<id>",
+  renderTemplateRequestBody: {
+    arguments: {},
+  },
 };
 ```
 

@@ -5,7 +5,11 @@
 ```typescript
 import { UpsertGlobalVariationRequest } from "@gram/client/models/operations";
 
-let value: UpsertGlobalVariationRequest = {};
+let value: UpsertGlobalVariationRequest = {
+  upsertGlobalToolVariationForm: {
+    srcToolName: "<value>",
+  },
+};
 ```
 
 ## Fields

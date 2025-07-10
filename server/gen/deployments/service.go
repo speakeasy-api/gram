@@ -124,10 +124,14 @@ type DeploymentSummary struct {
 	ID string
 	// The ID of the user that created the deployment.
 	UserID string
+	// The status of the deployment.
+	Status string
 	// The creation date of the deployment.
 	CreatedAt string
 	// The number of upstream assets.
 	AssetCount int64
+	// The number of tools in the deployment.
+	ToolCount int64
 }
 
 // EvolvePayload is the payload type of the deployments service evolve method.

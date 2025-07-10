@@ -1,5 +1,5 @@
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -20,6 +20,8 @@ import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
+import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import Deployment from "./pages/deployments/Deployment";
 import Settings from "./pages/settings/Settings";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
@@ -31,9 +33,11 @@ import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Home from "./pages/home/Home";
 import { cn } from "./lib/utils";
+import { useLatestDeployment } from "@gram/client/react-query";
 
 type AppRouteBasic = {
   title: string;
+  titleNode?: React.ReactNode;
   url: string;
   external?: boolean;
   icon?: IconName;
@@ -65,6 +69,7 @@ export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
 
 type RouteEntry = {
   title: string;
+  titleNode?: React.ReactNode;
   url: string;
   icon?: IconName;
 } & (
@@ -236,6 +241,21 @@ const ROUTE_STRUCTURE = {
     icon: "upload",
     component: Onboarding,
   },
+  deployments: {
+    title: "Deployments",
+    titleNode: <DeploymentsLabel />,
+    url: "deployments",
+    icon: "circle-play",
+    component: DeploymentsRoot,
+    indexComponent: Deployments,
+    subPages: {
+      deployment: {
+        title: "Overview",
+        url: ":deploymentId",
+        component: Deployment,
+      },
+    },
+  },
   settings: {
     title: "Settings",
     url: "settings",
@@ -249,6 +269,34 @@ const ROUTE_STRUCTURE = {
     external: true,
   },
 } satisfies Record<string, RouteEntry>;
+
+function DeploymentsLabel() {
+  const { data } = useLatestDeployment();
+  const status = data?.deployment?.status;
+  let icon: React.ReactNode = null;
+  switch (status) {
+    case "completed":
+      icon = <Icon name="check" className="text-success" />;
+      break;
+    case "pending":
+      icon = <Icon name="circle-dashed" className="text-warning" />;
+      break;
+    case "failed":
+      icon = <Icon name="x" className="text-destructive" />;
+      break;
+  }
+
+  if (!icon) {
+    return "Deployments";
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      Deployments
+      {icon}
+    </span>
+  );
+}
 
 type RouteStructure = typeof ROUTE_STRUCTURE;
 

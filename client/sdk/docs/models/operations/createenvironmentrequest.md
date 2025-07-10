@@ -5,7 +5,18 @@
 ```typescript
 import { CreateEnvironmentRequest } from "@gram/client/models/operations";
 
-let value: CreateEnvironmentRequest = {};
+let value: CreateEnvironmentRequest = {
+  createEnvironmentForm: {
+    entries: [
+      {
+        name: "<value>",
+        value: "<value>",
+      },
+    ],
+    name: "<value>",
+    organizationId: "<id>",
+  },
+};
 ```
 
 ## Fields

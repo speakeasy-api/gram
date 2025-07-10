@@ -6398,6 +6398,13 @@ components:
                     type: string
                     description: The ID to of the deployment.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                status:
+                    type: string
+                    description: The status of the deployment.
+                tool_count:
+                    type: integer
+                    description: The number of tools in the deployment.
+                    format: int64
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -6405,7 +6412,9 @@ components:
                 - id
                 - created_at
                 - user_id
+                - status
                 - asset_count
+                - tool_count
         Environment:
             type: object
             properties:

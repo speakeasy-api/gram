@@ -792,20 +792,32 @@ func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID
 }
 
 const listDeployments = `-- name: ListDeployments :many
+WITH latest_statuses AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, status
+  FROM deployment_statuses
+  WHERE deployment_id IN (
+    SELECT id FROM deployments WHERE project_id = $1
+  )
+  ORDER BY deployment_id, seq DESC
+)
 SELECT 
   d.id,
   d.user_id,
   d.created_at,
-  COUNT(doa.id) as asset_count
+  COALESCE(ls.status, 'unknown') as status,
+  COUNT(DISTINCT doa.id) as asset_count,
+  COUNT(DISTINCT htd.id) as tool_count
 FROM deployments d
+LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
+LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
 WHERE
   d.project_id = $1
   AND d.id <= CASE 
     WHEN $2::uuid IS NOT NULL THEN $2::uuid
     ELSE (SELECT id FROM deployments WHERE project_id = $1 ORDER BY id DESC LIMIT 1)
   END
-GROUP BY d.id
+GROUP BY d.id, ls.status
 ORDER BY d.id DESC
 LIMIT 51
 `
@@ -819,7 +831,9 @@ type ListDeploymentsRow struct {
 	ID         uuid.UUID
 	UserID     string
 	CreatedAt  pgtype.Timestamptz
+	Status     string
 	AssetCount int64
+	ToolCount  int64
 }
 
 func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams) ([]ListDeploymentsRow, error) {
@@ -835,7 +849,9 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 			&i.ID,
 			&i.UserID,
 			&i.CreatedAt,
+			&i.Status,
 			&i.AssetCount,
+			&i.ToolCount,
 		); err != nil {
 			return nil, err
 		}

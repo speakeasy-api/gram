@@ -1513,8 +1513,10 @@ func marshalDeploymentsDeploymentSummaryToDeploymentSummaryResponseBody(v *deplo
 	res := &DeploymentSummaryResponseBody{
 		ID:         v.ID,
 		UserID:     v.UserID,
+		Status:     v.Status,
 		CreatedAt:  v.CreatedAt,
 		AssetCount: v.AssetCount,
+		ToolCount:  v.ToolCount,
 	}
 
 	return res

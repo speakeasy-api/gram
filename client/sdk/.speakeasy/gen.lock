@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: cb2facbdcc671d4ac9500ec92d7eeef1
+  docChecksum: e5d3b411241c1265b8be36d7daf16f63
   docVersion: 0.0.1
-  speakeasyVersion: 1.575.4
-  generationVersion: 2.648.7
-  releaseVersion: 0.12.27
-  configChecksum: efbb3e200b920dfc2d62581e103a3b37
+  speakeasyVersion: 1.580.1
+  generationVersion: 2.656.3
+  releaseVersion: 0.12.28
+  configChecksum: 5761fba4faa604da58ef683559d4fa6b
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.13
+    core: 3.21.14
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -315,6 +315,10 @@ generatedFiles:
   - docs/sdks/toolsets/README.md
   - docs/sdks/variations/README.md
   - eslint.config.mjs
+  - examples/.env.template
+  - examples/README.md
+  - examples/package.json
+  - examples/slackSlackLogin.example.ts
   - jsr.json
   - package.json
   - src/core.ts
@@ -839,7 +843,7 @@ examples:
     speakeasy-default-list-deployments:
       responses:
         "200":
-          application/json: {"items": [{"asset_count": 585740, "created_at": "2023-05-14T18:10:51.662Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
+          application/json: {"items": [{"asset_count": 585740, "created_at": "2023-05-14T18:10:51.662Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "status": "<value>", "tool_count": 522593, "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

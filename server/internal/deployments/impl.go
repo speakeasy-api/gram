@@ -247,8 +247,10 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 		items = append(items, &gen.DeploymentSummary{
 			ID:         r.ID.String(),
 			UserID:     r.UserID,
+			Status:     r.Status,
 			CreatedAt:  r.CreatedAt.Time.Format(time.RFC3339),
 			AssetCount: r.AssetCount,
+			ToolCount:  r.ToolCount,
 		})
 	}
 

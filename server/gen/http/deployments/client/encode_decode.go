@@ -1632,8 +1632,10 @@ func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *Dep
 	res := &deployments.DeploymentSummary{
 		ID:         *v.ID,
 		UserID:     *v.UserID,
+		Status:     *v.Status,
 		CreatedAt:  *v.CreatedAt,
 		AssetCount: *v.AssetCount,
+		ToolCount:  *v.ToolCount,
 	}
 
 	return res

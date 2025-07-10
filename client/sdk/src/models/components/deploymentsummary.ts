@@ -22,6 +22,14 @@ export type DeploymentSummary = {
    */
   id: string;
   /**
+   * The status of the deployment.
+   */
+  status: string;
+  /**
+   * The number of tools in the deployment.
+   */
+  toolCount: number;
+  /**
    * The ID of the user that created the deployment.
    */
   userId: string;
@@ -36,11 +44,14 @@ export const DeploymentSummary$inboundSchema: z.ZodType<
   asset_count: z.number().int(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   id: z.string(),
+  status: z.string(),
+  tool_count: z.number().int(),
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "asset_count": "assetCount",
     "created_at": "createdAt",
+    "tool_count": "toolCount",
     "user_id": "userId",
   });
 });
@@ -50,6 +61,8 @@ export type DeploymentSummary$Outbound = {
   asset_count: number;
   created_at: string;
   id: string;
+  status: string;
+  tool_count: number;
   user_id: string;
 };
 
@@ -62,11 +75,14 @@ export const DeploymentSummary$outboundSchema: z.ZodType<
   assetCount: z.number().int(),
   createdAt: z.date().transform(v => v.toISOString()),
   id: z.string(),
+  status: z.string(),
+  toolCount: z.number().int(),
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
     assetCount: "asset_count",
     createdAt: "created_at",
+    toolCount: "tool_count",
     userId: "user_id",
   });
 });

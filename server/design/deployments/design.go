@@ -172,7 +172,7 @@ var _ = Service("deployments", func() {
 })
 
 var DeploymentSummary = Type("DeploymentSummary", func() {
-	Required("id", "created_at", "user_id", "asset_count")
+	Required("id", "created_at", "user_id", "status", "asset_count", "tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -181,12 +181,18 @@ var DeploymentSummary = Type("DeploymentSummary", func() {
 	Attribute("user_id", String, func() {
 		Description("The ID of the user that created the deployment.")
 	})
+	Attribute("status", String, func() {
+		Description("The status of the deployment.")
+	})
 	Attribute("created_at", String, func() {
 		Description("The creation date of the deployment.")
 		Format(FormatDateTime)
 	})
 	Attribute("asset_count", Int64, func() {
 		Description("The number of upstream assets.")
+	})
+	Attribute("tool_count", Int64, func() {
+		Description("The number of tools in the deployment.")
 	})
 })
 

@@ -1315,10 +1315,14 @@ type DeploymentSummaryResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the user that created the deployment.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// The status of the deployment.
+	Status string `form:"status" json:"status" xml:"status"`
 	// The creation date of the deployment.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The number of upstream assets.
 	AssetCount int64 `form:"asset_count" json:"asset_count" xml:"asset_count"`
+	// The number of tools in the deployment.
+	ToolCount int64 `form:"tool_count" json:"tool_count" xml:"tool_count"`
 }
 
 // DeploymentLogEventResponseBody is used to define fields on response body

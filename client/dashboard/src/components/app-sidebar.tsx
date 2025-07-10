@@ -35,7 +35,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     consume: [routes.playground, routes.mcp, routes.sdks],
   };
 
-  const bottomNav = [routes.settings, routes.docs];
+  const bottomNav = [routes.deployments, routes.settings, routes.docs];
 
   const primaryCTA = (
     <SidebarMenuButton

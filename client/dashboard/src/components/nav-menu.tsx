@@ -6,6 +6,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
 import { Type } from "./ui/type";
+import React from "react";
 
 export function NavMenu({
   items,
@@ -29,6 +30,7 @@ function NavMenuButton({ item }: { item: AppRoute }) {
   return (
     <NavButton
       title={item.title}
+      titleNode={item.titleNode}
       href={item.href()}
       active={item.active}
       Icon={item.Icon}
@@ -38,12 +40,14 @@ function NavMenuButton({ item }: { item: AppRoute }) {
 
 export function NavButton({
   title,
+  titleNode,
   href,
   active,
   Icon,
   onClick,
 }: {
   title: string;
+  titleNode?: React.ReactNode;
   href?: string;
   onClick?: () => void;
   active?: boolean;
@@ -58,7 +62,7 @@ export function NavButton({
       onClick={onClick}
     >
       {Icon && <Icon className={cn("trans text-muted-foreground")} />}
-      <Type variant="small">{title}</Type>
+      <Type variant="small">{titleNode ?? title}</Type>
     </SidebarMenuButton>
   );
 }

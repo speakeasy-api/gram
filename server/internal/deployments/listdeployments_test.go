@@ -80,7 +80,9 @@ func TestDeploymentsService_ListDeployments_Success(t *testing.T) {
 	require.Equal(t, created.Deployment.ID, foundDeployment.ID, "deployment ID should match")
 	require.Equal(t, created.Deployment.UserID, foundDeployment.UserID, "user ID should match")
 	require.NotEmpty(t, foundDeployment.CreatedAt, "created at should not be empty")
+	require.NotEmpty(t, foundDeployment.Status, "status should not be empty")
 	require.GreaterOrEqual(t, foundDeployment.AssetCount, int64(1), "asset count should be at least 1")
+	require.GreaterOrEqual(t, foundDeployment.ToolCount, int64(0), "tool count should be at least 0")
 }
 
 func TestDeploymentsService_ListDeployments_EmptyList(t *testing.T) {
@@ -324,7 +326,9 @@ func TestDeploymentsService_ListDeployments_MultipleDeployments(t *testing.T) {
 				// Verify the summary fields
 				require.Equal(t, dep.Deployment.UserID, item.UserID, "user ID should match for deployment %s", dep.Deployment.ID)
 				require.NotEmpty(t, item.CreatedAt, "created at should not be empty for deployment %s", dep.Deployment.ID)
+				require.NotEmpty(t, item.Status, "status should not be empty for deployment %s", dep.Deployment.ID)
 				require.GreaterOrEqual(t, item.AssetCount, int64(1), "asset count should be at least 1 for deployment %s", dep.Deployment.ID)
+				require.GreaterOrEqual(t, item.ToolCount, int64(0), "tool count should be at least 0 for deployment %s", dep.Deployment.ID)
 			}
 		}
 	}

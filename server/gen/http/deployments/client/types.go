@@ -1345,10 +1345,14 @@ type DeploymentSummaryResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the user that created the deployment.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The status of the deployment.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The number of upstream assets.
 	AssetCount *int64 `form:"asset_count,omitempty" json:"asset_count,omitempty" xml:"asset_count,omitempty"`
+	// The number of tools in the deployment.
+	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
 }
 
 // DeploymentLogEventResponseBody is used to define fields on response body
@@ -4076,8 +4080,14 @@ func ValidateDeploymentSummaryResponseBody(body *DeploymentSummaryResponseBody) 
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
 	if body.AssetCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("asset_count", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
