@@ -22,6 +22,10 @@ import {
 
 export type Deployment = {
   /**
+   * The ID of the deployment that this deployment was cloned from.
+   */
+  clonedFrom?: string | undefined;
+  /**
    * The creation date of the deployment.
    */
   createdAt: Date;
@@ -85,6 +89,7 @@ export const Deployment$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  cloned_from: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_id: z.string().optional(),
   external_url: z.string().optional(),
@@ -101,6 +106,7 @@ export const Deployment$inboundSchema: z.ZodType<
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
+    "cloned_from": "clonedFrom",
     "created_at": "createdAt",
     "external_id": "externalId",
     "external_url": "externalUrl",
@@ -117,6 +123,7 @@ export const Deployment$inboundSchema: z.ZodType<
 
 /** @internal */
 export type Deployment$Outbound = {
+  cloned_from?: string | undefined;
   created_at: string;
   external_id?: string | undefined;
   external_url?: string | undefined;
@@ -139,6 +146,7 @@ export const Deployment$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   Deployment
 > = z.object({
+  clonedFrom: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
   externalId: z.string().optional(),
   externalUrl: z.string().optional(),
@@ -155,6 +163,7 @@ export const Deployment$outboundSchema: z.ZodType<
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
+    clonedFrom: "cloned_from",
     createdAt: "created_at",
     externalId: "external_id",
     externalUrl: "external_url",

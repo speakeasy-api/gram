@@ -808,6 +808,263 @@ func BuildUploadOpenAPIv3StreamPayload(payload any, fpath string) (*assets.Uploa
 	}, nil
 }
 
+// BuildServeOpenAPIv3Request instantiates a HTTP request object with method
+// and path set to call the "assets" service "serveOpenAPIv3" endpoint
+func (c *Client) BuildServeOpenAPIv3Request(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServeOpenAPIv3AssetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "serveOpenAPIv3", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeServeOpenAPIv3Request returns an encoder for requests sent to the
+// assets serveOpenAPIv3 server.
+func EncodeServeOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.ServeOpenAPIv3Form)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "serveOpenAPIv3", "*assets.ServeOpenAPIv3Form", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeServeOpenAPIv3Response returns a decoder for responses returned by the
+// assets serveOpenAPIv3 endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeServeOpenAPIv3Response may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeServeOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType   string
+				contentLength int64
+				lastModified  string
+				err           error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			{
+				contentLengthRaw := resp.Header.Get("Content-Length")
+				if contentLengthRaw == "" {
+					return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", goa.MissingFieldError("content_length", "header"))
+				}
+				v, err2 := strconv.ParseInt(contentLengthRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("content_length", contentLengthRaw, "integer"))
+				}
+				contentLength = v
+			}
+			lastModifiedRaw := resp.Header.Get("Last-Modified")
+			if lastModifiedRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("last_modified", "header"))
+			}
+			lastModified = lastModifiedRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			res := NewServeOpenAPIv3ResultOK(contentType, contentLength, lastModified)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ServeOpenAPIv3UnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3UnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3Unauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ServeOpenAPIv3ForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3ForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3Forbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ServeOpenAPIv3BadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3BadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3BadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ServeOpenAPIv3NotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3NotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3NotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ServeOpenAPIv3ConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3ConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3Conflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ServeOpenAPIv3UnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3UnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3UnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ServeOpenAPIv3InvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3InvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3Invalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ServeOpenAPIv3InvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+				}
+				err = ValidateServeOpenAPIv3InvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+				}
+				return nil, NewServeOpenAPIv3InvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ServeOpenAPIv3UnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+				}
+				err = ValidateServeOpenAPIv3UnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+				}
+				return nil, NewServeOpenAPIv3Unexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveOpenAPIv3", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ServeOpenAPIv3GatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			}
+			err = ValidateServeOpenAPIv3GatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+			}
+			return nil, NewServeOpenAPIv3GatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "serveOpenAPIv3", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAssetResponseBodyToAssetsAsset builds a value of type *assets.Asset
 // from a value of type *AssetResponseBody.
 func unmarshalAssetResponseBodyToAssetsAsset(v *AssetResponseBody) *assets.Asset {

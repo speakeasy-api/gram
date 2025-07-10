@@ -204,6 +204,124 @@ paths:
             x-speakeasy-name-override: serveImage
             x-speakeasy-react-hook:
                 name: serveImage
+    /rpc/assets.serveOpenAPIv3:
+        get:
+            description: Serve an OpenAPIv3 asset from Gram.
+            operationId: serveOpenAPIv3
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the asset to serve
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the asset to serve
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Content-Length:
+                            schema:
+                                format: int64
+                                type: integer
+                        Content-Type:
+                            schema:
+                                type: string
+                        Last-Modified:
+                            schema:
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: serveOpenAPIv3 assets
+            tags:
+                - assets
+            x-speakeasy-name-override: serveOpenAPIv3
+            x-speakeasy-react-hook:
+                name: serveOpenAPIv3
     /rpc/assets.uploadImage:
         post:
             description: Upload an image to Gram.
@@ -6285,6 +6403,10 @@ components:
         Deployment:
             type: object
             properties:
+                cloned_from:
+                    type: string
+                    description: The ID of the deployment that this deployment was cloned from.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 created_at:
                     type: string
                     description: The creation date of the deployment.
@@ -6599,6 +6721,10 @@ components:
         GetDeploymentResult:
             type: object
             properties:
+                cloned_from:
+                    type: string
+                    description: The ID of the deployment that this deployment was cloned from.
+                    example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
                 created_at:
                     type: string
                     description: The creation date of the deployment.
@@ -7506,6 +7632,34 @@ components:
             required:
                 - id
         ServeImageResult:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                last_modified:
+                    type: string
+            required:
+                - content_type
+                - content_length
+                - last_modified
+        ServeOpenAPIv3Form:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                id:
+                    type: string
+                    description: The ID of the asset to serve
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - id
+        ServeOpenAPIv3Result:
             type: object
             properties:
                 content_length:

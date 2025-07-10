@@ -34,6 +34,8 @@ type Deployment struct {
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string
+	// The ID of the deployment that this deployment was cloned from.
+	ClonedFrom *string
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAsset

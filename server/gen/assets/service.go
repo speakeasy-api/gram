@@ -27,6 +27,12 @@ type Service interface {
 	UploadImage(context.Context, *UploadImageForm, io.ReadCloser) (res *UploadImageResult, err error)
 	// Upload an OpenAPI v3 document to Gram.
 	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Form, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
+	// Serve an OpenAPIv3 asset from Gram.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeOpenAPIv3(context.Context, *ServeOpenAPIv3Form) (res *ServeOpenAPIv3Result, body io.ReadCloser, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -49,7 +55,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"serveImage", "uploadImage", "uploadOpenAPIv3"}
+var MethodNames = [4]string{"serveImage", "uploadImage", "uploadOpenAPIv3", "serveOpenAPIv3"}
 
 type Asset struct {
 	// The ID of the asset
@@ -76,6 +82,24 @@ type ServeImageForm struct {
 
 // ServeImageResult is the result type of the assets service serveImage method.
 type ServeImageResult struct {
+	ContentType   string
+	ContentLength int64
+	LastModified  string
+}
+
+// ServeOpenAPIv3Form is the payload type of the assets service serveOpenAPIv3
+// method.
+type ServeOpenAPIv3Form struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the asset to serve
+	ID string
+}
+
+// ServeOpenAPIv3Result is the result type of the assets service serveOpenAPIv3
+// method.
+type ServeOpenAPIv3Result struct {
 	ContentType   string
 	ContentLength int64
 	LastModified  string

@@ -95,7 +95,7 @@ function DeploymentsTable() {
   );
 }
 
-function DeploymentLink({ id }: { id: string }) {
+export function DeploymentLink({ id }: { id: string }) {
   const routes = useRoutes();
   return (
     <routes.deployments.deployment.Link params={[id]}>

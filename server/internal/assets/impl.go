@@ -485,3 +485,59 @@ func sniffMimeType(source io.ReadSeeker, params sniffMimeTypeParams) (mtype stri
 
 	return params.inputMimeType, exts[0], nil
 }
+
+func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv3Form) (*gen.ServeOpenAPIv3Result, io.ReadCloser, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	assetID, err := uuid.Parse(payload.ID)
+	switch {
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse asset id: %w", err), "invalid asset id")
+	case assetID == uuid.Nil:
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "asset id cannot be empty")
+	}
+
+	logger := s.logger.With(
+		slog.String("asset_id", assetID.String()),
+		slog.String("project_id", authCtx.ProjectID.String()),
+	)
+
+	row, err := s.repo.GetOpenAPIv3AssetURL(ctx, repo.GetOpenAPIv3AssetURLParams{
+		ID:        assetID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get openapiv3 asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	assetURL, err := url.Parse(row.Url)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	exists, err := s.storage.Exists(ctx, assetURL)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+	}
+
+	if !exists {
+		return nil, nil, oops.C(oops.CodeNotFound)
+	}
+
+	body, err := s.storage.Read(ctx, assetURL)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+	}
+
+	return &gen.ServeOpenAPIv3Result{
+		ContentType:   row.ContentType,
+		ContentLength: row.ContentLength,
+		LastModified:  row.UpdatedAt.Time.Format(time.RFC1123),
+	}, body, nil
+}

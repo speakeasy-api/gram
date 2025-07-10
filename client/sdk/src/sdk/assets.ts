@@ -3,6 +3,7 @@
  */
 
 import { assetsServeImage } from "../funcs/assetsServeImage.js";
+import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
 import { assetsUploadImage } from "../funcs/assetsUploadImage.js";
 import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -23,6 +24,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<operations.ServeImageResponse> {
     return unwrapAsync(assetsServeImage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * serveOpenAPIv3 assets
+   *
+   * @remarks
+   * Serve an OpenAPIv3 asset from Gram.
+   */
+  async serveOpenAPIv3(
+    request: operations.ServeOpenAPIv3Request,
+    security?: operations.ServeOpenAPIv3Security | undefined,
+    options?: RequestOptions,
+  ): Promise<operations.ServeOpenAPIv3Response> {
+    return unwrapAsync(assetsServeOpenAPIv3(
       this,
       request,
       security,

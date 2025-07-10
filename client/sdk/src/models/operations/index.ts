@@ -48,6 +48,7 @@ export * from "./registerdomain.js";
 export * from "./rendertemplate.js";
 export * from "./revokeapikey.js";
 export * from "./serveimage.js";
+export * from "./serveopenapiv3.js";
 export * from "./sessioninfo.js";
 export * from "./slackcallback.js";
 export * from "./slacklogin.js";

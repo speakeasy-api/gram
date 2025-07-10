@@ -112,6 +112,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		GithubRepo:      dep.GithubRepo,
 		GithubPr:        dep.GithubPr,
 		GithubSha:       dep.GithubSha,
+		ClonedFrom:      dep.ClonedFrom,
 		Openapiv3Assets: dep.Openapiv3Assets,
 		Packages:        dep.Packages,
 	}, nil

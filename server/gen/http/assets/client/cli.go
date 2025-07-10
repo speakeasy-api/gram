@@ -119,3 +119,37 @@ func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assets
 
 	return v, nil
 }
+
+// BuildServeOpenAPIv3Payload builds the payload for the assets serveOpenAPIv3
+// endpoint from CLI flags.
+func BuildServeOpenAPIv3Payload(assetsServeOpenAPIv3ID string, assetsServeOpenAPIv3ApikeyToken string, assetsServeOpenAPIv3ProjectSlugInput string, assetsServeOpenAPIv3SessionToken string) (*assets.ServeOpenAPIv3Form, error) {
+	var id string
+	{
+		id = assetsServeOpenAPIv3ID
+	}
+	var apikeyToken *string
+	{
+		if assetsServeOpenAPIv3ApikeyToken != "" {
+			apikeyToken = &assetsServeOpenAPIv3ApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assetsServeOpenAPIv3ProjectSlugInput != "" {
+			projectSlugInput = &assetsServeOpenAPIv3ProjectSlugInput
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsServeOpenAPIv3SessionToken != "" {
+			sessionToken = &assetsServeOpenAPIv3SessionToken
+		}
+	}
+	v := &assets.ServeOpenAPIv3Form{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

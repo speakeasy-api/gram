@@ -7,6 +7,7 @@ import { GetLatestDeploymentResult } from "@gram/client/models/components";
 
 let value: GetLatestDeploymentResult = {
   deployment: {
+    clonedFrom: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
     createdAt: new Date("2025-05-24T05:11:37.963Z"),
     externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
     githubPr: "1234",

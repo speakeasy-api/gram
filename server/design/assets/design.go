@@ -84,6 +84,34 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "uploadOpenAPIv3")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenAPIv3"}`)
 	})
+
+	Method("serveOpenAPIv3", func() {
+		Description("Serve an OpenAPIv3 asset from Gram.")
+
+		Payload(ServeOpenAPIv3Form)
+		Result(ServeOpenAPIv3Result)
+
+		HTTP(func() {
+			GET("/rpc/assets.serveOpenAPIv3")
+			Param("id")
+
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+			})
+
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "serveOpenAPIv3")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveOpenAPIv3")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveOpenAPIv3"}`)
+	})
+
 })
 
 var ServeImageForm = Type("ServeImageForm", func() {
@@ -131,6 +159,23 @@ var UploadImageResult = Type("UploadImageResult", func() {
 	Required("asset")
 
 	Attribute("asset", Asset, "The asset entry that was created in Gram")
+})
+
+var ServeOpenAPIv3Form = Type("ServeOpenAPIv3Form", func() {
+	Required("id")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+
+	Attribute("id", String, "The ID of the asset to serve")
+})
+
+var ServeOpenAPIv3Result = Type("ServeOpenAPIv3Result", func() {
+	Required("content_type", "content_length", "last_modified")
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+	Attribute("last_modified", String)
 })
 
 var Asset = Type("Asset", func() {

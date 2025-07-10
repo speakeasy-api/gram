@@ -98,6 +98,38 @@ func (q *Queries) GetImageAssetURL(ctx context.Context, id uuid.UUID) (GetImageA
 	return i, err
 }
 
+const getOpenAPIv3AssetURL = `-- name: GetOpenAPIv3AssetURL :one
+SELECT url, content_type, content_length, updated_at
+FROM assets
+WHERE
+  id = $1 AND kind = 'openapiv3'
+  AND project_id = $2
+`
+
+type GetOpenAPIv3AssetURLParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetOpenAPIv3AssetURLRow struct {
+	Url           string
+	ContentType   string
+	ContentLength int64
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetOpenAPIv3AssetURL(ctx context.Context, arg GetOpenAPIv3AssetURLParams) (GetOpenAPIv3AssetURLRow, error) {
+	row := q.db.QueryRow(ctx, getOpenAPIv3AssetURL, arg.ID, arg.ProjectID)
+	var i GetOpenAPIv3AssetURLRow
+	err := row.Scan(
+		&i.Url,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getProjectAsset = `-- name: GetProjectAsset :one
 SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND id = $2
 `

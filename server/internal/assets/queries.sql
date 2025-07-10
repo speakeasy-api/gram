@@ -30,3 +30,10 @@ SELECT * FROM assets WHERE project_id = @project_id AND sha256 = @sha256;
 
 -- name: GetImageAssetURL :one
 SELECT url, content_type, content_length, updated_at FROM assets WHERE id = @id AND kind = 'image';
+
+-- name: GetOpenAPIv3AssetURL :one
+SELECT url, content_type, content_length, updated_at
+FROM assets
+WHERE
+  id = @id AND kind = 'openapiv3'
+  AND project_id = @project_id;

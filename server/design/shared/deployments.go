@@ -50,6 +50,10 @@ var Deployment = Type("Deployment", func() {
 	Attribute("external_url", String, func() {
 		Description("The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.")
 	})
+	Attribute("cloned_from", String, func() {
+		Description("The ID of the deployment that this deployment was cloned from.")
+		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
+	})
 
 	Attribute("openapiv3_assets", ArrayOf(OpenAPIv3DeploymentAsset), func() {
 		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")

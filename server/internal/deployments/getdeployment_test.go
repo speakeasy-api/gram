@@ -303,3 +303,96 @@ func TestDeploymentsService_GetDeployment_WithExternalFields(t *testing.T) {
 	require.Equal(t, &githubPr, result.GithubPr, "github PR mismatch")
 	require.Equal(t, &githubSha, result.GithubSha, "github SHA mismatch")
 }
+
+func TestDeploymentsService_GetDeployment_WithClonedFrom(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload OpenAPI asset
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	// Create initial deployment
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-initial-deployment",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "initial-doc",
+				Slug:    "initial-doc",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	// Upload second asset
+	bs2 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares2, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs2.Len()),
+	}, io.NopCloser(bs2))
+	require.NoError(t, err, "upload second openapi v3 asset")
+
+	// Use Evolve to create a cloned deployment
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares2.Asset.ID,
+				Name:    "evolved-doc",
+				Slug:    "evolved-doc",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment")
+
+	// Test GetDeployment on the cloned deployment
+	result, err := ti.service.GetDeployment(ctx, &gen.GetDeploymentPayload{
+		ID:               evolved.Deployment.ID,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "get cloned deployment")
+
+	// Verify the cloned_from field is set to the initial deployment ID
+	require.NotNil(t, result.ClonedFrom, "cloned_from should not be nil")
+	require.Equal(t, initial.Deployment.ID, *result.ClonedFrom, "cloned_from should match initial deployment ID")
+
+	// Verify the initial deployment has no cloned_from field
+	initialResult, err := ti.service.GetDeployment(ctx, &gen.GetDeploymentPayload{
+		ID:               initial.Deployment.ID,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "get initial deployment")
+	require.Nil(t, initialResult.ClonedFrom, "initial deployment should not have cloned_from set")
+}

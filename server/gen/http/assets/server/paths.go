@@ -21,3 +21,8 @@ func UploadImageAssetsPath() string {
 func UploadOpenAPIv3AssetsPath() string {
 	return "/rpc/assets.uploadOpenAPIv3"
 }
+
+// ServeOpenAPIv3AssetsPath returns the URL path to the assets service serveOpenAPIv3 HTTP endpoint.
+func ServeOpenAPIv3AssetsPath() string {
+	return "/rpc/assets.serveOpenAPIv3"
+}

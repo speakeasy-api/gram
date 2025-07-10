@@ -20,6 +20,7 @@ type Endpoints struct {
 	ServeImage      goa.Endpoint
 	UploadImage     goa.Endpoint
 	UploadOpenAPIv3 goa.Endpoint
+	ServeOpenAPIv3  goa.Endpoint
 }
 
 // ServeImageResponseData holds both the result and the HTTP response body
@@ -49,6 +50,15 @@ type UploadOpenAPIv3RequestData struct {
 	Body io.ReadCloser
 }
 
+// ServeOpenAPIv3ResponseData holds both the result and the HTTP response body
+// reader of the "serveOpenAPIv3" method.
+type ServeOpenAPIv3ResponseData struct {
+	// Result is the method result.
+	Result *ServeOpenAPIv3Result
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
 // NewEndpoints wraps the methods of the "assets" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
@@ -57,6 +67,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ServeImage:      NewServeImageEndpoint(s, a.APIKeyAuth),
 		UploadImage:     NewUploadImageEndpoint(s, a.APIKeyAuth),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		ServeOpenAPIv3:  NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -65,6 +76,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ServeImage = m(e.ServeImage)
 	e.UploadImage = m(e.UploadImage)
 	e.UploadOpenAPIv3 = m(e.UploadOpenAPIv3)
+	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
 }
 
 // NewServeImageEndpoint returns an endpoint function that calls the method
@@ -209,5 +221,68 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.UploadOpenAPIv3(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewServeOpenAPIv3Endpoint returns an endpoint function that calls the method
+// "serveOpenAPIv3" of service "assets".
+func NewServeOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ServeOpenAPIv3Form)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.ServeOpenAPIv3(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &ServeOpenAPIv3ResponseData{Result: res, Body: body}, nil
 	}
 }

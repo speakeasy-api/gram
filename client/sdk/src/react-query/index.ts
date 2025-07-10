@@ -46,6 +46,7 @@ export * from "./registerDomain.js";
 export * from "./renderTemplate.js";
 export * from "./revokeAPIKey.js";
 export * from "./serveImage.js";
+export * from "./serveOpenAPIv3.js";
 export * from "./sessionInfo.js";
 export * from "./switchScopes.js";
 export * from "./template.js";

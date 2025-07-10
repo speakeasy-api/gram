@@ -88,6 +88,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		GithubPr:        conv.FromPGText[string](deployment.GithubPr),
 		GithubRepo:      conv.FromPGText[string](deployment.GithubRepo),
 		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
+		ClonedFrom:      conv.FromNullableUUID(deployment.ClonedFrom),
 		Openapiv3Assets: attachedAssets,
 		Packages:        attachedPackages,
 	}, nil

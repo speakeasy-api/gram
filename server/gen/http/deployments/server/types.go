@@ -80,6 +80,8 @@ type GetDeploymentResponseBody struct {
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	// The ID of the deployment that this deployment was cloned from.
+	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
@@ -1301,6 +1303,8 @@ type DeploymentResponseBody struct {
 	// The upstream URL a deployment can refer to. This can be a github url to a
 	// commit hash or pull request.
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	// The ID of the deployment that this deployment was cloned from.
+	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
@@ -1383,6 +1387,7 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 		GithubSha:      res.GithubSha,
 		ExternalID:     res.ExternalID,
 		ExternalURL:    res.ExternalURL,
+		ClonedFrom:     res.ClonedFrom,
 	}
 	if res.Openapiv3Assets != nil {
 		body.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(res.Openapiv3Assets))
