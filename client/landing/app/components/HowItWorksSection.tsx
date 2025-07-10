@@ -52,7 +52,7 @@ const HowItWorksSection = () => {
                 <div className="flex flex-col items-center justify-center px-4 sm:px-6 py-6 gap-4 sm:gap-6">
                   <Settings2 className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
                   <h3 className="font-display font-thin text-xl sm:text-2xl lg:text-3xl text-black text-center">
-                    Configure & Test
+                    Curate & Test
                   </h3>
                 </div>
                 {/* Right edge dot for middle column */}
@@ -75,7 +75,7 @@ const HowItWorksSection = () => {
                 <div className="flex flex-col items-center justify-center px-4 sm:px-6 py-6 gap-4 sm:gap-6">
                   <Share2 className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
                   <h3 className="font-display font-thin text-xl sm:text-2xl lg:text-3xl text-black text-center">
-                    Deploy & Share
+                    Host & Share
                   </h3>
                 </div>
                 {/* Right edge dot for last column */}
