@@ -7,6 +7,7 @@ junit-report.xml
 .assets
 .vscode/*
 !.vscode/extensions.json
+*.code-workspace
 .idea
 /server/goa*
 /server/gram
