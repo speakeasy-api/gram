@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useProject, useSession } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { HTTPToolDefinition } from "@gram/client/models/components";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
@@ -27,26 +27,46 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
 import { Suspense, useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { OnboardingContent } from "../onboarding/Onboarding";
 
 export function useEmptyProjectRedirect() {
   const session = useSession();
-  const project = useProject();
+  const { projectSlug } = useParams();
   const navigate = useNavigate();
 
-  const { data: deployment } = useLatestDeploymentSuspense({
-    gramProject: project.slug, // Set this forcibly to avoid a race condition when switching projects
-  });
-  const { data: toolsets } = useListToolsetsSuspense({
-    gramProject: project.slug, // Set this forcibly to avoid a race condition when switching projects
-  });
+  const { data: deployment, isFetchedAfterMount: deploymentFetchedAfterMount } =
+    useLatestDeploymentSuspense(
+      {
+        gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
+      },
+      undefined,
+      {
+        refetchOnMount: "always",
+      }
+    );
+
+  const { data: toolsets, isFetchedAfterMount: toolsetsFetchedAfterMount } =
+    useListToolsetsSuspense(
+      {
+        gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
+      },
+      undefined,
+      {
+        refetchOnMount: "always",
+      }
+    );
 
   useEffect(() => {
+    // Make sure we have the latest data
+    if (!deploymentFetchedAfterMount || !toolsetsFetchedAfterMount) {
+      return;
+    }
+
     const deploymentEmpty = isDeploymentEmpty(deployment.deployment);
 
     if (deploymentEmpty && toolsets.toolsets.length === 0) {
-      navigate(`/${session.organization.slug}/${project.slug}/onboarding`);
+      navigate(`/${session.organization.slug}/${projectSlug}/onboarding`);
     }
   }, [deployment, toolsets]);
 }

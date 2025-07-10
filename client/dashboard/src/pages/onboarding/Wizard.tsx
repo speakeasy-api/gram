@@ -22,7 +22,7 @@ import { useGroupedHttpTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
-import { invalidateAllToolset, useListTools } from "@gram/client/react-query";
+import { invalidateAllLatestDeployment, invalidateAllListToolsets, invalidateAllToolset, useListTools } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -314,7 +314,7 @@ const UploadStep = ({
       </Stack>
       {content}
       <ContinueButton
-        disabled={!file}
+        disabled={!file || !!apiNameError}
         onClick={onContinue}
         inProgressText="Generating tools"
       />
@@ -453,7 +453,10 @@ const McpStep = ({
       },
     });
 
-    invalidateAllToolset(queryClient);
+    // We need to invalidate all queries used in the `emptyProjectRedirect` to avoid looping back to onboarding
+    await invalidateAllToolset(queryClient);
+    await invalidateAllListToolsets(queryClient);
+    await invalidateAllLatestDeployment(queryClient);
 
     toast.success("MCP server created successfully");
     routes.home.goTo();
@@ -484,15 +487,6 @@ const McpStep = ({
           />
         )}
       />
-      {/* value={mcpSlug || createdToolset?.slug || "my-mcp"}
-        onChange={(e) => setMcpSlug(e.target.value)}
-        maxLength={40}
-        label="MCP Server Slug"
-        error={slugError}
-        hint={"☑︎ This slug is available!"}
-        required
-        requiredPrefix={org?.slug ? `${org.slug}-` : ""} */}
-      {/* /> */}
       <ContinueButton disabled={!!slugError} onClick={onContinue} />
     </>
   );
