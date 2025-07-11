@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type localEnvFile map[string]struct {
@@ -34,6 +35,7 @@ type Manager struct {
 	speakeasyServerAddress string
 	speakeasySecretKey     string
 	orgRepo                *orgRepo.Queries
+	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
 }
 
@@ -47,6 +49,7 @@ func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,
 		orgRepo:                orgRepo.New(db),
+		userRepo:               userRepo.New(db),
 		pylon:                  pylon,
 	}
 }

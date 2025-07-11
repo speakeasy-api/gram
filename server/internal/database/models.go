@@ -362,3 +362,13 @@ type ToolsetPrompt struct {
 	PromptTemplateID uuid.NullUUID
 	PromptName       string
 }
+
+type User struct {
+	ID          string
+	Email       string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+	Admin       bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}

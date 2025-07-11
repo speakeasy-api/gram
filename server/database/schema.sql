@@ -640,3 +640,19 @@ CREATE TABLE IF NOT EXISTS toolset_prompts (
 -- Ensure a toolset can only have one prompt template per name
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_prompts_toolset_id_prompt_name_key
 ON toolset_prompts (toolset_id, prompt_name);
+
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  photo_url TEXT,
+  admin BOOLEAN NOT NULL DEFAULT FALSE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT users_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
+ON users (email);

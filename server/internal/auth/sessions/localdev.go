@@ -16,9 +16,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var unsafeSessionData = []byte(`
@@ -80,6 +82,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		speakeasyServerAddress: "",
 		speakeasySecretKey:     "",
 		orgRepo:                orgRepo.New(db),
+		userRepo:               userRepo.New(db),
 		pylon:                  fakePylon,
 	}, nil
 }
@@ -124,6 +127,17 @@ func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (strin
 		if err := s.InvalidateUserInfoCache(ctx, userID); err != nil {
 			s.logger.WarnContext(ctx, "failed to invalidate user info cache", slog.String("error", err.Error()))
 		}
+
+		if _, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
+			ID:          userID,
+			Email:       userInfo.UserEmail,
+			DisplayName: "stubbed user",
+			PhotoUrl:    conv.PtrToPGText(nil),
+			Admin:       userInfo.Admin,
+		}); err != nil {
+			return "", fmt.Errorf("failed to upsert user: %w", err)
+		}
+
 		_, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 			ID:   userInfo.Organizations[0].OrganizationID,
 			Name: userInfo.Organizations[0].OrganizationName,

@@ -11,6 +11,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type speakeasyProviderUser struct {
@@ -72,6 +74,16 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	var validateResp validateTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&validateResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if _, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
+		ID:          validateResp.User.ID,
+		Email:       validateResp.User.Email,
+		DisplayName: validateResp.User.DisplayName,
+		PhotoUrl:    conv.PtrToPGText(validateResp.User.PhotoURL),
+		Admin:       validateResp.User.Admin,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to upsert user: %w", err)
 	}
 
 	var adminOverride string
