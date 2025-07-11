@@ -69,6 +69,9 @@ importers:
       '@ai-sdk/react':
         specifier: ^1.2.9
         version: 1.2.9(react@19.1.0)(zod@3.24.3)
+      '@datadog/browser-rum':
+        specifier: ^6.13.0
+        version: 6.13.0
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -511,6 +514,20 @@ packages:
 
   '@code-hike/lighter@1.0.1':
     resolution: {integrity: sha512-mccvcsk5UTScRrE02oBz1/qzckyhD8YE3VQlQv++2bSVVZgNuCUX8MpokSCi5OmfRAAxbj6kmNiqq1Um8eXPrw==}
+
+  '@datadog/browser-core@6.13.0':
+    resolution: {integrity: sha512-wWhQ22F8pDjh7kGtvBetJhX5luyKsIVzJQTisjM/6p+A2nchDuoOiZ0GdjajRA5LlPa9pj/PlOoe/g+B9AMELg==}
+
+  '@datadog/browser-rum-core@6.13.0':
+    resolution: {integrity: sha512-+gp9MEDc24xB5dwvVYsOPoRueujTOy0GNW2Q3XNyWMstzuSQIwXaIuDIRVhCoi8+i4UioUCd7ZO30yEB01Ajwg==}
+
+  '@datadog/browser-rum@6.13.0':
+    resolution: {integrity: sha512-VIVpoD+A2WLIskB0PXzO0Gh3bZs7MkOrzhnDpamWMrcbGH/UaX6BUmTlorqtT374Jrre6frzN2IEKGQs7kVamQ==}
+    peerDependencies:
+      '@datadog/browser-logs': 6.13.0
+    peerDependenciesMeta:
+      '@datadog/browser-logs':
+        optional: true
 
   '@dnd-kit/accessibility@3.1.1':
     resolution: {integrity: sha512-2P+YgaXF+gRsIihwwY1gCsQSYnu9Zyj2py8kY5fFvUM1qm2WA2u639R6YNVfU4GWr+ZM5mqEsfHZZLoRONbemw==}
@@ -4555,6 +4572,17 @@ snapshots:
   '@code-hike/lighter@1.0.1':
     dependencies:
       ansi-sequence-parser: 1.1.1
+
+  '@datadog/browser-core@6.13.0': {}
+
+  '@datadog/browser-rum-core@6.13.0':
+    dependencies:
+      '@datadog/browser-core': 6.13.0
+
+  '@datadog/browser-rum@6.13.0':
+    dependencies:
+      '@datadog/browser-core': 6.13.0
+      '@datadog/browser-rum-core': 6.13.0
 
   '@dnd-kit/accessibility@3.1.1(react@19.1.0)':
     dependencies:
