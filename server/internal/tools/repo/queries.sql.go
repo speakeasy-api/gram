@@ -310,44 +310,46 @@ WITH deployment AS (
     ORDER BY seq DESC
     LIMIT 1
 ),
-external_deployments AS (
-  SELECT package_versions.deployment_id as id
-  FROM deployments_packages
-  INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
-  WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
+all_deployment_ids AS (
+    SELECT id FROM deployment
+    UNION
+    SELECT DISTINCT pv.deployment_id
+    FROM deployment d
+    JOIN deployments_packages dp ON dp.deployment_id = d.id
+    JOIN package_versions pv ON dp.version_id = pv.id
 )
 SELECT 
   (SELECT id FROM deployment) as deployment_id,
-  http_tool_definitions.id,
-  http_tool_definitions.name,
-  http_tool_definitions.summary,
-  http_tool_definitions.description,
-  http_tool_definitions.http_method,
-  http_tool_definitions.confirm,
-  http_tool_definitions.confirm_prompt,
-  http_tool_definitions.summarizer,
-  http_tool_definitions.path,
-  http_tool_definitions.openapiv3_document_id,
-  http_tool_definitions.openapiv3_operation,
-  http_tool_definitions.schema_version,
-  http_tool_definitions.schema,
-  http_tool_definitions.security,
-  http_tool_definitions.default_server_url,
-  http_tool_definitions.created_at,
-  http_tool_definitions.updated_at,
-  http_tool_definitions.tags,
+  htd.id,
+  htd.name,
+  htd.summary,
+  htd.description,
+  htd.http_method,
+  htd.confirm,
+  htd.confirm_prompt,
+  htd.summarizer,
+  htd.path,
+  htd.openapiv3_document_id,
+  htd.openapiv3_operation,
+  htd.schema_version,
+  htd.schema,
+  htd.security,
+  htd.default_server_url,
+  htd.created_at,
+  htd.updated_at,
+  htd.tags,
   (CASE
-    WHEN http_tool_definitions.project_id = $2 THEN ''
+    WHEN htd.project_id = $2 THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
     ELSE ''
   END) as package_name
-FROM http_tool_definitions
-LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
+FROM http_tool_definitions htd
+LEFT JOIN packages ON htd.project_id = packages.project_id
 WHERE
-  http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
-  AND http_tool_definitions.deleted IS FALSE
-  AND ($3::uuid IS NULL OR http_tool_definitions.id < $3)
-ORDER BY http_tool_definitions.id DESC
+  htd.deployment_id IN (SELECT id FROM all_deployment_ids)
+  AND htd.deleted IS FALSE
+  AND ($3::uuid IS NULL OR htd.id < $3)
+ORDER BY htd.id DESC
 LIMIT $1
 `
 
