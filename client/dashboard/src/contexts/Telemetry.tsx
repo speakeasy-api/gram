@@ -79,7 +79,7 @@ export const TelemetryProvider = (props: { children: ReactNode }) => {
         site: "datadoghq.com",
         service: "gram",
         sessionSampleRate: 100,
-        sessionReplaySampleRate: 0,
+        sessionReplaySampleRate: 100,
         trackUserInteractions: true,
         trackResources: true,
         defaultPrivacyLevel: "mask-user-input",
