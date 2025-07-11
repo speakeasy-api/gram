@@ -435,7 +435,7 @@ function CustomToolCard({
   const { data: tools } = useListTools();
   const routes = useRoutes();
   const isToolInToolset = (t: string) =>
-    currentTools.some((t2) => t2.canonicalName === t);
+    currentTools.some((t2) => t2.name === t);
 
   const templateIsInToolset = currentTemplates.some(
     (t) => t.name === template.name
