@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
@@ -18,6 +19,7 @@ import (
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
@@ -33,7 +35,7 @@ type dbClientOptions struct {
 	enableUnsafeLogging bool
 }
 
-func newDBClient(ctx context.Context, logger *slog.Logger, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {
+func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {
 	poolcfg := must.Value(pgxpool.ParseConfig(connstring))
 	consoleLogLevel := tracelog.LogLevelNone
 	if opts.enableUnsafeLogging {
@@ -51,6 +53,10 @@ func newDBClient(ctx context.Context, logger *slog.Logger, connstring string, op
 	pool, err := pgxpool.NewWithConfig(ctx, poolcfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pgx pool: %w", err)
+	}
+
+	if err := otelpgx.RecordStats(pool, otelpgx.WithStatsMeterProvider(meterProvider)); err != nil {
+		return nil, fmt.Errorf("unable to record pgx metrics: %w", err)
 	}
 
 	return pool, nil

@@ -16,6 +16,7 @@ require (
 	github.com/cbroglie/mustache v1.4.0
 	github.com/charmbracelet/log v0.4.2
 	github.com/ettle/strcase v0.2.0
+	github.com/exaring/otelpgx v0.9.3
 	github.com/go-logr/logr v1.4.3
 	github.com/go-redis/cache/v9 v9.0.0
 	github.com/gomarkdown/markdown v0.0.0-20250311123330-531bef5e742b
