@@ -472,9 +472,9 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
         "mcp-remote",
         "${mcpUrl}",
         "--header",
-        "Gram-Environment: ${toolset.defaultEnvironmentSlug}",
+        "Gram-Environment:${toolset.defaultEnvironmentSlug}",
         "--header",
-        "Authorization: \${GRAM_KEY}"
+        "Authorization:\${GRAM_KEY}"
       ],
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"

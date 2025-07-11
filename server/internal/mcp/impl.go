@@ -170,13 +170,13 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	envHeaders := []string{}
 	for _, envVar := range toolsetDetails.RelevantEnvironmentVariables {
 		if !strings.Contains(strings.ToLower(envVar), "server_url") {
-			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", envVar))
+			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
 		}
 	}
 
 	baseURL := s.serverURL.String() + "/mcp"
 	if customDomainCtx != nil {
-		baseURL = customDomainCtx.Domain + "/mcp"
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
 	}
 	MCPURL := path.Join(baseURL, mcpSlug)
 
