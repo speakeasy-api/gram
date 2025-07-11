@@ -269,8 +269,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     if (v.length < 4) {
       return "Tool name must be at least 4 characters long";
     }
-    if (v.length > 100) {
-      return "Tool name must be less than 100 characters long";
+    if (v.length >= 40) {
+      return "Tool name must be less than or equal to 40 characters long";
     }
     if (tools.some((t) => t.name.toLowerCase() === v.toLowerCase())) {
       return "Tool name must be unique";
