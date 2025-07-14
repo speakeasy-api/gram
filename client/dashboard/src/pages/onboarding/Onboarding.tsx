@@ -85,6 +85,20 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
     apiNameError = "API name is required";
   }
 
+  const getContentType = (file: File) => {
+    if (file.type) return file.type;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    switch (ext) {
+      case "json":
+        return "application/json";
+      case "yaml":
+      case "yml":
+        return "application/yaml";
+      default:
+        return "application/octet-stream";
+    }
+  };
+
   const handleSpecUpload = async (file: File) => {
     try {
       setFile(file);
@@ -97,7 +111,7 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
       fetch(`${getServerURL()}/rpc/assets.uploadOpenAPIv3`, {
         method: "POST",
         headers: {
-          "content-type": file.type,
+          "content-type": getContentType(file),
           "content-length": file.size.toString(),
           "gram-session": session.session,
           "gram-project": project.slug,
