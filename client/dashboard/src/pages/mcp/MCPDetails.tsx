@@ -97,7 +97,24 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const routes = useRoutes();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
-    onSuccess: () => invalidateAllToolset(queryClient),
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      toast.success("MCP settings saved successfully");
+      telemetry.capture("mcp_event", {
+        action: "mcp_settings_saved",
+        slug: toolset.slug,
+        isPublic: mcpIsPublic,
+      });
+    },
+    onError: (error) => {
+      if (error.message && error.message.includes("maximum number of public MCP servers for your account type")) {
+        setIsMaxServersModalOpen(true);
+      }
+
+      // Discard staged changes
+      setMcpSlug(toolset.mcpSlug || "");
+      setMcpIsPublic(toolset.mcpIsPublic);
+    },
   });
 
   const { data: domain } = useGetDomain(undefined, undefined, {
@@ -108,6 +125,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
   const [mcpIsPublic, setMcpIsPublic] = useState(toolset.mcpIsPublic);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
+  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
@@ -204,13 +222,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
               mcpIsPublic,
             },
           },
-        });
-        toast.success("MCP settings saved successfully");
-
-        telemetry.capture("mcp_event", {
-          action: "mcp_settings_saved",
-          slug: toolset.slug,
-          isPublic: mcpIsPublic,
         });
       }}
       disabled={!!mcpSlugError || !mcpSlug || !anyChanges}
@@ -320,10 +331,21 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
         title="Host your MCP at a custom domain"
-        description="Custom domains for your account require approval by the Speakeasy team. After requesting access, someone should be in touch shortly, or feel free to reach out in Slack directly."
+        description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
         actionType="mcp_custom_domain"
         icon={Globe}
         telemetryData={{ slug: toolset.slug }}
+        accountUpgrade
+      />
+      <FeatureRequestModal
+        isOpen={isMaxServersModalOpen}
+        onClose={() => setIsMaxServersModalOpen(false)}
+        title="Public MCP Server Limit Reached"
+        description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+        actionType="max_public_mcp_servers"
+        icon={Globe}
+        telemetryData={{ slug: toolset.slug }}
+        accountUpgrade
       />
     </Stack>
   );

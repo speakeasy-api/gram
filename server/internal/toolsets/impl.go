@@ -3,6 +3,7 @@ package toolsets
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -33,6 +34,11 @@ import (
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+var allowedPublicServers = map[string]int{
+	"free": 1,
+	"pro":  5,
+}
 
 type Service struct {
 	tracer          trace.Tracer
@@ -255,6 +261,18 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			// sanity check this should not be able to happens
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug is required to set mcp is public")
 		}
+		publicServerLimit, ok := allowedPublicServers[authCtx.AccountType]
+		if *payload.McpIsPublic && ok {
+			publicServers, err := s.repo.ListPublicToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error listing public toolsets").Log(ctx, logger)
+			}
+
+			if len(publicServers) >= publicServerLimit {
+				return nil, oops.E(oops.CodeForbidden, nil, "%s", fmt.Sprintf("you have reached the maximum number of public MCP servers for your account type: %d", publicServerLimit)).Log(ctx, logger)
+			}
+		}
+
 		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 

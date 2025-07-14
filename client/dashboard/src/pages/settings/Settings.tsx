@@ -528,10 +528,11 @@ export default function Settings() {
         <FeatureRequestModal
           isOpen={isCustomDomainModalOpen}
           onClose={() => setIsCustomDomainModalOpen(false)}
-          title="Custom Domain Request"
-          description="Custom domains for your account require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
+          title="Custom Domains"
+          description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
           actionType="custom_domain"
           icon={Globe}
+          accountUpgrade
         />
       </Page.Body>
     </Page>

@@ -2,7 +2,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ interface FeatureRequestModalProps {
   actionType: string;
   icon?: LucideIcon;
   telemetryData?: Record<string, unknown>;
+  accountUpgrade?: boolean;
 }
 
 export function FeatureRequestModal({
@@ -24,6 +25,7 @@ export function FeatureRequestModal({
   actionType,
   icon: Icon,
   telemetryData,
+  accountUpgrade,
 }: FeatureRequestModalProps) {
   const telemetry = useTelemetry();
   const [isRequesting, setIsRequesting] = useState(false);
@@ -35,14 +37,23 @@ export function FeatureRequestModal({
         action: actionType,
         ...telemetryData,
       });
-      toast.success("Feature requested");
-      onClose();
+      if (!accountUpgrade) {
+        toast.success("Feature requested");
+        onClose();
+      }
     } catch {
       toast.error("Failed to request feature");
     } finally {
       setIsRequesting(false);
     }
   };
+
+  // Auto-fire handleRequestFeature when modal opens for account upgrades
+  useEffect(() => {
+    if (isOpen && accountUpgrade) {
+      handleRequestFeature();
+    }
+  }, [isOpen, accountUpgrade]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -73,7 +84,7 @@ export function FeatureRequestModal({
           >
             <button
               disabled={isRequesting}
-              onClick={handleRequestFeature}
+              onClick={accountUpgrade ? () => window.open("https://calendly.com/sagar-speakeasy/30min", "_blank") : handleRequestFeature}
               className={cn(
                 "relative inline-flex items-center justify-center gap-2 px-4 py-2",
                 "font-mono text-sm uppercase text-foreground",
@@ -85,7 +96,7 @@ export function FeatureRequestModal({
                 "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500"
               )}
             >
-              {isRequesting ? "Requesting..." : "Request Feature"}
+              {accountUpgrade ? "Book Meeting" : (isRequesting ? "Requesting..." : "Request Feature")}
             </button>
           </div>
         </Dialog.Footer>

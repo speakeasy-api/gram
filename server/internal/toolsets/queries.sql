@@ -113,3 +113,13 @@ SELECT EXISTS (
   WHERE mcp_slug = @mcp_slug
   AND deleted IS FALSE
 );
+
+-- name: ListPublicToolsetsByOrganization :many
+SELECT t.*
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+WHERE p.organization_id = @organization_id
+  AND t.mcp_is_public IS TRUE
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC;

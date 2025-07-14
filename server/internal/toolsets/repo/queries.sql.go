@@ -367,6 +367,53 @@ func (q *Queries) GetToolsetByMcpSlugAndCustomDomain(ctx context.Context, arg Ge
 	return i, err
 }
 
+const listPublicToolsetsByOrganization = `-- name: ListPublicToolsetsByOrganization :many
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.http_tool_names, t.mcp_slug, t.mcp_is_public, t.custom_domain_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+WHERE p.organization_id = $1
+  AND t.mcp_is_public IS TRUE
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC
+`
+
+func (q *Queries) ListPublicToolsetsByOrganization(ctx context.Context, organizationID string) ([]Toolset, error) {
+	rows, err := q.db.Query(ctx, listPublicToolsetsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Toolset
+	for rows.Next() {
+		var i Toolset
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.DefaultEnvironmentSlug,
+			&i.HttpToolNames,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.CustomDomainID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listToolsetsByProject = `-- name: ListToolsetsByProject :many
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, custom_domain_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
