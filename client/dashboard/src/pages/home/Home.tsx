@@ -33,18 +33,37 @@ import { useEmptyProjectRedirect } from "../openapi/OpenAPI";
 import { ToolDefinition } from "../toolsets/types";
 
 export default function Home() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <Stack className="mb-4">
+          <Heading variant="h2" className="normal-case">
+            Welcome to Gram
+          </Heading>
+          <Type>The easiest way to deploy MCP.</Type>
+        </Stack>
+        <HomeContent />
+      </Page.Body>
+    </Page>
+  );
+}
+
+function HomeContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data: toolsets } = useListToolsets();
   const [selectedToolset, setSelectedToolset] = useState<Toolset | null>(null);
+
+  useEmptyProjectRedirect();
 
   useEffect(() => {
     if (toolsets?.toolsets.length) {
       setSelectedToolset(toolsets?.toolsets[0] ?? null);
     }
   }, [toolsets]);
-
-  useEmptyProjectRedirect();
 
   const cards = [
     {
@@ -93,64 +112,53 @@ export default function Home() {
   }, [toolsets]);
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Stack className="mb-4">
-          <Heading variant="h2" className="normal-case">
-            Welcome to Gram
-          </Heading>
-          <Type>The easiest way to deploy MCP.</Type>
-        </Stack>
-        {heroSection}
-        <Heading variant="h2" className="mt-5 mb-4">
-          Getting started
-        </Heading>
-        <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={6}>
-          {cards.map((card) => (
-            <Grid.Item key={card.title}>
-              <Card className="bg-sidebar h-[275px]">
-                <Card.Content>
-                  <Stack gap={4}>
-                    <Icon
-                      name={card.icon as IconName}
-                      size="large"
-                      className="text-muted-foreground"
-                    />
-                    <Link
-                      to={card.link}
-                      onClick={() =>
-                        telemetry.capture("home_action", {
-                          action: "card_clicked",
-                          card: card.title,
-                        })
-                      }
+    <>
+      {heroSection}
+      <Heading variant="h2" className="mt-5 mb-4">
+        Getting started
+      </Heading>
+      <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={6}>
+        {cards.map((card) => (
+          <Grid.Item key={card.title}>
+            <Card className="bg-sidebar h-[275px]">
+              <Card.Content>
+                <Stack gap={4}>
+                  <Icon
+                    name={card.icon as IconName}
+                    size="large"
+                    className="text-muted-foreground"
+                  />
+                  <Link
+                    to={card.link}
+                    onClick={() =>
+                      telemetry.capture("home_action", {
+                        action: "card_clicked",
+                        card: card.title,
+                      })
+                    }
+                  >
+                    <Stack
+                      direction="horizontal"
+                      gap={1}
+                      align="center"
+                      className="group"
                     >
-                      <Stack
-                        direction="horizontal"
-                        gap={1}
-                        align="center"
-                        className="group"
-                      >
-                        <Heading variant="h4" className="font-normal">
-                          {card.title}
-                        </Heading>
-                        <ArrowRightIcon className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </Stack>
-                    </Link>
-                    <Type className="text-[16px] leading-[28px]">
-                      {card.description}
-                    </Type>
-                  </Stack>
-                </Card.Content>
-              </Card>
-            </Grid.Item>
-          ))}
-        </Grid>
-      </Page.Body>
-    </Page>
+                      <Heading variant="h4" className="font-normal">
+                        {card.title}
+                      </Heading>
+                      <ArrowRightIcon className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Stack>
+                  </Link>
+                  <Type className="text-[16px] leading-[28px]">
+                    {card.description}
+                  </Type>
+                </Stack>
+              </Card.Content>
+            </Card>
+          </Grid.Item>
+        ))}
+      </Grid>
+    </>
   );
 }
 

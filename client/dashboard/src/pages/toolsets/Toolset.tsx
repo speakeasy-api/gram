@@ -19,6 +19,7 @@ import {
   useToolset,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
+import { useApiError } from "@/hooks/useApiError";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -31,12 +32,12 @@ import { ToolsetPlaygroundLink } from "./ToolsetCard";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
-
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
   const toolsets = useToolsets();
   const routes = useRoutes();
   const telemetry = useTelemetry();
+  const { handleApiError } = useApiError();
 
   const { data: toolset } = useToolset({
     slug: toolsetSlug || "",
@@ -53,6 +54,9 @@ export function ToolsetRoot() {
       });
       await toolsets.refetch();
       routes.toolsets.goTo();
+    },
+    onError: (error) => {
+      handleApiError(error, "Failed to delete toolset");
     },
   });
 

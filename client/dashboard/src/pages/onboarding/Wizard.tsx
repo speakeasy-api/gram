@@ -25,6 +25,8 @@ import { Toolset } from "@gram/client/models/components";
 import { invalidateAllLatestDeployment, invalidateAllListToolsets, invalidateAllToolset, useListTools } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { useApiError } from "@/hooks/useApiError";
+import { ErrorAlert } from "@/components/ui/alert";
 import {
   Check,
   ChevronRight,
@@ -335,26 +337,35 @@ const ToolsetStep = ({
 }) => {
   const client = useSdkClient();
   const { data: tools, isLoading: toolsLoading } = useListTools();
+  const { handleApiError } = useApiError();
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const onContinue = async () => {
-    if (!toolsetName) {
-      throw new Error("No toolset name found");
+    setCreateError(null);
+    
+    try {
+      if (!toolsetName) {
+        throw new Error("No toolset name found");
+      }
+      if (!tools?.tools.length) {
+        throw new Error("No tools found");
+      }
+
+      const toolset = await client.toolsets.create({
+        createToolsetRequestBody: {
+          name: toolsetName,
+          description: `A toolset created from your OpenAPI document`,
+          httpToolNames: tools?.tools.map((tool) => tool.name) ?? [],
+        },
+      });
+
+      setCreatedToolset(toolset);
+      setCurrentStep("mcp");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to create toolset";
+      setCreateError(errorMessage);
+      handleApiError(error, "Failed to create toolset");
     }
-    if (!tools?.tools.length) {
-      throw new Error("No tools found");
-    }
-
-    const toolset = await client.toolsets.create({
-      createToolsetRequestBody: {
-        name: toolsetName,
-        description: `A toolset created from your OpenAPI document`,
-        httpToolNames: tools?.tools.map((tool) => tool.name) ?? [],
-      },
-    });
-
-    setCreatedToolset(toolset);
-
-    setCurrentStep("mcp");
   };
 
   const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
@@ -378,6 +389,13 @@ const ToolsetStep = ({
         hint={"Don't worry, you can change this later."}
         required
       />
+      {createError && (
+        <ErrorAlert 
+          error={createError} 
+          title="Failed to create toolset"
+          onDismiss={() => setCreateError(null)}
+        />
+      )}
       {toolsLoading ? (
         <Spinner />
       ) : (
@@ -434,32 +452,42 @@ const McpStep = ({
   const client = useSdkClient();
   const routes = useRoutes();
   const org = useOrganization();
+  const { handleApiError } = useApiError();
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const slugError = useMcpSlugValidation(mcpSlug);
 
   const onContinue = async () => {
-    if (!createdToolset) {
-      throw new Error("No toolset found");
+    setUpdateError(null);
+    
+    try {
+      if (!createdToolset) {
+        throw new Error("No toolset found");
+      }
+
+      if (!mcpSlug) {
+        throw new Error("No MCP slug set");
+      }
+
+      await client.toolsets.updateBySlug({
+        slug: createdToolset.slug,
+        updateToolsetRequestBody: {
+          mcpSlug,
+        },
+      });
+
+      // We need to invalidate all queries used in the `emptyProjectRedirect` to avoid looping back to onboarding
+      await invalidateAllToolset(queryClient);
+      await invalidateAllListToolsets(queryClient);
+      await invalidateAllLatestDeployment(queryClient);
+
+      toast.success("MCP server created successfully");
+      routes.home.goTo();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to setup MCP server";
+      setUpdateError(errorMessage);
+      handleApiError(error, "Failed to setup MCP server");
     }
-
-    if (!mcpSlug) {
-      throw new Error("No MCP slug set");
-    }
-
-    await client.toolsets.updateBySlug({
-      slug: createdToolset.slug,
-      updateToolsetRequestBody: {
-        mcpSlug,
-      },
-    });
-
-    // We need to invalidate all queries used in the `emptyProjectRedirect` to avoid looping back to onboarding
-    await invalidateAllToolset(queryClient);
-    await invalidateAllListToolsets(queryClient);
-    await invalidateAllLatestDeployment(queryClient);
-
-    toast.success("MCP server created successfully");
-    routes.home.goTo();
   };
 
   return (
@@ -487,6 +515,13 @@ const McpStep = ({
           />
         )}
       />
+      {updateError && (
+        <ErrorAlert 
+          error={updateError} 
+          title="Failed to setup MCP server"
+          onDismiss={() => setUpdateError(null)}
+        />
+      )}
       <ContinueButton disabled={!!slugError} onClick={onContinue} />
     </>
   );
@@ -521,9 +556,16 @@ const ContinueButton = ({
     >
       <button
         disabled={disabled || isLoading}
-        onClick={() => {
+        onClick={async () => {
           setIsLoading(true);
-          onClick();
+          try {
+            await onClick();
+          } catch (error) {
+            // Error is already handled by the individual step components
+            console.error("Button click error:", error);
+          } finally {
+            setIsLoading(false);
+          }
         }}
         className={cn(
           buttonClasses,

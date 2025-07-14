@@ -5,12 +5,8 @@ import {
   ProjectEntry,
 } from "@gram/client/models/components";
 import { SessionInfoResponse } from "@gram/client/models/operations";
-import {
-  useListEnvironmentsSuspense,
-  useListToolsetsSuspense,
-  useSessionInfo,
-} from "@gram/client/react-query";
-import { createContext, Suspense, useContext, useEffect, useState } from "react";
+import { useSessionInfo } from "@gram/client/react-query";
+import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useNavigate } from "react-router";
 import { useSlugs } from "./Sdk";
@@ -179,14 +175,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// Prefetch any queries while we're in the top-level loading state
-const PrefetchedQueries = () => {
-  useListToolsetsSuspense();
-  useListEnvironmentsSuspense();
-
-  return null;
-};
-
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const { orgSlug, projectSlug } = useSlugs();
@@ -277,9 +265,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <SessionContext.Provider value={session}>
-      <Suspense fallback={null}>
-        <PrefetchedQueries />
-      </Suspense>
       {children}
     </SessionContext.Provider>
   );
@@ -305,7 +290,7 @@ export function usePylonInAppChat(user: User | undefined) {
       return;
     }
     const random = Math.random().toString(36).substring(7) + "-anonymous";
-    const email = user.email
+    const email = user.email;
     const displayName = user.displayName || random;
 
     // @ts-expect-error global pylon object
@@ -330,4 +315,3 @@ export function usePylonInAppChat(user: User | undefined) {
     localStorage.setItem("pylon_user_display_name", displayName);
   }, [user]);
 }
-

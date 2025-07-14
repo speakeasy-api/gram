@@ -41,6 +41,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
+import { useApiError } from "@/hooks/useApiError";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
@@ -153,6 +154,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const chat = useChatContext();
   const routes = useRoutes();
   const telemetry = useTelemetry();
+  const { handleApiError } = useApiError();
 
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -400,6 +402,9 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     onSettled: () => {
       invalidateTemplate(queryClient, [{ name }]);
     },
+    onError: (error) => {
+      handleApiError(error, "Failed to update tool");
+    },
   });
 
   const saveButton = (
@@ -408,71 +413,75 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       disabled={!!initial.id && !anyChanges}
       className="mb-8"
       onClick={async () => {
-        const argsJsonSchema = {
-          type: "object",
-          properties: Object.fromEntries(
-            inputs.map((input) => [
-              input.name,
-              {
-                type: "string",
-                ...(input.description && {
-                  description: input.description,
-                }),
-              },
-            ])
-          ),
-          required: inputs.map((input) => input.name),
-        };
+        try {
+          const argsJsonSchema = {
+            type: "object",
+            properties: Object.fromEntries(
+              inputs.map((input) => [
+                input.name,
+                {
+                  type: "string",
+                  ...(input.description && {
+                    description: input.description,
+                  }),
+                },
+              ])
+            ),
+            required: inputs.map((input) => input.name),
+          };
 
-        if (initial.id) {
-          updatePrompt({
-            request: {
-              updatePromptTemplateForm: {
-                id: initial.id,
+          if (initial.id) {
+            updatePrompt({
+              request: {
+                updatePromptTemplateForm: {
+                  id: initial.id,
+                  description,
+                  prompt: buildPrompt(name, purpose, inputs, steps),
+                  arguments: JSON.stringify(argsJsonSchema),
+                  toolsHint: steps.map((step) => step.canonicalTool),
+                },
+              },
+            });
+
+            telemetry.capture("tool_builder_event", {
+              event: "update_tool",
+            });
+          } else {
+            await client.templates.create({
+              createPromptTemplateForm: {
+                name,
                 description,
+                kind: PromptTemplateKind.HigherOrderTool,
                 prompt: buildPrompt(name, purpose, inputs, steps),
                 arguments: JSON.stringify(argsJsonSchema),
                 toolsHint: steps.map((step) => step.canonicalTool),
+                engine: "mustache",
               },
-            },
-          });
+            });
 
-          telemetry.capture("tool_builder_event", {
-            event: "update_tool",
-          });
-        } else {
-          await client.templates.create({
-            createPromptTemplateForm: {
-              name,
-              description,
-              kind: PromptTemplateKind.HigherOrderTool,
-              prompt: buildPrompt(name, purpose, inputs, steps),
-              arguments: JSON.stringify(argsJsonSchema),
-              toolsHint: steps.map((step) => step.canonicalTool),
-              engine: "mustache",
-            },
-          });
+            telemetry.capture("tool_builder_event", {
+              event: "create_tool",
+            });
 
-          telemetry.capture("tool_builder_event", {
-            event: "create_tool",
-          });
+            // Automatically add to the toolset
+            await client.toolsets.updateBySlug({
+              slug: toolsetFilter?.slug ?? "",
+              updateToolsetRequestBody: {
+                promptTemplateNames: [
+                  ...(toolsetData?.promptTemplates ?? []).map((t) => t.name),
+                  name,
+                ],
+              },
+            });
 
-          // Automatically add to the toolset
-          await client.toolsets.updateBySlug({
-            slug: toolsetFilter?.slug ?? "",
-            updateToolsetRequestBody: {
-              promptTemplateNames: [
-                ...(toolsetData?.promptTemplates ?? []).map((t) => t.name),
-                name,
-              ],
-            },
-          });
+            invalidateAllListToolsets(queryClient);
+            routes.customTools.toolBuilder.goTo(name);
+          }
 
-          invalidateAllListToolsets(queryClient);
-          routes.customTools.toolBuilder.goTo(name);
+          toast.success("Tool saved successfully");
+        } catch (error) {
+          handleApiError(error, "Failed to save tool");
         }
-
-        toast.success("Tool saved successfully");
       }}
     >
       Save

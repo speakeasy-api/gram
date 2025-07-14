@@ -4,11 +4,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import {
+  SimpleTooltip,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-  SimpleTooltip,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
@@ -60,11 +60,18 @@ export function MCPDetailPage() {
   );
 }
 
-export function useMcpUrl(toolset: Toolset | undefined) {
-  const { data: domain } = useGetDomain(undefined, undefined, {
+export function useCustomDomain() {
+  const { data: domain, refetch } = useGetDomain(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
+    throwOnError: false,
   });
+
+  return domain ? Object.assign(domain, { refetch }) : null;
+}
+
+export function useMcpUrl(toolset: Toolset | undefined) {
+  const domain = useCustomDomain();
   const project = useProject();
 
   if (!toolset) return { url: undefined, customServerURL: undefined };
@@ -95,6 +102,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const session = useSession();
   const { orgSlug, projectSlug } = useParams();
   const routes = useRoutes();
+  const domain = useCustomDomain();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -115,11 +123,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       setMcpSlug(toolset.mcpSlug || "");
       setMcpIsPublic(toolset.mcpIsPublic);
     },
-  });
-
-  const { data: domain } = useGetDomain(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
   });
 
   const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
@@ -408,9 +411,9 @@ export function MCPJson({
           Pass API credentials directly to the MCP server.
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ) as any);
+      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
+    ) as // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    any);
 
   return (
     <Grid
@@ -434,8 +437,10 @@ export function MCPJson({
             "Use preset gram environments with an MCP server."
           ) : (
             <>
-              This server can only be accessed using a Gram API Key.<br />
-              Either use a preset Gram environment or pass API credentials directly to the MCP server.
+              This server can only be accessed using a Gram API Key.
+              <br />
+              Either use a preset Gram environment or pass API credentials
+              directly to the MCP server.
             </>
           )}
         </Type>
@@ -454,10 +459,11 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
     (tool) => !tool.defaultServerUrl
   );
 
-
   const envHeaders =
     toolset.relevantEnvironmentVariables?.filter(
-      (v) => (!v.toLowerCase().includes("server_url") || requiresServerURL) && !v.toLowerCase().includes("token_url") // direct token url is always a hidden option right now
+      (v) =>
+        (!v.toLowerCase().includes("server_url") || requiresServerURL) &&
+        !v.toLowerCase().includes("token_url") // direct token url is always a hidden option right now
     ) ?? [];
 
   // Build the args array for public MCP config

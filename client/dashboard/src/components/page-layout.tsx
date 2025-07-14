@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils.ts";
 import { PageHeader } from "./page-header.tsx";
+import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,7 +22,7 @@ function PageBody({
         className
       )}
     >
-      {children}
+      <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );
 }

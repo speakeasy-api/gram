@@ -10,6 +10,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
+import { useApiError } from "@/hooks/useApiError";
 import { Environment } from "@gram/client/models/components/environment.js";
 import {
   useCreateEnvironmentMutation,
@@ -18,7 +19,6 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet } from "react-router";
-
 export function EnvironmentsRoot() {
   return <Outlet />;
 }
@@ -28,16 +28,17 @@ export function useEnvironments() {
     useListEnvironmentsSuspense(undefined, undefined, {
       refetchOnWindowFocus: false,
     });
-  return Object.assign(environments.environments, {
+  
+  return Object.assign(environments?.environments || [], {
     refetch: refetchEnvironments,
   });
 }
 
 export default function Environments() {
   const session = useSession();
-  const environments = useEnvironments();
   const routes = useRoutes();
   const telemetry = useTelemetry();
+  const { handleApiError } = useApiError();
 
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
@@ -49,11 +50,10 @@ export default function Environments() {
         action: "environment_created",
         environment_slug: data.slug,
       });
-      await environments.refetch();
       routes.environments.environment.goTo(data.slug);
     },
     onError: (error) => {
-      console.error("Failed to create environment:", error);
+      handleApiError(error, "Failed to create environment");
       telemetry.capture("environment_event", {
         action: "environment_creation_failed",
         error: error.message,
@@ -86,12 +86,14 @@ export default function Environments() {
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
-        {environments.map((environment) => (
-          <EnvironmentCard key={environment.id} environment={environment} />
-        ))}
-        <CreateThingCard onClick={() => setCreateEnvironmentDialogOpen(true)}>
-          + New Environment
-        </CreateThingCard>
+        <>
+          {useEnvironments().map((environment) => (
+            <EnvironmentCard key={environment.id} environment={environment} />
+          ))}
+          <CreateThingCard onClick={() => setCreateEnvironmentDialogOpen(true)}>
+            + New Environment
+          </CreateThingCard>
+        </>
         <InputDialog
           open={createEnvironmentDialogOpen}
           onOpenChange={setCreateEnvironmentDialogOpen}
@@ -110,6 +112,7 @@ export default function Environments() {
     </Page>
   );
 }
+
 
 function EnvironmentCard({ environment }: { environment: Environment }) {
   const routes = useRoutes();

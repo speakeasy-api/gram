@@ -82,8 +82,8 @@ const RouteProvider = () => {
     (route) => route.unauthenticated
   );
 
-  const outsideStructureRoutes = Object.values(routes).filter(
-    (route) => route.url.startsWith(":orgSlug/:projectSlug/")
+  const outsideStructureRoutes = Object.values(routes).filter((route) =>
+    route.url.startsWith(":orgSlug/:projectSlug/")
   );
 
   const authenticatedRoutes = Object.values(routes).filter(

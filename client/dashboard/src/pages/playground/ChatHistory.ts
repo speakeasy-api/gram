@@ -7,7 +7,7 @@ export const useChatHistory = (chatId: string) => {
       id: chatId,
     },
     undefined,
-    { retry: false } // Expected to fail (404) if it's a new chat
+    { retry: false, throwOnError: false } // Expected to fail (404) if it's a new chat
   );
 
   type ToolInvocationPart = {

@@ -1,27 +1,35 @@
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { cn } from "@/lib/utils";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import {
   invalidateListAPIKeys,
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
-import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { useGetDomain } from "@gram/client/react-query";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
+import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy, Trash2, Check, X, Loader2, Globe } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useOrganization, useSession } from "@/contexts/Auth";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import {
+  Check,
+  CheckCircle2,
+  Copy,
+  Globe,
+  Loader2,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useCustomDomain } from "../mcp/MCPDetails";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -39,24 +47,21 @@ export default function Settings() {
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
-  
+
   // Dynamic values based on domain input
   const subdomain = domainInput.trim() || "sub.yourdomain.com";
   const txtName = `_gram.${subdomain}`;
   const txtValue = `gram-domain-verify=${subdomain},${organization.id}`;
 
   const { data: keysData } = useListAPIKeysSuspense();
-  const domain = useGetDomain(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
+  const domain = useCustomDomain();
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
-    if (domain.data?.domain && !domainInput) {
-      setDomainInput(domain.data.domain);
+    if (domain?.domain && !domainInput) {
+      setDomainInput(domain.domain);
     }
-  }, [domain.data?.domain, domainInput]);
+  }, [domain?.domain, domainInput]);
 
   // Domain validation regex (same as used in the backend)
   const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
@@ -110,7 +115,7 @@ export default function Settings() {
       setDomainError("");
       // Wait 2 seconds before refetching domain data
       setTimeout(() => {
-        domain.refetch();
+        domain?.refetch();
       }, 2000);
     },
     onError: (error) => {
@@ -220,12 +225,12 @@ export default function Settings() {
 
   // refetch as domain is being verified
   useEffect(() => {
-    if (!domain.data?.isUpdating) return;
+    if (!domain?.isUpdating) return;
     const interval = setInterval(() => {
       domain.refetch();
     }, 30000);
     return () => clearInterval(interval);
-  }, [domain.data?.isUpdating, domain.refetch]);
+  }, [domain?.isUpdating, domain?.refetch]);
 
   return (
     <Page>
@@ -350,7 +355,7 @@ export default function Settings() {
               account.
             </Type>
           )}
-          {!domain.isLoading && !domain.data?.verified && (
+          {!!domain && !domain.verified && (
             <div className="flex justify-end mb-6">
               <Button
                 onClick={() => {
@@ -360,9 +365,9 @@ export default function Settings() {
                     setIsAddDomainDialogOpen(true);
                   }
                 }}
-                disabled={domain.data?.isUpdating}
+                disabled={domain?.isUpdating}
               >
-                {domain.data?.domain ? "Verify Domain" : "Add Domain"}
+                {domain?.domain ? "Verify Domain" : "Add Domain"}
               </Button>
             </div>
           )}
@@ -407,7 +412,7 @@ export default function Settings() {
                 ),
               },
             ]}
-            data={domain.data?.domain ? [domain.data] : []}
+            data={domain?.domain ? [domain] : []}
             rowKey={(row) => row.id}
           />
         </div>
@@ -494,10 +499,10 @@ export default function Settings() {
                     onChange={handleDomainInputChange}
                     className={cn(
                       domainError && "border-red-500",
-                      domain.data?.domain &&
+                      domain?.domain &&
                         "bg-muted text-muted-foreground cursor-not-allowed"
                     )}
-                    readOnly={!!domain.data?.domain}
+                    readOnly={!!domain?.domain}
                   />
                   {domainError && (
                     <Type variant="body" className="text-red-500 text-sm">
@@ -516,7 +521,7 @@ export default function Settings() {
                   >
                     {registerDomainMutation.isPending
                       ? "Registering..."
-                      : domain.data?.domain
+                      : domain?.domain
                       ? "Verify"
                       : "Register"}
                   </Button>
