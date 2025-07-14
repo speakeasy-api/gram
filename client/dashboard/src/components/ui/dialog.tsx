@@ -1,5 +1,5 @@
-import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { XIcon } from "lucide-react";
@@ -102,7 +102,7 @@ function DialogTitle({
     // Pulls styles from <Heading variant="h3">
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-xl leading-none capitalize", className)}
+      className={cn("text-xl leading-none", className)}
       {...props}
     >
       {children}

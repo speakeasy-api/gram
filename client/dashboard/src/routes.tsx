@@ -33,11 +33,9 @@ import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Home from "./pages/home/Home";
 import { cn } from "./lib/utils";
-import { useLatestDeployment } from "@gram/client/react-query";
 
 type AppRouteBasic = {
   title: string;
-  titleNode?: React.ReactNode;
   url: string;
   external?: boolean;
   icon?: IconName;
@@ -69,7 +67,6 @@ export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
 
 type RouteEntry = {
   title: string;
-  titleNode?: React.ReactNode;
   url: string;
   icon?: IconName;
 } & (
@@ -243,7 +240,6 @@ const ROUTE_STRUCTURE = {
   },
   deployments: {
     title: "Deployments",
-    titleNode: <DeploymentsLabel />,
     url: "deployments",
     icon: "circle-play",
     component: DeploymentsRoot,
@@ -270,33 +266,6 @@ const ROUTE_STRUCTURE = {
   },
 } satisfies Record<string, RouteEntry>;
 
-function DeploymentsLabel() {
-  const { data } = useLatestDeployment();
-  const status = data?.deployment?.status;
-  let icon: React.ReactNode = null;
-  switch (status) {
-    case "completed":
-      icon = <Icon name="check" className="text-success" />;
-      break;
-    case "pending":
-      icon = <Icon name="circle-dashed" className="text-warning" />;
-      break;
-    case "failed":
-      icon = <Icon name="x" className="text-destructive" />;
-      break;
-  }
-
-  if (!icon) {
-    return "Deployments";
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      Deployments
-      {icon}
-    </span>
-  );
-}
 
 type RouteStructure = typeof ROUTE_STRUCTURE;
 

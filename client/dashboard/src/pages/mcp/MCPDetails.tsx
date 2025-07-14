@@ -28,6 +28,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { Globe } from "lucide-react";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
 
@@ -105,6 +107,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
 
   const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
   const [mcpIsPublic, setMcpIsPublic] = useState(toolset.mcpIsPublic);
+  const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
@@ -152,20 +155,11 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         variant="outline"
         size="sm"
         onClick={() => {
-          if (session.gramAccountType === "free") {
-            telemetry.capture("feature_requested", {
-              action: "mcp_custom_domain",
-              slug: toolset.slug,
-            });
-            alert(
-              "Custom domains for your account require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
-            );
+          if (session.gramAccountType == "free") {
+            setIsCustomDomainModalOpen(true);
           } else {
             window.location.href = `/${orgSlug}/${projectSlug}/settings`;
           }
-          alert(
-            "Custom domains require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
-          );
         }}
       >
         Configure
@@ -322,6 +316,15 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <MCPJson toolset={toolset} />
       </PageSection>
+      <FeatureRequestModal
+        isOpen={isCustomDomainModalOpen}
+        onClose={() => setIsCustomDomainModalOpen(false)}
+        title="Host your MCP at a custom domain"
+        description="Custom domains for your account require approval by the Speakeasy team. After requesting access, someone should be in touch shortly, or feel free to reach out in Slack directly."
+        actionType="mcp_custom_domain"
+        icon={Globe}
+        telemetryData={{ slug: toolset.slug }}
+      />
     </Stack>
   );
 }

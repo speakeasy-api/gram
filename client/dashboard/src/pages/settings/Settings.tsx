@@ -17,16 +17,15 @@ import { useGetDomain } from "@gram/client/react-query";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy, Trash2, Check, X, Loader2 } from "lucide-react";
+import { CheckCircle2, Copy, Trash2, Check, X, Loader2, Globe } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useOrganization, useSession } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 
 export default function Settings() {
   const organization = useOrganization();
   const session = useSession();
-  const telemetry = useTelemetry();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
@@ -36,6 +35,7 @@ export default function Settings() {
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
+  const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
@@ -355,12 +355,7 @@ export default function Settings() {
               <Button
                 onClick={() => {
                   if (session.gramAccountType === "free") {
-                    telemetry.capture("feature_requested", {
-                      action: "custom_domain",
-                    });
-                    alert(
-                      "Custom domains for your account require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
-                    );
+                    setIsCustomDomainModalOpen(true);
                   } else {
                     setIsAddDomainDialogOpen(true);
                   }
@@ -530,6 +525,14 @@ export default function Settings() {
             </div>
           </Dialog.Content>
         </Dialog>
+        <FeatureRequestModal
+          isOpen={isCustomDomainModalOpen}
+          onClose={() => setIsCustomDomainModalOpen(false)}
+          title="Custom Domain Request"
+          description="Custom domains for your account require approval by the Speakeasy team. Someone should be in touch shortly, or feel free to reach out directly."
+          actionType="custom_domain"
+          icon={Globe}
+        />
       </Page.Body>
     </Page>
   );

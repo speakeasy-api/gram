@@ -30,7 +30,6 @@ function NavMenuButton({ item }: { item: AppRoute }) {
   return (
     <NavButton
       title={item.title}
-      titleNode={item.titleNode}
       href={item.href()}
       active={item.active}
       Icon={item.Icon}

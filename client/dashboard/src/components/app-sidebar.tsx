@@ -11,7 +11,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -20,10 +19,12 @@ import * as React from "react";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
 import { Type } from "./ui/type";
+import { FeatureRequestModal } from "./FeatureRequestModal";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
+  const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
+  const [evalsModalOpen, setEvalsModalOpen] = React.useState(false);
 
   const topNavGroups = {
     create: [
@@ -91,24 +92,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <NavButton
                   title="Metrics"
                   Icon={ChartNoAxesCombinedIcon}
-                  onClick={() => {
-                    alert("Metrics are coming soon!");
-                    telemetry.capture("feature_requested", {
-                      action: "metrics",
-                    });
-                  }}
+                  onClick={() => setMetricsModalOpen(true)}
                 />
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <NavButton
                   title="Evals"
                   Icon={TestTubeDiagonal}
-                  onClick={() => {
-                    alert("Evals are coming soon!");
-                    telemetry.capture("feature_requested", {
-                      action: "evals",
-                    });
-                  }}
+                  onClick={() => setEvalsModalOpen(true)}
                 />
               </SidebarMenuItem>
             </SidebarMenu>
@@ -123,6 +114,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <ProjectMenu />
       </SidebarFooter>
+      <FeatureRequestModal
+        isOpen={metricsModalOpen}
+        onClose={() => setMetricsModalOpen(false)}
+        title="Metrics Coming Soon"
+        description="Metrics are coming soon! We'll let you know when this feature is available."
+        actionType="metrics"
+        icon={ChartNoAxesCombinedIcon}
+      />
+      <FeatureRequestModal
+        isOpen={evalsModalOpen}
+        onClose={() => setEvalsModalOpen(false)}
+        title="Evals Coming Soon"
+        description="Evals are coming soon! We'll let you know when this feature is available."
+        actionType="evals"
+        icon={TestTubeDiagonal}
+      />
     </Sidebar>
   );
 }
