@@ -27,6 +27,11 @@ func EvolveDeploymentsPath() string {
 	return "/rpc/deployments.evolve"
 }
 
+// RedeployDeploymentsPath returns the URL path to the deployments service redeploy HTTP endpoint.
+func RedeployDeploymentsPath() string {
+	return "/rpc/deployments.redeploy"
+}
+
 // ListDeploymentsDeploymentsPath returns the URL path to the deployments service listDeployments HTTP endpoint.
 func ListDeploymentsDeploymentsPath() string {
 	return "/rpc/deployments.list"

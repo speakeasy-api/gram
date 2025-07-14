@@ -117,6 +117,32 @@ var _ = Service("deployments", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EvolveDeployment"}`)
 	})
 
+	Method("redeploy", func() {
+		Description("Redeploys an existing deployment.")
+
+		Payload(func() {
+			Attribute("deployment_id", String, "The ID of the deployment to redeploy.")
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Required("deployment_id")
+		})
+
+		Result(RedeployResult)
+
+		HTTP(func() {
+			POST("/rpc/deployments.redeploy")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "redeployDeployment")
+		Meta("openapi:extension:x-speakeasy-name-override", "redeployDeployment")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RedeployDeployment"}`)
+	})
+
 	Method("listDeployments", func() {
 		Description("List all deployments in descending order of creation.")
 
@@ -319,6 +345,13 @@ var EvolveForm = Type("EvolveForm", func() {
 })
 
 var EvolveResult = Type("EvolveResult", func() {
+	Attribute("deployment", shared.Deployment, func() {
+		Description("A deployment that was successfully created.")
+		Meta("openapi:example", "false")
+	})
+})
+
+var RedeployResult = Type("RedeployResult", func() {
 	Attribute("deployment", shared.Deployment, func() {
 		Description("A deployment that was successfully created.")
 		Meta("openapi:example", "false")

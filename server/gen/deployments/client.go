@@ -19,17 +19,19 @@ type Client struct {
 	GetLatestDeploymentEndpoint goa.Endpoint
 	CreateDeploymentEndpoint    goa.Endpoint
 	EvolveEndpoint              goa.Endpoint
+	RedeployEndpoint            goa.Endpoint
 	ListDeploymentsEndpoint     goa.Endpoint
 	GetDeploymentLogsEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "deployments" service client given the endpoints.
-func NewClient(getDeployment, getLatestDeployment, createDeployment, evolve, listDeployments, getDeploymentLogs goa.Endpoint) *Client {
+func NewClient(getDeployment, getLatestDeployment, createDeployment, evolve, redeploy, listDeployments, getDeploymentLogs goa.Endpoint) *Client {
 	return &Client{
 		GetDeploymentEndpoint:       getDeployment,
 		GetLatestDeploymentEndpoint: getLatestDeployment,
 		CreateDeploymentEndpoint:    createDeployment,
 		EvolveEndpoint:              evolve,
+		RedeployEndpoint:            redeploy,
 		ListDeploymentsEndpoint:     listDeployments,
 		GetDeploymentLogsEndpoint:   getDeploymentLogs,
 	}
@@ -124,6 +126,28 @@ func (c *Client) Evolve(ctx context.Context, p *EvolvePayload) (res *EvolveResul
 		return
 	}
 	return ires.(*EvolveResult), nil
+}
+
+// Redeploy calls the "redeploy" endpoint of the "deployments" service.
+// Redeploy may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Redeploy(ctx context.Context, p *RedeployPayload) (res *RedeployResult, err error) {
+	var ires any
+	ires, err = c.RedeployEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RedeployResult), nil
 }
 
 // ListDeployments calls the "listDeployments" endpoint of the "deployments"

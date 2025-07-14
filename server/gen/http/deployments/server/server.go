@@ -24,6 +24,7 @@ type Server struct {
 	GetLatestDeployment http.Handler
 	CreateDeployment    http.Handler
 	Evolve              http.Handler
+	Redeploy            http.Handler
 	ListDeployments     http.Handler
 	GetDeploymentLogs   http.Handler
 }
@@ -59,6 +60,7 @@ func New(
 			{"GetLatestDeployment", "GET", "/rpc/deployments.latest"},
 			{"CreateDeployment", "POST", "/rpc/deployments.create"},
 			{"Evolve", "POST", "/rpc/deployments.evolve"},
+			{"Redeploy", "POST", "/rpc/deployments.redeploy"},
 			{"ListDeployments", "GET", "/rpc/deployments.list"},
 			{"GetDeploymentLogs", "GET", "/rpc/deployments.logs"},
 		},
@@ -66,6 +68,7 @@ func New(
 		GetLatestDeployment: NewGetLatestDeploymentHandler(e.GetLatestDeployment, mux, decoder, encoder, errhandler, formatter),
 		CreateDeployment:    NewCreateDeploymentHandler(e.CreateDeployment, mux, decoder, encoder, errhandler, formatter),
 		Evolve:              NewEvolveHandler(e.Evolve, mux, decoder, encoder, errhandler, formatter),
+		Redeploy:            NewRedeployHandler(e.Redeploy, mux, decoder, encoder, errhandler, formatter),
 		ListDeployments:     NewListDeploymentsHandler(e.ListDeployments, mux, decoder, encoder, errhandler, formatter),
 		GetDeploymentLogs:   NewGetDeploymentLogsHandler(e.GetDeploymentLogs, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -80,6 +83,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetLatestDeployment = m(s.GetLatestDeployment)
 	s.CreateDeployment = m(s.CreateDeployment)
 	s.Evolve = m(s.Evolve)
+	s.Redeploy = m(s.Redeploy)
 	s.ListDeployments = m(s.ListDeployments)
 	s.GetDeploymentLogs = m(s.GetDeploymentLogs)
 }
@@ -93,6 +97,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetLatestDeploymentHandler(mux, h.GetLatestDeployment)
 	MountCreateDeploymentHandler(mux, h.CreateDeployment)
 	MountEvolveHandler(mux, h.Evolve)
+	MountRedeployHandler(mux, h.Redeploy)
 	MountListDeploymentsHandler(mux, h.ListDeployments)
 	MountGetDeploymentLogsHandler(mux, h.GetDeploymentLogs)
 }
@@ -285,6 +290,57 @@ func NewEvolveHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "evolve")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "deployments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
+// MountRedeployHandler configures the mux to serve the "deployments" service
+// "redeploy" endpoint.
+func MountRedeployHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/deployments.redeploy", otelhttp.WithRouteTag("/rpc/deployments.redeploy", f).ServeHTTP)
+}
+
+// NewRedeployHandler creates a HTTP handler which loads the HTTP request and
+// calls the "deployments" service "redeploy" endpoint.
+func NewRedeployHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRedeployRequest(mux, decoder)
+		encodeResponse = EncodeRedeployResponse(encoder)
+		encodeError    = EncodeRedeployError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "redeploy")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "deployments")
 		payload, err := decodeRequest(r)
 		if err != nil {

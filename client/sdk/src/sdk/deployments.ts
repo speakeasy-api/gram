@@ -8,6 +8,7 @@ import { deploymentsGetById } from "../funcs/deploymentsGetById.js";
 import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
 import { deploymentsList } from "../funcs/deploymentsList.js";
 import { deploymentsLogs } from "../funcs/deploymentsLogs.js";
+import { deploymentsRedeployDeployment } from "../funcs/deploymentsRedeployDeployment.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -121,6 +122,25 @@ export class Deployments extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.GetDeploymentLogsResult> {
     return unwrapAsync(deploymentsLogs(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * redeploy deployments
+   *
+   * @remarks
+   * Redeploys an existing deployment.
+   */
+  async redeployDeployment(
+    request: operations.RedeployDeploymentRequest,
+    security?: operations.RedeployDeploymentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RedeployResult> {
+    return unwrapAsync(deploymentsRedeployDeployment(
       this,
       request,
       security,

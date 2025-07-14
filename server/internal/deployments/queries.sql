@@ -160,10 +160,11 @@ INSERT INTO deployments (
   , project_id
   , github_repo
   , github_pr
+  , github_sha
   , external_id
   , external_url
 )
-SELECT 
+SELECT
   current.id
   , gen_random_uuid()
   , current.user_id
@@ -171,6 +172,7 @@ SELECT
   , current.project_id
   , current.github_repo
   , current.github_pr
+  , current.github_sha
   , current.external_id
   , current.external_url
 FROM deployments as current

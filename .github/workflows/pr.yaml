@@ -186,9 +186,10 @@ jobs:
         run: go install tool
         working-directory: server
 
+        # TODO add speakeasy cli so the sdk can be generated
       - name: Run code generators
         if: ${{ needs.changes.outputs.server == 'true' }}
-        run: mise run "gen:*"
+        run: mise run "gen:server"
 
       - name: Run "go mod tidy"
         if: ${{ needs.changes.outputs.server == 'true' }}
@@ -197,7 +198,6 @@ jobs:
       - name: Check for dirty files
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run git:porcelain
-
 
   server-test:
     runs-on: ubicloud-standard-4
@@ -247,7 +247,6 @@ jobs:
       - name: Test
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run test:server
-
 
   client-build-lint-test:
     runs-on: ubicloud-standard-4
@@ -308,7 +307,6 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' }}
         run: mise run git:porcelain
 
-  
   ts-sdk-build-lint:
     strategy:
       matrix:
@@ -371,4 +369,3 @@ jobs:
       - name: Check for dirty files
         if: ${{ needs.changes.outputs.client == 'true' || needs.changes.outputs.typescript_sdk == 'true' }}
         run: mise run git:porcelain
-

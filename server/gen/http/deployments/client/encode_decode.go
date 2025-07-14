@@ -987,6 +987,248 @@ func DecodeEvolveResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildRedeployRequest instantiates a HTTP request object with method and path
+// set to call the "deployments" service "redeploy" endpoint
+func (c *Client) BuildRedeployRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RedeployDeploymentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("deployments", "redeploy", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRedeployRequest returns an encoder for requests sent to the
+// deployments redeploy server.
+func EncodeRedeployRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*deployments.RedeployPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("deployments", "redeploy", "*deployments.RedeployPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewRedeployRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("deployments", "redeploy", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRedeployResponse returns a decoder for responses returned by the
+// deployments redeploy endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeRedeployResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRedeployResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RedeployResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			res := NewRedeployResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RedeployUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RedeployForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RedeployBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RedeployNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RedeployConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RedeployUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RedeployInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RedeployInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+				}
+				err = ValidateRedeployInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+				}
+				return nil, NewRedeployInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RedeployUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+				}
+				err = ValidateRedeployUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+				}
+				return nil, NewRedeployUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "redeploy", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RedeployGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			}
+			err = ValidateRedeployGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+			}
+			return nil, NewRedeployGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("deployments", "redeploy", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListDeploymentsRequest instantiates a HTTP request object with method
 // and path set to call the "deployments" service "listDeployments" endpoint
 func (c *Client) BuildListDeploymentsRequest(ctx context.Context, v any) (*http.Request, error) {

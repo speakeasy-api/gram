@@ -557,6 +557,84 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	return &gen.EvolveResult{Deployment: dep}, nil
 }
 
+func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*gen.RedeployResult, error) {
+	span := trace.SpanFromContext(ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if payload.DeploymentID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "deployment id is required").Log(ctx, s.logger)
+	}
+
+	projectID := *authCtx.ProjectID
+
+	logger := s.logger.With(slog.String("project_id", projectID.String()))
+	span.SetAttributes(attribute.String("project_id", projectID.String()))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	tx := s.repo.WithTx(dbtx)
+
+	deploymentID, err := uuid.Parse(payload.DeploymentID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment id").Log(ctx, logger)
+	}
+
+	newID, err := cloneDeployment(
+		ctx, s.tracer, logger, tx,
+		ProjectID(projectID), DeploymentID(deploymentID),
+		[]upsertOpenAPIv3{},
+		[]upsertPackage{},
+		[]uuid.UUID{},
+		[]uuid.UUID{},
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
+	}
+
+	ierr := inv.Check("cloned deployment state", "deployment id cannot be nil", newID != uuid.Nil)
+	if ierr != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
+	}
+
+	logger = logger.With(slog.String("deployment_id", newID.String()))
+	span.SetAttributes(attribute.String("deployment_id", newID.String()))
+
+	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
+	}
+
+	status := dep.Status
+	if status == "created" {
+		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
+		if err != nil {
+			return nil, err
+		}
+
+		status = s
+		if status == "" {
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").Log(ctx, logger)
+		}
+
+		dep.Status = status
+	}
+
+	return &gen.RedeployResult{Deployment: dep}, nil
+}
+
 type resolvedPackage struct {
 	packageID uuid.UUID
 	projectID uuid.UUID

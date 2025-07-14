@@ -24,7 +24,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 	{
 		err = json.Unmarshal([]byte(packagesCreatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"htd\",\n      \"image_asset_id\": \"ojh\",\n      \"keywords\": [\n         \"Aut rerum quidem.\",\n         \"Repellendus sint.\",\n         \"Nihil reiciendis sit asperiores deserunt.\"\n      ],\n      \"name\": \"jyu\",\n      \"summary\": \"o61\",\n      \"title\": \"pk4\",\n      \"url\": \"wnb\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"hoj\",\n      \"image_asset_id\": \"435\",\n      \"keywords\": [\n         \"Sint ut sint eos vero vitae.\",\n         \"Rerum ut explicabo.\",\n         \"Porro sit.\"\n      ],\n      \"name\": \"94p\",\n      \"summary\": \"5zb\",\n      \"title\": \"h65\",\n      \"url\": \"gg9\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 100 {
@@ -105,7 +105,7 @@ func BuildUpdatePackagePayload(packagesUpdatePackageBody string, packagesUpdateP
 	{
 		err = json.Unmarshal([]byte(packagesUpdatePackageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"u6a\",\n      \"id\": \"hdu\",\n      \"image_asset_id\": \"s4b\",\n      \"keywords\": [\n         \"Quibusdam eligendi itaque consequatur aperiam ducimus recusandae.\",\n         \"Est non nesciunt corrupti iste dolor sunt.\",\n         \"Qui magni voluptas qui consequatur corporis.\"\n      ],\n      \"summary\": \"9sy\",\n      \"title\": \"vmn\",\n      \"url\": \"2wn\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"syj\",\n      \"id\": \"0x3\",\n      \"image_asset_id\": \"g8u\",\n      \"keywords\": [\n         \"Magnam nulla impedit quibusdam eligendi itaque consequatur.\",\n         \"Ducimus recusandae eum est non nesciunt corrupti.\",\n         \"Dolor sunt.\"\n      ],\n      \"summary\": \"mna\",\n      \"title\": \"duq\",\n      \"url\": \"6a3\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.ID) > 50 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 50, false))

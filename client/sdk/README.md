@@ -154,6 +154,7 @@ run();
 * [latest](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 * [list](docs/sdks/deployments/README.md#list) - listDeployments deployments
 * [logs](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+* [redeployDeployment](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 
 ### [domains](docs/sdks/domains/README.md)
 
@@ -269,6 +270,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsLatest`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`deploymentsList`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`deploymentsLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+- [`deploymentsRedeployDeployment`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`domainsDeleteDomain`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`domainsGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
@@ -372,6 +374,7 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
+- [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates

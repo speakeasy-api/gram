@@ -32,6 +32,10 @@ type Client struct {
 	// Evolve Doer is the HTTP client used to make requests to the evolve endpoint.
 	EvolveDoer goahttp.Doer
 
+	// Redeploy Doer is the HTTP client used to make requests to the redeploy
+	// endpoint.
+	RedeployDoer goahttp.Doer
+
 	// ListDeployments Doer is the HTTP client used to make requests to the
 	// listDeployments endpoint.
 	ListDeploymentsDoer goahttp.Doer
@@ -64,6 +68,7 @@ func NewClient(
 		GetLatestDeploymentDoer: doer,
 		CreateDeploymentDoer:    doer,
 		EvolveDoer:              doer,
+		RedeployDoer:            doer,
 		ListDeploymentsDoer:     doer,
 		GetDeploymentLogsDoer:   doer,
 		RestoreResponseBody:     restoreBody,
@@ -165,6 +170,30 @@ func (c *Client) Evolve() goa.Endpoint {
 		resp, err := c.EvolveDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deployments", "evolve", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Redeploy returns an endpoint that makes HTTP requests to the deployments
+// service redeploy server.
+func (c *Client) Redeploy() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRedeployRequest(c.encoder)
+		decodeResponse = DecodeRedeployResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRedeployRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RedeployDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "redeploy", err)
 		}
 		return decodeResponse(resp)
 	}

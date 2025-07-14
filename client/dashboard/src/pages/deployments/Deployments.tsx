@@ -1,10 +1,21 @@
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { useRoutes } from "@/routes";
-import { useListDeploymentsSuspense } from "@gram/client/react-query";
+import {
+  useListDeploymentsSuspense,
+  useRedeployDeploymentMutation,
+} from "@gram/client/react-query";
 import { Icon, Table, TableProps } from "@speakeasy-api/moonshine";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function DeploymentsPage() {
   return (
@@ -32,6 +43,75 @@ type DeploymentSummary = {
   assetCount: number;
   toolCount: number;
 };
+
+function DeploymentActionsDropdown({
+  deploymentId,
+  deployments,
+}: {
+  deploymentId: string;
+  deployments: DeploymentSummary[];
+}) {
+  const queryClient = useQueryClient();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const redeployMutation = useRedeployDeploymentMutation({
+    onSuccess: () => {
+      // Invalidate and refetch deployments list
+      queryClient.invalidateQueries({
+        queryKey: ["@gram/client", "deployments", "list"],
+      });
+      setIsOpen(false);
+    },
+    onError: (error) => {
+      console.error("Failed to redeploy:", error);
+      setIsOpen(false);
+    },
+  });
+
+  // Don't show actions for the latest deployment (first item, assuming sorted by date desc)
+  const isLatestDeployment =
+    deployments.length > 0 && deployments[0]?.id === deploymentId;
+
+  // Find the current deployment to check its status
+  const currentDeployment = deployments.find((d) => d.id === deploymentId);
+  const isCompletedDeployment = currentDeployment?.status === "completed";
+
+  // Only show actions for completed deployments that are not the latest
+  if (isLatestDeployment || !isCompletedDeployment) {
+    return null;
+  }
+
+  const handleRedeploy = () => {
+    redeployMutation.mutate({
+      request: {
+        redeployRequestBody: {
+          deploymentId,
+        },
+      },
+    });
+  };
+
+  return (
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+          <Icon name="ellipsis" className="size-4" />
+          <span className="sr-only">Open menu</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          onClick={handleRedeploy}
+          disabled={redeployMutation.isPending}
+          className="cursor-pointer"
+        >
+          <Icon name="refresh-cw" className="size-4 mr-2" />
+          {redeployMutation.isPending ? "Redeploying..." : "Redeploy"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 const columns: TableProps<DeploymentSummary>["columns"] = [
   {
@@ -77,19 +157,46 @@ const columns: TableProps<DeploymentSummary>["columns"] = [
     render: (row) => row.toolCount,
     width: "1fr",
   },
+  {
+    key: "actions",
+    header: "",
+    render: () => {
+      // This will be overridden in DeploymentsTable with proper deployments prop
+      return null;
+    },
+    width: "auto",
+  },
 ];
 
 function DeploymentsTable() {
   const { data: res } = useListDeploymentsSuspense();
+  const deployments = res.items ?? [];
+
+  const columnsWithData: TableProps<DeploymentSummary>["columns"] = [
+    ...columns.slice(0, -1), // All columns except the last one (actions)
+    {
+      key: "actions",
+      header: "",
+      render: (row) => {
+        return (
+          <DeploymentActionsDropdown
+            deploymentId={row.id}
+            deployments={deployments}
+          />
+        );
+      },
+      width: "auto",
+    },
+  ];
 
   return (
     <>
       <Heading variant="h2">Recent Deployments</Heading>
 
       <Table<DeploymentSummary>
-        columns={columns}
+        columns={columnsWithData}
         rowKey={(row) => row.id}
-        data={res.items ?? []}
+        data={deployments}
       />
     </>
   );

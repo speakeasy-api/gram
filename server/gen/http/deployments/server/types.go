@@ -51,6 +51,13 @@ type EvolveRequestBody struct {
 	ExcludePackages []string `form:"exclude_packages,omitempty" json:"exclude_packages,omitempty" xml:"exclude_packages,omitempty"`
 }
 
+// RedeployRequestBody is the type of the "deployments" service "redeploy"
+// endpoint HTTP request body.
+type RedeployRequestBody struct {
+	// The ID of the deployment to redeploy.
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+}
+
 // GetDeploymentResponseBody is the type of the "deployments" service
 // "getDeployment" endpoint HTTP response body.
 type GetDeploymentResponseBody struct {
@@ -106,6 +113,13 @@ type CreateDeploymentResponseBody struct {
 // EvolveResponseBody is the type of the "deployments" service "evolve"
 // endpoint HTTP response body.
 type EvolveResponseBody struct {
+	// A deployment that was successfully created.
+	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
+}
+
+// RedeployResponseBody is the type of the "deployments" service "redeploy"
+// endpoint HTTP response body.
+type RedeployResponseBody struct {
 	// A deployment that was successfully created.
 	Deployment *DeploymentResponseBody `form:"deployment,omitempty" json:"deployment,omitempty" xml:"deployment,omitempty"`
 }
@@ -874,6 +888,188 @@ type EvolveGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RedeployUnauthorizedResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "unauthorized" error.
+type RedeployUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployForbiddenResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "forbidden" error.
+type RedeployForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployBadRequestResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "bad_request" error.
+type RedeployBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployNotFoundResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "not_found" error.
+type RedeployNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployConflictResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "conflict" error.
+type RedeployConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployUnsupportedMediaResponseBody is the type of the "deployments"
+// service "redeploy" endpoint HTTP response body for the "unsupported_media"
+// error.
+type RedeployUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployInvalidResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "invalid" error.
+type RedeployInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployInvariantViolationResponseBody is the type of the "deployments"
+// service "redeploy" endpoint HTTP response body for the "invariant_violation"
+// error.
+type RedeployInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployUnexpectedResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "unexpected" error.
+type RedeployUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployGatewayErrorResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "gateway_error" error.
+type RedeployGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListDeploymentsUnauthorizedResponseBody is the type of the "deployments"
 // service "listDeployments" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1432,6 +1628,16 @@ func NewCreateDeploymentResponseBody(res *deployments.CreateDeploymentResult) *C
 // "evolve" endpoint of the "deployments" service.
 func NewEvolveResponseBody(res *deployments.EvolveResult) *EvolveResponseBody {
 	body := &EvolveResponseBody{}
+	if res.Deployment != nil {
+		body.Deployment = marshalTypesDeploymentToDeploymentResponseBody(res.Deployment)
+	}
+	return body
+}
+
+// NewRedeployResponseBody builds the HTTP response body from the result of the
+// "redeploy" endpoint of the "deployments" service.
+func NewRedeployResponseBody(res *deployments.RedeployResult) *RedeployResponseBody {
+	body := &RedeployResponseBody{}
 	if res.Deployment != nil {
 		body.Deployment = marshalTypesDeploymentToDeploymentResponseBody(res.Deployment)
 	}
@@ -2047,6 +2253,146 @@ func NewEvolveGatewayErrorResponseBody(res *goa.ServiceError) *EvolveGatewayErro
 	return body
 }
 
+// NewRedeployUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployUnauthorizedResponseBody(res *goa.ServiceError) *RedeployUnauthorizedResponseBody {
+	body := &RedeployUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployForbiddenResponseBody builds the HTTP response body from the
+// result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployForbiddenResponseBody(res *goa.ServiceError) *RedeployForbiddenResponseBody {
+	body := &RedeployForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployBadRequestResponseBody builds the HTTP response body from the
+// result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployBadRequestResponseBody(res *goa.ServiceError) *RedeployBadRequestResponseBody {
+	body := &RedeployBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployNotFoundResponseBody builds the HTTP response body from the
+// result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployNotFoundResponseBody(res *goa.ServiceError) *RedeployNotFoundResponseBody {
+	body := &RedeployNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployConflictResponseBody builds the HTTP response body from the
+// result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployConflictResponseBody(res *goa.ServiceError) *RedeployConflictResponseBody {
+	body := &RedeployConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployUnsupportedMediaResponseBody(res *goa.ServiceError) *RedeployUnsupportedMediaResponseBody {
+	body := &RedeployUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployInvalidResponseBody builds the HTTP response body from the result
+// of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployInvalidResponseBody(res *goa.ServiceError) *RedeployInvalidResponseBody {
+	body := &RedeployInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployInvariantViolationResponseBody(res *goa.ServiceError) *RedeployInvariantViolationResponseBody {
+	body := &RedeployInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployUnexpectedResponseBody builds the HTTP response body from the
+// result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployUnexpectedResponseBody(res *goa.ServiceError) *RedeployUnexpectedResponseBody {
+	body := &RedeployUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "redeploy" endpoint of the "deployments" service.
+func NewRedeployGatewayErrorResponseBody(res *goa.ServiceError) *RedeployGatewayErrorResponseBody {
+	body := &RedeployGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListDeploymentsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listDeployments" endpoint of the "deployments"
 // service.
@@ -2426,6 +2772,18 @@ func NewEvolvePayload(body *EvolveRequestBody, apikeyToken *string, sessionToken
 	return v
 }
 
+// NewRedeployPayload builds a deployments service redeploy endpoint payload.
+func NewRedeployPayload(body *RedeployRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.RedeployPayload {
+	v := &deployments.RedeployPayload{
+		DeploymentID: *body.DeploymentID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
 func NewListDeploymentsPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
@@ -2486,6 +2844,15 @@ func ValidateEvolveRequestBody(body *EvolveRequestBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateRedeployRequestBody runs the validations defined on
+// RedeployRequestBody
+func ValidateRedeployRequestBody(body *RedeployRequestBody) (err error) {
+	if body.DeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
 	}
 	return
 }

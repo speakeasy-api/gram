@@ -25,6 +25,8 @@ type Service interface {
 	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
 	// Create a new deployment with additional or updated tool sources.
 	Evolve(context.Context, *EvolvePayload) (res *EvolveResult, err error)
+	// Redeploys an existing deployment.
+	Redeploy(context.Context, *RedeployPayload) (res *RedeployResult, err error)
 	// List all deployments in descending order of creation.
 	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
 	// Get logs for a deployment.
@@ -51,7 +53,7 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"getDeployment", "getLatestDeployment", "createDeployment", "evolve", "listDeployments", "getDeploymentLogs"}
+var MethodNames = [7]string{"getDeployment", "getLatestDeployment", "createDeployment", "evolve", "redeploy", "listDeployments", "getDeploymentLogs"}
 
 type AddDeploymentPackageForm struct {
 	// The name of the package.
@@ -263,6 +265,22 @@ type ListDeploymentsPayload struct {
 	ProjectSlugInput *string
 	// The cursor to fetch results from
 	Cursor *string
+}
+
+// RedeployPayload is the payload type of the deployments service redeploy
+// method.
+type RedeployPayload struct {
+	// The ID of the deployment to redeploy.
+	DeploymentID     string
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// RedeployResult is the result type of the deployments service redeploy method.
+type RedeployResult struct {
+	// A deployment that was successfully created.
+	Deployment *types.Deployment
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

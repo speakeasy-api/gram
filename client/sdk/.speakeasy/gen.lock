@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 431578e4eea52914a13c02e77e143a8d
+  docChecksum: 770b1dd5d07a301fbe95de6d281feb6b
   docVersion: 0.0.1
-  speakeasyVersion: 1.580.1
-  generationVersion: 2.656.3
-  releaseVersion: 0.12.31
-  configChecksum: 38e4e9face64dbc58a37da362452d2fe
+  speakeasyVersion: 1.581.0
+  generationVersion: 2.656.5
+  releaseVersion: 0.12.33
+  configChecksum: c9e91b822654ed04314462940bc4dd08
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -108,6 +108,8 @@ generatedFiles:
   - docs/models/components/prompttemplatekind.md
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
+  - docs/models/components/redeployrequestbody.md
+  - docs/models/components/redeployresult.md
   - docs/models/components/registerrequestbody.md
   - docs/models/components/rendertemplaterequestbody.md
   - docs/models/components/rendertemplateresult.md
@@ -245,6 +247,10 @@ generatedFiles:
   - docs/models/operations/publishsecurity.md
   - docs/models/operations/publishsecurityoption1.md
   - docs/models/operations/publishsecurityoption2.md
+  - docs/models/operations/redeploydeploymentrequest.md
+  - docs/models/operations/redeploydeploymentsecurity.md
+  - docs/models/operations/redeploydeploymentsecurityoption1.md
+  - docs/models/operations/redeploydeploymentsecurityoption2.md
   - docs/models/operations/registerdomainrequest.md
   - docs/models/operations/registerdomainsecurity.md
   - docs/models/operations/registerrequest.md
@@ -345,6 +351,7 @@ generatedFiles:
   - src/funcs/deploymentsLatest.ts
   - src/funcs/deploymentsList.ts
   - src/funcs/deploymentsLogs.ts
+  - src/funcs/deploymentsRedeployDeployment.ts
   - src/funcs/domainsDeleteDomain.ts
   - src/funcs/domainsGetDomain.ts
   - src/funcs/domainsRegisterDomain.ts
@@ -473,6 +480,8 @@ generatedFiles:
   - src/models/components/prompttemplate.ts
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
+  - src/models/components/redeployrequestbody.ts
+  - src/models/components/redeployresult.ts
   - src/models/components/registerrequestbody.ts
   - src/models/components/rendertemplaterequestbody.ts
   - src/models/components/rendertemplateresult.ts
@@ -538,6 +547,7 @@ generatedFiles:
   - src/models/operations/loadchat.ts
   - src/models/operations/logout.ts
   - src/models/operations/publish.ts
+  - src/models/operations/redeploydeployment.ts
   - src/models/operations/register.ts
   - src/models/operations/registerdomain.ts
   - src/models/operations/rendertemplate.ts
@@ -595,6 +605,7 @@ generatedFiles:
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
   - src/react-query/publishPackage.ts
+  - src/react-query/redeployDeployment.ts
   - src/react-query/register.ts
   - src/react-query/registerDomain.ts
   - src/react-query/renderTemplate.ts
@@ -1269,5 +1280,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  redeployDeployment:
+    speakeasy-default-redeploy-deployment:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2024-06-03T17:13:21.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

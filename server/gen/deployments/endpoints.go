@@ -20,6 +20,7 @@ type Endpoints struct {
 	GetLatestDeployment goa.Endpoint
 	CreateDeployment    goa.Endpoint
 	Evolve              goa.Endpoint
+	Redeploy            goa.Endpoint
 	ListDeployments     goa.Endpoint
 	GetDeploymentLogs   goa.Endpoint
 }
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetLatestDeployment: NewGetLatestDeploymentEndpoint(s, a.APIKeyAuth),
 		CreateDeployment:    NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
 		Evolve:              NewEvolveEndpoint(s, a.APIKeyAuth),
+		Redeploy:            NewRedeployEndpoint(s, a.APIKeyAuth),
 		ListDeployments:     NewListDeploymentsEndpoint(s, a.APIKeyAuth),
 		GetDeploymentLogs:   NewGetDeploymentLogsEndpoint(s, a.APIKeyAuth),
 	}
@@ -44,6 +46,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetLatestDeployment = m(e.GetLatestDeployment)
 	e.CreateDeployment = m(e.CreateDeployment)
 	e.Evolve = m(e.Evolve)
+	e.Redeploy = m(e.Redeploy)
 	e.ListDeployments = m(e.ListDeployments)
 	e.GetDeploymentLogs = m(e.GetDeploymentLogs)
 }
@@ -281,6 +284,65 @@ func NewEvolveEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Evolve(ctx, p)
+	}
+}
+
+// NewRedeployEndpoint returns an endpoint function that calls the method
+// "redeploy" of service "deployments".
+func NewRedeployEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RedeployPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Redeploy(ctx, p)
 	}
 }
 
