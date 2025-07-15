@@ -20,8 +20,7 @@ import { GetDeploymentResult } from "@gram/client/models/components/getdeploymen
 import {
   useDeploymentSuspense,
   useLatestDeployment,
-  useLatestDeploymentSuspense,
-  useListToolsetsSuspense,
+  useListToolsets,
   useListToolsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -35,37 +34,48 @@ export function useEmptyProjectRedirect() {
   const { projectSlug } = useParams();
   const navigate = useNavigate();
 
-  const { data: deployment, isFetchedAfterMount: deploymentFetchedAfterMount } =
-    useLatestDeploymentSuspense(
-      {
-        gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
-      },
-      undefined,
-      {
-        refetchOnMount: "always",
-      }
-    );
+  const {
+    data: deployment,
+    isLoading: deploymentLoading,
+    isFetchedAfterMount: deploymentFetchedAfterMount,
+  } = useLatestDeployment(
+    {
+      gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
+    },
+    undefined,
+    {
+      refetchOnMount: "always",
+    }
+  );
 
-  const { data: toolsets, isFetchedAfterMount: toolsetsFetchedAfterMount } =
-    useListToolsetsSuspense(
-      {
-        gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
-      },
-      undefined,
-      {
-        refetchOnMount: "always",
-      }
-    );
+  const {
+    data: toolsets,
+    isLoading: toolsetsLoading,
+    isFetchedAfterMount: toolsetsFetchedAfterMount,
+  } = useListToolsets(
+    {
+      gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
+    },
+    undefined,
+    {
+      refetchOnMount: "always",
+    }
+  );
 
   useEffect(() => {
     // Make sure we have the latest data
-    if (!deploymentFetchedAfterMount || !toolsetsFetchedAfterMount) {
+    if (
+      toolsetsLoading ||
+      deploymentLoading ||
+      !deploymentFetchedAfterMount ||
+      !toolsetsFetchedAfterMount
+    ) {
       return;
     }
 
-    const deploymentEmpty = isDeploymentEmpty(deployment.deployment);
+    const deploymentEmpty = isDeploymentEmpty(deployment?.deployment);
 
-    if (deploymentEmpty && toolsets.toolsets.length === 0) {
+    if (deploymentEmpty && toolsets?.toolsets.length === 0) {
       navigate(`/${session.organization.slug}/${projectSlug}/onboarding`);
     }
   }, [deployment, toolsets]);
@@ -264,31 +274,33 @@ function DeploymentCard({
   return (
     <Card key={asset.id}>
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify="space-between">
-          <Card.Title>
-            <CopyableSlug slug={asset.slug}>{asset.name}</CopyableSlug>
-          </Card.Title>
+        <Card.Title>
+          <CopyableSlug slug={asset.slug}>{asset.name}</CopyableSlug>
+        </Card.Title>
+        <Card.Info>
           <ToolsBadge toolNames={tools.map((tool) => tool.name)} />
-        </Stack>
-        {latestToolTimestamp && (
-          <Type variant="body" muted className="text-sm italic">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    {"Updated "}
-                    {formatDistanceToNow(latestToolTimestamp, {
-                      addSuffix: true,
-                    })}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {latestToolTimestamp.toString()}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Type>
-        )}
+        </Card.Info>
+        <Card.Description>
+          {latestToolTimestamp && (
+            <Type variant="body" muted className="text-sm italic">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      {"Updated "}
+                      {formatDistanceToNow(latestToolTimestamp, {
+                        addSuffix: true,
+                      })}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {latestToolTimestamp.toString()}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Type>
+          )}
+        </Card.Description>
       </Card.Header>
       <Card.Content>
         <Type muted variant="body" className="italic line-clamp-2">

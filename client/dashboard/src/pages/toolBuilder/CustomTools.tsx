@@ -106,26 +106,28 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
   return (
     <Card>
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <routes.customTools.toolBuilder.Link params={[template.name]}>
-            <Card.Title className="normal-case">{template.name}</Card.Title>
-          </routes.customTools.toolBuilder.Link>
+        <routes.customTools.toolBuilder.Link params={[template.name]}>
+          <Card.Title className="normal-case">{template.name}</Card.Title>
+        </routes.customTools.toolBuilder.Link>
+        <Card.Info>
           <Stack direction="horizontal" gap={2}>
             {inputsBadge}
             <ToolsBadge toolNames={template.toolsHint} />
           </Stack>
-        </Stack>
-        <Stack direction="horizontal" gap={3} justify={"space-between"}>
-          {template.description ? (
-            <Card.Description className="max-w-2/3 line-clamp-3">
-              <MustacheHighlight>{template.description}</MustacheHighlight>
-            </Card.Description>
-          ) : null}
-          <Type variant="body" muted className="text-sm italic">
-            {"Updated "}
-            <HumanizeDateTime date={new Date(template.updatedAt)} />
-          </Type>
-        </Stack>
+        </Card.Info>
+        <Card.Description>
+          <Stack direction="horizontal" gap={3} justify={"space-between"}>
+            {template.description ? (
+              <div className="max-w-2/3">
+                <MustacheHighlight>{template.description}</MustacheHighlight>
+              </div>
+            ) : null}
+            <Type variant="body" muted className="text-sm italic">
+              {"Updated "}
+              <HumanizeDateTime date={new Date(template.updatedAt)} />
+            </Type>
+          </Stack>
+        </Card.Description>
       </Card.Header>
       <Card.Footer>
         <Button

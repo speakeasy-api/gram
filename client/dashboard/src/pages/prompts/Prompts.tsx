@@ -84,34 +84,36 @@ export function PromptTemplateCard({
     <Card>
       <Card.Header>
         <Card.Title className="normal-case">{template.name}</Card.Title>
-        <Stack direction="horizontal" gap={3} justify={"space-between"}>
-          {template.description ? (
-            <Card.Description className="max-w-2/3">
-              {template.description}
-            </Card.Description>
-          ) : null}
-          <Type variant="body" muted className="text-sm italic">
-            {"Updated "}
-            <HumanizeDateTime date={new Date(template.updatedAt)} />
-          </Type>
-        </Stack>
+        <Card.Description>
+          <Stack direction="horizontal" gap={3} justify={"space-between"}>
+            {template.description ? (
+              <div className="max-w-2/3">{template.description}</div>
+            ) : null}
+            <Type variant="body" muted className="text-sm italic">
+              {"Updated "}
+              <HumanizeDateTime date={new Date(template.updatedAt)} />
+            </Type>
+          </Stack>
+        </Card.Description>
         {actions && <Card.Actions>{actions}</Card.Actions>}
       </Card.Header>
-      <Card.Content>
+      <Card.Footer>
         <Stack direction="horizontal" gap={2}>
-          <routes.prompts.prompt.Link params={[template.name]}>
-            <Button variant="outline">Edit</Button>
-          </routes.prompts.prompt.Link>
           <DeleteButton
             tooltip="Delete Prompt Template"
             onClick={() => {
-              if (confirm("Are you sure you want to delete this prompt template?")) {
+              if (
+                confirm("Are you sure you want to delete this prompt template?")
+              ) {
                 deleteTemplate.mutate({ request: { name: template.name } });
               }
             }}
           />
+          <routes.prompts.prompt.Link params={[template.name]}>
+            <Button variant="outline">Edit</Button>
+          </routes.prompts.prompt.Link>
         </Stack>
-      </Card.Content>
+      </Card.Footer>
     </Card>
   );
 }

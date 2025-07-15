@@ -23,28 +23,30 @@ export function ToolsetCard({
   return (
     <Card className={className}>
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Card.Title>
-            <CopyableSlug slug={toolset.slug}>
-              <routes.toolsets.toolset.Link params={[toolset.slug]}>
-                {toolset.name}
-              </routes.toolsets.toolset.Link>
-            </CopyableSlug>
-          </Card.Title>
+        <Card.Title>
+          <CopyableSlug slug={toolset.slug}>
+            <routes.toolsets.toolset.Link params={[toolset.slug]}>
+              {toolset.name}
+            </routes.toolsets.toolset.Link>
+          </CopyableSlug>
+        </Card.Title>
+        <Card.Info>
           <Stack direction="horizontal" gap={1} align="center">
             <ToolsetPromptsBadge toolset={toolset} />
             <ToolsetToolsBadge toolset={toolset} />
           </Stack>
-        </Stack>
-        <Stack direction="horizontal" gap={3} justify={"space-between"}>
-          <Card.Description className="max-w-2/3">
-            {toolset.description}
-          </Card.Description>
-          <Type variant="body" muted className="text-sm italic">
-            {"Updated "}
-            <HumanizeDateTime date={new Date(toolset.updatedAt)} />
-          </Type>
-        </Stack>
+        </Card.Info>
+        <Card.Description>
+          <Stack direction="horizontal" gap={3} justify={"space-between"}>
+            <Type small className="max-w-2/3">
+              {toolset.description}
+            </Type>
+            <Type muted small italic>
+              {"Updated "}
+              <HumanizeDateTime date={new Date(toolset.updatedAt)} />
+            </Type>
+          </Stack>
+        </Card.Description>
       </Card.Header>
       <Card.Footer>
         <Stack direction="horizontal" gap={2}>

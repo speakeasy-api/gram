@@ -187,6 +187,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   } = useSessionInfo(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
+    throwOnError: false,
   });
 
   const asSession = (sessionData: SessionInfoResponse): Session => {

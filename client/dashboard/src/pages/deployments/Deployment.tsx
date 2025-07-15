@@ -85,9 +85,9 @@ function DeploymentLogs(props: { deploymentId: string }) {
             return (
               <li
                 key={asset.id}
-                className="text-xl flex flex-nowrap gap-2 items-center"
+                className="text-xl flex flex-nowrap gap-1 items-center"
               >
-                <Icon name="file-text" size="medium" />
+                <Icon name="file-text" size="small" className="text-muted-foreground" />
                 <a href={`${downloadURL}`} download>
                   {asset.name}
                 </a>

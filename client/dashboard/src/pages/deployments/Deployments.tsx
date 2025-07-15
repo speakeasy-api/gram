@@ -143,19 +143,18 @@ const columns: TableProps<DeploymentSummary>["columns"] = [
         </div>
       );
     },
-    width: "auto",
   },
   {
     key: "assetCount",
     header: "Assets",
     render: (row) => row.assetCount,
-    width: "auto",
+    width: "150px",
   },
   {
     key: "toolCount",
     header: "Tools",
     render: (row) => row.toolCount,
-    width: "1fr",
+    width: "0.5fr",
   },
   {
     key: "actions",

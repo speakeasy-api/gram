@@ -135,17 +135,15 @@ export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
   return (
     <Card>
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <Card.Title>
-            <CopyableSlug slug={toolset.slug}>
-              <routes.mcp.details.Link params={[toolset.slug]}>
-                {toolset.name}
-              </routes.mcp.details.Link>
-            </CopyableSlug>
-          </Card.Title>
-          {badges}
-        </Stack>
-        <Card.Description>
+        <Card.Title>
+          <CopyableSlug slug={toolset.slug}>
+            <routes.mcp.details.Link params={[toolset.slug]}>
+              {toolset.name}
+            </routes.mcp.details.Link>
+          </CopyableSlug>
+        </Card.Title>
+        <Card.Info>{badges}</Card.Info>
+        <Card.Description className="mt-[-6px]">
           <Stack direction="horizontal" className="group" align="center">
             <Type muted mono small className="break-all text-xs">
               {mcpUrl}

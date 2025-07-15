@@ -142,7 +142,7 @@ export function ToolCard({
           >
             <Type
               className={cn(
-                "line-clamp-3 text-muted-foreground",
+                "line-clamp-3 text-muted-foreground wrap-anywhere!",
                 !tool.description && "italic"
               )}
             >

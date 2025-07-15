@@ -13,10 +13,11 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { useEmptyProjectRedirect } from "../openapi/OpenAPI";
 import { ToolsetCard } from "./ToolsetCard";
+import { Cards } from "@/components/ui/card";
 
 export function useToolsets() {
-  const { data: toolsets, refetch } = useListToolsets();
-  return Object.assign(toolsets?.toolsets || [], { refetch });
+  const { data: toolsets, refetch, isLoading } = useListToolsets();
+  return Object.assign(toolsets?.toolsets || [], { refetch, isLoading });
 }
 
 export function ToolsetsRoot() {
@@ -87,7 +88,7 @@ function ToolsetsContent({
   useEmptyProjectRedirect();
 
   return (
-    <>
+    <Cards loading={toolsets.isLoading}>
       {toolsets.map((toolset) => (
         <ToolsetCard key={toolset.id} toolset={toolset} />
       ))}
@@ -108,6 +109,6 @@ function ToolsetsContent({
           validate: (value) => value.length > 0,
         }}
       />
-    </>
+    </Cards>
   );
 }

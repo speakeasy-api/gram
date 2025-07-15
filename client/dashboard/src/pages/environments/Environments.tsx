@@ -8,15 +8,14 @@ import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useApiError } from "@/hooks/useApiError";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { useApiError } from "@/hooks/useApiError";
 import { Environment } from "@gram/client/models/components/environment.js";
 import {
   useCreateEnvironmentMutation,
   useListEnvironmentsSuspense,
 } from "@gram/client/react-query/index.js";
-import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet } from "react-router";
 export function EnvironmentsRoot() {
@@ -28,7 +27,7 @@ export function useEnvironments() {
     useListEnvironmentsSuspense(undefined, undefined, {
       refetchOnWindowFocus: false,
     });
-  
+
   return Object.assign(environments?.environments || [], {
     refetch: refetchEnvironments,
   });
@@ -113,34 +112,33 @@ export default function Environments() {
   );
 }
 
-
 function EnvironmentCard({ environment }: { environment: Environment }) {
   const routes = useRoutes();
 
   return (
     <Card>
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
-          <routes.environments.environment.Link params={[environment.slug]}>
-            <Card.Title className="hover:underline">
-              {environment.name}
-            </Card.Title>
-          </routes.environments.environment.Link>
+        <routes.environments.environment.Link params={[environment.slug]}>
+          <Card.Title className="hover:underline">
+            {environment.name}
+          </Card.Title>
+        </routes.environments.environment.Link>
+        <Card.Info>
           <Badge>{environment.entries.length || "No"} Entries</Badge>
-        </Stack>
-        <Stack direction="horizontal" gap={3} justify={"space-between"}>
+        </Card.Info>
+        <Card.Description>
           {/* TODO: add description */}
           <Type variant="body" muted className="text-sm italic">
             {"Updated "}
             <HumanizeDateTime date={new Date(environment.updatedAt)} />
           </Type>
-        </Stack>
+        </Card.Description>
       </Card.Header>
-      <Card.Content>
+      <Card.Footer>
         <routes.environments.environment.Link params={[environment.slug]}>
           <Button variant="outline">Edit</Button>
         </routes.environments.environment.Link>
-      </Card.Content>
+      </Card.Footer>
     </Card>
   );
 }

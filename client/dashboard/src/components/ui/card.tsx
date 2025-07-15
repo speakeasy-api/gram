@@ -27,7 +27,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-6 [.border-b]:pb-6 relative",
+        "@container/card-header flex flex-wrap items-center gap-2 px-6 [.border-b]:pb-6",
         className
       )}
       {...props}
@@ -56,7 +56,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-muted-foreground text-sm w-full", className)}
       {...props}
     />
   );
@@ -67,7 +67,7 @@ function CardInfo({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-info"
       className={cn(
-        "absolute top-[-4px] right-6 bg-card trans gap-2 flex",
+        "gap-2 flex justify-start ml-auto",
         "group-hover/card:has([data-slot=card-action]):opacity-0", // Only hide info when card has an action and is hovered
         className
       )}

@@ -18,7 +18,7 @@ export const HttpRoute = ({
   return (
     <div className="flex gap-2 font-mono items-start">
       <HttpMethod method={method} variant="type" />
-      <Type className="text-xs text-muted-foreground">{path}</Type>
+      <Type className="text-xs text-muted-foreground wrap-anywhere">{path}</Type>
     </div>
   );
 };
