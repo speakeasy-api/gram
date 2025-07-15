@@ -61,17 +61,17 @@ export function MCPDetailPage() {
 }
 
 export function useCustomDomain() {
-  const { data: domain, refetch } = useGetDomain(undefined, undefined, {
+  const { data: domain, isLoading, refetch } = useGetDomain(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,
   });
 
-  return domain ? Object.assign(domain, { refetch }) : null;
+  return { domain: domain, refetch: refetch, isLoading };
 }
 
 export function useMcpUrl(toolset: Toolset | undefined) {
-  const domain = useCustomDomain();
+  const { domain } = useCustomDomain();
   const project = useProject();
 
   if (!toolset) return { url: undefined, customServerURL: undefined };
@@ -102,7 +102,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const session = useSession();
   const { orgSlug, projectSlug } = useParams();
   const routes = useRoutes();
-  const domain = useCustomDomain();
+  const { domain } = useCustomDomain();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {

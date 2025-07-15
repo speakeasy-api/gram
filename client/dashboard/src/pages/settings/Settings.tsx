@@ -54,7 +54,7 @@ export default function Settings() {
   const txtValue = `gram-domain-verify=${subdomain},${organization.id}`;
 
   const { data: keysData } = useListAPIKeysSuspense();
-  const domain = useCustomDomain();
+  const { domain, isLoading: domainIsLoading, refetch: domainRefetch } = useCustomDomain();
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -115,7 +115,7 @@ export default function Settings() {
       setDomainError("");
       // Wait 2 seconds before refetching domain data
       setTimeout(() => {
-        domain?.refetch();
+        domainRefetch();
       }, 2000);
     },
     onError: (error) => {
@@ -227,10 +227,10 @@ export default function Settings() {
   useEffect(() => {
     if (!domain?.isUpdating) return;
     const interval = setInterval(() => {
-      domain.refetch();
+      domainRefetch();
     }, 30000);
     return () => clearInterval(interval);
-  }, [domain?.isUpdating, domain?.refetch]);
+  }, [domain?.isUpdating, domainRefetch]);
 
   return (
     <Page>
@@ -355,7 +355,7 @@ export default function Settings() {
               account.
             </Type>
           )}
-          {!!domain && !domain.verified && (
+          {!domainIsLoading && !domain?.verified && (
             <div className="flex justify-end mb-6">
               <Button
                 onClick={() => {
