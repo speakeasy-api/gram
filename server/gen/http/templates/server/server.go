@@ -19,13 +19,14 @@ import (
 
 // Server lists the templates service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	CreateTemplate http.Handler
-	UpdateTemplate http.Handler
-	GetTemplate    http.Handler
-	ListTemplates  http.Handler
-	DeleteTemplate http.Handler
-	RenderTemplate http.Handler
+	Mounts             []*MountPoint
+	CreateTemplate     http.Handler
+	UpdateTemplate     http.Handler
+	GetTemplate        http.Handler
+	ListTemplates      http.Handler
+	DeleteTemplate     http.Handler
+	RenderTemplateByID http.Handler
+	RenderTemplate     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -60,14 +61,16 @@ func New(
 			{"GetTemplate", "GET", "/rpc/templates.get"},
 			{"ListTemplates", "GET", "/rpc/templates.list"},
 			{"DeleteTemplate", "DELETE", "/rpc/templates.delete"},
-			{"RenderTemplate", "POST", "/rpc/templates.render"},
+			{"RenderTemplateByID", "POST", "/rpc/templates.render"},
+			{"RenderTemplate", "POST", "/rpc/templates.render-direct"},
 		},
-		CreateTemplate: NewCreateTemplateHandler(e.CreateTemplate, mux, decoder, encoder, errhandler, formatter),
-		UpdateTemplate: NewUpdateTemplateHandler(e.UpdateTemplate, mux, decoder, encoder, errhandler, formatter),
-		GetTemplate:    NewGetTemplateHandler(e.GetTemplate, mux, decoder, encoder, errhandler, formatter),
-		ListTemplates:  NewListTemplatesHandler(e.ListTemplates, mux, decoder, encoder, errhandler, formatter),
-		DeleteTemplate: NewDeleteTemplateHandler(e.DeleteTemplate, mux, decoder, encoder, errhandler, formatter),
-		RenderTemplate: NewRenderTemplateHandler(e.RenderTemplate, mux, decoder, encoder, errhandler, formatter),
+		CreateTemplate:     NewCreateTemplateHandler(e.CreateTemplate, mux, decoder, encoder, errhandler, formatter),
+		UpdateTemplate:     NewUpdateTemplateHandler(e.UpdateTemplate, mux, decoder, encoder, errhandler, formatter),
+		GetTemplate:        NewGetTemplateHandler(e.GetTemplate, mux, decoder, encoder, errhandler, formatter),
+		ListTemplates:      NewListTemplatesHandler(e.ListTemplates, mux, decoder, encoder, errhandler, formatter),
+		DeleteTemplate:     NewDeleteTemplateHandler(e.DeleteTemplate, mux, decoder, encoder, errhandler, formatter),
+		RenderTemplateByID: NewRenderTemplateByIDHandler(e.RenderTemplateByID, mux, decoder, encoder, errhandler, formatter),
+		RenderTemplate:     NewRenderTemplateHandler(e.RenderTemplate, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -81,6 +84,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetTemplate = m(s.GetTemplate)
 	s.ListTemplates = m(s.ListTemplates)
 	s.DeleteTemplate = m(s.DeleteTemplate)
+	s.RenderTemplateByID = m(s.RenderTemplateByID)
 	s.RenderTemplate = m(s.RenderTemplate)
 }
 
@@ -94,6 +98,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetTemplateHandler(mux, h.GetTemplate)
 	MountListTemplatesHandler(mux, h.ListTemplates)
 	MountDeleteTemplateHandler(mux, h.DeleteTemplate)
+	MountRenderTemplateByIDHandler(mux, h.RenderTemplateByID)
 	MountRenderTemplateHandler(mux, h.RenderTemplate)
 }
 
@@ -357,6 +362,57 @@ func NewDeleteTemplateHandler(
 	})
 }
 
+// MountRenderTemplateByIDHandler configures the mux to serve the "templates"
+// service "renderTemplateByID" endpoint.
+func MountRenderTemplateByIDHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/templates.render", otelhttp.WithRouteTag("/rpc/templates.render", f).ServeHTTP)
+}
+
+// NewRenderTemplateByIDHandler creates a HTTP handler which loads the HTTP
+// request and calls the "templates" service "renderTemplateByID" endpoint.
+func NewRenderTemplateByIDHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRenderTemplateByIDRequest(mux, decoder)
+		encodeResponse = EncodeRenderTemplateByIDResponse(encoder)
+		encodeError    = EncodeRenderTemplateByIDError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "renderTemplateByID")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "templates")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
 // MountRenderTemplateHandler configures the mux to serve the "templates"
 // service "renderTemplate" endpoint.
 func MountRenderTemplateHandler(mux goahttp.Muxer, h http.Handler) {
@@ -366,7 +422,7 @@ func MountRenderTemplateHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/templates.render", otelhttp.WithRouteTag("/rpc/templates.render", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/templates.render-direct", otelhttp.WithRouteTag("/rpc/templates.render-direct", f).ServeHTTP)
 }
 
 // NewRenderTemplateHandler creates a HTTP handler which loads the HTTP request

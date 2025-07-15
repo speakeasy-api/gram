@@ -5,11 +5,7 @@
 ```typescript
 import { UpdateTemplateRequest } from "@gram/client/models/operations";
 
-let value: UpdateTemplateRequest = {
-  updatePromptTemplateForm: {
-    id: "<id>",
-  },
-};
+let value: UpdateTemplateRequest = {};
 ```
 
 ## Fields

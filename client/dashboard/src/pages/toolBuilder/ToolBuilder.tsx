@@ -18,9 +18,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useApiError } from "@/hooks/useApiError";
 import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
 import { useGroupedTools } from "@/lib/toolNames";
 import { capitalize, cn } from "@/lib/utils";
@@ -34,14 +36,13 @@ import {
   useToolset,
   useUpdateTemplateMutation,
 } from "@gram/client/react-query";
-import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Message } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
-import { useApiError } from "@/hooks/useApiError";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
@@ -50,9 +51,11 @@ import { ToolDefinition, useToolDefinitions } from "../toolsets/types";
 import {
   Block,
   BlockInner,
+  HigherOrderTool,
   Input,
   instructionsPlaceholder,
   Step,
+  toJSON,
 } from "./components";
 import { useToolifyContext } from "./Toolify";
 
@@ -190,15 +193,31 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     });
   };
 
+  const tools = useToolDefinitions(toolsetFilter);
+
   // Ensures that the canonical tool and update function is set for the step
-  const makeStep = (step: Step) => ({
-    ...step,
-    update: (s: Step) => setStep(s),
-    canonicalTool:
+  const makeStep = (step: Step) => {
+    if (!step.tool) {
+      return {
+        ...step,
+        update: (s: Step) => setStep(s),
+      };
+    }
+
+    const canonicalTool =
       step.canonicalTool ??
-      tools.find((t) => t.name === step.tool)?.canonicalName ??
-      step.tool,
-  });
+      tools?.find((t) => t.name === step.tool)?.canonicalName;
+
+    if (!canonicalTool) {
+      console.error(`Tool ${step.tool} not found`);
+    }
+
+    return {
+      ...step,
+      update: (s: Step) => setStep(s),
+      canonicalTool,
+    };
+  };
 
   const [steps, setSteps] = useState<Step[]>(initial.steps.map(makeStep));
 
@@ -210,24 +229,33 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     setSteps(initial.steps.map(makeStep));
   }, [initial]);
 
-  const insertTool = (tool: { name: string; canonicalName: string }) => {
+  const insertTool = (
+    tool: { name: string; canonicalName: string } | "none"
+  ) => {
     if (steps.length >= 10) {
       return;
     }
     const newSteps = [...steps];
-    newSteps.push({
+
+    const step: Step = {
       id: uuidv7(),
-      tool: tool.name,
-      canonicalTool: tool.canonicalName,
       instructions: instructionsPlaceholder,
       update: (step) => setStep(step),
-    });
+    };
 
+    if (tool !== "none") {
+      step.tool = tool.name;
+      step.canonicalTool = tool.canonicalName;
+    } else {
+      step.instructions = "Fill in what this step should do...";
+    }
+
+    newSteps.push(step);
     setSteps(newSteps);
 
     telemetry.capture("tool_builder_event", {
       event: "add_step",
-      tool: tool.name,
+      tool: tool !== "none" ? tool.name : "none",
     });
   };
 
@@ -249,8 +277,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
         toolsetData.defaultEnvironmentSlug;
     }
   }, [toolsetData]);
-
-  const tools = useToolDefinitions(toolsetFilter);
 
   // When purpose or steps change, recompute inputs
   useEffect(() => {
@@ -339,19 +365,37 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       icon="play"
       size="sm"
       className="h-7"
-      onClick={() => {
+      onClick={async () => {
         telemetry.capture("tool_builder_event", {
           event: "try_now",
         });
+
+        const inputArgs = Object.fromEntries(
+          inputs.map((input) => [input.name, `{{${input.name}}}`])
+        );
+
+        const higherOrderTool: HigherOrderTool = {
+          toolName: name,
+          purpose,
+          inputs,
+          steps,
+        };
+
+        const renderResult = await client.templates.render({
+          renderTemplateRequestBody: {
+            prompt: toJSON(higherOrderTool),
+            arguments: inputArgs,
+            engine: "mustache",
+            kind: PromptTemplateKind.HigherOrderTool,
+          },
+        });
+
+        const renderedPrompt = renderResult.prompt || "";
+
         chat.appendMessage({
           id: uuidv7(),
           role: "user",
-          content: `\`\`\`xml\n${buildPrompt(
-            name,
-            purpose,
-            inputs,
-            steps
-          )}\n\`\`\``,
+          content: `\`\`\`xml\n${renderedPrompt}\n\`\`\``,
         });
       }}
     >
@@ -411,7 +455,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     <Button
       icon="save"
       disabled={!!initial.id && !anyChanges}
-      className="mb-8"
       onClick={async () => {
         try {
           const argsJsonSchema = {
@@ -430,15 +473,22 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             required: inputs.map((input) => input.name),
           };
 
+          const higherOrderTool: HigherOrderTool = {
+            toolName: name,
+            purpose,
+            inputs,
+            steps,
+          };
+
           if (initial.id) {
             updatePrompt({
               request: {
                 updatePromptTemplateForm: {
                   id: initial.id,
                   description,
-                  prompt: buildPrompt(name, purpose, inputs, steps),
+                  prompt: toJSON(higherOrderTool),
                   arguments: JSON.stringify(argsJsonSchema),
-                  toolsHint: steps.map((step) => step.canonicalTool),
+                  toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
                 },
               },
             });
@@ -452,15 +502,15 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                 name,
                 description,
                 kind: PromptTemplateKind.HigherOrderTool,
-                prompt: buildPrompt(name, purpose, inputs, steps),
+                prompt: toJSON(higherOrderTool),
                 arguments: JSON.stringify(argsJsonSchema),
-                toolsHint: steps.map((step) => step.canonicalTool),
+                toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
                 engine: "mustache",
               },
             });
 
             telemetry.capture("tool_builder_event", {
-              event: "create_tool",
+              event: "update_tool",
             });
 
             // Automatically add to the toolset
@@ -650,7 +700,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             align="center"
             justify="end"
             gap={1}
-            className="mt-4"
+            className="mt-4 mb-8"
           >
             {revertButton}
             {saveButton}
@@ -668,10 +718,9 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   );
 }
 
-const blockBackground = "bg-stone-100 dark:bg-stone-900";
-
 const inputStyles =
   "bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-1 rounded";
+const blockBackground = "bg-stone-100 dark:bg-stone-900";
 
 export const MustacheHighlight = ({
   children,
@@ -726,8 +775,16 @@ const StepCard = ({
       setOpen={setOpen}
       tools={tools}
       onSelect={(tool) => {
+        if (tool === "none") {
+          return;
+        }
+
         setOpen(false);
-        step.update({ ...step, tool: tool.name });
+        step.update?.({
+          ...step,
+          tool: tool.name,
+          canonicalTool: tool.canonicalName,
+        });
       }}
     >
       <Badge
@@ -740,6 +797,13 @@ const StepCard = ({
     </ToolSelectPopover>
   );
 
+  let noToolText = "Then...";
+  if (moveUp && !moveDown) {
+    noToolText = "Finally...";
+  } else if (!moveUp && moveDown) {
+    noToolText = "First...";
+  }
+
   return (
     <BlockInner className="p-0 rounded-md overflow-clip">
       <Stack>
@@ -749,7 +813,11 @@ const StepCard = ({
           justify="space-between"
           className="px-4 py-3 border-b border-stone-300 dark:border-stone-700 group/heading"
         >
-          <Type variant="subheading">Use the {toolBadge} tool to...</Type>
+          {step.canonicalTool ? (
+            <Type variant="subheading">Use the {toolBadge} tool to...</Type>
+          ) : (
+            <Type variant="subheading">{noToolText}</Type>
+          )}
           <Stack
             direction="horizontal"
             className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans"
@@ -784,7 +852,7 @@ const StepCard = ({
             value={step.instructions}
             lines={3}
             onSubmit={(instructions) => {
-              step.update({ ...step, instructions });
+              step.update?.({ ...step, instructions });
             }}
           >
             <Type
@@ -812,7 +880,7 @@ const ToolSelectPopover = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSelect: (tool: ToolDefinition) => void;
+  onSelect: (tool: ToolDefinition | "none") => void;
   tools: ToolDefinition[];
   children: React.ReactNode;
 }) => {
@@ -830,6 +898,18 @@ const ToolSelectPopover = ({
                 ? "Toolset is empty."
                 : "No items found."}
             </CommandEmpty>
+            <CommandGroup>
+              <SimpleTooltip tooltip="Create a step that doesn't use any tools">
+                <CommandItem
+                  value={"none"}
+                  className="cursor-pointer min-w-fit text-sm"
+                  onSelect={() => onSelect("none")}
+                >
+                  <Icon name="file-text" size="small" />
+                  Instruction
+                </CommandItem>
+              </SimpleTooltip>
+            </CommandGroup>
             {groupedTools.map((group) => (
               <CommandGroup
                 key={group.key}
@@ -861,60 +941,48 @@ const StepSeparator = () => {
   );
 };
 
-const buildPrompt = (
-  toolName: string,
-  purpose: string,
-  inputs: Input[],
-  steps: Step[]
-) => {
-  const inputsPortion = inputs
-    .map(
-      (input) =>
-        `  <Input name="${input.name}" description="${input.description}" />`
-    )
-    .join("\n");
+const parsePrompt = (
+  prompt: string
+): { purpose: string; inputs: Input[]; steps: Step[] } => {
+  // First try to parse as JSON
+  try {
+    const higherOrderTool = JSON.parse(prompt) as HigherOrderTool;
 
-  const stepsPortion = steps
-    .map((step) => {
-      let stepInputs = step.inputs
-        ?.map((input) => `<Input name="${input}" />`)
-        .join("\n");
-      if (stepInputs) {
-        stepInputs = `\n    ${stepInputs}`;
-      }
+    // Validate that it has the expected structure
+    if (
+      higherOrderTool &&
+      typeof higherOrderTool === "object" &&
+      "purpose" in higherOrderTool &&
+      "inputs" in higherOrderTool &&
+      "steps" in higherOrderTool
+    ) {
+      // Convert to the expected format with proper step handling
+      const steps: Step[] = higherOrderTool.steps.map((step) => ({
+        ...step,
+        id: step.id || uuidv7(), // Ensure steps have IDs
+        update: () => {
+          console.error("update not implemented");
+        }, // This will be replaced by the component when used
+      }));
 
-      return `  <CallTool tool_name="${step.tool}">
-    <Instruction>${step.instructions.trim()}</Instruction>${stepInputs}
-  </CallTool>`;
-    })
-    .join("\n");
+      return {
+        purpose: higherOrderTool.purpose,
+        inputs: higherOrderTool.inputs,
+        steps,
+      };
+    }
+  } catch (error) {
+    console.error(error);
+    // If JSON parsing fails, fall back to legacy parsing
+    console.log("Failed to parse as JSON, falling back to legacy parsing");
+  }
 
-  return `
-Here are instructions on how to use the other tools in this toolset to complete the task.
-Do NOT use this tool (${toolName}) again when executing the plan.
-
-<Purpose>
-  <Instruction>
-    You will be provided with a <Purpose>, a list of <Inputs>, and a <Plan>. Your goal is to use the <Plan> and <Inputs> to complete the <Purpose>.
-  </Instruction>
-  <Purpose>
-    ${purpose}
-  </Purpose>
-</Purpose>
-<Inputs>
-  <Instruction>
-    Ask me for each of these inputs before proceeding with the <Plan> below.
-    If there is existing context to fill them out then go with that and only ask me for what is missing.
-    Before executing the plan ask me to confirm all the provided details.
-  </Instruction>
-  ${inputsPortion.trim() || "No inputs needed"}
-</Inputs>
-<Plan>
-  ${stepsPortion.trim()}
-</Plan>`;
+  // Legacy parsing logic (kept for backward compatibility)
+  return parsePromptLegacy(prompt);
 };
 
-const parsePrompt = (
+// Keep this around until important "old" templates have been migrated
+const parsePromptLegacy = (
   prompt: string
 ): { purpose: string; inputs: Input[]; steps: Step[] } => {
   // Remove markdown backticks and xml tag if present

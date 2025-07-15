@@ -192,9 +192,9 @@ function ChatInner({
         description: pt.description ?? "",
         parameters: jsonSchema(JSON.parse(pt.arguments ?? "{}")),
         execute: async (args) => {
-          const res = await client.templates.render({
+          const res = await client.templates.renderByID({
             id: pt.id,
-            renderTemplateRequestBody: {
+            renderTemplateByIDRequestBody: {
               arguments: args,
             },
           });

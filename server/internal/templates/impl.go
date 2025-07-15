@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/cbroglie/mustache"
@@ -304,7 +306,7 @@ func (s *Service) ListTemplates(ctx context.Context, payload *gen.ListTemplatesP
 	return &gen.ListPromptTemplatesResult{Templates: pt}, nil
 }
 
-func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplatePayload) (*gen.RenderTemplateResult, error) {
+func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTemplateByIDPayload) (*gen.RenderTemplateResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -329,12 +331,21 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
 	}
 
+	prompt := pt.Prompt
+	renderedPrompt := prompt
+	if pt.Kind.Valid && pt.Kind.String == "higher_order_tool" {
+		renderedPrompt, err = s.RenderTemplateJSON(ctx, prompt)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+		}
+	}
+
 	var data string
 	switch pt.Engine.String {
 	case "":
 		data = pt.Prompt
 	case "mustache":
-		data, err = mustache.Render(pt.Prompt, payload.Arguments)
+		data, err = mustache.Render(renderedPrompt, payload.Arguments)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
 		}
@@ -343,4 +354,112 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 	}
 
 	return &gen.RenderTemplateResult{Prompt: data}, nil
+}
+
+func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplatePayload) (*gen.RenderTemplateResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(slog.String("project_id", projectID.String()))
+
+	prompt := payload.Prompt
+	renderedPrompt := prompt
+	if payload.Kind == "higher_order_tool" {
+		var err error
+		renderedPrompt, err = s.RenderTemplateJSON(ctx, prompt)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+		}
+	}
+
+	var data string
+	switch payload.Engine {
+	case "":
+		data = payload.Prompt
+	case "mustache":
+		var err error
+		data, err = mustache.Render(renderedPrompt, payload.Arguments)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+		}
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported template engine").Log(ctx, logger)
+	}
+
+	return &gen.RenderTemplateResult{Prompt: data}, nil
+}
+
+type CustomToolJSONV1 struct {
+	ToolName string  `json:"toolName"`
+	Purpose  string  `json:"purpose"`
+	Inputs   []Input `json:"inputs"`
+	Steps    []Step  `json:"steps"`
+}
+
+type Input struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type Step struct {
+	ID            string   `json:"id"`
+	Tool          string   `json:"tool"`
+	CanonicalTool string   `json:"canonicalTool"`
+	Instructions  string   `json:"instructions"`
+	Inputs        []string `json:"inputs"`
+}
+
+func (s *Service) RenderTemplateJSON(ctx context.Context, promptJSON string) (string, error) {
+	var prompt CustomToolJSONV1
+	if err := json.Unmarshal([]byte(promptJSON), &prompt); err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "failed to unmarshal prompt").Log(ctx, s.logger)
+	}
+
+	inputsPortion := ""
+	for _, input := range prompt.Inputs {
+		inputsPortion += fmt.Sprintf("  <Input name=\"%s\" description=\"%s\" />\n", input.Name, input.Description)
+	}
+	if inputsPortion == "" {
+		inputsPortion = "  No inputs needed\n"
+	}
+
+	stepsPortion := ""
+	for _, step := range prompt.Steps {
+		stepInputs := ""
+		for _, input := range step.Inputs {
+			stepInputs += fmt.Sprintf("    <Input name=\"%s\" />\n", input)
+		}
+
+		stepInstructions := fmt.Sprintf("  <Instruction>%s</Instruction>\n%s", step.Instructions, stepInputs)
+		if step.Tool == "" {
+			// When tool is empty, just show the instruction without CallTool wrapper
+			stepsPortion += stepInstructions
+		} else {
+			stepsPortion += fmt.Sprintf("  <CallTool tool_name=\"%s\">\n  %s  </CallTool>\n", step.Tool, stepInstructions)
+		}
+	}
+
+	renderedPrompt := fmt.Sprintf(`Here are instructions on how to use the other tools in this toolset to complete the task.
+Do NOT use this tool (%s) again when executing the plan.
+
+<Purpose>
+  <Instruction>
+    You will be provided with a <Purpose>, a list of <Inputs>, and a <Plan>. Your goal is to use the <Plan> and <Inputs> to complete the <Purpose>.
+  </Instruction>
+  <Purpose>
+    %s
+  </Purpose>
+</Purpose>
+<Inputs>
+  <Instruction>
+    Ask me for each of these inputs before proceeding with the <Plan> below.
+  </Instruction>
+%s</Inputs>
+<Plan>
+%s</Plan>`, prompt.ToolName, prompt.Purpose, inputsPortion, stepsPortion)
+
+	return renderedPrompt, nil
 }

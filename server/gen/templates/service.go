@@ -27,7 +27,9 @@ type Service interface {
 	ListTemplates(context.Context, *ListTemplatesPayload) (res *ListPromptTemplatesResult, err error)
 	// Delete prompt template by its ID or name.
 	DeleteTemplate(context.Context, *DeleteTemplatePayload) (err error)
-	// Render a prompt template given some input data.
+	// Render a prompt template by ID with provided input data.
+	RenderTemplateByID(context.Context, *RenderTemplateByIDPayload) (res *RenderTemplateResult, err error)
+	// Render a prompt template directly with all template fields provided.
 	RenderTemplate(context.Context, *RenderTemplatePayload) (res *RenderTemplateResult, err error)
 }
 
@@ -51,7 +53,7 @@ const ServiceName = "templates"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createTemplate", "updateTemplate", "getTemplate", "listTemplates", "deleteTemplate", "renderTemplate"}
+var MethodNames = [7]string{"createTemplate", "updateTemplate", "getTemplate", "listTemplates", "deleteTemplate", "renderTemplateByID", "renderTemplate"}
 
 // CreatePromptTemplateResult is the result type of the templates service
 // createTemplate method.
@@ -128,9 +130,9 @@ type ListTemplatesPayload struct {
 	ProjectSlugInput *string
 }
 
-// RenderTemplatePayload is the payload type of the templates service
-// renderTemplate method.
-type RenderTemplatePayload struct {
+// RenderTemplateByIDPayload is the payload type of the templates service
+// renderTemplateByID method.
+type RenderTemplateByIDPayload struct {
 	// The ID of the prompt template to render
 	ID string
 	// The input data to render the template with
@@ -140,8 +142,24 @@ type RenderTemplatePayload struct {
 	ProjectSlugInput *string
 }
 
-// RenderTemplateResult is the result type of the templates service
+// RenderTemplatePayload is the payload type of the templates service
 // renderTemplate method.
+type RenderTemplatePayload struct {
+	// The template content to render
+	Prompt string
+	// The input data to render the template with
+	Arguments map[string]any
+	// The template engine
+	Engine string
+	// The kind of prompt the template is used for
+	Kind             string
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// RenderTemplateResult is the result type of the templates service
+// renderTemplateByID method.
 type RenderTemplateResult struct {
 	// The rendered prompt
 	Prompt string

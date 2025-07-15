@@ -7,6 +7,7 @@ import { templatesDelete } from "../funcs/templatesDelete.js";
 import { templatesGet } from "../funcs/templatesGet.js";
 import { templatesList } from "../funcs/templatesList.js";
 import { templatesRender } from "../funcs/templatesRender.js";
+import { templatesRenderByID } from "../funcs/templatesRenderByID.js";
 import { templatesUpdate } from "../funcs/templatesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -91,10 +92,29 @@ export class Templates extends ClientSDK {
   }
 
   /**
+   * renderTemplateByID templates
+   *
+   * @remarks
+   * Render a prompt template by ID with provided input data.
+   */
+  async renderByID(
+    request: operations.RenderTemplateByIDRequest,
+    security?: operations.RenderTemplateByIDSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RenderTemplateResult> {
+    return unwrapAsync(templatesRenderByID(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * renderTemplate templates
    *
    * @remarks
-   * Render a prompt template given some input data.
+   * Render a prompt template directly with all template fields provided.
    */
   async render(
     request: operations.RenderTemplateRequest,

@@ -25,7 +25,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 	{
 		err = json.Unmarshal([]byte(templatesCreateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Doloribus quis dolore eos.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"f5w\",\n      \"prompt\": \"Reprehenderit incidunt in iure ipsam voluptates.\",\n      \"tools_hint\": [\n         \"Repellendus velit dicta ex possimus quaerat.\",\n         \"Tenetur deserunt libero.\",\n         \"Odit blanditiis.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Culpa fugit dicta eaque.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"8er\",\n      \"prompt\": \"Minima voluptates qui magnam ullam consequatur et.\",\n      \"tools_hint\": [\n         \"Hic eveniet in iure qui molestiae.\",\n         \"Facilis occaecati asperiores est.\",\n         \"Nesciunt tempora officia.\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 40 {
@@ -94,7 +94,7 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 	{
 		err = json.Unmarshal([]byte(templatesUpdateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Sunt mollitia.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Deserunt debitis qui eaque quia excepturi.\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"Qui vel adipisci et iusto iusto quam.\",\n      \"tools_hint\": [\n         \"Velit voluptates unde officiis.\",\n         \"Perferendis ut a suscipit.\",\n         \"Magni cumque dolores non.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Ut tempora.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Quas tenetur sapiente eum ut perferendis nihil.\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"Inventore occaecati blanditiis eaque in expedita autem.\",\n      \"tools_hint\": [\n         \"Illo rerum voluptatum.\",\n         \"Aliquid ad.\",\n         \"Ad voluptatibus consequatur reiciendis voluptatum eveniet.\"\n      ]\n   }'")
 		}
 		if body.Arguments != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
@@ -270,15 +270,15 @@ func BuildDeleteTemplatePayload(templatesDeleteTemplateID string, templatesDelet
 	return v, nil
 }
 
-// BuildRenderTemplatePayload builds the payload for the templates
-// renderTemplate endpoint from CLI flags.
-func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRenderTemplateID string, templatesRenderTemplateApikeyToken string, templatesRenderTemplateSessionToken string, templatesRenderTemplateProjectSlugInput string) (*templates.RenderTemplatePayload, error) {
+// BuildRenderTemplateByIDPayload builds the payload for the templates
+// renderTemplateByID endpoint from CLI flags.
+func BuildRenderTemplateByIDPayload(templatesRenderTemplateByIDBody string, templatesRenderTemplateByIDID string, templatesRenderTemplateByIDApikeyToken string, templatesRenderTemplateByIDSessionToken string, templatesRenderTemplateByIDProjectSlugInput string) (*templates.RenderTemplateByIDPayload, error) {
 	var err error
-	var body RenderTemplateRequestBody
+	var body RenderTemplateByIDRequestBody
 	{
-		err = json.Unmarshal([]byte(templatesRenderTemplateBody), &body)
+		err = json.Unmarshal([]byte(templatesRenderTemplateByIDBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Est dolorem.\": \"Dignissimos et occaecati atque rerum.\",\n         \"Pariatur et libero hic et libero necessitatibus.\": \"Dolorem itaque fugiat nihil deserunt magni.\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Dicta fuga optio perferendis inventore corporis et.\": \"Porro doloribus.\"\n      }\n   }'")
 		}
 		if body.Arguments == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))
@@ -289,7 +289,65 @@ func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRen
 	}
 	var id string
 	{
-		id = templatesRenderTemplateID
+		id = templatesRenderTemplateByIDID
+	}
+	var apikeyToken *string
+	{
+		if templatesRenderTemplateByIDApikeyToken != "" {
+			apikeyToken = &templatesRenderTemplateByIDApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if templatesRenderTemplateByIDSessionToken != "" {
+			sessionToken = &templatesRenderTemplateByIDSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if templatesRenderTemplateByIDProjectSlugInput != "" {
+			projectSlugInput = &templatesRenderTemplateByIDProjectSlugInput
+		}
+	}
+	v := &templates.RenderTemplateByIDPayload{}
+	if body.Arguments != nil {
+		v.Arguments = make(map[string]any, len(body.Arguments))
+		for key, val := range body.Arguments {
+			tk := key
+			tv := val
+			v.Arguments[tk] = tv
+		}
+	}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRenderTemplatePayload builds the payload for the templates
+// renderTemplate endpoint from CLI flags.
+func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRenderTemplateApikeyToken string, templatesRenderTemplateSessionToken string, templatesRenderTemplateProjectSlugInput string) (*templates.RenderTemplatePayload, error) {
+	var err error
+	var body RenderTemplateRequestBody
+	{
+		err = json.Unmarshal([]byte(templatesRenderTemplateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Et et consequatur similique non enim.\": \"Est sit.\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"Sit laboriosam.\"\n   }'")
+		}
+		if body.Arguments == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))
+		}
+		if !(body.Engine == "mustache") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.engine", body.Engine, []any{"mustache"}))
+		}
+		if !(body.Kind == "prompt" || body.Kind == "higher_order_tool") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"prompt", "higher_order_tool"}))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	var apikeyToken *string
 	{
@@ -309,7 +367,11 @@ func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRen
 			projectSlugInput = &templatesRenderTemplateProjectSlugInput
 		}
 	}
-	v := &templates.RenderTemplatePayload{}
+	v := &templates.RenderTemplatePayload{
+		Prompt: body.Prompt,
+		Engine: body.Engine,
+		Kind:   body.Kind,
+	}
 	if body.Arguments != nil {
 		v.Arguments = make(map[string]any, len(body.Arguments))
 		for key, val := range body.Arguments {
@@ -318,7 +380,6 @@ func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRen
 			v.Arguments[tk] = tv
 		}
 	}
-	v.ID = id
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

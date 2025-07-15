@@ -45,6 +45,7 @@ export * from "./redeployDeployment.js";
 export * from "./register.js";
 export * from "./registerDomain.js";
 export * from "./renderTemplate.js";
+export * from "./renderTemplateByID.js";
 export * from "./revokeAPIKey.js";
 export * from "./serveImage.js";
 export * from "./serveOpenAPIv3.js";

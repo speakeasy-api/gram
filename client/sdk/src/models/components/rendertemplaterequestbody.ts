@@ -4,15 +4,97 @@
 
 import * as z from "zod";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * The template engine
+ */
+export const RenderTemplateRequestBodyEngine = {
+  Mustache: "mustache",
+} as const;
+/**
+ * The template engine
+ */
+export type RenderTemplateRequestBodyEngine = ClosedEnum<
+  typeof RenderTemplateRequestBodyEngine
+>;
+
+/**
+ * The kind of prompt the template is used for
+ */
+export const RenderTemplateRequestBodyKind = {
+  Prompt: "prompt",
+  HigherOrderTool: "higher_order_tool",
+} as const;
+/**
+ * The kind of prompt the template is used for
+ */
+export type RenderTemplateRequestBodyKind = ClosedEnum<
+  typeof RenderTemplateRequestBodyKind
+>;
 
 export type RenderTemplateRequestBody = {
   /**
    * The input data to render the template with
    */
   arguments: { [k: string]: any };
+  /**
+   * The template engine
+   */
+  engine: RenderTemplateRequestBodyEngine;
+  /**
+   * The kind of prompt the template is used for
+   */
+  kind: RenderTemplateRequestBodyKind;
+  /**
+   * The template content to render
+   */
+  prompt: string;
 };
+
+/** @internal */
+export const RenderTemplateRequestBodyEngine$inboundSchema: z.ZodNativeEnum<
+  typeof RenderTemplateRequestBodyEngine
+> = z.nativeEnum(RenderTemplateRequestBodyEngine);
+
+/** @internal */
+export const RenderTemplateRequestBodyEngine$outboundSchema: z.ZodNativeEnum<
+  typeof RenderTemplateRequestBodyEngine
+> = RenderTemplateRequestBodyEngine$inboundSchema;
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RenderTemplateRequestBodyEngine$ {
+  /** @deprecated use `RenderTemplateRequestBodyEngine$inboundSchema` instead. */
+  export const inboundSchema = RenderTemplateRequestBodyEngine$inboundSchema;
+  /** @deprecated use `RenderTemplateRequestBodyEngine$outboundSchema` instead. */
+  export const outboundSchema = RenderTemplateRequestBodyEngine$outboundSchema;
+}
+
+/** @internal */
+export const RenderTemplateRequestBodyKind$inboundSchema: z.ZodNativeEnum<
+  typeof RenderTemplateRequestBodyKind
+> = z.nativeEnum(RenderTemplateRequestBodyKind);
+
+/** @internal */
+export const RenderTemplateRequestBodyKind$outboundSchema: z.ZodNativeEnum<
+  typeof RenderTemplateRequestBodyKind
+> = RenderTemplateRequestBodyKind$inboundSchema;
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace RenderTemplateRequestBodyKind$ {
+  /** @deprecated use `RenderTemplateRequestBodyKind$inboundSchema` instead. */
+  export const inboundSchema = RenderTemplateRequestBodyKind$inboundSchema;
+  /** @deprecated use `RenderTemplateRequestBodyKind$outboundSchema` instead. */
+  export const outboundSchema = RenderTemplateRequestBodyKind$outboundSchema;
+}
 
 /** @internal */
 export const RenderTemplateRequestBody$inboundSchema: z.ZodType<
@@ -21,11 +103,17 @@ export const RenderTemplateRequestBody$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   arguments: z.record(z.any()),
+  engine: RenderTemplateRequestBodyEngine$inboundSchema,
+  kind: RenderTemplateRequestBodyKind$inboundSchema,
+  prompt: z.string(),
 });
 
 /** @internal */
 export type RenderTemplateRequestBody$Outbound = {
   arguments: { [k: string]: any };
+  engine: string;
+  kind: string;
+  prompt: string;
 };
 
 /** @internal */
@@ -35,6 +123,9 @@ export const RenderTemplateRequestBody$outboundSchema: z.ZodType<
   RenderTemplateRequestBody
 > = z.object({
   arguments: z.record(z.any()),
+  engine: RenderTemplateRequestBodyEngine$outboundSchema,
+  kind: RenderTemplateRequestBodyKind$outboundSchema,
+  prompt: z.string(),
 });
 
 /**

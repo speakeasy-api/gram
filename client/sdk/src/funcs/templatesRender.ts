@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * renderTemplate templates
  *
  * @remarks
- * Render a prompt template given some input data.
+ * Render a prompt template directly with all template fields provided.
  */
 export function templatesRender(
   client: GramCore,
@@ -94,11 +94,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/templates.render")();
-
-  const query = encodeFormQuery({
-    "id": payload.id,
-  });
+  const path = pathToFunc("/rpc/templates.render-direct")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -177,7 +173,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

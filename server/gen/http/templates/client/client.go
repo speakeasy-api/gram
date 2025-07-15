@@ -37,6 +37,10 @@ type Client struct {
 	// deleteTemplate endpoint.
 	DeleteTemplateDoer goahttp.Doer
 
+	// RenderTemplateByID Doer is the HTTP client used to make requests to the
+	// renderTemplateByID endpoint.
+	RenderTemplateByIDDoer goahttp.Doer
+
 	// RenderTemplate Doer is the HTTP client used to make requests to the
 	// renderTemplate endpoint.
 	RenderTemplateDoer goahttp.Doer
@@ -61,17 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateTemplateDoer:  doer,
-		UpdateTemplateDoer:  doer,
-		GetTemplateDoer:     doer,
-		ListTemplatesDoer:   doer,
-		DeleteTemplateDoer:  doer,
-		RenderTemplateDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateTemplateDoer:     doer,
+		UpdateTemplateDoer:     doer,
+		GetTemplateDoer:        doer,
+		ListTemplatesDoer:      doer,
+		DeleteTemplateDoer:     doer,
+		RenderTemplateByIDDoer: doer,
+		RenderTemplateDoer:     doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -190,6 +195,30 @@ func (c *Client) DeleteTemplate() goa.Endpoint {
 		resp, err := c.DeleteTemplateDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("templates", "deleteTemplate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RenderTemplateByID returns an endpoint that makes HTTP requests to the
+// templates service renderTemplateByID server.
+func (c *Client) RenderTemplateByID() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRenderTemplateByIDRequest(c.encoder)
+		decodeResponse = DecodeRenderTemplateByIDResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRenderTemplateByIDRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RenderTemplateByIDDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("templates", "renderTemplateByID", err)
 		}
 		return decodeResponse(resp)
 	}

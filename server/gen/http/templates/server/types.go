@@ -53,11 +53,24 @@ type UpdateTemplateRequestBody struct {
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
 }
 
+// RenderTemplateByIDRequestBody is the type of the "templates" service
+// "renderTemplateByID" endpoint HTTP request body.
+type RenderTemplateByIDRequestBody struct {
+	// The input data to render the template with
+	Arguments map[string]any `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+}
+
 // RenderTemplateRequestBody is the type of the "templates" service
 // "renderTemplate" endpoint HTTP request body.
 type RenderTemplateRequestBody struct {
+	// The template content to render
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// The input data to render the template with
 	Arguments map[string]any `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	// The template engine
+	Engine *string `form:"engine,omitempty" json:"engine,omitempty" xml:"engine,omitempty"`
+	// The kind of prompt the template is used for
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 }
 
 // CreateTemplateResponseBody is the type of the "templates" service
@@ -86,6 +99,13 @@ type GetTemplateResponseBody struct {
 type ListTemplatesResponseBody struct {
 	// The created prompt template
 	Templates []*PromptTemplateResponseBody `form:"templates" json:"templates" xml:"templates"`
+}
+
+// RenderTemplateByIDResponseBody is the type of the "templates" service
+// "renderTemplateByID" endpoint HTTP response body.
+type RenderTemplateByIDResponseBody struct {
+	// The rendered prompt
+	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
 }
 
 // RenderTemplateResponseBody is the type of the "templates" service
@@ -1011,6 +1031,195 @@ type DeleteTemplateGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RenderTemplateByIDUnauthorizedResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the
+// "unauthorized" error.
+type RenderTemplateByIDUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDForbiddenResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the "forbidden"
+// error.
+type RenderTemplateByIDForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDBadRequestResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the
+// "bad_request" error.
+type RenderTemplateByIDBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDNotFoundResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the "not_found"
+// error.
+type RenderTemplateByIDNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDConflictResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the "conflict"
+// error.
+type RenderTemplateByIDConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDUnsupportedMediaResponseBody is the type of the
+// "templates" service "renderTemplateByID" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RenderTemplateByIDUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDInvalidResponseBody is the type of the "templates" service
+// "renderTemplateByID" endpoint HTTP response body for the "invalid" error.
+type RenderTemplateByIDInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDInvariantViolationResponseBody is the type of the
+// "templates" service "renderTemplateByID" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RenderTemplateByIDInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDUnexpectedResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the
+// "unexpected" error.
+type RenderTemplateByIDUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateByIDGatewayErrorResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the
+// "gateway_error" error.
+type RenderTemplateByIDGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RenderTemplateUnauthorizedResponseBody is the type of the "templates"
 // service "renderTemplate" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1264,6 +1473,15 @@ func NewListTemplatesResponseBody(res *templates.ListPromptTemplatesResult) *Lis
 		}
 	} else {
 		body.Templates = []*PromptTemplateResponseBody{}
+	}
+	return body
+}
+
+// NewRenderTemplateByIDResponseBody builds the HTTP response body from the
+// result of the "renderTemplateByID" endpoint of the "templates" service.
+func NewRenderTemplateByIDResponseBody(res *templates.RenderTemplateResult) *RenderTemplateByIDResponseBody {
+	body := &RenderTemplateByIDResponseBody{
+		Prompt: res.Prompt,
 	}
 	return body
 }
@@ -1980,6 +2198,153 @@ func NewDeleteTemplateGatewayErrorResponseBody(res *goa.ServiceError) *DeleteTem
 	return body
 }
 
+// NewRenderTemplateByIDUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDUnauthorizedResponseBody(res *goa.ServiceError) *RenderTemplateByIDUnauthorizedResponseBody {
+	body := &RenderTemplateByIDUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDForbiddenResponseBody builds the HTTP response body
+// from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDForbiddenResponseBody(res *goa.ServiceError) *RenderTemplateByIDForbiddenResponseBody {
+	body := &RenderTemplateByIDForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDBadRequestResponseBody builds the HTTP response body
+// from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDBadRequestResponseBody(res *goa.ServiceError) *RenderTemplateByIDBadRequestResponseBody {
+	body := &RenderTemplateByIDBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDNotFoundResponseBody builds the HTTP response body from
+// the result of the "renderTemplateByID" endpoint of the "templates" service.
+func NewRenderTemplateByIDNotFoundResponseBody(res *goa.ServiceError) *RenderTemplateByIDNotFoundResponseBody {
+	body := &RenderTemplateByIDNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDConflictResponseBody builds the HTTP response body from
+// the result of the "renderTemplateByID" endpoint of the "templates" service.
+func NewRenderTemplateByIDConflictResponseBody(res *goa.ServiceError) *RenderTemplateByIDConflictResponseBody {
+	body := &RenderTemplateByIDConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDUnsupportedMediaResponseBody(res *goa.ServiceError) *RenderTemplateByIDUnsupportedMediaResponseBody {
+	body := &RenderTemplateByIDUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDInvalidResponseBody builds the HTTP response body from
+// the result of the "renderTemplateByID" endpoint of the "templates" service.
+func NewRenderTemplateByIDInvalidResponseBody(res *goa.ServiceError) *RenderTemplateByIDInvalidResponseBody {
+	body := &RenderTemplateByIDInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDInvariantViolationResponseBody(res *goa.ServiceError) *RenderTemplateByIDInvariantViolationResponseBody {
+	body := &RenderTemplateByIDInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDUnexpectedResponseBody builds the HTTP response body
+// from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDUnexpectedResponseBody(res *goa.ServiceError) *RenderTemplateByIDUnexpectedResponseBody {
+	body := &RenderTemplateByIDUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateByIDGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDGatewayErrorResponseBody(res *goa.ServiceError) *RenderTemplateByIDGatewayErrorResponseBody {
+	body := &RenderTemplateByIDGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRenderTemplateUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "renderTemplate" endpoint of the "templates" service.
 func NewRenderTemplateUnauthorizedResponseBody(res *goa.ServiceError) *RenderTemplateUnauthorizedResponseBody {
@@ -2206,10 +2571,10 @@ func NewDeleteTemplatePayload(id *string, name *string, apikeyToken *string, ses
 	return v
 }
 
-// NewRenderTemplatePayload builds a templates service renderTemplate endpoint
-// payload.
-func NewRenderTemplatePayload(body *RenderTemplateRequestBody, id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *templates.RenderTemplatePayload {
-	v := &templates.RenderTemplatePayload{}
+// NewRenderTemplateByIDPayload builds a templates service renderTemplateByID
+// endpoint payload.
+func NewRenderTemplateByIDPayload(body *RenderTemplateByIDRequestBody, id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *templates.RenderTemplateByIDPayload {
+	v := &templates.RenderTemplateByIDPayload{}
 	v.Arguments = make(map[string]any, len(body.Arguments))
 	for key, val := range body.Arguments {
 		tk := key
@@ -2217,6 +2582,27 @@ func NewRenderTemplatePayload(body *RenderTemplateRequestBody, id string, apikey
 		v.Arguments[tk] = tv
 	}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRenderTemplatePayload builds a templates service renderTemplate endpoint
+// payload.
+func NewRenderTemplatePayload(body *RenderTemplateRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *templates.RenderTemplatePayload {
+	v := &templates.RenderTemplatePayload{
+		Prompt: *body.Prompt,
+		Engine: *body.Engine,
+		Kind:   *body.Kind,
+	}
+	v.Arguments = make(map[string]any, len(body.Arguments))
+	for key, val := range body.Arguments {
+		tk := key
+		tv := val
+		v.Arguments[tk] = tv
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2291,11 +2677,39 @@ func ValidateUpdateTemplateRequestBody(body *UpdateTemplateRequestBody) (err err
 	return
 }
 
+// ValidateRenderTemplateByIDRequestBody runs the validations defined on
+// RenderTemplateByIDRequestBody
+func ValidateRenderTemplateByIDRequestBody(body *RenderTemplateByIDRequestBody) (err error) {
+	if body.Arguments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))
+	}
+	return
+}
+
 // ValidateRenderTemplateRequestBody runs the validations defined on
 // RenderTemplateRequestBody
 func ValidateRenderTemplateRequestBody(body *RenderTemplateRequestBody) (err error) {
+	if body.Prompt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
+	}
 	if body.Arguments == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))
+	}
+	if body.Engine == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("engine", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Engine != nil {
+		if !(*body.Engine == "mustache") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.engine", *body.Engine, []any{"mustache"}))
+		}
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "prompt" || *body.Kind == "higher_order_tool") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt", "higher_order_tool"}))
+		}
 	}
 	return
 }

@@ -212,6 +212,7 @@ run();
 * [delete](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 * [get](docs/sdks/templates/README.md#get) - getTemplate templates
 * [list](docs/sdks/templates/README.md#list) - listTemplates templates
+* [renderByID](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 * [render](docs/sdks/templates/README.md#render) - renderTemplate templates
 * [update](docs/sdks/templates/README.md#update) - updateTemplate templates
 
@@ -301,6 +302,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`templatesGet`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`templatesList`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`templatesRender`](docs/sdks/templates/README.md#render) - renderTemplate templates
+- [`templatesRenderByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`templatesUpdate`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`toolsetsCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
@@ -378,6 +380,7 @@ To learn about this feature and how to get started, check
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
+- [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
@@ -517,7 +520,7 @@ run();
 ### Error Classes
 **Primary errors:**
 * [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access.
+  * [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
 
 <details><summary>Less common errors (6)</summary>
 

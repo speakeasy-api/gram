@@ -25,14 +25,8 @@ export class APIError extends GramError {
       }`;
     }
     const body = httpMeta.body || `""`;
-    message += body.length > 100 ? "\n" : ". ";
-    let bodyDisplay = body;
-    if (body.length > 10000) {
-      const truncated = body.substring(0, 10000);
-      const remaining = body.length - 10000;
-      bodyDisplay = `${truncated}...and ${remaining} more chars`;
-    }
-    message += `Body: ${bodyDisplay}`;
+    message += body.length > 100 ? "\n" : " ";
+    message += `Body ${body}`;
     message = message.trim();
     super(message, httpMeta);
     this.name = "APIError";

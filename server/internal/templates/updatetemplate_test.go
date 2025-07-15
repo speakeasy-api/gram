@@ -37,7 +37,7 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 		Prompt:           conv.Ptr("Updated prompt {{name}}!"),
 		Description:      conv.Ptr("Updated description"),
 		Engine:           conv.Ptr("mustache"),
-		Kind:             conv.Ptr("higher_order_tool"),
+		Kind:             conv.Ptr("prompt"),
 		ToolsHint:        []string{"user", "assistant"},
 		Arguments:        conv.Ptr(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
 		ApikeyToken:      nil,
@@ -52,14 +52,14 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	require.Equal(t, "Updated prompt {{name}}!", result.Template.Prompt, "template prompt mismatch")
 	require.Equal(t, "Updated description", *result.Template.Description, "template description mismatch")
 	require.Equal(t, "mustache", result.Template.Engine, "template engine should remain unchanged when updating to empty")
-	require.Equal(t, "higher_order_tool", result.Template.Kind, "template kind mismatch")
+	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"user", "assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
 	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, *result.Template.Arguments, "template arguments mismatch")
 	require.Equal(t, created.Template.CreatedAt, result.Template.CreatedAt, "created at should not change")
 	// Note: UpdatedAt may or may not change depending on whether the update actually creates a new version
 
 	// Render the updated template to ensure the update version is used by the server
-	rendered, err := ti.service.RenderTemplate(ctx, &gen.RenderTemplatePayload{
+	rendered, err := ti.service.RenderTemplateByID(ctx, &gen.RenderTemplateByIDPayload{
 		ID: result.Template.ID,
 		Arguments: map[string]any{
 			"name": "TestUser",

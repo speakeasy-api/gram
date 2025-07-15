@@ -12,7 +12,7 @@ export type RedeployRequestBody = {
   /**
    * The ID of the deployment to redeploy.
    */
-  deploymentId?: string | undefined;
+  deploymentId: string;
 };
 
 /** @internal */
@@ -21,7 +21,7 @@ export const RedeployRequestBody$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  deployment_id: z.string().optional(),
+  deployment_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "deployment_id": "deploymentId",
@@ -30,7 +30,7 @@ export const RedeployRequestBody$inboundSchema: z.ZodType<
 
 /** @internal */
 export type RedeployRequestBody$Outbound = {
-  deployment_id?: string | undefined;
+  deployment_id: string;
 };
 
 /** @internal */
@@ -39,7 +39,7 @@ export const RedeployRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   RedeployRequestBody
 > = z.object({
-  deploymentId: z.string().optional(),
+  deploymentId: z.string(),
 }).transform((v) => {
   return remap$(v, {
     deploymentId: "deployment_id",

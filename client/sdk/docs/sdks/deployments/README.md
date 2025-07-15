@@ -604,7 +604,9 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.deployments.redeployDeployment({
-    redeployRequestBody: {},
+    redeployRequestBody: {
+      deploymentId: "<id>",
+    },
   });
 
   console.log(result);
@@ -627,7 +629,9 @@ const gram = new GramCore();
 
 async function run() {
   const res = await deploymentsRedeployDeployment(gram, {
-    redeployRequestBody: {},
+    redeployRequestBody: {
+      deploymentId: "<id>",
+    },
   });
   if (res.ok) {
     const { value: result } = res;

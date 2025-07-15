@@ -150,8 +150,8 @@ var _ = Service("templates", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteTemplate"}`)
 	})
 
-	Method("renderTemplate", func() {
-		Description("Render a prompt template given some input data.")
+	Method("renderTemplateByID", func() {
+		Description("Render a prompt template by ID with provided input data.")
 
 		// This allows us to accept multiple key scopes for a particular method
 		// One downside of this is it does duplicate the same security scheme into the openapi spec
@@ -177,6 +177,51 @@ var _ = Service("templates", func() {
 		HTTP(func() {
 			POST("/rpc/templates.render")
 			Param("id")
+
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "renderTemplateByID")
+		Meta("openapi:extension:x-speakeasy-name-override", "renderByID")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RenderTemplateByID", "type": "query"}`)
+	})
+
+	Method("renderTemplate", func() {
+		Description("Render a prompt template directly with all template fields provided.")
+
+		// This allows us to accept multiple key scopes for a particular method
+		// One downside of this is it does duplicate the same security scheme into the openapi spec
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+
+		Payload(func() {
+			Required("prompt", "arguments", "engine", "kind")
+			Attribute("prompt", String, "The template content to render")
+			Attribute("arguments", MapOf(String, Any), "The input data to render the template with")
+			Attribute("engine", String, func() {
+				Description("The template engine")
+				Enum("mustache")
+			})
+			Attribute("kind", String, func() {
+				Description("The kind of prompt the template is used for")
+				Enum("prompt", "higher_order_tool")
+			})
+
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(RenderTemplateResult)
+
+		HTTP(func() {
+			POST("/rpc/templates.render-direct")
 
 			security.ByKeyHeader()
 			security.SessionHeader()

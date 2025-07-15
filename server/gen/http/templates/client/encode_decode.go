@@ -1220,6 +1220,252 @@ func DecodeDeleteTemplateResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildRenderTemplateByIDRequest instantiates a HTTP request object with
+// method and path set to call the "templates" service "renderTemplateByID"
+// endpoint
+func (c *Client) BuildRenderTemplateByIDRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RenderTemplateByIDTemplatesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("templates", "renderTemplateByID", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRenderTemplateByIDRequest returns an encoder for requests sent to the
+// templates renderTemplateByID server.
+func EncodeRenderTemplateByIDRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*templates.RenderTemplateByIDPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("templates", "renderTemplateByID", "*templates.RenderTemplateByIDPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		body := NewRenderTemplateByIDRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("templates", "renderTemplateByID", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRenderTemplateByIDResponse returns a decoder for responses returned by
+// the templates renderTemplateByID endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRenderTemplateByIDResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRenderTemplateByIDResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RenderTemplateByIDResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			res := NewRenderTemplateByIDRenderTemplateResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RenderTemplateByIDUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RenderTemplateByIDForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RenderTemplateByIDBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RenderTemplateByIDNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RenderTemplateByIDConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RenderTemplateByIDUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RenderTemplateByIDInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RenderTemplateByIDInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+				}
+				err = ValidateRenderTemplateByIDInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+				}
+				return nil, NewRenderTemplateByIDInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RenderTemplateByIDUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+				}
+				err = ValidateRenderTemplateByIDUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+				}
+				return nil, NewRenderTemplateByIDUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("templates", "renderTemplateByID", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RenderTemplateByIDGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
+			}
+			err = ValidateRenderTemplateByIDGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("templates", "renderTemplateByID", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRenderTemplateRequest instantiates a HTTP request object with method
 // and path set to call the "templates" service "renderTemplate" endpoint
 func (c *Client) BuildRenderTemplateRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1255,9 +1501,6 @@ func EncodeRenderTemplateRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		values := req.URL.Query()
-		values.Add("id", p.ID)
-		req.URL.RawQuery = values.Encode()
 		body := NewRenderTemplateRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("templates", "renderTemplate", err)

@@ -32,7 +32,7 @@ export type RenderTemplateQueryData = components.RenderTemplateResult;
  * renderTemplate templates
  *
  * @remarks
- * Render a prompt template given some input data.
+ * Render a prompt template directly with all template fields provided.
  */
 export function useRenderTemplate(
   request: operations.RenderTemplateRequest,
@@ -55,7 +55,7 @@ export function useRenderTemplate(
  * renderTemplate templates
  *
  * @remarks
- * Render a prompt template given some input data.
+ * Render a prompt template directly with all template fields provided.
  */
 export function useRenderTemplateSuspense(
   request: operations.RenderTemplateRequest,
@@ -93,7 +93,6 @@ export function setRenderTemplateData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      id: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -110,7 +109,6 @@ export function invalidateRenderTemplate(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      id: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -145,7 +143,6 @@ export function buildRenderTemplateQuery(
 } {
   return {
     queryKey: queryKeyRenderTemplate({
-      id: request.id,
       gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
@@ -171,7 +168,6 @@ export function buildRenderTemplateQuery(
 
 export function queryKeyRenderTemplate(
   parameters: {
-    id: string;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

@@ -16,12 +16,13 @@ import (
 
 // Endpoints wraps the "templates" service endpoints.
 type Endpoints struct {
-	CreateTemplate goa.Endpoint
-	UpdateTemplate goa.Endpoint
-	GetTemplate    goa.Endpoint
-	ListTemplates  goa.Endpoint
-	DeleteTemplate goa.Endpoint
-	RenderTemplate goa.Endpoint
+	CreateTemplate     goa.Endpoint
+	UpdateTemplate     goa.Endpoint
+	GetTemplate        goa.Endpoint
+	ListTemplates      goa.Endpoint
+	DeleteTemplate     goa.Endpoint
+	RenderTemplateByID goa.Endpoint
+	RenderTemplate     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "templates" service with endpoints.
@@ -29,12 +30,13 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateTemplate: NewCreateTemplateEndpoint(s, a.APIKeyAuth),
-		UpdateTemplate: NewUpdateTemplateEndpoint(s, a.APIKeyAuth),
-		GetTemplate:    NewGetTemplateEndpoint(s, a.APIKeyAuth),
-		ListTemplates:  NewListTemplatesEndpoint(s, a.APIKeyAuth),
-		DeleteTemplate: NewDeleteTemplateEndpoint(s, a.APIKeyAuth),
-		RenderTemplate: NewRenderTemplateEndpoint(s, a.APIKeyAuth),
+		CreateTemplate:     NewCreateTemplateEndpoint(s, a.APIKeyAuth),
+		UpdateTemplate:     NewUpdateTemplateEndpoint(s, a.APIKeyAuth),
+		GetTemplate:        NewGetTemplateEndpoint(s, a.APIKeyAuth),
+		ListTemplates:      NewListTemplatesEndpoint(s, a.APIKeyAuth),
+		DeleteTemplate:     NewDeleteTemplateEndpoint(s, a.APIKeyAuth),
+		RenderTemplateByID: NewRenderTemplateByIDEndpoint(s, a.APIKeyAuth),
+		RenderTemplate:     NewRenderTemplateEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -45,6 +47,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetTemplate = m(e.GetTemplate)
 	e.ListTemplates = m(e.ListTemplates)
 	e.DeleteTemplate = m(e.DeleteTemplate)
+	e.RenderTemplateByID = m(e.RenderTemplateByID)
 	e.RenderTemplate = m(e.RenderTemplate)
 }
 
@@ -364,6 +367,89 @@ func NewDeleteTemplateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return nil, s.DeleteTemplate(ctx, p)
+	}
+}
+
+// NewRenderTemplateByIDEndpoint returns an endpoint function that calls the
+// method "renderTemplateByID" of service "templates".
+func NewRenderTemplateByIDEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RenderTemplateByIDPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer"},
+				RequiredScopes: []string{"consumer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"consumer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RenderTemplateByID(ctx, p)
 	}
 }
 

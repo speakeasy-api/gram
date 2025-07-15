@@ -5,13 +5,7 @@
 ```typescript
 import { SlackCallbackResponse } from "@gram/client/models/operations";
 
-let value: SlackCallbackResponse = {
-  headers: {
-    "key": [
-      "<value 1>",
-    ],
-  },
-};
+let value: SlackCallbackResponse = {};
 ```
 
 ## Fields

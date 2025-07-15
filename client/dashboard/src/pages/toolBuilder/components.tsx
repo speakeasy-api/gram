@@ -29,12 +29,27 @@ export type Input = {
 
 export type Step = {
   id: string;
-  tool: string;
-  canonicalTool: string;
+  tool?: string;
+  canonicalTool?: string;
   instructions: string;
   inputs?: string[];
   update: (step: Step) => void;
 };
+
+// Type for steps without the update function (used for JSON serialization)
+export type SerializableStep = Omit<Step, 'update'>;
+
+// Needs to stay aligned with server/internal/templates/impl.go:CustomToolJSONV1
+export type HigherOrderTool = {
+  toolName: string;
+  purpose: string;
+  inputs: Input[];
+  steps: SerializableStep[];
+};
+
+export function toJSON(tool: HigherOrderTool): string {
+  return JSON.stringify(tool, null, 2);
+}
 
 export const blockBackground = "bg-stone-100 dark:bg-stone-900";
 export const Block = ({
@@ -167,7 +182,7 @@ export const StepCard = ({
       tools={tools}
       onSelect={(tool) => {
         setOpen(false);
-        step.update({ ...step, tool: tool.name });
+        step.update?.({ ...step, tool: tool.name });
       }}
     >
       <Badge
@@ -204,7 +219,7 @@ export const StepCard = ({
             value={step.instructions}
             lines={3}
             onSubmit={(instructions) => {
-              step.update({ ...step, instructions });
+              step.update?.({ ...step, instructions });
             }}
           >
             <Type

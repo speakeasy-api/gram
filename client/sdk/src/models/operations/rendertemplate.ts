@@ -32,10 +32,6 @@ export type RenderTemplateSecurity = {
 
 export type RenderTemplateRequest = {
   /**
-   * The ID of the prompt template to render
-   */
-  id: string;
-  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -338,7 +334,6 @@ export const RenderTemplateRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  id: z.string(),
   "Gram-Key": z.string().optional(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
@@ -354,7 +349,6 @@ export const RenderTemplateRequest$inboundSchema: z.ZodType<
 
 /** @internal */
 export type RenderTemplateRequest$Outbound = {
-  id: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -367,7 +361,6 @@ export const RenderTemplateRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   RenderTemplateRequest
 > = z.object({
-  id: z.string(),
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),

@@ -15,23 +15,25 @@ import (
 
 // Client is the "templates" service client.
 type Client struct {
-	CreateTemplateEndpoint goa.Endpoint
-	UpdateTemplateEndpoint goa.Endpoint
-	GetTemplateEndpoint    goa.Endpoint
-	ListTemplatesEndpoint  goa.Endpoint
-	DeleteTemplateEndpoint goa.Endpoint
-	RenderTemplateEndpoint goa.Endpoint
+	CreateTemplateEndpoint     goa.Endpoint
+	UpdateTemplateEndpoint     goa.Endpoint
+	GetTemplateEndpoint        goa.Endpoint
+	ListTemplatesEndpoint      goa.Endpoint
+	DeleteTemplateEndpoint     goa.Endpoint
+	RenderTemplateByIDEndpoint goa.Endpoint
+	RenderTemplateEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "templates" service client given the endpoints.
-func NewClient(createTemplate, updateTemplate, getTemplate, listTemplates, deleteTemplate, renderTemplate goa.Endpoint) *Client {
+func NewClient(createTemplate, updateTemplate, getTemplate, listTemplates, deleteTemplate, renderTemplateByID, renderTemplate goa.Endpoint) *Client {
 	return &Client{
-		CreateTemplateEndpoint: createTemplate,
-		UpdateTemplateEndpoint: updateTemplate,
-		GetTemplateEndpoint:    getTemplate,
-		ListTemplatesEndpoint:  listTemplates,
-		DeleteTemplateEndpoint: deleteTemplate,
-		RenderTemplateEndpoint: renderTemplate,
+		CreateTemplateEndpoint:     createTemplate,
+		UpdateTemplateEndpoint:     updateTemplate,
+		GetTemplateEndpoint:        getTemplate,
+		ListTemplatesEndpoint:      listTemplates,
+		DeleteTemplateEndpoint:     deleteTemplate,
+		RenderTemplateByIDEndpoint: renderTemplateByID,
+		RenderTemplateEndpoint:     renderTemplate,
 	}
 }
 
@@ -142,6 +144,29 @@ func (c *Client) ListTemplates(ctx context.Context, p *ListTemplatesPayload) (re
 func (c *Client) DeleteTemplate(ctx context.Context, p *DeleteTemplatePayload) (err error) {
 	_, err = c.DeleteTemplateEndpoint(ctx, p)
 	return
+}
+
+// RenderTemplateByID calls the "renderTemplateByID" endpoint of the
+// "templates" service.
+// RenderTemplateByID may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RenderTemplateByID(ctx context.Context, p *RenderTemplateByIDPayload) (res *RenderTemplateResult, err error) {
+	var ires any
+	ires, err = c.RenderTemplateByIDEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RenderTemplateResult), nil
 }
 
 // RenderTemplate calls the "renderTemplate" endpoint of the "templates"

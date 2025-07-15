@@ -94,6 +94,7 @@ export const ToolifyDialog = ({
       A composite tool consists of a series of steps which invoke an underlying tool along with instructions for how to use the tool.
   
       Given the provided purpose, suggest:
+      - A name for the tool that indicates the purpose of the tool. This should be fewer than 40 characters.
       - A description of the tool which will be provided to future LLMs invoking this tool. It should distinguish when and how this tool should be used.
       - A list of inputs needed to invoke the tool. Any inputs here must appear in at least one step's instructions inside {{mustaches}}. Anything in {{mustaches}} must appear in this list.
       - A list of steps which will accomplish the purpose. Each step should invoke one tool exactly by its provided name.
@@ -102,6 +103,7 @@ export const ToolifyDialog = ({
       For example, a tool that expects an ID might first require a lookup tool to retrieve the ID given fuzzy user input.
   
       The purpose is: ${purpose}
+
       The available tools are: ${JSON.stringify(
         tools.map((t) => {
           return {

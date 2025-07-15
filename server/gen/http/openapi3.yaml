@@ -4709,8 +4709,8 @@ paths:
                 name: Templates
     /rpc/templates.render:
         post:
-            description: Render a prompt template given some input data.
-            operationId: renderTemplate
+            description: Render a prompt template by ID with provided input data.
+            operationId: renderTemplateByID
             parameters:
                 - allowEmptyValue: true
                   description: The ID of the prompt template to render
@@ -4720,6 +4720,113 @@ paths:
                   schema:
                     description: The ID of the prompt template to render
                     type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RenderTemplateByIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RenderTemplateResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: renderTemplateByID templates
+            tags:
+                - templates
+            x-speakeasy-name-override: renderByID
+            x-speakeasy-react-hook:
+                name: RenderTemplateByID
+                type: query
+    /rpc/templates.render-direct:
+        post:
+            description: Render a prompt template directly with all template fields provided.
+            operationId: renderTemplate
+            parameters:
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -7721,7 +7828,7 @@ components:
                     description: The name of the org to register
             required:
                 - org_name
-        RenderTemplateRequestBody:
+        RenderTemplateByIDRequestBody:
             type: object
             properties:
                 arguments:
@@ -7730,6 +7837,32 @@ components:
                     additionalProperties: true
             required:
                 - arguments
+        RenderTemplateRequestBody:
+            type: object
+            properties:
+                arguments:
+                    type: object
+                    description: The input data to render the template with
+                    additionalProperties: true
+                engine:
+                    type: string
+                    description: The template engine
+                    enum:
+                        - mustache
+                kind:
+                    type: string
+                    description: The kind of prompt the template is used for
+                    enum:
+                        - prompt
+                        - higher_order_tool
+                prompt:
+                    type: string
+                    description: The template content to render
+            required:
+                - prompt
+                - arguments
+                - engine
+                - kind
         RenderTemplateResult:
             type: object
             properties:

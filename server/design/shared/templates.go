@@ -30,6 +30,7 @@ var PromptTemplate = Type("PromptTemplate", func() {
 		Description("The suggested tool names associated with the prompt template")
 		MaxLength(20)
 	})
+
 	Attribute("created_at", String, func() {
 		Description("The creation date of the prompt template.")
 		Format(FormatDateTime)
