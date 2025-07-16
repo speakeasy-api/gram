@@ -193,38 +193,45 @@ function HeroCard({
       <Card.Content>
         <Stack direction="horizontal" gap={6}>
           {hero}
-          <Stack gap={6} className="py-4">
+          <Stack gap={6} className="py-4 min-w-0 flex-1">
             <Stack>
               <Type muted>Toolset</Type>
               <Stack direction="horizontal" gap={2} align="center">
                 <ToolsetBadge toolset={toolset} />
               </Stack>
             </Stack>
-            <Stack direction="horizontal" gap={6}>
-              <Stack>
+            <Stack direction={{ xs: "vertical", xl: "horizontal" }} gap={6} className="min-w-0">
+              <Stack className="min-w-0 flex-1">
                 <Type muted>MCP URL</Type>
-                <Stack direction="horizontal" align="center">
-                  <Type className="font-medium" skeleton="phrase">
+                <Stack direction="horizontal" align="center" className="min-w-0">
+                  <Type className="font-medium truncate" skeleton="phrase">
                     {mcpUrl}
                   </Type>
                   <CopyButton
                     text={mcpUrl ?? ""}
                     size="inline"
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
                   />
                 </Stack>
               </Stack>
-              <Stack>
+              <Stack className="min-w-0 flex-1">
                 <Type muted>Install Page</Type>
                 {toolset?.mcpIsPublic ? (
-                  <Link to={pageUrl!} external>
-                    <Type className="font-medium" skeleton="phrase">
-                      {pageUrl}
-                    </Type>
-                  </Link>
+                  <Stack direction="horizontal" align="center" className="min-w-0">
+                    <Link to={pageUrl!} external className="truncate">
+                      <Type className="font-medium truncate" skeleton="phrase">
+                        {pageUrl}
+                      </Type>
+                    </Link>
+                    <CopyButton
+                      text={pageUrl ?? ""}
+                      size="inline"
+                      className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                    />
+                  </Stack>
                 ) : (
                   <SimpleTooltip tooltip="Make this MCP public in order to access the shareable page.">
-                    <Type className="font-medium" skeleton="phrase">
+                    <Type className="font-medium truncate" skeleton="phrase">
                       {pageUrl}
                     </Type>
                   </SimpleTooltip>
