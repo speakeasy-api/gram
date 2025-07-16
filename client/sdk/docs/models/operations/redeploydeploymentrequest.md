@@ -5,7 +5,11 @@
 ```typescript
 import { RedeployDeploymentRequest } from "@gram/client/models/operations";
 
-let value: RedeployDeploymentRequest = {};
+let value: RedeployDeploymentRequest = {
+  redeployRequestBody: {
+    deploymentId: "<id>",
+  },
+};
 ```
 
 ## Fields

@@ -5,7 +5,11 @@
 ```typescript
 import { UpdateSlackConnectionRequest } from "@gram/client/models/operations";
 
-let value: UpdateSlackConnectionRequest = {};
+let value: UpdateSlackConnectionRequest = {
+  updateSlackConnectionRequestBody: {
+    defaultToolsetSlug: "<value>",
+  },
+};
 ```
 
 ## Fields

@@ -59,3 +59,25 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 
 	return v, nil
 }
+
+// BuildCreditUsagePayload builds the payload for the chat creditUsage endpoint
+// from CLI flags.
+func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsageProjectSlugInput string) (*chat.CreditUsagePayload, error) {
+	var sessionToken *string
+	{
+		if chatCreditUsageSessionToken != "" {
+			sessionToken = &chatCreditUsageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatCreditUsageProjectSlugInput != "" {
+			projectSlugInput = &chatCreditUsageProjectSlugInput
+		}
+	}
+	v := &chat.CreditUsagePayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

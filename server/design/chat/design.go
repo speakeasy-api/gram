@@ -57,6 +57,32 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "load")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadChat"}`)
 	})
+
+	Method("creditUsage", func() {
+		Description("Load a chat by its ID")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("credits_used", Float64, "The number of credits remaining")
+			Attribute("monthly_credits", Int, "The number of monthly credits")
+			Required("credits_used", "monthly_credits")
+		})
+
+		HTTP(func() {
+			GET("/rpc/chat.creditUsage")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "creditUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "creditUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetCreditUsage"}`)
+	})
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {

@@ -16,3 +16,8 @@ func ListChatsChatPath() string {
 func LoadChatChatPath() string {
 	return "/rpc/chat.load"
 }
+
+// CreditUsageChatPath returns the URL path to the chat service creditUsage HTTP endpoint.
+func CreditUsageChatPath() string {
+	return "/rpc/chat.creditUsage"
+}

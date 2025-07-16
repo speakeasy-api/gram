@@ -19,9 +19,10 @@ import (
 
 // Server lists the chat service endpoint HTTP handlers.
 type Server struct {
-	Mounts    []*MountPoint
-	ListChats http.Handler
-	LoadChat  http.Handler
+	Mounts      []*MountPoint
+	ListChats   http.Handler
+	LoadChat    http.Handler
+	CreditUsage http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,9 +54,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListChats", "GET", "/rpc/chat.list"},
 			{"LoadChat", "GET", "/rpc/chat.load"},
+			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
 		},
-		ListChats: NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
-		LoadChat:  NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
+		ListChats:   NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
+		LoadChat:    NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
+		CreditUsage: NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,6 +69,7 @@ func (s *Server) Service() string { return "chat" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListChats = m(s.ListChats)
 	s.LoadChat = m(s.LoadChat)
+	s.CreditUsage = m(s.CreditUsage)
 }
 
 // MethodNames returns the methods served.
@@ -75,6 +79,7 @@ func (s *Server) MethodNames() []string { return chat.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListChatsHandler(mux, h.ListChats)
 	MountLoadChatHandler(mux, h.LoadChat)
+	MountCreditUsageHandler(mux, h.CreditUsage)
 }
 
 // Mount configures the mux to serve the chat endpoints.
@@ -163,6 +168,57 @@ func NewLoadChatHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "loadChat")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			errhandler(ctx, w, err)
+		}
+	})
+}
+
+// MountCreditUsageHandler configures the mux to serve the "chat" service
+// "creditUsage" endpoint.
+func MountCreditUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/chat.creditUsage", otelhttp.WithRouteTag("/rpc/chat.creditUsage", f).ServeHTTP)
+}
+
+// NewCreditUsageHandler creates a HTTP handler which loads the HTTP request
+// and calls the "chat" service "creditUsage" endpoint.
+func NewCreditUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreditUsageRequest(mux, decoder)
+		encodeResponse = EncodeCreditUsageResponse(encoder)
+		encodeError    = EncodeCreditUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "creditUsage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: ab9c5c12f3cb2c632d6507e510b6c559
+  docChecksum: ecd96761243a63f6b9b122c264f13870
   docVersion: 0.0.1
-  speakeasyVersion: 1.568.2
-  generationVersion: 2.634.2
-  releaseVersion: 0.12.34
-  configChecksum: 64a265b9868edf9d6f36b0033cfd8d7d
+  speakeasyVersion: 1.582.0
+  generationVersion: 2.657.1
+  releaseVersion: 0.12.35
+  configChecksum: a66065de7058c4972aec8775170d4bf6
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.11
+    core: 3.21.14
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -59,6 +59,7 @@ generatedFiles:
   - docs/models/components/createprompttemplateformkind.md
   - docs/models/components/createprompttemplateresult.md
   - docs/models/components/createtoolsetrequestbody.md
+  - docs/models/components/creditusageresponsebody.md
   - docs/models/components/customdomain.md
   - docs/models/components/deleteglobaltoolvariationresult.md
   - docs/models/components/deployment.md
@@ -158,6 +159,8 @@ generatedFiles:
   - docs/models/operations/createtemplatesecurityoption2.md
   - docs/models/operations/createtoolsetrequest.md
   - docs/models/operations/createtoolsetsecurity.md
+  - docs/models/operations/creditusagerequest.md
+  - docs/models/operations/creditusagesecurity.md
   - docs/models/operations/deletedomainrequest.md
   - docs/models/operations/deletedomainsecurity.md
   - docs/models/operations/deleteenvironmentrequest.md
@@ -334,6 +337,10 @@ generatedFiles:
   - docs/sdks/toolsets/README.md
   - docs/sdks/variations/README.md
   - eslint.config.mjs
+  - examples/.env.template
+  - examples/README.md
+  - examples/package.json
+  - examples/slackSlackLogin.example.ts
   - jsr.json
   - package.json
   - src/core.ts
@@ -347,6 +354,7 @@ generatedFiles:
   - src/funcs/authLogout.ts
   - src/funcs/authRegister.ts
   - src/funcs/authSwitchScopes.ts
+  - src/funcs/chatCreditUsage.ts
   - src/funcs/chatList.ts
   - src/funcs/chatLoad.ts
   - src/funcs/deploymentsCreate.ts
@@ -438,6 +446,7 @@ generatedFiles:
   - src/models/components/createprompttemplateform.ts
   - src/models/components/createprompttemplateresult.ts
   - src/models/components/createtoolsetrequestbody.ts
+  - src/models/components/creditusageresponsebody.ts
   - src/models/components/customdomain.ts
   - src/models/components/deleteglobaltoolvariationresult.ts
   - src/models/components/deployment.ts
@@ -521,6 +530,7 @@ generatedFiles:
   - src/models/operations/createproject.ts
   - src/models/operations/createtemplate.ts
   - src/models/operations/createtoolset.ts
+  - src/models/operations/creditusage.ts
   - src/models/operations/deletedomain.ts
   - src/models/operations/deleteenvironment.ts
   - src/models/operations/deleteglobalvariation.ts
@@ -592,6 +602,7 @@ generatedFiles:
   - src/react-query/deployment.ts
   - src/react-query/deploymentLogs.ts
   - src/react-query/evolveDeployment.ts
+  - src/react-query/getCreditUsage.ts
   - src/react-query/getDomain.ts
   - src/react-query/getSlackConnection.ts
   - src/react-query/globalVariations.ts
@@ -1313,5 +1324,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  creditUsage:
+    speakeasy-default-credit-usage:
+      responses:
+        "200":
+          application/json: {"credits_used": 4205.07, "monthly_credits": 586555}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

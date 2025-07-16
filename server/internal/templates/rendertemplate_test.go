@@ -355,7 +355,7 @@ func TestTemplatesService_RenderTemplateByID_HigherOrderTool_JSON_Success(t *tes
 	require.NoError(t, err, "render template by ID")
 
 	require.NotNil(t, result, "result is nil")
-	
+
 	// Check that the JSON was converted to XML format
 	require.Contains(t, result.Prompt, "Here are instructions on how to use the other tools", "should contain XML header")
 	require.Contains(t, result.Prompt, "Do NOT use this tool (summarize_document) again", "should contain tool name")

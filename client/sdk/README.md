@@ -143,6 +143,7 @@ run();
 
 ### [chat](docs/sdks/chat/README.md)
 
+* [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 
@@ -263,6 +264,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
 - [`authRegister`](docs/sdks/auth/README.md#register) - register auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
@@ -357,6 +359,7 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
+- [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
@@ -520,7 +523,7 @@ run();
 ### Error Classes
 **Primary errors:**
 * [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
+  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access.
 
 <details><summary>Less common errors (6)</summary>
 

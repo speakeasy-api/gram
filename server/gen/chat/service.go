@@ -20,6 +20,8 @@ type Service interface {
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
 	// Load a chat by its ID
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
+	// Load a chat by its ID
+	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -42,7 +44,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"listChats", "loadChat"}
+var MethodNames = [3]string{"listChats", "loadChat", "creditUsage"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -96,6 +98,21 @@ type ChatOverview struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+}
+
+// CreditUsagePayload is the payload type of the chat service creditUsage
+// method.
+type CreditUsagePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// CreditUsageResult is the result type of the chat service creditUsage method.
+type CreditUsageResult struct {
+	// The number of credits remaining
+	CreditsUsed float64
+	// The number of monthly credits
+	MonthlyCredits int
 }
 
 // ListChatsPayload is the payload type of the chat service listChats method.

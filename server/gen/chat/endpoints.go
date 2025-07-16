@@ -16,8 +16,9 @@ import (
 
 // Endpoints wraps the "chat" service endpoints.
 type Endpoints struct {
-	ListChats goa.Endpoint
-	LoadChat  goa.Endpoint
+	ListChats   goa.Endpoint
+	LoadChat    goa.Endpoint
+	CreditUsage goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "chat" service with endpoints.
@@ -25,8 +26,9 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListChats: NewListChatsEndpoint(s, a.APIKeyAuth),
-		LoadChat:  NewLoadChatEndpoint(s, a.APIKeyAuth),
+		ListChats:   NewListChatsEndpoint(s, a.APIKeyAuth),
+		LoadChat:    NewLoadChatEndpoint(s, a.APIKeyAuth),
+		CreditUsage: NewCreditUsageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -34,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListChats = m(e.ListChats)
 	e.LoadChat = m(e.LoadChat)
+	e.CreditUsage = m(e.CreditUsage)
 }
 
 // NewListChatsEndpoint returns an endpoint function that calls the method
@@ -103,5 +106,40 @@ func NewLoadChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 			return nil, err
 		}
 		return s.LoadChat(ctx, p)
+	}
+}
+
+// NewCreditUsageEndpoint returns an endpoint function that calls the method
+// "creditUsage" of service "chat".
+func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreditUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreditUsage(ctx, p)
 	}
 }

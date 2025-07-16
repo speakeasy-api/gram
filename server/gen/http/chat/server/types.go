@@ -38,6 +38,15 @@ type LoadChatResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CreditUsageResponseBody is the type of the "chat" service "creditUsage"
+// endpoint HTTP response body.
+type CreditUsageResponseBody struct {
+	// The number of credits remaining
+	CreditsUsed float64 `form:"credits_used" json:"credits_used" xml:"credits_used"`
+	// The number of monthly credits
+	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+}
+
 // ListChatsUnauthorizedResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "unauthorized" error.
 type ListChatsUnauthorizedResponseBody struct {
@@ -398,6 +407,187 @@ type LoadChatGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreditUsageUnauthorizedResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "unauthorized" error.
+type CreditUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageForbiddenResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "forbidden" error.
+type CreditUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageBadRequestResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "bad_request" error.
+type CreditUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageNotFoundResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "not_found" error.
+type CreditUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageConflictResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "conflict" error.
+type CreditUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageUnsupportedMediaResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "unsupported_media" error.
+type CreditUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageInvalidResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "invalid" error.
+type CreditUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageInvariantViolationResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "invariant_violation"
+// error.
+type CreditUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageUnexpectedResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "unexpected" error.
+type CreditUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreditUsageGatewayErrorResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "gateway_error" error.
+type CreditUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ChatOverviewResponseBody is used to define fields on response body types.
 type ChatOverviewResponseBody struct {
 	// The ID of the chat
@@ -469,6 +659,16 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		}
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
+	}
+	return body
+}
+
+// NewCreditUsageResponseBody builds the HTTP response body from the result of
+// the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageResponseBody(res *chat.CreditUsageResult) *CreditUsageResponseBody {
+	body := &CreditUsageResponseBody{
+		CreditsUsed:    res.CreditsUsed,
+		MonthlyCredits: res.MonthlyCredits,
 	}
 	return body
 }
@@ -753,6 +953,146 @@ func NewLoadChatGatewayErrorResponseBody(res *goa.ServiceError) *LoadChatGateway
 	return body
 }
 
+// NewCreditUsageUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageUnauthorizedResponseBody(res *goa.ServiceError) *CreditUsageUnauthorizedResponseBody {
+	body := &CreditUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageForbiddenResponseBody builds the HTTP response body from the
+// result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageForbiddenResponseBody(res *goa.ServiceError) *CreditUsageForbiddenResponseBody {
+	body := &CreditUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageBadRequestResponseBody builds the HTTP response body from the
+// result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageBadRequestResponseBody(res *goa.ServiceError) *CreditUsageBadRequestResponseBody {
+	body := &CreditUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageNotFoundResponseBody builds the HTTP response body from the
+// result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageNotFoundResponseBody(res *goa.ServiceError) *CreditUsageNotFoundResponseBody {
+	body := &CreditUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageConflictResponseBody builds the HTTP response body from the
+// result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageConflictResponseBody(res *goa.ServiceError) *CreditUsageConflictResponseBody {
+	body := &CreditUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *CreditUsageUnsupportedMediaResponseBody {
+	body := &CreditUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageInvalidResponseBody builds the HTTP response body from the
+// result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageInvalidResponseBody(res *goa.ServiceError) *CreditUsageInvalidResponseBody {
+	body := &CreditUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageInvariantViolationResponseBody(res *goa.ServiceError) *CreditUsageInvariantViolationResponseBody {
+	body := &CreditUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageUnexpectedResponseBody builds the HTTP response body from the
+// result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageUnexpectedResponseBody(res *goa.ServiceError) *CreditUsageUnexpectedResponseBody {
+	body := &CreditUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreditUsageGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "creditUsage" endpoint of the "chat" service.
+func NewCreditUsageGatewayErrorResponseBody(res *goa.ServiceError) *CreditUsageGatewayErrorResponseBody {
+	body := &CreditUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListChatsPayload builds a chat service listChats endpoint payload.
 func NewListChatsPayload(sessionToken *string, projectSlugInput *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
@@ -766,6 +1106,15 @@ func NewListChatsPayload(sessionToken *string, projectSlugInput *string) *chat.L
 func NewLoadChatPayload(id string, sessionToken *string, projectSlugInput *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCreditUsagePayload builds a chat service creditUsage endpoint payload.
+func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string) *chat.CreditUsagePayload {
+	v := &chat.CreditUsagePayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

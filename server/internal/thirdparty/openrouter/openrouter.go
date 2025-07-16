@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 
 	"github.com/hashicorp/go-cleanhttp"
@@ -23,15 +24,16 @@ import (
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
 var creditsAccountTypeMap = map[string]int{
-	"free":       10,
+	"free":       5,
 	"pro":        50,
 	"enterprise": 50,
-	"":           10, // safety default
+	"":           5, // safety default
 }
 
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string) (int, error)
+	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
 }
 
 type KeyRefresher interface {
@@ -144,6 +146,63 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int,
 	}
 
 	return limit, nil
+}
+
+type keyUsageResponse struct {
+	Data struct {
+		Limit *float64 `json:"limit"`
+		Usage *float64 `json:"usage"`
+	} `json:"data"`
+}
+
+func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
+	}
+
+	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+	}
+
+	limit := creditsAccountTypeMap[org.GramAccountType]
+
+	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/key", nil)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to get openrouter key HTTP request", slog.String("error", err.Error()))
+		return 0, 0, fmt.Errorf("failed to get key request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+key.Key)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := o.orClient.Do(req)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
+		return 0, 0, fmt.Errorf("failed to send update key request: %w", err)
+	}
+
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, 0, errors.New("failed to update OpenRouter API key: " + resp.Status)
+	}
+
+	var usageResp keyUsageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&usageResp); err != nil {
+		o.logger.ErrorContext(ctx, "failed to decode key usage response", slog.String("error", err.Error()))
+		return 0, 0, fmt.Errorf("failed to decode key usage response: %w", err)
+	}
+
+	var creditsUsed float64
+	if usageResp.Data.Usage != nil {
+		creditsUsed = math.Round(*usageResp.Data.Usage*100) / 100
+	}
+
+	return creditsUsed, limit, nil
 }
 
 type updateKeyRequest struct {

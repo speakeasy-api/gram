@@ -339,6 +339,22 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePayload) (*gen.CreditUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").Log(ctx, s.logger)
+	}
+
+	return &gen.CreditUsageResult{
+		CreditsUsed:    creditsUsed,
+		MonthlyCredits: creditLimit,
+	}, nil
+}
+
 func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, chatIDHeader string, request openrouter.OpenAIChatRequest) (uuid.UUID, error) {
 	chatID, err := uuid.Parse(chatIDHeader)
 	if err != nil {

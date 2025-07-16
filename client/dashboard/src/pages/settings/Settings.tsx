@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSession } from "@/contexts/Auth";
@@ -11,6 +12,7 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
 import {
   invalidateListAPIKeys,
   useListAPIKeysSuspense,
@@ -44,6 +46,7 @@ export default function Settings() {
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
+  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] = useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
@@ -59,6 +62,11 @@ export default function Settings() {
     isLoading: domainIsLoading,
     refetch: domainRefetch,
   } = useCustomDomain();
+  
+  const { data: creditUsage } = useGetCreditUsage(
+    { gramSession: "" },
+    { sessionHeaderGramSession: "" }
+  );
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -575,6 +583,48 @@ export default function Settings() {
           description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
           actionType="custom_domain"
           icon={Globe}
+          accountUpgrade
+        />
+
+        <Stack direction="horizontal" justify="space-between" className="mt-8">
+          <Heading variant="h4">Credit Usage</Heading>
+          {session.gramAccountType === "free" && (
+            <Button onClick={() => setIsCreditUpgradeModalOpen(true)}>
+              Upgrade Account
+            </Button>
+          )}
+        </Stack>
+        <div className="space-y-4">
+          <Type variant="body" className="text-muted-foreground">
+            LLM Credits are used for the chat playground and other AI-powered in dashboard experiences.
+          </Type>
+          {creditUsage && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Type variant="body" className="font-medium">
+                  {Math.min(creditUsage.creditsUsed, creditUsage.monthlyCredits).toLocaleString()} / {creditUsage.monthlyCredits.toLocaleString()} credits used this month
+                </Type>
+              </div>
+              <Progress 
+                value={creditUsage.creditsUsed} 
+                max={creditUsage.monthlyCredits}
+                indicatorClassName={cn(
+                  "bg-gradient-to-r",
+                  creditUsage.creditsUsed >= creditUsage.monthlyCredits * 0.75
+                    ? "from-red-500 to-red-600" 
+                    : "from-green-500 to-green-600"
+                )}
+              />
+            </div>
+          )}
+        </div>
+
+        <FeatureRequestModal
+          isOpen={isCreditUpgradeModalOpen}
+          onClose={() => setIsCreditUpgradeModalOpen(false)}
+          title="Increase Credit Limit"
+          description={`To increase your monthly credit limit upgrade from the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+          actionType="credit_upgrade"
           accountUpgrade
         />
       </Page.Body>
