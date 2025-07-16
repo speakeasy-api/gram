@@ -250,7 +250,7 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack direction="horizontal" justify="space-between">
+        <Stack direction="horizontal" justify="space-between" align="center">
           <Heading variant="h4">API Keys</Heading>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             Create API Key
@@ -376,7 +376,12 @@ export default function Settings() {
           </Dialog.Content>
         </Dialog>
 
-        <Stack direction="horizontal" justify="space-between" className="mt-8">
+        <Stack
+          direction="horizontal"
+          justify="space-between"
+          align="center"
+          className="mt-8"
+        >
           <Heading variant="h4">Custom Domains</Heading>
           {session.gramAccountType === "free" && (
             <Type className="text-muted-foreground">

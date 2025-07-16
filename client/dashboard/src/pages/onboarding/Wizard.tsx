@@ -1,6 +1,7 @@
 import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
+import { ProjectSelector } from "@/components/project-menu";
 import { ToolBadge } from "@/components/tool-badge";
 import {
   Accordion,
@@ -8,25 +9,29 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ErrorAlert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { ThemeContext } from "@/components/ui/theme-toggle";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useApiError } from "@/hooks/useApiError";
 import { slugify } from "@/lib/constants";
 import { useGroupedHttpTools } from "@/lib/toolNames";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
-import { invalidateAllLatestDeployment, invalidateAllListToolsets, invalidateAllToolset, useListTools } from "@gram/client/react-query";
+import {
+  invalidateAllLatestDeployment,
+  invalidateAllListToolsets,
+  invalidateAllToolset,
+  useListTools,
+} from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useApiError } from "@/hooks/useApiError";
-import { ErrorAlert } from "@/components/ui/alert";
 import {
   Check,
   ChevronRight,
@@ -37,17 +42,14 @@ import {
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { useOnboardingSteps } from "./Onboarding";
-import { ProjectSelector } from "@/components/project-menu";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
-  const theme = useContext(ThemeContext);
-  theme.setTheme("light"); // Wizard only supports light theme right now
 
   const [currentStep, setCurrentStep] = useState<"upload" | "toolset" | "mcp">(
     "upload"
@@ -64,7 +66,7 @@ export function OnboardingWizard() {
 
   return (
     <Stack direction={"horizontal"} className="h-[100vh] w-full">
-      <div className="w-1/2 h-full border-r-1 border-r-[#BCBCBC]">
+      <div className="w-1/2 h-full border-r-1 ">
         <LHS
           currentStep={currentStep}
           setCurrentStep={setCurrentStep}
@@ -74,7 +76,7 @@ export function OnboardingWizard() {
           setMcpSlug={setMcpSlug}
         />
       </div>
-      <div className="w-1/2 h-full bg-stone-200 overflow-hidden">
+      <div className="w-1/2 h-full bg-background overflow-hidden">
         <AnimatedRightSide
           currentStep={currentStep}
           toolsetName={toolsetName}
@@ -100,13 +102,13 @@ const Step = ({
     <Stack direction={"horizontal"} gap={2} align={"center"}>
       <span
         className={cn(
-          "rounded-full bg-stone-200 h-8 w-8 flex items-center justify-center",
-          active && "bg-green-200 text-green-900"
+          "rounded-full bg-muted h-8 w-8 flex items-center justify-center",
+          active && "bg-success text-success-foreground"
         )}
       >
         {completed ? <Check className="w-4 h-4" /> : icon}
       </span>
-      <span className={cn(!active && "text-stone-400!", "text-body-sm")}>
+      <span className={cn(!active && "text-muted-foreground", "text-body-sm")}>
         {text}
       </span>
     </Stack>
@@ -131,23 +133,26 @@ const LHS = ({
   const [createdToolset, setCreatedToolset] = useState<Toolset>();
   const { organization } = useSession();
 
-  const lowerLeft = organization?.projects.length > 1 ? (
-    <div className="max-w-sm">
-      <ProjectSelector />
-    </div>
-  ) : (
-    <span className="text-body-sm text-muted-foreground">© 2025 speakeasy</span>
-  );
+  const lowerLeft =
+    organization?.projects.length > 1 ? (
+      <div className="max-w-sm">
+        <ProjectSelector />
+      </div>
+    ) : (
+      <span className="text-body-sm text-muted-foreground">
+        © 2025 speakeasy
+      </span>
+    );
 
   return (
-    <div className="h-full flex flex-col relative bg-white">
+    <div className="h-full flex flex-col relative bg-card">
       {/* Fixed Header */}
       <Stack align={"center"}>
         <Stack
           direction={"horizontal"}
           align={"center"}
           justify={"space-between"}
-          className="w-full border-b h-16 px-6 mb-8 border-b-[#BCBCBC]"
+          className="w-full border-b h-16 px-6 mb-8"
         >
           <GramLogo className="text-[28px]" />
           <a href="https://docs.getgram.ai/" target="_blank">
@@ -248,14 +253,14 @@ const UploadStep = ({
     <Stack gap={4}>
       <Stack gap={1}>
         <Stack direction={"horizontal"} gap={1} align={"center"}>
-          <CircleCheckIcon className="w-4 h-4 text-green-500" />
+          <CircleCheckIcon className="w-4 h-4 text-emerald-500 dark:text-success" />
           <Type small className="font-normal">
             OpenAPI Document
           </Type>
         </Stack>
         <Accordion type="single" collapsible>
           <AccordionItem value="logs">
-            <AccordionTrigger className="text-base border-1 px-4 py-2 bg-stone-50 w-full [&[data-state=open]]:rounded-b-none ">
+            <AccordionTrigger className="text-base border-1 px-4 py-2 w-full [&[data-state=open]]:rounded-b-none ">
               <Stack direction={"horizontal"} gap={2} align={"center"}>
                 <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
                 <Type small mono>
@@ -264,7 +269,7 @@ const UploadStep = ({
               </Stack>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="text-xs p-4 bg-stone-100 h-48 overflow-y-auto border-1 border-t-0 rounded-b-md">
+              <div className="text-xs p-4 bg-background h-48 overflow-y-auto border-1 border-t-0 rounded-b-md">
                 {fileText?.length ? (
                   <pre className="whitespace-pre-wrap">{fileText}</pre>
                 ) : (
@@ -342,7 +347,7 @@ const ToolsetStep = ({
 
   const onContinue = async () => {
     setCreateError(null);
-    
+
     try {
       if (!toolsetName) {
         throw new Error("No toolset name found");
@@ -362,7 +367,8 @@ const ToolsetStep = ({
       setCreatedToolset(toolset);
       setCurrentStep("mcp");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to create toolset";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to create toolset";
       setCreateError(errorMessage);
       handleApiError(error, "Failed to create toolset");
     }
@@ -390,8 +396,8 @@ const ToolsetStep = ({
         required
       />
       {createError && (
-        <ErrorAlert 
-          error={createError} 
+        <ErrorAlert
+          error={createError}
           title="Failed to create toolset"
           onDismiss={() => setCreateError(null)}
         />
@@ -459,7 +465,7 @@ const McpStep = ({
 
   const onContinue = async () => {
     setUpdateError(null);
-    
+
     try {
       if (!createdToolset) {
         throw new Error("No toolset found");
@@ -484,7 +490,8 @@ const McpStep = ({
       toast.success("MCP server created successfully");
       routes.home.goTo();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to setup MCP server";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to setup MCP server";
       setUpdateError(errorMessage);
       handleApiError(error, "Failed to setup MCP server");
     }
@@ -516,8 +523,8 @@ const McpStep = ({
         )}
       />
       {updateError && (
-        <ErrorAlert 
-          error={updateError} 
+        <ErrorAlert
+          error={updateError}
           title="Failed to setup MCP server"
           onDismiss={() => setUpdateError(null)}
         />
@@ -570,7 +577,7 @@ const ContinueButton = ({
         className={cn(
           buttonClasses,
           "w-full rounded-[7px] bg-background border-0",
-          "hover:bg-accent",
+          "hover:bg-background/90 transition-all duration-300",
           "disabled:cursor-not-allowed",
           "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500"
         )}
@@ -592,7 +599,7 @@ const AnimatedRightSide = ({
   mcpSlug: string | undefined;
 }) => {
   return (
-    <div className="w-full h-full bg-stone-50 flex items-center justify-center relative overflow-hidden">
+    <div className="w-full h-full bg-background flex items-center justify-center relative overflow-hidden">
       <AnimatePresence mode="wait">
         {currentStep === "toolset" ? (
           <ToolsetAnimation key="toolset" toolsetName={toolsetName} />
@@ -609,12 +616,12 @@ const AnimatedRightSide = ({
 const DefaultLogo = () => (
   <motion.div
     layoutId="main-container"
-    className="w-32 h-32 bg-white rounded-lg border border-[#bcbcbc] flex items-center justify-center"
+    className="w-32 h-32 bg-card rounded-lg border flex items-center justify-center"
     transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
   >
     <motion.span
       layoutId="main-icon"
-      className="font-thin text-black text-6xl select-none"
+      className="font-thin text-foreground text-6xl select-none"
       style={{
         fontFamily: "Tobias, sans-serif",
         letterSpacing: "-0.05em",
@@ -646,7 +653,7 @@ const ToolsetAnimation = ({
         }}
         className="w-70 pl-1"
       >
-        <h3 className="text-lg font-medium text-stone-800 mb-1">
+        <h3 className="text-lg font-medium text-foreground mb-1">
           {toolsetName || "my-toolset"}
         </h3>
       </motion.div>
@@ -654,12 +661,12 @@ const ToolsetAnimation = ({
       {/* Main logo that morphs from the default logo */}
       <motion.div
         layoutId="main-container"
-        className="w-70 h-12 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+        className="w-70 h-12 bg-card rounded-lg border  flex items-center px-4"
         transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
       >
         <motion.div
           layoutId="main-icon"
-          className="w-6 h-6 bg-stone-100 rounded flex items-center justify-center flex-shrink-0"
+          className="w-6 h-6 bg-background rounded flex items-center justify-center flex-shrink-0"
           transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
         >
           <motion.div
@@ -672,7 +679,7 @@ const ToolsetAnimation = ({
               bounce: 0.3,
             }}
           >
-            <Wrench className="w-3 h-3 text-stone-600" />
+            <Wrench className="w-3 h-3 text-muted-foreground" />
           </motion.div>
         </motion.div>
         <motion.div
@@ -686,7 +693,7 @@ const ToolsetAnimation = ({
           }}
           className="ml-3 flex-1"
         >
-          <div className="h-3 bg-stone-200 rounded w-full" />
+          <div className="h-3 bg-muted rounded w-full" />
         </motion.div>
       </motion.div>
 
@@ -701,12 +708,12 @@ const ToolsetAnimation = ({
             duration: 0.5,
             bounce: 0.2,
           }}
-          className="w-70 h-12 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+          className="w-70 h-12 bg-card rounded-lg border flex items-center px-4"
         >
-          <div className="w-6 h-6 bg-stone-100 rounded flex items-center justify-center">
-            <Wrench className="w-3 h-3 text-stone-600" />
+          <div className="w-6 h-6 bg-background rounded flex items-center justify-center">
+            <Wrench className="w-3 h-3 text-muted-foreground" />
           </div>
-          <div className="ml-3 h-3 bg-stone-200 rounded w-full" />
+          <div className="ml-3 h-3 bg-muted rounded w-full" />
         </motion.div>
 
         <motion.div
@@ -718,12 +725,12 @@ const ToolsetAnimation = ({
             duration: 0.5,
             bounce: 0.2,
           }}
-          className="w-70 h-12 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+          className="w-70 h-12 bg-card rounded-lg border  flex items-center px-4"
         >
-          <div className="w-6 h-6 bg-stone-100 rounded flex items-center justify-center">
-            <Wrench className="w-3 h-3 text-stone-600" />
+          <div className="w-6 h-6 bg-background rounded flex items-center justify-center">
+            <Wrench className="w-3 h-3 text-muted-foreground" />
           </div>
-          <div className="ml-3 h-3 bg-stone-200 rounded w-full" />
+          <div className="ml-3 h-3 bg-muted rounded w-full" />
         </motion.div>
       </AnimatePresence>
     </div>
@@ -742,7 +749,7 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
         {/* First tool transforms into server rack unit */}
         <motion.div
           layoutId="main-container"
-          className="w-48 h-10 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+          className="w-48 h-10 bg-card rounded-lg border  flex items-center px-4"
           transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
         >
           <motion.div
@@ -759,7 +766,7 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
                 duration: 0.4,
                 bounce: 0.3,
               }}
-              className="w-3 h-3 bg-stone-400 rounded-full"
+              className="w-3 h-3 bg-muted-foreground rounded-full"
             />
           </motion.div>
         </motion.div>
@@ -774,9 +781,9 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
             duration: 0.5,
             bounce: 0.2,
           }}
-          className="w-48 h-10 bg-white rounded-lg border border-[#bcbcbc] flex items-center px-4"
+          className="w-48 h-10 bg-card rounded-lg border  flex items-center px-4"
         >
-          <div className="w-3 h-3 bg-stone-400 rounded-full" />
+          <div className="w-3 h-3 bg-muted-foreground rounded-full" />
         </motion.div>
       </div>
 
@@ -792,8 +799,8 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
         }}
         className="text-center"
       >
-        <div className="bg-stone-50 border border-stone-200 rounded-md px-3 py-2">
-          <p className="text-sm font-mono text-stone-700">{slug}</p>
+        <div className="bg-background border rounded-md px-3 py-2">
+          <p className="text-sm font-mono text-muted-foreground">{slug}</p>
         </div>
       </motion.div>
     </div>
