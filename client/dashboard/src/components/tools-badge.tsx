@@ -4,6 +4,7 @@ import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge, TwoPartBadge } from "./ui/badge";
+import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 
 export const ToolsetBadge = ({
   toolset,
@@ -23,7 +24,11 @@ export const ToolsetBadge = ({
       <routes.toolsets.toolset.Link params={[toolset.slug]}>
         <Badge className="capitalize">{toolset.name}</Badge>
       </routes.toolsets.toolset.Link>
-      <ToolsetToolsBadge toolset={toolset} variant="outline" className="lowercase" />
+      <ToolsetToolsBadge
+        toolset={toolset}
+        variant="outline"
+        className="lowercase"
+      />
     </TwoPartBadge>
   );
 };
@@ -84,6 +89,7 @@ export const ToolsetToolsBadge = ({
       size={size}
       variant={variant}
       className={className}
+      warnOnTooManyTools
     />
   );
 };
@@ -93,13 +99,15 @@ export const ToolsBadge = ({
   size = "md",
   variant = "default",
   className,
+  warnOnTooManyTools = false,
 }: {
   toolNames: string[] | undefined;
   size?: "sm" | "md";
   variant?: "outline" | "default";
   className?: string;
+  warnOnTooManyTools?: boolean;
 }) => {
-  const tooltipContent = (
+  let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
         {toolNames?.map((tool, i) => (
@@ -109,13 +117,20 @@ export const ToolsBadge = ({
     </div>
   );
 
+  const tooManyTools = warnOnTooManyTools && toolNames && toolNames.length > 40;
+  if (tooManyTools) {
+    tooltipContent =
+      "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers under 40 tools";
+  }
+
   return toolNames && toolNames.length > 0 ? (
     <Badge
       size={size}
-      variant={variant}
+      variant={tooManyTools ? "urgent-warning" : variant}
       tooltip={tooltipContent}
       className={className}
     >
+      {tooManyTools && <UrgentWarningIcon />}
       {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
     </Badge>
   ) : (

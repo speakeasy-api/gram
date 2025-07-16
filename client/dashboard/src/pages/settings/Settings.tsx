@@ -17,7 +17,7 @@ import {
 } from "@gram/client/react-query/listAPIKeys";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -54,7 +54,11 @@ export default function Settings() {
   const txtValue = `gram-domain-verify=${subdomain},${organization.id}`;
 
   const { data: keysData } = useListAPIKeysSuspense();
-  const { domain, isLoading: domainIsLoading, refetch: domainRefetch } = useCustomDomain();
+  const {
+    domain,
+    isLoading: domainIsLoading,
+    refetch: domainRefetch,
+  } = useCustomDomain();
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -238,16 +242,35 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <div className="flex justify-between items-center mb-4">
+        <Stack direction="horizontal" justify="space-between">
           <Heading variant="h4">API Keys</Heading>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             Create API Key
           </Button>
-        </div>
+        </Stack>
         <Table
           columns={apiKeyColumns}
           data={keysData?.keys ?? []}
           rowKey={(row) => row.id}
+          noResultsMessage={
+            <Stack
+              direction="horizontal"
+              gap={2}
+              className="h-full p-4 bg-background"
+              align="center"
+              justify="center"
+            >
+              <Type variant="body">No API keys yet.</Type>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setIsCreateDialogOpen(true)}
+                icon={"key-round"}
+              >
+                Create
+              </Button>
+            </Stack>
+          }
         />
 
         <Dialog
@@ -345,77 +368,92 @@ export default function Settings() {
           </Dialog.Content>
         </Dialog>
 
-        <div className="mt-10">
-          <Heading variant="h4" className="mb-4">
-            Custom Domains
-          </Heading>
+        <Stack direction="horizontal" justify="space-between" className="mt-8">
+          <Heading variant="h4">Custom Domains</Heading>
           {session.gramAccountType === "free" && (
-            <Type className="text-muted-foreground mb-2">
+            <Type className="text-muted-foreground">
               Contact gram support to get access to custom domains for your
               account.
             </Type>
           )}
           {!domainIsLoading && !domain?.verified && (
-            <div className="flex justify-end mb-6">
-              <Button
-                onClick={() => {
-                  if (session.gramAccountType === "free") {
-                    setIsCustomDomainModalOpen(true);
-                  } else {
-                    setIsAddDomainDialogOpen(true);
-                  }
-                }}
-                disabled={domain?.isUpdating}
-              >
-                {domain?.domain ? "Verify Domain" : "Add Domain"}
-              </Button>
-            </div>
+            <Button
+              onClick={() => {
+                if (session.gramAccountType === "free") {
+                  setIsCustomDomainModalOpen(true);
+                } else {
+                  setIsAddDomainDialogOpen(true);
+                }
+              }}
+              disabled={domain?.isUpdating}
+            >
+              {domain?.domain ? "Verify Domain" : "Add Domain"}
+            </Button>
           )}
-          <Table
-            columns={[
-              {
-                key: "domain",
-                header: "Domain",
-                width: "1fr",
-                render: (row) => <Type variant="body">{row.domain}</Type>,
-              },
-              {
-                key: "createdAt",
-                header: "Date Linked",
-                width: "1fr",
-                render: (row) => (
-                  <Type variant="body">
-                    <HumanizeDateTime date={row.createdAt} />
-                  </Type>
-                ),
-              },
-              {
-                key: "verified",
-                header: "Verified",
-                width: "120px",
-                render: (row) => (
-                  <span className="flex justify-center items-center">
-                    {row.isUpdating ? (
-                      <SimpleTooltip tooltip="Your domain is being verified. Please refresh the page in a minute or two.">
-                        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-                      </SimpleTooltip>
-                    ) : row.verified ? (
-                      <Check
-                        className={cn("w-5 h-5 stroke-3", "text-green-500")}
-                      />
-                    ) : (
-                      <SimpleTooltip tooltip="Domain verification failed, please ensure your DNS records have been setup correctly">
-                        <X className="w-5 h-5 stroke-3 text-red-500" />
-                      </SimpleTooltip>
-                    )}
-                  </span>
-                ),
-              },
-            ]}
-            data={domain?.domain ? [domain] : []}
-            rowKey={(row) => row.id}
-          />
-        </div>
+        </Stack>
+        <Table
+          noResultsMessage={
+            <Stack
+              direction="horizontal"
+              gap={2}
+              className="h-full p-4 bg-background"
+              align="center"
+              justify="center"
+            >
+              <Type variant="body">No custom domains yet.</Type>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setIsAddDomainDialogOpen(true)}
+                icon={"globe"}
+              >
+                Add
+              </Button>
+            </Stack>
+          }
+          columns={[
+            {
+              key: "domain",
+              header: "Domain",
+              width: "1fr",
+              render: (row) => <Type variant="body">{row.domain}</Type>,
+            },
+            {
+              key: "createdAt",
+              header: "Date Linked",
+              width: "1fr",
+              render: (row) => (
+                <Type variant="body">
+                  <HumanizeDateTime date={row.createdAt} />
+                </Type>
+              ),
+            },
+            {
+              key: "verified",
+              header: "Verified",
+              width: "120px",
+              render: (row) => (
+                <span className="flex justify-center items-center">
+                  {row.isUpdating ? (
+                    <SimpleTooltip tooltip="Your domain is being verified. Please refresh the page in a minute or two.">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                    </SimpleTooltip>
+                  ) : row.verified ? (
+                    <Check
+                      className={cn("w-5 h-5 stroke-3", "text-green-500")}
+                    />
+                  ) : (
+                    <SimpleTooltip tooltip="Domain verification failed, please ensure your DNS records have been setup correctly">
+                      <X className="w-5 h-5 stroke-3 text-red-500" />
+                    </SimpleTooltip>
+                  )}
+                </span>
+              ),
+            },
+          ]}
+          data={domain?.domain ? [domain] : []}
+          rowKey={(row) => row.id}
+        />
 
         <Dialog
           open={isAddDomainDialogOpen}

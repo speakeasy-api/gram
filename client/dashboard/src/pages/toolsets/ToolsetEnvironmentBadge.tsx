@@ -1,13 +1,14 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Badge } from "@/components/ui/badge";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { UrgentWarningIcon } from "@/components/ui/urgent-warning-icon";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { EnvironmentEntryInput, Toolset } from "@gram/client/models/components";
 import { invalidateAllListEnvironments, useUpdateEnvironmentMutation } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEnvironments } from "../environments/Environments";
 import { useState } from "react";
 
@@ -139,15 +140,11 @@ export const ToolsetEnvironmentBadge = ({
         <SimpleTooltip tooltip="Your environment is missing variables required by this toolset. Click here to set them.">
           <Badge
             size={size}
-            variant={"warning"}
+            variant={"urgent-warning"}
             onClick={() => setEnvVarsDialogOpen(true)}
-            className={
-              "flex items-center cursor-pointer gap-1 ring-2 ring-orange-500 dark:ring-orange-700"
-            }
+            className="cursor-pointer"
           >
-            <AlertTriangle
-              className={cn("w-4 h-4 text-orange-700 dark:text-orange-300")}
-            />
+            <UrgentWarningIcon />
             Environment
           </Badge>
         </SimpleTooltip>

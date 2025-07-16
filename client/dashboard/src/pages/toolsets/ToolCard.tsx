@@ -104,7 +104,12 @@ export function ToolCard({
       <Badge
         variant="secondary"
         className="text-sm capitalize"
-        tooltip={`This tool is from your ${sourceName} source`}
+        tooltip={
+          <span>
+            This tool is from your{" "}
+            <span className="font-bold capitalize">'{sourceName}'</span> source
+          </span>
+        }
       >
         {sourceName}
       </Badge>
