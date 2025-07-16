@@ -70,10 +70,8 @@ func (m msgID) MarshalJSON() ([]byte, error) {
 	switch m.format {
 	case 1:
 		bs, err = json.Marshal(m.Number)
-	case 2:
-		bs, err = json.Marshal(m.String)
 	default:
-		bs, err = nil, fmt.Errorf("invalid message id format: %d", m.format)
+		bs, err = json.Marshal(m.String)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("marshal message id: %w", err)
@@ -249,6 +247,6 @@ func (e *rpcError) MarshalJSON() ([]byte, error) {
 func respondWithNoContent(ack bool, w http.ResponseWriter) error {
 	acks := strconv.FormatBool(ack)
 	w.Header().Set("Noop", acks)
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusAccepted)
 	return nil
 }

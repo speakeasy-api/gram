@@ -328,6 +328,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		authenticated:   authenticated,
 	}
 
+	sessionID := parseMcpSessionID(r.Header)
+	w.Header().Set("Mcp-Session-Id", sessionID)
+
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
 	switch {
 	case body == nil && err == nil:
@@ -442,6 +445,9 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		authenticated:   true,
 	}
 
+	sessionID := parseMcpSessionID(r.Header)
+	w.Header().Set("Mcp-Session-Id", sessionID)
+
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
 	switch {
 	case body == nil && err == nil:
@@ -533,4 +539,12 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 			Data:    nil,
 		}
 	}
+}
+
+func parseMcpSessionID(headers http.Header) string {
+	session := headers.Get("Mcp-Session-Id")
+	if session == "" {
+		session = uuid.New().String()
+	}
+	return session
 }
