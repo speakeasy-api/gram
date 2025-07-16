@@ -420,8 +420,8 @@ github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 h1:GFCKgm
 github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10/go.mod h1:t/avpk3KcrXxUnYOhZhMXJlSEyie6gQbtLq5NM3loB8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/posthog/posthog-go v1.5.12 h1:nxK/z5QLCFxwzxV8GNvVd4Y1wJ++zJSWMGEtzU+/HLM=
-github.com/posthog/posthog-go v1.5.12/go.mod h1:ZPCind3bz8xDLK0Zhvpv1fQav6WfRcQDqTMfMXmna98=
+github.com/posthog/posthog-go v1.5.14 h1:JlpLCB5NOMUoFpzU4NZ8cgkLC89lr6Xtmi4T1yPkUwI=
+github.com/posthog/posthog-go v1.5.14/go.mod h1:ZPCind3bz8xDLK0Zhvpv1fQav6WfRcQDqTMfMXmna98=
 github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 h1:o4JXh1EVt9k/+g42oCprj/FisM4qX9L3sZB3upGN2ZU=
 github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55/go.mod h1:OmDBASR4679mdNQnz2pUhc2G8CO2JrUAVFDRBDP/hJE=
 github.com/prashantv/gostub v1.1.0 h1:BTyx3RfQjRHnUWaGF9oQos79AlQ5k8WNktv7VGvVH4g=
