@@ -13,15 +13,18 @@ import (
 type errorCode int
 
 const (
-	parseError     errorCode = -32700
-	invalidRequest errorCode = -32600
-	methodNotFound errorCode = -32601
-	invalidParams  errorCode = -32602
-	internalError  errorCode = -32603
+	methodNotAllowed errorCode = -32000
+	parseError       errorCode = -32700
+	invalidRequest   errorCode = -32600
+	methodNotFound   errorCode = -32601
+	invalidParams    errorCode = -32602
+	internalError    errorCode = -32603
 )
 
 func (e errorCode) UserMessage() string {
 	switch e {
+	case methodNotAllowed:
+		return "method not allowed"
 	case parseError:
 		return "invalid json was received by the server"
 	case invalidRequest:
@@ -46,7 +49,7 @@ var (
 )
 
 type msgID struct {
-	format byte
+	format byte // 1 for int64. any other values means string.
 	Number int64
 	String string
 }
@@ -222,15 +225,20 @@ func (e *rpcError) MarshalJSON() ([]byte, error) {
 		msg = e.Code.UserMessage()
 	}
 
-	bs, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"jsonrpc": "2.0",
-		"id":      e.ID,
 		"error": map[string]any{
 			"code":    e.Code,
 			"message": msg,
 			"data":    e.Data,
 		},
-	})
+	}
+
+	if (e.ID.format == 1 && e.ID.Number != 0) || (e.ID.format != 1 && e.ID.String != "") {
+		payload["id"] = e.ID
+	}
+
+	bs, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal jsonrpc error: %w", err)
 	}

@@ -114,7 +114,24 @@ func Attach(mux goahttp.Muxer, service *Service) {
 			}
 		}
 
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		body, err := json.Marshal(rpcError{
+			ID:      msgID{format: 0, String: "", Number: 0},
+			Code:    methodNotAllowed,
+			Message: methodNotAllowed.UserMessage(),
+			Data:    nil,
+		})
+		if err != nil {
+			service.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", slog.String("error", err.Error()))
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, writeErr := w.Write(body)
+		if writeErr != nil {
+			service.logger.ErrorContext(r.Context(), "failed to write response body", slog.String("error", writeErr.Error()))
+		}
 	})
 	mux.Handle("GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
