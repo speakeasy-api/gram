@@ -133,6 +133,7 @@ func (itp *InstanceToolProxy) Do(
 	// Variable to capture status code for metrics
 	var responseStatusCode int
 	defer func() {
+		logger.InfoContext(ctx, "tool call", slog.String("status_code", fmt.Sprintf("%d", responseStatusCode)), slog.String("method", toolExecutionInfo.Tool.HttpMethod), slog.String("content_type", toolExecutionInfo.Tool.RequestContentType.String))
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
 		itp.metrics.RecordHTTPToolCall(ctx, toolExecutionInfo.OrganizationID, toolExecutionInfo.OrgSlug, toolExecutionInfo.Tool.Name, responseStatusCode)
 	}()
@@ -440,14 +441,11 @@ func reverseProxyRequest(ctx context.Context,
 
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		logger.InfoContext(ctx, "tool call", slog.String("error", err.Error()), slog.String("status_code", "0"), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")))
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return resp.Body.Close()
 	})
-
-	logger.InfoContext(ctx, "tool call", slog.String("status_code", fmt.Sprintf("%d", resp.StatusCode)), slog.String("server_url", req.Host), slog.String("method", req.Method), slog.String("content_type", req.Header.Get("Content-Type")))
 
 	if len(resp.Trailer) > 0 {
 		var trailerKeys []string
