@@ -79,8 +79,9 @@ export function PromptEditor({
   );
 
   return (
-    <div>
+    <div className="flex gap-8">
       <form
+        className="flex-1 min-w-0 space-y-8"
         onSubmit={(e) => {
           e.preventDefault();
           const fd = new FormData(e.currentTarget);
@@ -127,23 +128,25 @@ export function PromptEditor({
           }
         }}
       >
-        <div className="mb-6 grid grid-cols-1 gap-4 content-start">
+        <div className="space-y-6">
           {predecessor == null ? (
-            <InputField
-              label="Name"
-              name="name"
-              pattern={PROMPT_NAME_PATTERN}
-              required
-            />
+            <div className="max-w-md">
+              <InputField
+                label="Name"
+                name="name"
+                pattern={PROMPT_NAME_PATTERN}
+                required
+              />
+            </div>
           ) : null}
-          <div>
+          <div className="max-w-md">
             <InputField
               label="Description"
               name="description"
               defaultValue={predecessor?.description ?? ""}
             />
           </div>
-          <div className="grid lg:grid-cols-2 gap-4">
+          <div>
             <dialog
               open
               className="bg-background text-inherit w-dvw h-dvh fixed inset-0 z-50"
@@ -162,17 +165,14 @@ export function PromptEditor({
                     : false
                 )}
               >
-                <Label className="mb-2" htmlFor="newprompt_prompt">
+                <Label className="mb-3" htmlFor="newprompt_prompt">
                   Prompt
                 </Label>
                 <Textarea
                   id="newprompt_prompt"
                   name="prompt"
-                  rows={fullScreenEditor ? void 0 : 20}
-                  className={cn(
-                    "font-mono",
-                    fullScreenEditor ? "h-full" : false
-                  )}
+                  rows={fullScreenEditor ? void 0 : 4}
+                  className={cn("font-mono", fullScreenEditor ? "h-full" : "")}
                   required
                   defaultValue={predecessor?.prompt}
                   onKeyUp={handleKeyUp}
@@ -204,44 +204,90 @@ export function PromptEditor({
                 ) : null}
               </div>
             </dialog>
-            <div>
-              <fieldset>
-                <legend className="text-sm font-medium leading-none">
-                  Arguments
-                </legend>
-                <p className="text-muted-foreground mb-4">
-                  Add useful descriptions for your prompt template arguments
-                  (optional)
+          </div>
+          <div className="pt-4">
+            <fieldset className="space-y-4">
+              <legend className="text-base font-medium leading-none mb-3">
+                Arguments
+              </legend>
+              <p className="text-muted-foreground text-sm mb-4">
+                Add useful descriptions for your prompt template arguments
+                (optional)
+              </p>
+              {args.length > 0 ? (
+                <ul className="space-y-3">
+                  {args.map((name) => {
+                    return (
+                      <ArgumentEntry
+                        key={name}
+                        name={name}
+                        defaultValue={argDefaults[name]?.description}
+                      />
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground border border-dashed border-muted-foreground/20 rounded-md p-4">
+                  No arguments found in prompt template. You can add these using
+                  the syntax{" "}
+                  <code className="text-red-600 bg-red-50 px-1 py-0.5 rounded text-xs">
+                    {"{{argument_name}}"}
+                  </code>
+                  .
                 </p>
-                {args.length > 0 ? (
-                  <ul>
-                    {args.map((name) => {
-                      return (
-                        <ArgumentEntry
-                          key={name}
-                          name={name}
-                          defaultValue={argDefaults[name]?.description}
-                        />
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p>
-                    No arguments found in prompt template. You can add these
-                    using the syntax{" "}
-                    <code className="text-red-600">{"{{argument_name}}"}</code>.
-                  </p>
-                )}
-              </fieldset>
-            </div>
+              )}
+            </fieldset>
           </div>
         </div>
-        {error ? <p className="text-red-600 mb-4">{error.message}</p> : null}
-        <Button type="submit" disabled={isPending}>
-          {isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-          {isPending ? "Saving..." : "Save Prompt"}
-        </Button>
+        <div className="pt-6">
+          {error ? (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+              <p className="text-red-700 text-sm">{error.message}</p>
+            </div>
+          ) : null}
+          <Button type="submit" disabled={isPending} size="lg">
+            {isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : null}
+            {isPending ? "Saving..." : "Save Prompt"}
+          </Button>
+        </div>
       </form>
+      <aside className="w-80 flex-shrink-0 space-y-6 sticky top-8 bg-secondary p-6 rounded-lg">
+        <div>
+          <h3 className="text-sm font-medium mb-2">Prompt Templates</h3>
+          <p className="text-sm text-muted-foreground">
+            Create reusable prompts with dynamic variables using the Mustache
+            syntax.
+          </p>
+        </div>
+        <div>
+          <h3 className="text-sm font-medium mb-2">Using Variables</h3>
+          <p className="text-sm text-muted-foreground mb-2">
+            Add variables to your prompt using double curly braces:
+          </p>
+          <code className="text-xs bg-muted px-2 py-1 rounded block">
+            {"{{variable_name}}"}
+          </code>
+        </div>
+        <div>
+          <h3 className="text-sm font-medium mb-2">Arguments</h3>
+          <p className="text-sm text-muted-foreground">
+            Variables detected in your prompt will automatically appear in the
+            Arguments section. Add descriptions to help users understand what
+            each variable is for.
+          </p>
+        </div>
+        <div>
+          <h3 className="text-sm font-medium mb-2">Tips</h3>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>• Use descriptive variable names</li>
+            <li>• Keep prompts clear and concise</li>
+            <li>• Test with different inputs</li>
+            <li>• Use the fullscreen editor for long prompts</li>
+          </ul>
+        </div>
+      </aside>
     </div>
   );
 }
