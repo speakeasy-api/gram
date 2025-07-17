@@ -28,7 +28,9 @@ import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { useChatContext } from "./ChatContext";
 import { useChatHistory } from "./ChatHistory";
+import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
+import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 
 // Ignore int32 format instead of erroring out
 const ajv = new Ajv({ formats: { int32: true } });
@@ -442,35 +444,48 @@ function ChatInner({
     return 0;
   });
 
+  // Enable message history navigation with up/down arrow keys
+  const { isNavigating, historyIndex, totalMessages } =
+    useMessageHistoryNavigation(chatMessages);
+
   // TODO: fix this
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const m = messagesToDisplay as any;
 
   return (
-    <AIChatContainer
-      messages={m}
-      isLoading={status === "streaming" || isChatHistoryLoading}
-      onSendMessage={handleSend}
-      className={"pb-4"}
-      toolCallApproval={toolCallApproval}
-      components={{
-        composer: {
-          additionalActions,
-          modelSelector: "text-foreground",
-        },
-        message: {
-          avatar: {
-            user: () => <ProjectAvatar project={project} className="h-6 w-6" />,
+    <div className="relative h-full">
+      <AIChatContainer
+        messages={m}
+        isLoading={status === "streaming" || isChatHistoryLoading}
+        onSendMessage={handleSend}
+        className={"pb-4"}
+        toolCallApproval={toolCallApproval}
+        components={{
+          composer: {
+            additionalActions,
+            modelSelector: "text-foreground",
           },
-          toolCall: toolCallComponents(allTools),
-        },
-      }}
-      modelSelector={{
-        model,
-        onModelChange: setModel,
-        availableModels,
-      }}
-    />
+          message: {
+            avatar: {
+              user: () => (
+                <ProjectAvatar project={project} className="h-6 w-6" />
+              ),
+            },
+            toolCall: toolCallComponents(allTools),
+          },
+        }}
+        modelSelector={{
+          model,
+          onModelChange: setModel,
+          availableModels,
+        }}
+      />
+      <MessageHistoryIndicator
+        isNavigating={isNavigating}
+        historyIndex={historyIndex}
+        totalMessages={totalMessages}
+      />
+    </div>
   );
 }
 
