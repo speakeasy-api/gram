@@ -62,6 +62,7 @@ mise run install
 echo -e "\n⏳ Setting up API keys"
 mise run zero:openai
 mise run zero:github
+mise run zero:openrouter
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
