@@ -11,7 +11,6 @@ import {
 } from "@gram/client/react-query/index.js";
 import { useState } from "react";
 import { Outlet } from "react-router";
-import { useEmptyProjectRedirect } from "../openapi/OpenAPI";
 import { ToolsetCard } from "./ToolsetCard";
 import { Cards } from "@/components/ui/card";
 
@@ -84,8 +83,6 @@ function ToolsetsContent({
       },
     });
   };
-
-  useEmptyProjectRedirect();
 
   return (
     <Cards loading={toolsets.isLoading}>

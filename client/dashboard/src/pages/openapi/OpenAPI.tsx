@@ -13,86 +13,25 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { HTTPToolDefinition } from "@gram/client/models/components";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
 import {
   useDeploymentSuspense,
   useLatestDeployment,
-  useListToolsets,
   useListToolsSuspense,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
-import { Suspense, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Suspense, useState } from "react";
 import { OnboardingContent } from "../onboarding/Onboarding";
 
-export function useEmptyProjectRedirect() {
-  const session = useSession();
-  const { projectSlug } = useParams();
-  const navigate = useNavigate();
-
-  const {
-    data: deployment,
-    isLoading: deploymentLoading,
-    isFetchedAfterMount: deploymentFetchedAfterMount,
-  } = useLatestDeployment(
-    {
-      gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
-    },
-    undefined,
-    {
-      refetchOnMount: "always",
-    }
-  );
-
-  const {
-    data: toolsets,
-    isLoading: toolsetsLoading,
-    isFetchedAfterMount: toolsetsFetchedAfterMount,
-  } = useListToolsets(
-    {
-      gramProject: projectSlug, // Set this forcibly to avoid a race condition when switching projects
-    },
-    undefined,
-    {
-      refetchOnMount: "always",
-    }
-  );
-
-  useEffect(() => {
-    // Make sure we have the latest data
-    if (
-      toolsetsLoading ||
-      deploymentLoading ||
-      !deploymentFetchedAfterMount ||
-      !toolsetsFetchedAfterMount
-    ) {
-      return;
-    }
-
-    const deploymentEmpty = isDeploymentEmpty(deployment?.deployment);
-
-    if (deploymentEmpty && toolsets?.toolsets.length === 0) {
-      navigate(`/${session.organization.slug}/${projectSlug}/onboarding`);
-    }
-  }, [deployment, toolsets]);
-}
-
 function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
-  return (
-    !deployment ||
-    (deployment?.openapiv3Assets.length === 0 &&
-      deployment?.packages.length === 0)
-  );
+  return !deployment?.id;
 }
 
 function DeploymentCards() {
   const { data: deployment, refetch } = useLatestDeployment();
-
-  useEmptyProjectRedirect();
 
   // If the deployment is empty, show the in-page onboarding
   if (isDeploymentEmpty(deployment?.deployment)) {

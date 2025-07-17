@@ -4,8 +4,15 @@ import { Button } from "../components/button";
 import { getServerURL } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";
-import { useRegisterMutation } from "@gram/client/react-query";
+import {
+  buildRegisterMutation,
+  RegisterMutationVariables,
+  useGramContext,
+} from "@gram/client/react-query";
+import { authInfo } from "@gram/client/funcs/authInfo";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useMutation } from "@tanstack/react-query";
+import { useRoutes } from "@/routes";
 
 const Logo = () => {
   return (
@@ -113,11 +120,30 @@ export function RegisterSection() {
   const telemetry = useTelemetry();
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
+  const sdk = useGramContext();
+  const routes = useRoutes();
 
-  const registerMutation = useRegisterMutation({
-    onSuccess: () => {
-      // Redirect to app home after successful registration
-      window.location.href = "/";
+  const registerMutation = useMutation({
+    mutationFn: async (vars: RegisterMutationVariables) => {
+      await buildRegisterMutation(sdk).mutationFn(vars);
+
+      const info = await authInfo(sdk);
+      if (!info.ok) {
+        throw info.error;
+      }
+
+      const org = info.value.result.organizations.find(
+        (org) => org.id === info.value.result.activeOrganizationId
+      );
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      return org;
+    },
+
+    onSuccess: (data) => {
+      window.location.replace(routes.onboarding.href(data.slug, "default"));
     },
     onError: (error) => {
       setValidationError(error.message);

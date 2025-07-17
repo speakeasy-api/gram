@@ -29,7 +29,6 @@ import { Grid, Icon, IconName, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, CheckCircleIcon, LockIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMcpUrl } from "../mcp/MCPDetails";
-import { useEmptyProjectRedirect } from "../openapi/OpenAPI";
 import { ToolDefinition } from "../toolsets/types";
 
 export default function Home() {
@@ -56,8 +55,6 @@ function HomeContent() {
   const telemetry = useTelemetry();
   const { data: toolsets } = useListToolsets();
   const [selectedToolset, setSelectedToolset] = useState<Toolset | null>(null);
-
-  useEmptyProjectRedirect();
 
   useEffect(() => {
     if (toolsets?.toolsets.length) {
@@ -200,10 +197,18 @@ function HeroCard({
                 <ToolsetBadge toolset={toolset} />
               </Stack>
             </Stack>
-            <Stack direction={{ xs: "vertical", xl: "horizontal" }} gap={6} className="min-w-0">
+            <Stack
+              direction={{ xs: "vertical", xl: "horizontal" }}
+              gap={6}
+              className="min-w-0"
+            >
               <Stack className="min-w-0 flex-1">
                 <Type muted>MCP URL</Type>
-                <Stack direction="horizontal" align="center" className="min-w-0">
+                <Stack
+                  direction="horizontal"
+                  align="center"
+                  className="min-w-0"
+                >
                   <Type className="font-medium truncate" skeleton="phrase">
                     {mcpUrl}
                   </Type>
@@ -217,7 +222,11 @@ function HeroCard({
               <Stack className="min-w-0 flex-1">
                 <Type muted>Install Page</Type>
                 {toolset?.mcpIsPublic ? (
-                  <Stack direction="horizontal" align="center" className="min-w-0">
+                  <Stack
+                    direction="horizontal"
+                    align="center"
+                    className="min-w-0"
+                  >
                     <Link to={pageUrl!} external className="truncate">
                       <Type className="font-medium truncate" skeleton="phrase">
                         {pageUrl}
