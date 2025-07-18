@@ -38,7 +38,6 @@ import {
 } from "@gram/client/react-query";
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Message } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
@@ -58,6 +57,7 @@ import {
   toJSON,
 } from "./components";
 import { useToolifyContext } from "./Toolify";
+import React from "react";
 
 export function ToolBuilderNew() {
   const ctx = useToolifyContext();
@@ -93,9 +93,7 @@ export function ToolBuilderNew() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <ChatProvider>
-          <ToolBuilder initial={newTemplate} />
-        </ChatProvider>
+        <ToolBuilder initial={newTemplate} />
       </Page.Body>
     </Page>
   );
@@ -154,7 +152,6 @@ type ToolBuilderState = {
 function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const queryClient = useQueryClient();
   const client = useSdkClient();
-  const chat = useChatContext();
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { handleApiError } = useApiError();
@@ -259,25 +256,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     });
   };
 
-  const chatConfigRef: ChatConfig = useRef({
-    toolsetSlug: toolsetFilter?.slug ?? null,
-    environmentSlug: toolsetFilter?.defaultEnvironmentSlug ?? null,
-    isOnboarding: false,
-  });
-
-  useEffect(() => {
-    if (toolsetFilter?.slug) {
-      chatConfigRef.current.toolsetSlug = toolsetFilter.slug;
-    }
-  }, [toolsetFilter]);
-
-  useEffect(() => {
-    if (toolsetData?.defaultEnvironmentSlug) {
-      chatConfigRef.current.environmentSlug =
-        toolsetData.defaultEnvironmentSlug;
-    }
-  }, [toolsetData]);
-
   // When purpose or steps change, recompute inputs
   useEffect(() => {
     const allInputs = steps.flatMap((step) => parseInputs(step.instructions));
@@ -309,14 +287,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     return true;
   };
 
-  const initialMessages: Message[] = [
-    {
-      id: "1",
-      role: "assistant",
-      content: "Use this chat to test out your tool!",
-    },
-  ];
-
   const AddStepButton = () => {
     const [open, setOpen] = useState(false);
 
@@ -344,71 +314,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       </ToolSelectPopover>
     );
   };
-
-  const [selectedEnvironment, setSelectedEnvironment] = useState(
-    chatConfigRef.current.environmentSlug
-  );
-  const environmentSwitcher = (
-    <EnvironmentDropdown
-      selectedEnvironment={selectedEnvironment}
-      setSelectedEnvironment={(slug) => {
-        setSelectedEnvironment(slug);
-        chatConfigRef.current.environmentSlug = slug;
-      }}
-      className="h-7"
-      visibilityThreshold={2}
-    />
-  );
-
-  const tryNowButton = (
-    <Button
-      icon="play"
-      size="sm"
-      className="h-7"
-      onClick={async () => {
-        telemetry.capture("tool_builder_event", {
-          event: "try_now",
-        });
-
-        const inputArgs = Object.fromEntries(
-          inputs.map((input) => [input.name, `{{${input.name}}}`])
-        );
-
-        const higherOrderTool: HigherOrderTool = {
-          toolName: name,
-          purpose,
-          inputs,
-          steps,
-        };
-
-        const renderResult = await client.templates.render({
-          renderTemplateRequestBody: {
-            prompt: toJSON(higherOrderTool),
-            arguments: inputArgs,
-            engine: "mustache",
-            kind: PromptTemplateKind.HigherOrderTool,
-          },
-        });
-
-        const renderedPrompt = renderResult.prompt || "";
-
-        chat.appendMessage({
-          id: uuidv7(),
-          role: "user",
-          content: `\`\`\`xml\n${renderedPrompt}\n\`\`\``,
-        });
-      }}
-    >
-      Try Now
-    </Button>
-  );
-
-  const additionalActions = (
-    <>
-      {tryNowButton}
-      {environmentSwitcher}
-    </>
-  );
 
   const anyChanges =
     description !== initial.description ||
@@ -708,11 +613,16 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
         </Stack>
       </ResizablePanel.Pane>
       <ResizablePanel.Pane minSize={35}>
-        <ChatWindow
-          configRef={chatConfigRef}
-          additionalActions={additionalActions}
-          initialMessages={initialMessages}
-        />
+        <ChatProvider>
+          <ChatPanel
+            toolsetSlug={toolsetFilter?.slug}
+            defaultEnvironmentSlug={toolsetData?.defaultEnvironmentSlug}
+            inputs={inputs}
+            steps={steps}
+            name={name}
+            purpose={purpose}
+          />
+        </ChatProvider>
       </ResizablePanel.Pane>
     </ResizablePanel>
   );
@@ -1046,3 +956,119 @@ const parsePromptLegacy = (
 
   return { purpose, inputs, steps };
 };
+
+const customToolSystemPrompt = [
+  {
+    id: "1",
+    role: "system" as const,
+    content:
+      "Use this chat to test out the custom tool the user has built. You should faithfuly execute the plan it sets out to achieve the specified purpose.",
+  },
+];
+
+function ChatPanel(props: {
+  toolsetSlug?: string;
+  defaultEnvironmentSlug?: string;
+  inputs: Input[];
+  steps: Step[];
+  name: string;
+  purpose: string;
+}) {
+  const { toolsetSlug, defaultEnvironmentSlug, inputs, steps, name, purpose } =
+    props;
+  const client = useSdkClient();
+  const chat = useChatContext();
+  const telemetry = useTelemetry();
+  const [selectedEnvironment, setSelectedEnvironment] = useState(
+    defaultEnvironmentSlug ?? null
+  );
+
+  const chatConfigRef: ChatConfig = useRef({
+    toolsetSlug: toolsetSlug ?? null,
+    environmentSlug: selectedEnvironment ?? null,
+    isOnboarding: false,
+  });
+
+  useEffect(() => {
+    if (toolsetSlug) {
+      chatConfigRef.current.toolsetSlug = toolsetSlug;
+    }
+  }, [toolsetSlug]);
+
+  useEffect(() => {
+    if (!chatConfigRef.current.environmentSlug && defaultEnvironmentSlug) {
+      chatConfigRef.current.environmentSlug = defaultEnvironmentSlug;
+      setSelectedEnvironment(defaultEnvironmentSlug);
+    }
+  }, [defaultEnvironmentSlug]);
+
+  const environmentSwitcher = (
+    <EnvironmentDropdown
+      selectedEnvironment={selectedEnvironment}
+      setSelectedEnvironment={(slug) => {
+        setSelectedEnvironment(slug);
+        chatConfigRef.current.environmentSlug = slug;
+      }}
+      className="h-7"
+      visibilityThreshold={2}
+    />
+  );
+
+  const tryNowButton = (
+    <Button
+      icon="play"
+      size="sm"
+      className="h-7"
+      onClick={async () => {
+        telemetry.capture("tool_builder_event", {
+          event: "try_now",
+        });
+
+        const inputArgs = Object.fromEntries(
+          inputs.map((input) => [input.name, `{{${input.name}}}`])
+        );
+
+        const higherOrderTool: HigherOrderTool = {
+          toolName: name,
+          purpose,
+          inputs,
+          steps,
+        };
+
+        const renderResult = await client.templates.render({
+          renderTemplateRequestBody: {
+            prompt: toJSON(higherOrderTool),
+            arguments: inputArgs,
+            engine: "mustache",
+            kind: PromptTemplateKind.HigherOrderTool,
+          },
+        });
+
+        const renderedPrompt = renderResult.prompt || "";
+
+        chat.appendMessage({
+          id: uuidv7(),
+          role: "user",
+          content: `\`\`\`xml\n${renderedPrompt}\n\`\`\``,
+        });
+      }}
+    >
+      Try Now
+    </Button>
+  );
+
+  const additionalActions = (
+    <>
+      {tryNowButton}
+      {environmentSwitcher}
+    </>
+  );
+
+  return (
+    <ChatWindow
+      configRef={chatConfigRef}
+      additionalActions={additionalActions}
+      initialMessages={customToolSystemPrompt}
+    />
+  );
+}

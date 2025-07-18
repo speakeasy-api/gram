@@ -105,7 +105,7 @@ function ChatInner({
   const client = useSdkClient();
 
   const chat = useChatContext();
-  const { setMessages } = useChatContext();
+  const { setMessages } = chat;
   const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
     chat.id
   );
