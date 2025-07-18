@@ -4005,7 +4005,7 @@ paths:
             x-speakeasy-react-hook:
                 name: RenderTemplateByID
                 type: query
-    /rpc/templates.render-direct:
+    /rpc/templates.renderDirect:
         post:
             description: |-
                 Render a prompt template directly with all template fields provided.

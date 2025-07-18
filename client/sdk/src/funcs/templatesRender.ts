@@ -94,7 +94,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/templates.render-direct")();
+  const path = pathToFunc("/rpc/templates.renderDirect")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

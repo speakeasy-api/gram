@@ -221,7 +221,7 @@ var _ = Service("templates", func() {
 		Result(RenderTemplateResult)
 
 		HTTP(func() {
-			POST("/rpc/templates.render-direct")
+			POST("/rpc/templates.renderDirect")
 
 			security.ByKeyHeader()
 			security.SessionHeader()

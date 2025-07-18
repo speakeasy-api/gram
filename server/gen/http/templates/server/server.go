@@ -62,7 +62,7 @@ func New(
 			{"ListTemplates", "GET", "/rpc/templates.list"},
 			{"DeleteTemplate", "DELETE", "/rpc/templates.delete"},
 			{"RenderTemplateByID", "POST", "/rpc/templates.render"},
-			{"RenderTemplate", "POST", "/rpc/templates.render-direct"},
+			{"RenderTemplate", "POST", "/rpc/templates.renderDirect"},
 		},
 		CreateTemplate:     NewCreateTemplateHandler(e.CreateTemplate, mux, decoder, encoder, errhandler, formatter),
 		UpdateTemplate:     NewUpdateTemplateHandler(e.UpdateTemplate, mux, decoder, encoder, errhandler, formatter),
@@ -422,7 +422,7 @@ func MountRenderTemplateHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/templates.render-direct", otelhttp.WithRouteTag("/rpc/templates.render-direct", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/templates.renderDirect", otelhttp.WithRouteTag("/rpc/templates.renderDirect", f).ServeHTTP)
 }
 
 // NewRenderTemplateHandler creates a HTTP handler which loads the HTTP request

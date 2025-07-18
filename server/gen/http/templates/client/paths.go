@@ -39,5 +39,5 @@ func RenderTemplateByIDTemplatesPath() string {
 
 // RenderTemplateTemplatesPath returns the URL path to the templates service renderTemplate HTTP endpoint.
 func RenderTemplateTemplatesPath() string {
-	return "/rpc/templates.render-direct"
+	return "/rpc/templates.renderDirect"
 }
