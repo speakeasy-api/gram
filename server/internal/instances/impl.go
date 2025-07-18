@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -59,6 +60,7 @@ func NewService(
 	sessions *sessions.Manager,
 	enc *encryption.Encryption,
 	cacheImpl cache.Cache,
+	guardianPolicy *guardian.Policy,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -79,6 +81,7 @@ func NewService(
 			meter,
 			ToolCallSourceDirect,
 			cacheImpl,
+			guardianPolicy,
 		),
 	}
 }

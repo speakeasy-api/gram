@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -24,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/serialization"
@@ -95,6 +94,7 @@ type InstanceToolProxy struct {
 	tracer  trace.Tracer
 	metrics *metrics
 	cache   cache.Cache
+	policy  *guardian.Policy
 }
 
 func NewInstanceToolProxy(
@@ -103,6 +103,7 @@ func NewInstanceToolProxy(
 	meter metric.Meter,
 	source ToolCallSource,
 	cache cache.Cache,
+	policy *guardian.Policy,
 ) *InstanceToolProxy {
 	return &InstanceToolProxy{
 		source:  source,
@@ -110,6 +111,7 @@ func NewInstanceToolProxy(
 		tracer:  tracer,
 		metrics: newMetrics(meter, logger),
 		cache:   cache,
+		policy:  policy,
 	}
 }
 
@@ -308,11 +310,7 @@ func (itp *InstanceToolProxy) Do(
 
 	processSecurity(ctx, logger, req, w, &responseStatusCode, toolExecutionInfo, itp.cache, ciEnv, serverURL)
 
-	if err := protectSSRF(ctx, logger, req.URL); err != nil {
-		return oops.E(oops.CodeForbidden, err, "unauthorized ssrf request").Log(ctx, logger)
-	}
-
-	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, w, req, &responseStatusCode)
+	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, w, req, itp.policy, &responseStatusCode)
 }
 
 type retryConfig struct {
@@ -376,18 +374,15 @@ func reverseProxyRequest(ctx context.Context,
 	tool tools_repo.HttpToolDefinition,
 	w http.ResponseWriter,
 	req *http.Request,
+	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
 
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           policy.Dialer().DialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
@@ -505,39 +500,6 @@ func reverseProxyRequest(ctx context.Context,
 		if _, err := io.Copy(w, resp.Body); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
-		}
-	}
-
-	return nil
-}
-
-func protectSSRF(ctx context.Context, logger *slog.Logger, parsed *url.URL) error {
-	host := parsed.Hostname()
-	// Block localhost explicitly
-	if host == "localhost" || strings.HasPrefix(host, "localhost.") {
-		logger.WarnContext(ctx, "blocked localhost", slog.String("url", parsed.String()))
-		return errors.New("localhost is not allowed")
-	}
-
-	// If host is an IP, block private ranges
-	ip := net.ParseIP(host)
-	if ip != nil {
-		privateCIDRs := []string{
-			"127.0.0.0/8",
-			"10.0.0.0/8",
-			"172.16.0.0/12",
-			"192.168.0.0/16",
-			"169.254.0.0/16",
-			"::1/128",
-			"fc00::/7",
-			"fe80::/10",
-		}
-
-		for _, cidr := range privateCIDRs {
-			if _, block, err := net.ParseCIDR(cidr); err == nil && block.Contains(ip) {
-				logger.WarnContext(ctx, "blocked private IP", slog.String("ip", ip.String()), slog.String("url", parsed.String()))
-				return errors.New("internal IP is not allowed")
-			}
 		}
 	}
 

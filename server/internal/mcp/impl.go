@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -75,7 +76,18 @@ var configSnippetTmplData string
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, chatClient *openrouter.ChatClient, posthog *posthog.Posthog, serverURL *url.URL, cacheImpl cache.Cache) *Service {
+func NewService(logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	enc *encryption.Encryption,
+	chatClient *openrouter.ChatClient,
+	posthog *posthog.Posthog,
+	serverURL *url.URL,
+	cacheImpl cache.Cache,
+	guardianPolicy *guardian.Policy,
+) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 
@@ -97,6 +109,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 			meter,
 			instances.ToolCallSourceMCP,
 			cacheImpl,
+			guardianPolicy,
 		),
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -137,6 +138,12 @@ func newWorkerCommand() *cli.Command {
 				Usage:   "Password for the redis cache server",
 				EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
 			},
+			&cli.StringSliceFlag{
+				Name:     "disallowed-cidr-blocks",
+				Usage:    "List of CIDR blocks to block for SSRF protection",
+				EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-worker"
@@ -245,9 +252,17 @@ func newWorkerCommand() *cli.Command {
 				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient})
 			}
 
+			guardianPolicy := guardian.NewDefaultPolicy()
+			if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
+				guardianPolicy, err = guardian.NewUnsafePolicy(s)
+				if err != nil {
+					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+				}
+			}
+
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
 				DB:                  db,

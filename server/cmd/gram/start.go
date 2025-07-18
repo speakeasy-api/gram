@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -260,6 +261,12 @@ func newStartCommand() *cli.Command {
 				EnvVars:  []string{"POSTHOG_PRIVATE_KEY"},
 				Required: false,
 			},
+			&cli.StringSliceFlag{
+				Name:     "disallowed-cidr-blocks",
+				Usage:    "List of CIDR blocks to block for SSRF protection",
+				EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-server"
@@ -406,9 +413,18 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse server url: %w", err)
 			}
 
+			guardianPolicy := guardian.NewDefaultPolicy()
+			blockedCIDRs := c.StringSlice("disallowed-cidr-blocks")
+			if blockedCIDRs != nil {
+				guardianPolicy, err = guardian.NewUnsafePolicy(blockedCIDRs)
+				if err != nil {
+					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+				}
+			}
+
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
@@ -432,8 +448,8 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
-			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, cache.NewRedisCacheAdapter(redisClient)))
-			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, baseChatClient, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient)))
+			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
+			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, baseChatClient, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
