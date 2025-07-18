@@ -17,18 +17,9 @@ type Posthog struct {
 	logger   *slog.Logger
 }
 
-func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthogPrivateAPIKey string, posthogEndpoint string) *Posthog {
+func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthogEndpoint string) *Posthog {
 	if posthogAPIKey == "" {
 		logger.InfoContext(ctx, "posthog API key not found, disabling posthog")
-		return &Posthog{
-			disabled: true,
-			logger:   logger,
-			client:   nil,
-		}
-	}
-
-	if posthogPrivateAPIKey == "" {
-		logger.InfoContext(ctx, "posthog private API key not found, disabling posthog")
 		return &Posthog{
 			disabled: true,
 			logger:   logger,
@@ -48,8 +39,7 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	client, err := posthog.NewWithConfig(
 		posthogAPIKey,
 		posthog.Config{
-			PersonalApiKey: posthogPrivateAPIKey,
-			Endpoint:       posthogEndpoint,
+			Endpoint: posthogEndpoint,
 		},
 	)
 	if err != nil {
