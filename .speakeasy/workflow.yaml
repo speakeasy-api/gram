@@ -7,7 +7,7 @@ sources:
         overlays:
             - location: overlays/goa.yaml
         registry:
-            location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
+            location: registry.speakeasyapi.dev/gram/gram/gram-api-description
     Gram-Public:
         inputs:
             - location: server/gen/http/openapi3.yaml
@@ -15,7 +15,7 @@ sources:
             - location: overlays/goa.yaml
             - location: overlays/public-sdk.yaml
         registry:
-            location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-public-api-description
+            location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
 targets:
     gram-internal:
         target: typescript
@@ -23,7 +23,7 @@ targets:
         output: client/sdk
         codeSamples:
             registry:
-                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
+                location: registry.speakeasyapi.dev/gram/gram/gram-api-description-typescript-code-samples
             labelOverride:
                 fixedValue: Typescript (SDK)
             blocking: false

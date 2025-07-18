@@ -14,7 +14,7 @@ targets:
         sourceRevisionDigest: sha256:61f41a99a58aedfdd307194c8c3313e6722e3617b88289abd03b89893c8cb9f2
         sourceBlobDigest: sha256:4d10326843cd8a29264acc52bfc56d04a079ac8e42a5b4a171d035a873439eea
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:08e17a460499bfcb50be7e415a3a3b9d50d669584bbde018bcd3ace78d14daf9
+        codeSamplesRevisionDigest: sha256:ea4c5e34d82b06b54d02b32ccb171052b23d53d8fc04e899d46dcf659a4f6037
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest
@@ -25,7 +25,7 @@ workflow:
             overlays:
                 - location: overlays/goa.yaml
             registry:
-                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description
+                location: registry.speakeasyapi.dev/gram/gram/gram-api-description
         Gram-Public:
             inputs:
                 - location: server/gen/http/openapi3.yaml
@@ -33,7 +33,7 @@ workflow:
                 - location: overlays/goa.yaml
                 - location: overlays/public-sdk.yaml
             registry:
-                location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-public-api-description
+                location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
     targets:
         gram-internal:
             target: typescript
@@ -41,7 +41,7 @@ workflow:
             output: client/sdk
             codeSamples:
                 registry:
-                    location: registry.speakeasyapi.dev/speakeasy-self/speakeasy-self/gram-api-description-typescript-code-samples
+                    location: registry.speakeasyapi.dev/gram/gram/gram-api-description-typescript-code-samples
                 labelOverride:
                     fixedValue: Typescript (SDK)
                 blocking: false
