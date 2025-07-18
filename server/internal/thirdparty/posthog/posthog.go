@@ -133,11 +133,14 @@ func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID
 		properties.Set(k, v)
 	}
 
-	enqueueErr := p.client.Enqueue(posthog.Capture{
+	if err := p.client.Enqueue(posthog.Capture{
 		DistinctId: distinctID,
 		Event:      eventName,
 		Properties: properties,
 		Groups:     groups,
-	})
-	return fmt.Errorf("failed to enqueue event: %w", enqueueErr)
+	}); err != nil {
+		return fmt.Errorf("failed to enqueue event: %w", err)
+	}
+
+	return nil
 }
