@@ -17,51 +17,33 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { HTTPToolDefinition } from "@gram/client/models/components";
 import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult";
 import {
-  useDeploymentSuspense,
   useLatestDeployment,
-  useListToolsSuspense,
+  useListTools,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { formatDistanceToNow } from "date-fns";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { OnboardingContent } from "../onboarding/Onboarding";
+import { ApisEmptyState } from "./ApisEmptyState";
 
-function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
-  return !deployment?.id;
-}
-
-function DeploymentCards() {
-  const { data: deployment, refetch } = useLatestDeployment();
-
-  // If the deployment is empty, show the in-page onboarding
-  if (isDeploymentEmpty(deployment?.deployment)) {
-    return <OnboardingContent onOnboardingComplete={() => refetch()} />;
-  }
-
+export default function OpenAPIDocuments() {
   return (
-    <Suspense fallback={<Cards loading={true} />}>
-      <DeploymentTools
-        deploymentId={deployment!.deployment!.id}
-        onNewDeployment={refetch}
-      />
-    </Suspense>
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <DeploymentCards />
+      </Page.Body>
+    </Page>
   );
 }
 
-function DeploymentTools({
-  deploymentId,
-  onNewDeployment,
-}: {
-  deploymentId: string;
-  onNewDeployment: () => void;
-}) {
+function DeploymentCards() {
   const client = useSdkClient();
-  const { data: deployment } = useDeploymentSuspense({
-    id: deploymentId,
-  });
-  const { data: toolsData } = useListToolsSuspense({
-    deploymentId: deploymentId,
-  });
+  const { data: deploymentResult, refetch } = useLatestDeployment();
+  const { data: toolsData } = useListTools();
+  const deployment = deploymentResult?.deployment;
 
   const [newDocumentDialogOpen, setNewDocumentDialogOpen] = useState(false);
   const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] =
@@ -73,11 +55,7 @@ function DeploymentTools({
       deployment.packages.length === 0)
   ) {
     return (
-      <Card>
-        <Card.Content className="pt-6">
-          Latest deployment is empty.
-        </Card.Content>
-      </Card>
+      <ApisEmptyState onNewUpload={() => setNewDocumentDialogOpen(true)} />
     );
   }
 
@@ -86,18 +64,18 @@ function DeploymentTools({
   const finishUpload = () => {
     setNewDocumentDialogOpen(false);
     setChangeDocumentTargetSlug(undefined);
-    onNewDeployment();
+    refetch();
   };
 
   const removeDocument = async (assetId: string) => {
     await client.deployments.evolveDeployment({
       evolveForm: {
-        deploymentId: deploymentId,
+        deploymentId: deployment.id,
         excludeOpenapiv3Assets: [assetId],
       },
     });
 
-    onNewDeployment();
+    refetch();
   };
 
   return (
@@ -176,21 +154,6 @@ function DeploymentTools({
         </Dialog.Content>
       </Dialog>
     </>
-  );
-}
-
-export default function OpenAPIDocuments() {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Suspense fallback={<Cards loading={true} />}>
-          <DeploymentCards />
-        </Suspense>
-      </Page.Body>
-    </Page>
   );
 }
 

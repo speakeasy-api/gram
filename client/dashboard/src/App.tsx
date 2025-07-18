@@ -82,8 +82,8 @@ const RouteProvider = () => {
     (route) => route.unauthenticated
   );
 
-  const outsideStructureRoutes = Object.values(routes).filter((route) =>
-    route.url.startsWith(":orgSlug/:projectSlug/")
+  const outsideStructureRoutes = Object.values(routes).filter(
+    (route) => route.outsideMainLayout
   );
 
   const authenticatedRoutes = Object.values(routes).filter(
@@ -96,7 +96,9 @@ const RouteProvider = () => {
         {/* Register these unauthenticated paths outside of root layout */}
         {routesWithSubroutes(unauthenticatedRoutes)}
         <Route path="/" element={<LoginCheck />}>
-          {routesWithSubroutes(outsideStructureRoutes)}
+          <Route path=":orgSlug/:projectSlug">
+            {routesWithSubroutes(outsideStructureRoutes)}
+          </Route>
           <Route path=":orgSlug/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
           </Route>

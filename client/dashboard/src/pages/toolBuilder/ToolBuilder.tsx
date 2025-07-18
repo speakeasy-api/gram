@@ -799,7 +799,7 @@ const ToolSelectPopover = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0">
+      <PopoverContent className="w-[200px] min-w-fit p-0">
         <Command>
           <CommandInput placeholder="Search..." className="h-9" />
           <CommandList>

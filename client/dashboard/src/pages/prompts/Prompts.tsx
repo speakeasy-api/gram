@@ -20,6 +20,7 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "react-router";
+import { PromptsEmptyState } from "./PromptsEmptyState";
 
 export function PromptsRoot() {
   return <Outlet />;
@@ -42,6 +43,21 @@ export default function Prompts() {
   const prompts = usePrompts();
   const routes = useRoutes();
 
+  let content = <PromptsEmptyState onCreatePrompt={() => routes.prompts.newPrompt.goTo()} />;
+
+  if (prompts && prompts.length > 0) {
+    content = (
+      <>
+        {prompts?.map((template) => {
+          return <PromptTemplateCard key={template.id} template={template} />;
+        })}
+        <routes.prompts.newPrompt.Link>
+          <CreateThingCard>+ New Prompt Template</CreateThingCard>
+        </routes.prompts.newPrompt.Link>
+      </>
+    );
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -52,24 +68,19 @@ export default function Prompts() {
           </routes.prompts.newPrompt.Link>
         </Page.Header.Actions>
       </Page.Header>
-      <Page.Body>
-        {prompts?.map((template) => {
-          return <PromptTemplateCard key={template.id} template={template} />;
-        })}
-        <routes.prompts.newPrompt.Link>
-          <CreateThingCard>+ New Prompt Template</CreateThingCard>
-        </routes.prompts.newPrompt.Link>
-      </Page.Body>
+      <Page.Body>{content}</Page.Body>
     </Page>
   );
 }
 
 export function PromptTemplateCard({
   template,
-  actions,
+  onDelete,
+  deleteTooltip,
 }: {
   template: PromptTemplate;
-  actions?: React.ReactNode;
+  onDelete?: () => void;
+  deleteTooltip?: string;
 }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
@@ -95,14 +106,15 @@ export function PromptTemplateCard({
             </Type>
           </Stack>
         </Card.Description>
-        {actions && <Card.Actions>{actions}</Card.Actions>}
       </Card.Header>
       <Card.Footer>
         <Stack direction="horizontal" gap={2}>
           <DeleteButton
-            tooltip="Delete Prompt Template"
+            tooltip={deleteTooltip ?? "Delete Prompt Template"}
             onClick={() => {
-              if (
+              if (onDelete) {
+                onDelete();
+              } else if (
                 confirm("Are you sure you want to delete this prompt template?")
               ) {
                 deleteTemplate.mutate({ request: { name: template.name } });

@@ -85,13 +85,11 @@ function PageHeaderBreadcrumbs() {
       };
     });
 
-  if (visibleElements.length === 0) {
-    visibleElements.push({
-      url: "/",
-      title: "Home",
-      isCurrentPage: location.pathname === "/",
-    });
-  }
+  visibleElements.unshift({
+    url: "/",
+    title: "Home",
+    isCurrentPage: visibleElements.length === 0,
+  });
 
   return (
     <PageHeader.Title>

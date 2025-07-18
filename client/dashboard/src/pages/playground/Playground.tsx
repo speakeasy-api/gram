@@ -22,13 +22,14 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
+import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ToolsetView } from "../toolsets/Toolset";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
+import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { AgentifyProvider } from "./Agentify";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { PlaygroundRHS } from "./PlaygroundRHS";
-import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 
 export default function Playground() {
   return (
@@ -234,15 +235,9 @@ export function ToolsetPanel({
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
     // This should only be reachable if the user has an OpenAPI document but no toolsets
     content = (
-      <Type className="p-8">
-        Looks like you don't have any toolsets yet. Head to the{" "}
-        <routes.toolsets.Link>
-          <Button size="inline" icon="arrow-right" iconAfter>
-            Toolsets
-          </Button>
-        </routes.toolsets.Link>{" "}
-        page to get started
-      </Type>
+      <div className="h-[600px] p-8">
+        <ToolsetsEmptyState onCreateToolset={() => routes.toolsets.goTo()} />
+      </div>
     );
   }
 

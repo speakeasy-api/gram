@@ -46,7 +46,8 @@ export default function Settings() {
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
-  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] = useState(false);
+  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
+    useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
@@ -62,7 +63,7 @@ export default function Settings() {
     isLoading: domainIsLoading,
     refetch: domainRefetch,
   } = useCustomDomain();
-  
+
   const { data: creditUsage } = useGetCreditUsage(
     { gramSession: "" },
     { sessionHeaderGramSession: "" }
@@ -253,7 +254,7 @@ export default function Settings() {
         <Stack direction="horizontal" justify="space-between" align="center">
           <Heading variant="h4">API Keys</Heading>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
-            Create API Key
+            New API Key
           </Button>
         </Stack>
         <Table
@@ -262,20 +263,19 @@ export default function Settings() {
           rowKey={(row) => row.id}
           noResultsMessage={
             <Stack
-              direction="horizontal"
               gap={2}
               className="h-full p-4 bg-background"
               align="center"
               justify="center"
             >
-              <Type variant="body">No API keys yet.</Type>
+              <Type variant="body">No API keys yet</Type>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => setIsCreateDialogOpen(true)}
                 icon={"key-round"}
               >
-                Create
+                Create Key
               </Button>
             </Stack>
           }
@@ -407,20 +407,19 @@ export default function Settings() {
         <Table
           noResultsMessage={
             <Stack
-              direction="horizontal"
               gap={2}
               className="h-full p-4 bg-background"
               align="center"
               justify="center"
             >
-              <Type variant="body">No custom domains yet.</Type>
+              <Type variant="body">No custom domains yet</Type>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => setIsAddDomainDialogOpen(true)}
                 icon={"globe"}
               >
-                Add
+                Add Domain
               </Button>
             </Stack>
           }
@@ -600,24 +599,34 @@ export default function Settings() {
           )}
         </Stack>
         <div className="space-y-4">
-          <Type variant="body" className="text-muted-foreground">
-            LLM Credits are used for the chat playground and other AI-powered in dashboard experiences.
+          <Type variant="body" muted>
+            LLM Credits are used for the chat playground and other AI-powered in
+            dashboard experiences.
           </Type>
           {creditUsage && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Type variant="body" className="font-medium">
-                  {Math.min(creditUsage.creditsUsed, creditUsage.monthlyCredits).toLocaleString()} / {creditUsage.monthlyCredits.toLocaleString()} credits used this month
+                  {Math.min(
+                    creditUsage.creditsUsed,
+                    creditUsage.monthlyCredits
+                  ).toLocaleString()}{" "}
+                  / {creditUsage.monthlyCredits.toLocaleString()}
+                  <span className="text-muted-foreground font-thin">
+                    {" "}
+                    credits used this month
+                  </span>
                 </Type>
               </div>
-              <Progress 
-                value={creditUsage.creditsUsed} 
+              <Progress
+                value={creditUsage.creditsUsed}
                 max={creditUsage.monthlyCredits}
+                className="h-4"
                 indicatorClassName={cn(
                   "bg-gradient-to-r",
                   creditUsage.creditsUsed >= creditUsage.monthlyCredits * 0.75
-                    ? "from-red-500 to-red-600" 
-                    : "from-green-500 to-green-600"
+                    ? "from-red-400 to-red-600 dark:from-red-700 dark:to-red-500"
+                    : "from-green-400 to-green-600 dark:from-green-700 dark:to-green-500"
                 )}
               />
             </div>

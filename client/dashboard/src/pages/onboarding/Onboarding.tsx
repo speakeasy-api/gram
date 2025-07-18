@@ -18,16 +18,18 @@ import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   Deployment,
+  GetDeploymentResult,
   UploadOpenAPIv3Result,
 } from "@gram/client/models/components";
 import {
   useDeploymentLogs,
   useLatestDeployment,
   useListTools,
+  useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -355,5 +357,25 @@ function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boolean }) {
     <div className="font-mono text-sm max-h-[250px] overflow-y-auto">
       {lines.length > 0 ? lines : "OpenAPI document processed without issue"}
     </div>
+  );
+}
+
+export function useIsProjectEmpty() {
+  const { projectSlug } = useParams();
+
+  const { data: deployment, isLoading: isDeploymentLoading } = useLatestDeployment({ gramProject: projectSlug });
+  const { data: toolsets, isLoading: isToolsetsLoading } = useListToolsets({ gramProject: projectSlug });
+
+  return {
+    isLoading: isDeploymentLoading || isToolsetsLoading,
+    isEmpty: isDeploymentEmpty(deployment?.deployment) && toolsets?.toolsets.length === 0
+  };
+}
+
+function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
+  return (
+    !deployment ||
+    (deployment?.openapiv3Assets.length === 0 &&
+      deployment?.packages.length === 0)
   );
 }

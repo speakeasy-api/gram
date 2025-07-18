@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
+import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 
 export default function DeploymentsPage() {
   return (
@@ -170,6 +171,10 @@ const columns: TableProps<DeploymentSummary>["columns"] = [
 function DeploymentsTable() {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
+
+  if (deployments.length === 0) {
+    return <DeploymentsEmptyState />;
+  }
 
   const columnsWithData: TableProps<DeploymentSummary>["columns"] = [
     ...columns.slice(0, -1), // All columns except the last one (actions)

@@ -99,7 +99,7 @@ export function ToolCard({
     </Stack>
   );
 
-  const tags = (
+  let tags = (
     <>
       <Badge
         variant="secondary"
@@ -120,6 +120,18 @@ export function ToolCard({
       ))}
     </>
   );
+
+  if (sourceName === "Custom") {
+    tags = (
+      <Badge
+        variant="secondary"
+        className="text-sm capitalize"
+        tooltip={<span>This is a custom tool</span>}
+      >
+        Custom
+      </Badge>
+    );
+  }
 
   return (
     <Card size="sm">

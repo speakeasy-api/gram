@@ -26,6 +26,7 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { useToolsets } from "../toolsets/Toolsets";
 import { MCPJson, useMcpUrl } from "./MCPDetails";
+import { MCPEmptyState } from "./MCPEmptyState";
 
 export function MCPRoot() {
   return (
@@ -41,32 +42,11 @@ export function MCPRoot() {
 }
 
 export function MCPOverview() {
-  const routes = useRoutes();
   const toolsets = useToolsets();
 
-  const content =
-    toolsets.length === 0 ? (
-      <Stack gap={2}>
-        <Heading variant="h3" className="normal-case">
-          Expose any toolset as a hosted MCP server in seconds.
-        </Heading>
-        <Type>
-          Head to the{" "}
-          <routes.playground.Link>
-            <Button size="inline" icon="arrow-right" iconAfter>
-              Playground
-            </Button>
-          </routes.playground.Link>{" "}
-          to get started
-        </Type>
-      </Stack>
-    ) : (
-      <Cards>
-        {toolsets.map((toolset: Toolset) => (
-          <McpToolsetCard key={toolset.id} toolset={toolset} />
-        ))}
-      </Cards>
-    );
+  if (toolsets.length === 0) {
+    return <MCPEmptyState />;
+  }
 
   return (
     <>
@@ -76,7 +56,11 @@ export function MCPOverview() {
           Access any of your Gram toolsets below as a hosted MCP server
         </Type>
       </div>
-      {content}
+      <Cards>
+        {toolsets.map((toolset: Toolset) => (
+          <McpToolsetCard key={toolset.id} toolset={toolset} />
+        ))}
+      </Cards>
     </>
   );
 }

@@ -36,7 +36,9 @@ export const useGroupedHttpTools = (
 };
 
 export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
-  const { data: deployment } = useLatestDeployment();
+  const { data: deployment } = useLatestDeployment(undefined, undefined, {
+    staleTime: 1000 * 60 * 60,
+  });
 
   const documentIdToSlug = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce((acc, asset) => {

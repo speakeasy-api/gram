@@ -29,6 +29,7 @@ import { Grid, Icon, IconName, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, CheckCircleIcon, LockIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMcpUrl } from "../mcp/MCPDetails";
+import { MCPEmptyState } from "../mcp/MCPEmptyState";
 import { ToolDefinition } from "../toolsets/types";
 
 export default function Home() {
@@ -66,20 +67,22 @@ function HomeContent() {
     {
       icon: "message-circle",
       title: "Try it in the playground",
-      description: "Try out the MCP server in the playground.",
+      description:
+        "Try out your MCP server in the playground. Easily test and iterate.",
       link: routes.playground.href(),
     },
     {
       icon: "blocks",
       title: "Curate your tools",
-      description: "Create toolsets for different purposes.",
+      description:
+        "Create toolsets for different purposes. Maximize both user and LLM success.",
       link: routes.toolsets.toolset.href(selectedToolset?.slug ?? "_"),
     },
     {
       icon: "cog",
       title: "Configure your MCP server",
       description:
-        "Choose your server settings. Like visibility, name, and more.",
+        "Choose your server settings. Control visibility, name, and more.",
       link: routes.mcp.details.href(selectedToolset?.slug ?? "_"),
     },
   ];
@@ -108,6 +111,10 @@ function HomeContent() {
     );
   }, [toolsets]);
 
+  if (toolsets?.toolsets.length === 0) {
+    return <MCPEmptyState />;
+  }
+
   return (
     <>
       {heroSection}
@@ -123,7 +130,7 @@ function HomeContent() {
                   <Icon
                     name={card.icon as IconName}
                     size="large"
-                    className="text-muted-foreground"
+                    className="text-stone-400 dark:text-stone-500"
                   />
                   <Link
                     to={card.link}

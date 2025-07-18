@@ -2,6 +2,7 @@ import { AddButton } from "@/components/add-button";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { Cards } from "@/components/ui/card";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { useRoutes } from "@/routes";
@@ -12,7 +13,7 @@ import {
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { ToolsetCard } from "./ToolsetCard";
-import { Cards } from "@/components/ui/card";
+import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
 
 export function useToolsets() {
   const { data: toolsets, refetch, isLoading } = useListToolsets();
@@ -83,6 +84,14 @@ function ToolsetsContent({
       },
     });
   };
+
+  if (toolsets.length === 0) {
+    return (
+      <ToolsetsEmptyState
+        onCreateToolset={() => setCreateToolsetDialogOpen(true)}
+      />
+    );
+  }
 
   return (
     <Cards loading={toolsets.isLoading}>

@@ -21,6 +21,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet } from "react-router";
+import { CustomToolsEmptyState } from "./CustomToolsEmptyState";
 import { MustacheHighlight } from "./ToolBuilder";
 import { ToolifyDialog, ToolifyProvider } from "./Toolify";
 
@@ -48,15 +49,11 @@ export default function CustomTools() {
     routes.customTools.toolBuilderNew.goTo();
   };
 
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>
-          <AddButton onClick={onNewCustomTool} tooltip="New Custom Tool" />
-        </Page.Header.Actions>
-      </Page.Header>
-      <Page.Body>
+  let content = <CustomToolsEmptyState onCreateCustomTool={onNewCustomTool} />;
+
+  if (customTools && customTools.length > 0) {
+    content = (
+      <>
         {customTools?.map((template) => {
           return <CustomToolCard key={template.id} template={template} />;
         })}
@@ -67,7 +64,19 @@ export default function CustomTools() {
           open={newToolDialogOpen}
           setOpen={setNewToolDialogOpen}
         />
-      </Page.Body>
+      </>
+    );
+  }
+
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+        <Page.Header.Actions>
+          <AddButton onClick={onNewCustomTool} tooltip="New Custom Tool" />
+        </Page.Header.Actions>
+      </Page.Header>
+      <Page.Body>{content}</Page.Body>
     </Page>
   );
 }
@@ -118,7 +127,7 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
         <Card.Description>
           <Stack direction="horizontal" gap={3} justify={"space-between"}>
             {template.description ? (
-              <div className="max-w-2/3">
+              <div className="max-w-2/3 line-clamp-3">
                 <MustacheHighlight>{template.description}</MustacheHighlight>
               </div>
             ) : null}

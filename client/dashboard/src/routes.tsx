@@ -43,6 +43,7 @@ type AppRouteBasic = {
   indexComponent?: React.ComponentType;
   subPages?: AppRoutesBasic;
   unauthenticated?: boolean;
+  outsideMainLayout?: boolean;
 };
 
 type GoToFunction = (...params: string[]) => void;
@@ -85,6 +86,7 @@ type RouteEntry = {
       indexComponent?: React.ComponentType;
       unauthenticated?: boolean;
       subPages?: Record<string, RouteEntry>;
+      outsideMainLayout?: boolean;
     }
 );
 
@@ -103,8 +105,9 @@ const ROUTE_STRUCTURE = {
   },
   onboarding: {
     title: "Onboarding",
-    url: ":orgSlug/:projectSlug/onboarding", // Route is like this to break us out of the normal page structure
+    url: "onboarding",
     component: OnboardingWizard,
+    outsideMainLayout: true,  // Break out of normal page structure
   },
   home: {
     title: "Home",
