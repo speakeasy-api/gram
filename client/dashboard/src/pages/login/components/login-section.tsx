@@ -12,7 +12,6 @@ import {
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMutation } from "@tanstack/react-query";
-import { useRoutes } from "@/routes";
 
 const Logo = () => {
   return (
@@ -121,7 +120,6 @@ export function RegisterSection() {
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
   const sdk = useGramContext();
-  const routes = useRoutes();
 
   const registerMutation = useMutation({
     mutationFn: async (vars: RegisterMutationVariables) => {
